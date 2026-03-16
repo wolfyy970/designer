@@ -74,7 +74,7 @@ The agent runs a multi-turn tool-use loop with three tools:
 
 **Context compaction.** For long agent runs (> 30 turns), the context is automatically compacted: the original hypothesis prompt and the 20 most recent turns are preserved; earlier turns are replaced with a summary listing which files have been written. This prevents context-limit failures on complex generations.
 
-**Thinking levels.** When agentic mode is on, a thinking-level selector appears on the Hypothesis node: None / Light / Deep. Controls the model's extended reasoning budget.
+**Thinking levels.** When agentic mode is on, a thinking-level selector appears on the Hypothesis node: None / Light / Deep. When a non-None level is selected, `reasoning_effort` is sent to the provider API. Only models that support extended reasoning (e.g. Claude 3.5+, o1/o3, DeepSeek-R1, Qwen3) will act on it — other models ignore the parameter or return an API error.
 
 **Prompt override.** The agentic system prompt (`genSystemHtmlAgentic`) is exposed in the Prompt Editor and can be overridden per-session.
 

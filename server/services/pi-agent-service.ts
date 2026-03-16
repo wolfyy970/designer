@@ -38,7 +38,17 @@ const ZEROED_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
  * Uses manual construction (NOT getModel() from PI's curated registry)
  * so any OpenRouter or LM Studio model ID works without PI needing to know it.
  */
-function buildModel(providerId: string, modelId: string): Model<'openai-completions'> {
+function buildModel(
+  providerId: string,
+  modelId: string,
+  thinkingLevel?: AgentRunParams['thinkingLevel'],
+): Model<'openai-completions'> {
+  // `reasoning: true` tells PI to include `reasoning_effort` in the API request.
+  // Only set when the user has explicitly opted into a thinking level.
+  // Models that don't support extended reasoning will either ignore the parameter
+  // or return a clear API error — not a silent no-op.
+  const reasoning = !!thinkingLevel && thinkingLevel !== 'off';
+
   if (providerId === 'lmstudio') {
     return {
       id: modelId,
@@ -46,7 +56,7 @@ function buildModel(providerId: string, modelId: string): Model<'openai-completi
       api: 'openai-completions',
       provider: 'lmstudio',
       baseUrl: `${env.LMSTUDIO_URL}/v1`,
-      reasoning: false,
+      reasoning,
       input: ['text'],
       cost: ZEROED_COST,
       contextWindow: 131072,
@@ -63,7 +73,7 @@ function buildModel(providerId: string, modelId: string): Model<'openai-completi
     api: 'openai-completions',
     provider: 'openrouter',
     baseUrl: `${env.OPENROUTER_BASE_URL}/api/v1`,
-    reasoning: false,
+    reasoning,
     input: ['text'],
     cost: ZEROED_COST,
     contextWindow: 131072,
@@ -174,7 +184,7 @@ export async function runDesignAgent(
 
   const virtualFS = new Map<string, string>();
 
-  const model = buildModel(params.providerId, params.modelId);
+  const model = buildModel(params.providerId, params.modelId, params.thinkingLevel);
   const planTool = makePlanFilesTool((files) => {
     void onEvent({ type: 'plan', files });
   });
