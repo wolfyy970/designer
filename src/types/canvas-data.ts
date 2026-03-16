@@ -20,8 +20,10 @@ export type CompilerNodeData = NodeData<{
 export type HypothesisNodeData = NodeData<{
   refId?: string;
   placeholder?: boolean;
-  providerId?: string;
-  modelId?: string;
+  providerId?: string;  // vestigial post-v13, kept for migration safety
+  modelId?: string;     // vestigial post-v13
+  agentMode?: 'single' | 'agentic';
+  thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high';
 }>;
 
 export type VariantNodeData = NodeData<{

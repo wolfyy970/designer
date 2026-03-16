@@ -1,33 +1,31 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { useGenerationStore } from '../../../stores/generation-store';
 import { normalizeError } from '../../../lib/error-utils';
 import { useCompilerStore, findVariantStrategy } from '../../../stores/compiler-store';
-import { prepareIframeContent, renderErrorHtml } from '../../../lib/iframe-utils';
+import { bundleVirtualFS, prepareIframeContent, renderErrorHtml } from '../../../lib/iframe-utils';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import type { VariantNodeData } from '../../../types/canvas-data';
 import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
 import { useResultCode } from '../../../hooks/useResultCode';
+import { useResultFiles } from '../../../hooks/useResultFiles';
 import { useVersionStack } from '../../../hooks/useVersionStack';
 import { useVariantZoom } from '../../../hooks/useVariantZoom';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
 import { variantStatus } from '../../../lib/node-status';
 import { GENERATION_STATUS } from '../../../constants/generation';
+import { downloadFilesAsZip } from '../../../lib/zip-utils';
 import NodeShell from './NodeShell';
 import VariantToolbar from './VariantToolbar';
 import VariantFooter from './VariantFooter';
+import FileExplorer from './FileExplorer';
 
 type VariantNodeType = Node<VariantNodeData, 'variant'>;
 
 /** Scrolling terminal-like activity log during generation */
 function ActivityLog({ entries }: { entries?: string[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [entries?.length]);
 
   if (!entries || entries.length === 0) {
     return (
@@ -53,35 +51,63 @@ function ActivityLog({ entries }: { entries?: string[] }) {
     );
   }
 
+  // Streaming token deltas arrive as a single growing string in entries[0]
+  const text = entries.join('');
+
+  // Scroll on content change (entries.length always 1 now, must track text length)
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [text.length]);
+
   return (
     <div
       ref={scrollRef}
-      className="nodrag nowheel min-h-0 flex-1 overflow-y-auto px-4 py-3 font-mono text-[11px] leading-[1.6]"
+      className="nodrag nowheel min-h-0 flex-1 overflow-y-auto px-4 py-3 font-mono text-[11px] leading-relaxed"
     >
-      {entries.map((entry, i) => {
-        const isSuccess = entry.startsWith('\u2713');
-        const isError = entry.startsWith('\u2717');
-        const isPlan = entry.startsWith('Plan:') || entry.startsWith('  \u25cb');
-        const isThinking = !isSuccess && !isError && !isPlan;
+      <span className="whitespace-pre-wrap italic text-fg-muted">{text}</span>
+    </div>
+  );
+}
 
-        return (
+function GeneratingFooter({
+  plan,
+  written,
+  progressMessage,
+  elapsed,
+}: {
+  plan: string[] | undefined;
+  written: number;
+  progressMessage: string | undefined;
+  elapsed: number;
+}) {
+  const total = plan?.length ?? 0;
+  const hasPlan = total > 0;
+  const progress = hasPlan ? written / total : 0;
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-border-subtle px-4 py-3">
+      {hasPlan ? (
+        <div className="h-1 w-full overflow-hidden rounded-full bg-border">
           <div
-            key={i}
-            className={`py-0.5 ${
-              isSuccess ? 'text-success' :
-              isError ? 'text-error' :
-              isPlan ? 'text-accent' :
-              'text-fg-muted'
-            }`}
-          >
-            {isThinking ? (
-              <span className="italic">{entry}</span>
-            ) : (
-              entry
-            )}
-          </div>
-        );
-      })}
+            className="h-full rounded-full bg-accent/70 transition-all duration-500"
+            style={{ width: `${Math.min(progress * 100, 100)}%` }}
+          />
+        </div>
+      ) : (
+        <div className="h-1 w-full overflow-hidden rounded-full bg-border">
+          <div className="h-full w-full animate-pulse rounded-full bg-accent/60" />
+        </div>
+      )}
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1.5 text-xs text-fg-secondary">
+          <Loader2 size={10} className="animate-spin text-accent" />
+          {hasPlan
+            ? `${written} / ${total} files`
+            : (progressMessage || 'Generating…')}
+        </span>
+        <span className="tabular-nums text-xs text-fg-muted">{elapsed}s</span>
+      </div>
     </div>
   );
 }
@@ -116,8 +142,11 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
 
   const deleteResult = useGenerationStore((s) => s.deleteResult);
 
-  // Load code from IndexedDB
+  // Load code from IndexedDB (single-file)
   const { code, isLoading: codeLoading } = useResultCode(result?.id, result?.status);
+
+  // Load files from IndexedDB (multi-file)
+  const { files } = useResultFiles(result?.id, result?.status);
 
   const strategy = useCompilerStore((s) => {
     const vsId = variantStrategyId ?? result?.variantStrategyId;
@@ -129,6 +158,51 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
   const setExpandedVariant = useCanvasStore((s) => s.setExpandedVariant);
 
   const variantName = strategy?.name ?? 'Variant';
+
+  // Tab state for multi-file complete view
+  const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
+  const [activeCodeFile, setActiveCodeFile] = useState<string | undefined>(undefined);
+
+  // Track most-recently-written file during generation
+  const [writingFile, setWritingFile] = useState<string | undefined>(undefined);
+  const prevLiveFilesRef = useRef<Record<string, string> | undefined>(undefined);
+
+  useEffect(() => {
+    const lf = result?.liveFiles;
+    if (!lf) return;
+    const prev = prevLiveFilesRef.current ?? {};
+    const newKey = Object.keys(lf).find((k) => !(k in prev));
+    if (newKey) {
+      setWritingFile(newKey);
+      const t = setTimeout(() => setWritingFile(undefined), 1000);
+      prevLiveFilesRef.current = lf;
+      return () => clearTimeout(t);
+    }
+    prevLiveFilesRef.current = lf;
+  }, [result?.liveFiles]);
+
+  // Determine whether we're in multi-file mode
+  const currentFiles = files ?? result?.liveFiles;
+  const isMultiFile = !!currentFiles && Object.keys(currentFiles).length > 0;
+
+  // Auto-select code file when switching to code tab
+  useEffect(() => {
+    if (activeTab === 'code' && !activeCodeFile && currentFiles) {
+      const preferred = ['index.html', 'styles.css', 'app.js'];
+      const first = preferred.find((p) => p in currentFiles) ?? Object.keys(currentFiles)[0];
+      setActiveCodeFile(first);
+    }
+  }, [activeTab, activeCodeFile, currentFiles]);
+
+  // Bundled HTML for multi-file preview
+  const bundledHtml = useMemo(() => {
+    if (!currentFiles || Object.keys(currentFiles).length === 0) return '';
+    try {
+      return bundleVirtualFS(currentFiles);
+    } catch (err) {
+      return renderErrorHtml(normalizeError(err));
+    }
+  }, [currentFiles]);
 
   const handleDeleteVersion = useCallback(async () => {
     if (!result || !versionKey) return;
@@ -152,20 +226,24 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
     deleteResult,
   ]);
 
+  const slug = variantName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+
   const handleDownload = useCallback(() => {
-    if (!code) return;
-    const slug = variantName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '');
-    const blob = new Blob([code], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${slug}.html`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [code, variantName]);
+    if (files && Object.keys(files).length > 0) {
+      downloadFilesAsZip(files, `${slug}.zip`);
+    } else if (code) {
+      const blob = new Blob([code], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${slug}.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  }, [files, code, slug]);
 
   const { contentRef, zoom, zoomIn, zoomOut, resetZoom } = useVariantZoom();
 
@@ -181,7 +259,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
     }
   }, [code]);
 
-  const hasCode = result?.status === GENERATION_STATUS.COMPLETE && !!code;
+  const hasCode = result?.status === GENERATION_STATUS.COMPLETE && (!!code || isMultiFile);
 
   const status = variantStatus({
     isArchived,
@@ -227,26 +305,38 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
 
       {/* ── Content area ──────────────────────────────────────── */}
       <div ref={contentRef} className="relative flex-1 overflow-hidden">
-        {/* Generating state — activity log with live progress */}
+
+        {/* States 1 & 2: GENERATING */}
         {result?.status === GENERATION_STATUS.GENERATING && (
           <div className="absolute inset-0 flex flex-col bg-surface">
-            <ActivityLog entries={result.activityLog} />
-
-            <div className="flex flex-col gap-2 border-t border-border-subtle px-4 py-3">
-              <div className="h-1 w-full overflow-hidden rounded-full bg-border">
-                <div className="h-full w-full animate-pulse rounded-full bg-accent/60" />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-xs text-fg-secondary">
-                  <Loader2 size={10} className="animate-spin text-accent" />
-                  {result.progressMessage || 'Generating…'}
-                </span>
-                <span className="tabular-nums text-xs text-fg-muted">
-                  {elapsed}s
-                </span>
-              </div>
+            <div className="flex flex-1 min-h-0 overflow-hidden">
+              {/* File explorer sidebar — shown once a plan or files exist */}
+              {(result.liveFilesPlan || result.liveFiles) && (
+                <div className="w-28 shrink-0 border-r border-border-subtle overflow-hidden flex flex-col">
+                  <div className="px-2 py-1.5 border-b border-border-subtle">
+                    <span className="text-[9px] font-medium uppercase tracking-wider text-fg-faint">Files</span>
+                  </div>
+                  <FileExplorer
+                    files={result.liveFiles ?? {}}
+                    plannedFiles={result.liveFilesPlan}
+                    activeFile={undefined}
+                    onSelectFile={() => {}}
+                    isGenerating={true}
+                    writingFile={writingFile}
+                    className="flex-1"
+                  />
+                </div>
+              )}
+              {/* Activity log */}
+              <ActivityLog entries={result.activityLog} />
             </div>
+            {/* Progress footer */}
+            <GeneratingFooter
+              plan={result.liveFilesPlan}
+              written={Object.keys(result.liveFiles ?? {}).length}
+              progressMessage={result.progressMessage}
+              elapsed={elapsed}
+            />
           </div>
         )}
 
@@ -267,38 +357,105 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
           </div>
         )}
 
-        {/* Loading code from IndexedDB */}
-        {result?.status === GENERATION_STATUS.COMPLETE && codeLoading && (
-          <div className="flex h-full items-center justify-center bg-surface">
-            <Loader2 size={14} className="animate-spin text-fg-muted" />
-          </div>
+        {/* State 3: COMPLETE, single-file */}
+        {result?.status === GENERATION_STATUS.COMPLETE && !isMultiFile && (
+          <>
+            {/* Loading code from IndexedDB */}
+            {codeLoading && (
+              <div className="flex h-full items-center justify-center bg-surface">
+                <Loader2 size={14} className="animate-spin text-fg-muted" />
+              </div>
+            )}
+
+            {/* Complete but code missing from IndexedDB */}
+            {!codeLoading && !code && (
+              <div className="flex h-full flex-col items-center justify-center bg-surface p-4">
+                <AlertCircle size={16} className="mb-2 text-fg-muted" />
+                <p className="text-center text-xs text-fg-muted">
+                  Code unavailable — may need to regenerate
+                </p>
+              </div>
+            )}
+
+            {/* Complete: rendered preview */}
+            {code && (
+              <iframe
+                srcDoc={htmlContent}
+                sandbox="allow-scripts"
+                title={`Variant: ${variantName}`}
+                className="absolute left-0 top-0 border-0 bg-white"
+                style={{
+                  width: `${100 / zoom}%`,
+                  height: `${100 / zoom}%`,
+                  transform: `scale(${zoom})`,
+                  transformOrigin: '0 0',
+                  pointerEvents: 'auto',
+                }}
+              />
+            )}
+          </>
         )}
 
-        {/* Complete but code missing from IndexedDB */}
-        {result?.status === GENERATION_STATUS.COMPLETE && !codeLoading && !code && (
-          <div className="flex h-full flex-col items-center justify-center bg-surface p-4">
-            <AlertCircle size={16} className="mb-2 text-fg-muted" />
-            <p className="text-center text-xs text-fg-muted">
-              Code unavailable — may need to regenerate
-            </p>
+        {/* State 4: COMPLETE, multi-file — tab bar with preview/code */}
+        {result?.status === GENERATION_STATUS.COMPLETE && isMultiFile && (
+          <div className="absolute inset-0 flex flex-col">
+            {/* Tab bar */}
+            <div className="flex border-b border-border-subtle bg-surface shrink-0">
+              {(['preview', 'code'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onPointerDown={() => setActiveTab(tab)}
+                  className={`nodrag px-3 py-1.5 text-[10px] font-medium capitalize transition-colors ${
+                    activeTab === tab
+                      ? 'border-b border-accent text-fg'
+                      : 'text-fg-muted hover:text-fg-secondary'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+            {/* Preview tab */}
+            {activeTab === 'preview' && (
+              <div className="relative flex-1 overflow-hidden">
+                <iframe
+                  srcDoc={bundledHtml}
+                  sandbox="allow-scripts"
+                  title={`Variant: ${variantName}`}
+                  className="absolute left-0 top-0 border-0 bg-white"
+                  style={{
+                    width: `${100 / zoom}%`,
+                    height: `${100 / zoom}%`,
+                    transform: `scale(${zoom})`,
+                    transformOrigin: '0 0',
+                    pointerEvents: 'auto',
+                  }}
+                />
+              </div>
+            )}
+            {/* Code tab */}
+            {activeTab === 'code' && (
+              <div className="flex flex-1 overflow-hidden">
+                <div className="w-28 shrink-0 border-r border-border-subtle bg-surface flex flex-col">
+                  <div className="px-2 py-1.5 border-b border-border-subtle">
+                    <span className="text-[9px] font-medium uppercase tracking-wider text-fg-faint">Files</span>
+                  </div>
+                  <FileExplorer
+                    files={currentFiles!}
+                    activeFile={activeCodeFile}
+                    onSelectFile={setActiveCodeFile}
+                    isGenerating={false}
+                    className="flex-1"
+                  />
+                </div>
+                <div className="nodrag nowheel flex-1 overflow-auto bg-bg">
+                  <pre className="min-h-full p-3 font-mono text-[10px] leading-relaxed text-fg-secondary whitespace-pre-wrap">
+                    {activeCodeFile && currentFiles?.[activeCodeFile]}
+                  </pre>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-
-        {/* Complete: rendered preview */}
-        {hasCode && (
-          <iframe
-            srcDoc={htmlContent}
-            sandbox="allow-scripts"
-            title={`Variant: ${variantName}`}
-            className="absolute left-0 top-0 border-0 bg-white"
-            style={{
-              width: `${100 / zoom}%`,
-              height: `${100 / zoom}%`,
-              transform: `scale(${zoom})`,
-              transformOrigin: '0 0',
-              pointerEvents: 'auto',
-            }}
-          />
         )}
       </div>
 

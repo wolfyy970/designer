@@ -54,6 +54,7 @@ export const useGenerationStore = create<GenerationStore>()(
       deleteResult: (resultId) => {
         idbCleanup(storage.deleteCode(resultId));
         idbCleanup(storage.deleteProvenance(resultId));
+        idbCleanup(storage.deleteFiles(resultId));
 
         set((state) => {
           const filtered = state.results.filter((r) => r.id !== resultId);
@@ -79,6 +80,7 @@ export const useGenerationStore = create<GenerationStore>()(
           for (const id of toDelete) {
             idbCleanup(storage.deleteCode(id));
             idbCleanup(storage.deleteProvenance(id));
+            idbCleanup(storage.deleteFiles(id));
           }
 
           return { results: filtered, selectedVersions: sv };
@@ -88,14 +90,15 @@ export const useGenerationStore = create<GenerationStore>()(
       reset: () => {
         set({ results: [], isGenerating: false, selectedVersions: {} });
         idbCleanup(storage.clearAllCodes());
+        idbCleanup(storage.clearAllFiles());
       },
     }),
     {
       name: STORAGE_KEYS.GENERATION,
       version: 2,
       partialize: (state) => ({
-        // Strip `code` from persisted results — code lives in IndexedDB
-        results: state.results.map(({ code: _, ...rest }) => rest),
+        // Strip `code`, `liveCode`, and `liveFiles` from persisted results — code lives in IndexedDB
+        results: state.results.map(({ code: _, liveCode: __, liveFiles: ___, liveFilesPlan: ____, ...rest }) => rest),
         selectedVersions: state.selectedVersions,
       }),
       migrate: (persisted, version) => {

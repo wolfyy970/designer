@@ -46,6 +46,8 @@ export interface GenerateStreamCallbacks {
   onActivity?: (entry: string) => void;
   onCode?: (code: string) => void;
   onError?: (error: string) => void;
+  onFile?: (path: string, content: string) => void;
+  onPlan?: (files: string[]) => void;
   onDone?: () => void;
 }
 
@@ -108,6 +110,12 @@ export async function generate(
               break;
             case 'error':
               callbacks.onError?.(event.error);
+              break;
+            case 'file':
+              callbacks.onFile?.(event.path, event.content);
+              break;
+            case 'plan':
+              callbacks.onPlan?.(event.files);
               break;
             case 'done':
               callbacks.onDone?.();

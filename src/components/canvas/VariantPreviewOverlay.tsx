@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, Columns2, ChevronLeft, ChevronRight, Loader2, AlertCircle } from 'lucide-react';
 import { useCompilerStore, findVariantStrategy } from '../../stores/compiler-store';
 import { useCanvasStore } from '../../stores/canvas-store';
-import { prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
+import { bundleVirtualFS, prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
 import { normalizeError } from '../../lib/error-utils';
 import { useResultCode } from '../../hooks/useResultCode';
+import { useResultFiles } from '../../hooks/useResultFiles';
 import { useVersionStack } from '../../hooks/useVersionStack';
 import { badgeColor } from '../../lib/badge-colors';
 import type { GenerationResult } from '../../types/provider';
@@ -53,11 +54,13 @@ export default function VariantPreviewOverlay() {
 
   // Load code from IndexedDB
   const { code, isLoading: codeLoading } = useResultCode(result?.id, result?.status);
+  const { files } = useResultFiles(result?.id, result?.status);
   const compareResult = useMemo(
     () => (compareId ? results.find((r) => r.id === compareId) : undefined),
     [compareId, results],
   );
   const { code: compareCode, isLoading: compareCodeLoading } = useResultCode(compareResult?.id, compareResult?.status);
+  const { files: compareFiles } = useResultFiles(compareResult?.id, compareResult?.status);
 
   // Other complete results (for compare mode)
   const otherResults = useMemo(
@@ -91,12 +94,19 @@ export default function VariantPreviewOverlay() {
     r: GenerationResult,
     panelCode: string | undefined,
     isLoading: boolean,
+    panelFiles?: Record<string, string>,
     label?: string,
   ) {
     const strat = findVariantStrategy(dimensionMaps, r.variantStrategyId);
     let content: string | null = null;
 
-    if (panelCode) {
+    if (panelFiles && Object.keys(panelFiles).length > 0) {
+      try {
+        content = bundleVirtualFS(panelFiles);
+      } catch (err) {
+        content = renderErrorHtml(normalizeError(err));
+      }
+    } else if (panelCode) {
       try {
         content = prepareIframeContent(panelCode);
       } catch (err) {
@@ -241,7 +251,7 @@ export default function VariantPreviewOverlay() {
       <div className="flex flex-1 overflow-hidden">
         {compareId && compareResult ? (
           <>
-            {renderPanel(result, code, codeLoading, 'Original')}
+            {renderPanel(result, code, codeLoading, files, 'Original')}
             <div className="w-px bg-white/10" />
             <div className="flex flex-1 flex-col overflow-hidden">
               {/* Compare selector */}
@@ -269,11 +279,11 @@ export default function VariantPreviewOverlay() {
                   })}
                 </select>
               </div>
-              {renderPanel(compareResult, compareCode, compareCodeLoading)}
+              {renderPanel(compareResult, compareCode, compareCodeLoading, compareFiles)}
             </div>
           </>
         ) : (
-          renderPanel(result, code, codeLoading)
+          renderPanel(result, code, codeLoading, files)
         )}
       </div>
     </div>

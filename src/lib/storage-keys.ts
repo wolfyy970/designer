@@ -18,4 +18,5 @@ export const STORAGE_KEYS = {
   // IndexedDB store names
   IDB_CODE: 'lattice-code',
   IDB_PROVENANCE: 'lattice-provenance',
+  IDB_FILES: 'lattice-files',
 } as const;

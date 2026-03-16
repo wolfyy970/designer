@@ -43,6 +43,8 @@ export function useGenerate() {
       options: {
         model: string;
         supportsVision?: boolean;
+        mode?: 'single' | 'agentic';
+        thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high';
       },
       callbacks?: {
         onPlaceholdersReady?: (placeholders: GenerationResult[]) => void;
@@ -83,8 +85,12 @@ export function useGenerate() {
       const generateOne = async (prompt: CompiledPrompt) => {
         const placeholderId = placeholderMap.get(prompt.variantStrategyId)!;
         try {
-          const activityLog: string[] = [];
+          // Single growing string — streaming token deltas are appended and flushed
+          // to the store at animation-frame rate (not per-token) to avoid 50+ renders/sec.
+          let activityText = '';
+          let rafId: ReturnType<typeof requestAnimationFrame> | null = null;
           let generatedCode = '';
+          let liveFiles: Record<string, string> = {};
 
           await apiGenerate(
             {
@@ -93,19 +99,35 @@ export function useGenerate() {
               modelId: options.model,
               promptOverrides: {
                 genSystemHtml: getPrompt('genSystemHtml'),
+                genSystemHtmlAgentic: getPrompt('genSystemHtmlAgentic'),
               },
               supportsVision: options.supportsVision,
+              mode: options.mode,
+              thinkingLevel: options.thinkingLevel,
             },
             {
               onActivity: (entry) => {
-                activityLog.push(entry);
-                updateResult(placeholderId, { activityLog: [...activityLog] });
+                activityText += entry;
+                if (rafId === null) {
+                  rafId = requestAnimationFrame(() => {
+                    updateResult(placeholderId, { activityLog: [activityText] });
+                    rafId = null;
+                  });
+                }
               },
               onProgress: (status) => {
                 updateResult(placeholderId, { progressMessage: status });
               },
               onCode: (code) => {
                 generatedCode = code;
+                updateResult(placeholderId, { liveCode: code });
+              },
+              onFile: (path, content) => {
+                liveFiles = { ...liveFiles, [path]: content };
+                updateResult(placeholderId, { liveFiles });
+              },
+              onPlan: (files) => {
+                updateResult(placeholderId, { liveFilesPlan: files });
               },
               onError: (error) => {
                 updateResult(placeholderId, { status: GENERATION_STATUS.ERROR, error });
@@ -113,7 +135,7 @@ export function useGenerate() {
             },
           );
 
-          if (!generatedCode) {
+          if (!generatedCode && Object.keys(liveFiles).length === 0) {
             updateResult(placeholderId, {
               status: GENERATION_STATUS.ERROR,
               error: 'Server returned no code.',
@@ -121,7 +143,8 @@ export function useGenerate() {
             return;
           }
 
-          await storage.saveCode(placeholderId, generatedCode);
+          if (generatedCode) await storage.saveCode(placeholderId, generatedCode);
+          if (Object.keys(liveFiles).length > 0) await storage.saveFiles(placeholderId, liveFiles);
 
           if (provenanceCtx) {
             const strategySnapshot =

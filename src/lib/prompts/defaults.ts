@@ -12,6 +12,7 @@ export const ENV_KEYS: Record<PromptKey, string> = {
   compilerSystem: 'VITE_PROMPT_COMPILER_SYSTEM',
   compilerUser: 'VITE_PROMPT_COMPILER_USER',
   genSystemHtml: 'VITE_PROMPT_GEN_SYSTEM_HTML',
+  genSystemHtmlAgentic: 'VITE_PROMPT_GEN_SYSTEM_HTML_AGENTIC',
   variant: 'VITE_PROMPT_VARIANT',
   designSystemExtract: 'VITE_PROMPT_DESIGN_SYSTEM_EXTRACT',
 };
@@ -41,6 +42,11 @@ export const PROMPT_META: PromptMeta[] = [
     key: 'genSystemHtml',
     label: 'Designer — System',
     description: 'System prompt for design generation. The model receives this plus the hypothesis/spec context and returns a complete self-contained HTML document.',
+  },
+  {
+    key: 'genSystemHtmlAgentic',
+    label: 'Designer — System (Agentic)',
+    description: 'System prompt for agentic multi-file design generation. Instructs the agent to reason about the hypothesis before writing files, then self-critique and revise.',
   },
   {
     key: 'variant',

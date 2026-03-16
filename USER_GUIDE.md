@@ -3,7 +3,7 @@
 ## Setup
 
 ```bash
-npm install
+pnpm install
 cp .env.example .env.local
 ```
 
@@ -20,8 +20,8 @@ VITE_LMSTUDIO_VISION_MODELS=llava,minicpm-v,qwen2-vl
 ```
 
 ```bash
-npm run dev          # Vite SPA (port 5173)
-npm run dev:server   # Hono API (port 3001)
+pnpm dev          # Vite SPA (port 5173)
+pnpm dev:server   # Hono API (port 3001)
 ```
 
 Both processes are needed for local development.
@@ -53,30 +53,51 @@ Connect input nodes to the **Incubator** (edges auto-connect on add). With a Mod
 ### 4. Edit Hypotheses
 
 Hypothesis nodes appear to the right of the Incubator. Each represents a variant strategy with:
-- **Name** — Editable label
-- **Primary Emphasis** — Which dimensions this variant pushes on
-- **Details** (expandable) — Rationale, how it differs, coupled decisions
+- **Name** — Editable label (double-click or pencil icon)
+- **Hypothesis** — The core design bet
+- **Details** (expandable) — Rationale, measurements
 
 Edit these before generation. Remove strategies not worth exploring.
 
 ### 5. Add Design System (Optional)
 
-Add a **Design System** node from the toolbar (Processing group). It auto-connects to all existing hypotheses. You can have multiple design system nodes — e.g., one for Material Design tokens, another for a custom system. Each hypothesis uses the design tokens from its connected design system(s).
+Add a **Design System** node from the toolbar (Processing group). It auto-connects to all existing hypotheses. You can have multiple design system nodes — e.g., one for Material Design tokens, another for a custom system.
 
 - Type or paste design tokens directly into the content area
 - Drag-and-drop screenshots of existing design systems, then click **Extract from Images** to have an LLM read the tokens from the images
 
 ### 6. Generate Variants
 
-Each hypothesis has built-in generation controls. Connect a Model node to the hypothesis, then click **Create**. The server generates a complete self-contained HTML document in a single LLM call. Variants appear to the right. Running generation again adds new versions — use the version navigation arrows to browse previous results.
+Each hypothesis has built-in generation controls at the bottom. Connect a Model node, then choose your mode:
+
+**Single-shot (default):** Click **Create**. The server makes one LLM call and returns a complete self-contained HTML document. Fast — typically 10–30 seconds.
+
+**Agentic:** Toggle **Agentic** on the hypothesis node, choose a thinking level (None / Light / Deep), then click **Think & Create**. The agent:
+1. Reasons out loud about the hypothesis before touching any tool
+2. Plans the file structure (`plan_files`)
+3. Writes each file comprehensively — CSS can be 500+ lines
+4. Reads files back and revises (self-critique pass)
+
+Agentic runs take longer (1–5 minutes) but produce more considered designs. The file explorer sidebar and progress bar show what the agent is doing in real time.
+
+Running generation again adds new versions — use the version navigation arrows to browse previous results.
 
 ### 7. Review Variants
 
-Variant nodes render the generated code in sandboxed iframes:
+Variant nodes render the generated code in sandboxed iframes.
+
+**Single-file results:**
 - **Zoom** — +/- buttons or auto-fit
-- **Source view** — Toggle Preview/Source to see the raw code
-- **Full-screen** — Click the expand icon for full-viewport preview with version navigation
-- **Version badges** — v1, v2, etc. with ChevronLeft/Right to browse accumulated versions
+- **Source** — Toggle Preview/Source to see the raw HTML
+- **Full-screen** — Click the expand icon for full-viewport preview
+
+**Multi-file (agentic) results:**
+- **Preview tab** — Bundled preview (CSS and JS inlined into the HTML)
+- **Code tab** — File explorer on the left, raw file content on the right
+- **Download** — Zip button downloads all files as a `.zip` archive
+- **Full-screen** — Same as single-file
+
+**Version badges** — v1, v2, etc. with ChevronLeft/Right to browse accumulated versions across runs.
 
 ### 8. Iterate
 
@@ -105,4 +126,3 @@ Click **Canvas Manager** in the header:
 - **Import JSON** — Loads a previously exported canvas
 - **Load** — Switch to a saved canvas
 - **Delete** — Remove a saved canvas from localStorage
-

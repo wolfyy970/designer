@@ -14,6 +14,7 @@ export type PromptKey =
   | 'compilerSystem'
   | 'compilerUser'
   | 'genSystemHtml'
+  | 'genSystemHtmlAgentic'
   | 'variant'
   | 'designSystemExtract';
 

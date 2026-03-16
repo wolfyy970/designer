@@ -20,7 +20,7 @@
 
 **Client** — React SPA with Zustand stores, `@xyflow/react` canvas, IndexedDB for generated code. Makes REST and SSE calls to `/api/*`.
 
-**Server** — Hono app deployed as a Vercel serverless function. Handles all LLM orchestration: compilation, single-shot generation, model listing, design system extraction. Holds API keys server-side.
+**Server** — Hono app deployed as a Vercel serverless function. Handles all LLM orchestration: compilation, generation (single-shot and agentic), model listing, design system extraction. Holds API keys server-side.
 
 **Local dev** — Two processes: Vite (SPA + HMR on 5173) and Hono (API on 3001 via `tsx watch`). Vite proxy forwards `/api/*` to Hono.
 
@@ -42,7 +42,7 @@
 │  2. API Client + Prompt Compiler            │
 │  Client: compileVariantPrompts() (local)    │
 │  Server: compileSpec() → DimensionMap       │
-│  Server: provider.generateChat() → HTML     │
+│  Server: generate() → HTML or files         │
 └──────────────────┬──────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────┐
@@ -53,7 +53,8 @@
                    │
 ┌──────────────────▼──────────────────────────┐
 │  4. Output Rendering                        │
-│  HTML → sandboxed iframe (srcdoc)           │
+│  Single-file: HTML → sandboxed iframe       │
+│  Multi-file: bundleVirtualFS → iframe       │
 │  Canvas VariantNode                         │
 └─────────────────────────────────────────────┘
 ```
@@ -72,9 +73,16 @@ DimensionMap (dimensions + variant strategies)
 CompiledPrompt[] (one full prompt per variant)
     │
     ▼ POST /api/generate  (SSE stream per variant)
-    │  Server: provider.generateChat(messages) → raw HTML
-    │  SSE events: progress, code, done
-    │  Client: code → StoragePort (IndexedDB), metadata → Zustand
+    │
+    ├─ mode=single ──────────────────────────────────────────────┐
+    │  Server: provider.generateChat(messages) → raw HTML        │
+    │  SSE events: progress, code, done                          │
+    │  Client: code → StoragePort (code store), meta → Zustand   │
+    │                                                            │
+    └─ mode=agentic ─────────────────────────────────────────────┤
+       Server: PI Agent loop (plan_files, write_file, read_file) │
+       SSE events: activity, progress, plan, file, done          │
+       Client: files → StoragePort (files store), meta → Zustand │
     │
     ▼ iframe srcdoc attribute
 Rendered variants (sandboxed, interactive)
@@ -88,13 +96,17 @@ Next iteration cycle
 | Endpoint | Method | Purpose | Response |
 |---|---|---|---|
 | `/api/compile` | POST | Compile spec into dimension map | JSON: `DimensionMap` |
-| `/api/generate` | POST | Generate one variant (single-shot) | SSE stream: progress, code, done |
+| `/api/generate` | POST | Generate one variant (single-shot or agentic) | SSE stream |
 | `/api/models/:provider` | GET | List available models | JSON: `ProviderModel[]` |
 | `/api/models` | GET | List available providers | JSON: `ProviderInfo[]` |
 | `/api/logs` | GET | Fetch LLM call log entries (dev-only) | JSON: `LlmLogEntry[]` |
 | `/api/logs` | DELETE | Clear log entries (dev-only) | 204 |
 | `/api/design-system/extract` | POST | Extract design tokens from screenshots | JSON: extracted tokens |
 | `/api/health` | GET | Health check | JSON: `{ ok: true }` |
+
+**`/api/generate` request fields:** `prompt`, `providerId`, `modelId`, `promptOverrides` (`genSystemHtml`, `genSystemHtmlAgentic`, `variant`), `supportsVision`, `mode` (`single` | `agentic`), `thinkingLevel` (`off` | `minimal` | `low` | `medium` | `high`).
+
+**SSE events:** `progress` (status label), `activity` (streaming agent text), `code` (final HTML in single-shot), `file` (path + content in agentic), `plan` (declared file list in agentic), `error`, `done`.
 
 All POST endpoints validate request bodies with Zod `safeParse` — malformed requests return a structured `400` before any LLM call is made.
 
@@ -107,11 +119,11 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 | `dev.ts` | Local dev entry (Hono + `@hono/node-server` on 3001) |
 | `log-store.ts` | In-memory LLM call log (dev-only, no Zustand) |
 | `routes/compile.ts` | POST /api/compile |
-| `routes/generate.ts` | POST /api/generate (SSE stream) |
+| `routes/generate.ts` | POST /api/generate — branches on `mode` to single-shot or agentic path |
 | `routes/models.ts` | GET /api/models/:provider |
 | `routes/logs.ts` | GET/DELETE /api/logs |
 | `routes/design-system.ts` | POST /api/design-system/extract |
-| `services/_archived/` | Inactive agentic build loop (orchestrator + workspace) — archived, not compiled or tested |
+| `services/pi-agent-service.ts` | PI Agent adapter — single import boundary for `@mariozechner/pi-agent-core`. Defines virtual filesystem, tool implementations (`plan_files`, `write_file`, `read_file`), context compaction, and SSE event emission. |
 | `services/compiler.ts` | LLM compilation — Zod-validates request/response boundaries |
 | `services/providers/openrouter.ts` | OpenRouter provider (direct API, auth header) |
 | `services/providers/lmstudio.ts` | LM Studio provider (direct URL) |
@@ -124,24 +136,31 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 
 ## Generation Engine
 
-Generation is a single LLM call per hypothesis-model pair (`server/routes/generate.ts`).
+### Single-Shot
 
-The route:
+`server/routes/generate.ts` (when `mode === 'single'`):
 1. Validates the request with Zod
 2. Resolves the `genSystemHtml` system prompt (default or client-provided override)
 3. Calls `provider.generateChat([system, user], options)`
-4. Extracts the HTML code block from the response
+4. Extracts the HTML code block via `extractCode()`
 5. Streams three SSE events: `progress` (start), `code` (HTML), `done`
 
-The client streams the SSE response, saves the code to StoragePort (IndexedDB), and updates Zustand metadata.
+### Agentic
+
+`server/routes/generate.ts` delegates to `server/services/pi-agent-service.ts` (when `mode === 'agentic'`).
+
+`runDesignAgent()`:
+1. Creates a virtual filesystem (`Map<string, string>`)
+2. Constructs a PI Agent with `plan_files`, `write_file`, `read_file` tools
+3. Configures `transformContext` for automatic context compaction: when message history exceeds 30 turns, keeps the original user message + last 20 turns + a synthetic summary listing which files have been written
+4. Calls `agent.prompt(userPrompt)` — the agent runs autonomously until it stops calling tools
+5. Streams SSE events as the agent emits them: `activity` (text deltas), `progress` (status), `plan` (file plan), `file` (per-file write), `error`
+
+`server/services/pi-agent-service.ts` is the **only** file that imports from `@mariozechner/pi-agent-core`. All PI types are isolated here.
 
 ### Generation Cancellation
 
-SSE is unidirectional. The client holds an `AbortController` and calls `abort()` on unmount or user cancellation. The server checks `c.req.raw.signal.aborted` to detect client disconnection.
-
-### Agentic Engine (Archived)
-
-A multi-file agentic build loop (two-phase planner + builder, VirtualWorkspace, fuzzy patching) was prototyped and is preserved in `server/services/_archived/` and `src/services/_archived/`. It is excluded from TypeScript compilation and Vitest runs. Not called from any active route.
+SSE is unidirectional. The client holds an `AbortController` and calls `abort()` on unmount or user cancellation. Single-shot: the server checks `c.req.raw.signal.aborted`. Agentic: the abort signal is forwarded to `agent.abort()` via the `params.signal` event listener.
 
 ## Canvas Architecture
 
@@ -150,6 +169,17 @@ The primary interface is a node-graph canvas built on `@xyflow/react` v12.
 ### Node Types
 
 11 node types in 3 categories: 5 input nodes rendered by shared `SectionNode.tsx`, plus `ModelNode`, `DesignSystemNode`, `CompilerNode`, `HypothesisNode`, `VariantNode`, and `CritiqueNode`. `ModelNode` centralizes provider/model selection. Design System is self-contained (data in `node.data`, not spec store). Each node uses a typed data interface from `types/canvas-data.ts`.
+
+### HypothesisNode — Generation Controls
+
+`HypothesisNode` stores `agentMode` (`single` | `agentic`) and `thinkingLevel` in canvas node data. The **Agentic** toggle and **Thinking** segmented control are inline on the node. At generation time, `useHypothesisGeneration` reads these from canvas state and passes them to `useGenerate()`.
+
+### Variant Node — Multi-File Display
+
+When a result has files (agentic output), `VariantNode` shows:
+- **Generating state:** file explorer sidebar (planned + written files with status dots) + activity log + progress bar
+- **Complete state:** Preview/Code tab bar. Preview bundles all files via `bundleVirtualFS()`. Code tab shows the file explorer + raw file content.
+- **Download:** produces a `.zip` via `fflate`.
 
 ### Auto-Connection Logic (`canvas-connections.ts`)
 
@@ -171,7 +201,7 @@ Results accumulate across generation runs. Each result has a `runId` (UUID) and 
 
 ### Parallel Generation
 
-Multiple hypotheses generate simultaneously via `Promise.all`. Within a single hypothesis, multiple connected Models also generate in parallel. The global `isGenerating` flag only clears when all in-flight results reach a terminal status, preventing premature UI resets.
+Multiple hypotheses generate simultaneously via `Promise.all`. Within a single hypothesis, multiple connected Models also generate in parallel. The global `isGenerating` flag only clears when all in-flight results reach a terminal status, preventing premature UI resets. Note: LM Studio runs sequentially — sending concurrent requests returns HTTP 500.
 
 ## Client Module Boundaries
 
@@ -188,15 +218,15 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 
 | File | Purpose |
 |------|---------|
-| `client.ts` | REST + SSE fetch wrappers with AbortController support |
-| `types.ts` | Request/response interfaces for all endpoints |
+| `client.ts` | REST + SSE fetch wrappers. `GenerateStreamCallbacks` includes `onFile(path, content)` and `onPlan(files)` for agentic events. |
+| `types.ts` | Request/response interfaces. `GenerateRequest` includes `mode` and `thinkingLevel`. `GenerateSSEEvent` includes `file` and `plan` variants. |
 
 ### Storage (`src/storage/`)
 
 | File | Purpose |
 |------|---------|
-| `types.ts` | `StoragePort` interface — swappable storage backend |
-| `browser-storage.ts` | `BrowserStorage` — wraps `idb-storage.ts` for IndexedDB |
+| `types.ts` | `StoragePort` interface — `saveFiles`, `loadFiles`, `deleteFiles`, `clearAllFiles`, GC returns `filesRemoved` |
+| `browser-storage.ts` | `BrowserStorage` — wraps `idb-storage.ts` for IndexedDB (code, provenance, and files stores) |
 | `index.ts` | Default storage export |
 
 ### Stores (`src/stores/`)
@@ -205,21 +235,22 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 |-------|-------------|--------------|
 | `spec-store` | localStorage | Active `DesignSpec`, section/image CRUD |
 | `compiler-store` | localStorage | `DimensionMap` per compiler node, `CompiledPrompt[]`, variant editing |
-| `generation-store` | localStorage + StoragePort | `GenerationResult[]` metadata in localStorage, code in IndexedDB via StoragePort |
+| `generation-store` | localStorage + StoragePort | `GenerationResult[]` metadata in localStorage, code in IndexedDB (`code` store), multi-file in IndexedDB (`files` store). `liveCode`, `liveFiles`, `liveFilesPlan` are in-memory only, stripped by `partialize`. |
 | `canvas-store` | localStorage | Nodes, edges, viewport, auto-layout preferences |
-| `prompt-store` | localStorage | Prompt template overrides (sent as per-request overrides to server) |
+| `prompt-store` | localStorage | Prompt template overrides (sent as per-request overrides to server). Includes `genSystemHtmlAgentic`. |
 | `theme-store` | — | Theme mode (always `dark`; static store) |
 
 ### Hooks (`src/hooks/`)
 
 | File | Purpose |
 |------|---------|
-| `useGenerate.ts` | Generation orchestration — calls `apiClient.generate()` SSE stream, saves code to StoragePort |
-| `useHypothesisGeneration.ts` | Generation orchestration for hypothesis nodes |
+| `useGenerate.ts` | Generation orchestration — calls `apiClient.generate()` SSE stream, saves code or files to StoragePort. Forwards `mode`, `thinkingLevel`, and `genSystemHtmlAgentic` override. RAF-batches activity log updates to avoid >50 renders/sec. |
+| `useHypothesisGeneration.ts` | Reads `agentMode` and `thinkingLevel` from canvas node data at generation time; passes to `useGenerate()` |
+| `useResultCode.ts` | Loads generated code from StoragePort (single-file results) |
+| `useResultFiles.ts` | Loads multi-file result from StoragePort (agentic results) |
 | `useProviderModels.ts` | React Query hook — calls `apiClient.listModels()` |
-| `useResultCode.ts` | Loads generated code from StoragePort |
 | `useConnectedModel.ts` | Reads provider/model config from a connected Model node |
-| `useNodeRemoval.ts` | Shared node + associated-edges removal logic (used by all node components) |
+| `useNodeRemoval.ts` | Shared node + associated-edges removal logic |
 
 ### Constants (`src/constants/`)
 
@@ -234,6 +265,8 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 | File | Purpose |
 |------|---------|
+| `iframe-utils.ts` | `bundleVirtualFS(files)` — inlines `<link>` and `<script>` references for multi-file preview; `prepareIframeContent(code)` — single-file pass-through; `renderErrorHtml(msg)` |
+| `zip-utils.ts` | `downloadFilesAsZip(files, filename)` — bundles virtual FS into a `.zip` via `fflate` and triggers browser download |
 | `node-status.ts` | `filledOrEmpty`, `processingOrFilled`, `variantStatus` — pure helpers for node visual state |
 | `provider-fetch.ts` | Environment-agnostic fetch utilities shared by client and server (`fetchChatCompletion`, `fetchModelList`, `parseChatResponse`, `extractMessageText`) |
 | `canvas-connections.ts` | Connection validation rules and auto-connect edge builders |
@@ -245,19 +278,25 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 ## Key Design Decisions
 
-**Why a Hono server on Vercel.** All LLM orchestration runs server-side. API keys never reach the browser. LLM calls and SSE streaming run in a serverless function. Vercel supports 300s timeout (Hobby) or 800s (Pro) for streaming functions — sufficient for single-shot generation.
+**Why a Hono server on Vercel.** All LLM orchestration runs server-side. API keys never reach the browser. LLM calls and SSE streaming run in a serverless function. Vercel supports 300s timeout (Hobby) or 800s (Pro) for streaming functions — sufficient for both single-shot and agentic generation.
 
 **Why prompts are sent per-request.** The prompt store lives in the browser (localStorage). The server is stateless — it carries defaults and applies client-provided overrides. No shared state between server and client beyond the request payload.
 
 **Why `src/lib/prompts/shared-defaults.ts`.** Prompt text is the same on client and server. A single shared module is the one source of truth. Both `src/lib/prompts/defaults.ts` (client) and `server/lib/prompts/defaults.ts` (server) import from it. `tsconfig.server.json` explicitly includes the file.
 
+**Why `pi-agent-service.ts` is an isolation boundary.** `@mariozechner/pi-agent-core` is pre-1.0 (pinned). Keeping all PI imports in one file means TypeScript surfaces any breaking API changes in exactly one place when upgrading.
+
+**Why window-based context compaction instead of a second LLM call.** Compaction is purely structural: keep the original hypothesis prompt + recent working context + a file-list summary. No summarization LLM needed. The original user message (the full hypothesis/spec/design system context) is always preserved as `messages[0]`.
+
 **Why `src/lib/provider-fetch.ts`.** LLM fetch logic is identical on client and server, but `import.meta.env` (client) and `process.env` (server) are incompatible. The shared module contains only environment-agnostic functions. Client and server each have their own `buildChatRequestFromMessages` that reads the correct env API, then re-export everything else from the shared module.
 
 **Why `src/constants/`.** String literals for node types, edge types, and generation statuses appear across stores, hooks, components, and edge/node definitions. A dedicated constants layer eliminates magic strings and ensures TypeScript narrows to exact union types at every call site.
 
-**Why SSE for generation.** Each variant is a separate SSE stream. Events: `activity` (thinking, file writes), `progress` (phase labels), `code` (final HTML), `error`, `done`. The client manages sequencing across variants.
+**Why SSE for generation.** Each variant is a separate SSE stream. Single-shot events: `progress`, `code`, `done`. Agentic events additionally include `activity`, `plan`, and `file`. The client manages sequencing across variants.
 
-**Why StoragePort.** Generated code currently lives in IndexedDB (browser-local). The `StoragePort` abstraction allows swapping to a server-backed database later without changing any consuming code.
+**Why `bundleVirtualFS` on the client.** The agentic agent produces separate files (index.html, styles.css, app.js). The sandboxed iframe environment has no file system — it renders a single HTML string. `bundleVirtualFS` inlines CSS and JS at display time, keeping the stored files pristine and separately downloadable.
+
+**Why StoragePort.** Generated code currently lives in IndexedDB (browser-local). The `StoragePort` abstraction allows swapping to a server-backed database later without changing any consuming code. The files store (agentic output) is added alongside the existing code and provenance stores.
 
 **Why LM Studio is local-dev only.** Vercel serverless functions can't reach `localhost:1234`. In production, only cloud providers (OpenRouter) work.
 
@@ -277,9 +316,9 @@ Single source of truth for string literals shared across the codebase. Eliminate
 **Vercel:**
 - `vercel.json` configures static output from `dist/` and API routes via `api/[[...route]].ts`
 - Set `OPENROUTER_API_KEY` as a Vercel environment variable
-- `npm run build` produces the SPA; Vercel bundles the serverless function automatically
+- `pnpm build` produces the SPA; Vercel bundles the serverless function automatically
 
 **Local dev:**
-- `npm run dev` — Vite dev server (port 5173)
-- `npm run dev:server` — Hono API server (port 3001)
+- `pnpm dev` — Vite dev server (port 5173)
+- `pnpm dev:server` — Hono API server (port 3001)
 - Vite proxy forwards `/api/*` to Hono

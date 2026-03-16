@@ -40,9 +40,12 @@ export interface GenerateRequest {
   modelId: string;
   promptOverrides?: {
     genSystemHtml?: string;
+    genSystemHtmlAgentic?: string;
     variant?: string;
   };
   supportsVision?: boolean;
+  mode?: 'single' | 'agentic';
+  thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high';
 }
 
 export type GenerateSSEEvent =
@@ -50,6 +53,8 @@ export type GenerateSSEEvent =
   | { type: 'activity'; entry: string }
   | { type: 'code'; code: string }
   | { type: 'error'; error: string }
+  | { type: 'file'; path: string; content: string }
+  | { type: 'plan'; files: string[] }
   | { type: 'done' };
 
 // ── Models ──────────────────────────────────────────────────────────

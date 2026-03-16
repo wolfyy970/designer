@@ -9,6 +9,10 @@ export const browserStorage: StoragePort = {
   getCodeKeys: idb.getCodeKeys,
   saveProvenance: idb.saveProvenance,
   deleteProvenance: idb.deleteProvenance,
+  saveFiles: idb.saveFiles,
+  loadFiles: idb.loadFiles,
+  deleteFiles: idb.deleteFiles,
+  clearAllFiles: idb.clearAllFiles,
   garbageCollect: async (activeResultIds: Set<string>): Promise<GCResult> => {
     return idb.garbageCollect(activeResultIds);
   },

@@ -1,6 +1,6 @@
 import { memo, useCallback, useState } from 'react';
 import { type NodeProps, type Node, Handle, Position } from '@xyflow/react';
-import { ChevronDown, ChevronRight, X, Sparkles, Loader2, Pencil } from 'lucide-react';
+import { ChevronDown, ChevronRight, X, Sparkles, Loader2, Pencil, Zap } from 'lucide-react';
 import { useCompilerStore, findVariantStrategy } from '../../../stores/compiler-store';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { useGenerationStore } from '../../../stores/generation-store';
@@ -25,6 +25,23 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
     (s) => findVariantStrategy(s.dimensionMaps, strategyId),
   );
   const updateVariant = useCompilerStore((s) => s.updateVariant);
+  // Read via Zustand store selectors (same pattern as useNodeProviderModel) so updates
+  // from updateNodeData are immediately reactive — not delayed by React Flow reconciliation.
+  const agentMode = useCanvasStore(
+    (s) => ((s.nodes.find((n) => n.id === nodeId)?.data.agentMode as 'single' | 'agentic' | undefined) ?? 'single'),
+  );
+  const thinkingLevel = useCanvasStore(
+    (s) => ((s.nodes.find((n) => n.id === nodeId)?.data.thinkingLevel as 'off' | 'minimal' | 'low' | 'medium' | 'high' | undefined) ?? 'minimal'),
+  );
+
+  const setAgentMode = useCallback(
+    (mode: 'single' | 'agentic') => useCanvasStore.getState().updateNodeData(nodeId, { agentMode: mode }),
+    [nodeId],
+  );
+  const setThinkingLevel = useCallback(
+    (level: 'off' | 'minimal' | 'medium') => useCanvasStore.getState().updateNodeData(nodeId, { thinkingLevel: level }),
+    [nodeId],
+  );
 
   const handleRemove = useNodeRemoval(nodeId);
 
@@ -213,7 +230,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
       )}
 
       {/* Skeleton while generating */}
-      {isGenerating && <GeneratingSkeleton label="Creating design…" elapsed={elapsed} />}
+      {isGenerating && <GeneratingSkeleton label={agentMode === 'agentic' ? 'Agent reasoning…' : 'Creating design…'} elapsed={elapsed} />}
 
       {/* ── Generation Controls ──────────────────────────────── */}
       <div className="border-t border-border-subtle px-3 py-2.5">
@@ -222,6 +239,46 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
             {generationError}
           </div>
         )}
+
+        {/* Agentic mode toggle */}
+        <div className="nodrag nowheel mb-2 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1 text-nano text-fg-muted">
+              <Zap size={9} />
+              Agentic
+            </span>
+            <button
+              onPointerDown={() => setAgentMode(agentMode === 'agentic' ? 'single' : 'agentic')}
+              title={agentMode === 'agentic' ? 'Switch to single-shot mode' : 'Switch to agentic mode (uses more tokens)'}
+              className={`relative h-4 w-7 overflow-hidden rounded-full transition-colors ${agentMode === 'agentic' ? 'bg-accent' : 'bg-border'}`}
+            >
+              <span
+                className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${agentMode === 'agentic' ? 'translate-x-3.5' : 'translate-x-0.5'}`}
+              />
+            </button>
+          </div>
+
+          {agentMode === 'agentic' && (
+            <div className="flex items-center justify-between">
+              <span className="text-nano text-fg-muted">Thinking</span>
+              <div className="flex gap-0.5 rounded border border-border bg-surface p-0.5">
+                {(['off', 'minimal', 'medium'] as const).map((level) => {
+                  const label = level === 'off' ? 'None' : level === 'minimal' ? 'Light' : 'Deep';
+                  return (
+                    <button
+                      key={level}
+                      onPointerDown={() => setThinkingLevel(level)}
+                      className={`rounded px-1.5 py-0.5 text-nano transition-colors ${thinkingLevel === level ? 'bg-fg text-bg' : 'text-fg-muted hover:text-fg-secondary'}`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="nodrag nowheel">
           {hint && (
             <p className="mb-1.5 text-center text-nano text-fg-muted">{hint}</p>
@@ -244,8 +301,8 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               </>
             ) : (
               <>
-                <Sparkles size={12} />
-                Create
+                {agentMode === 'agentic' ? <Zap size={12} /> : <Sparkles size={12} />}
+                {agentMode === 'agentic' ? 'Think & Create' : 'Create'}
               </>
             )}
           </button>

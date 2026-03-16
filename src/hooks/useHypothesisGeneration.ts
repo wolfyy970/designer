@@ -93,8 +93,13 @@ export function useHypothesisGeneration({
     const connectedModels = getConnectedModels(nodeId);
     if (connectedModels.length === 0) return;
 
-    // Collect design system content from connected DesignSystem nodes
+    // Read agentic settings from node data at generation time
     const { nodes: canvasNodes, edges: canvasEdges } = useCanvasStore.getState();
+    const thisNode = canvasNodes.find((n) => n.id === nodeId);
+    const agentMode = (thisNode?.data?.agentMode as 'single' | 'agentic' | undefined) ?? 'single';
+    const thinkingLevel = thisNode?.data?.thinkingLevel as 'off' | 'minimal' | 'low' | 'medium' | 'high' | undefined;
+
+    // Collect design system content from connected DesignSystem nodes
     const { content: dsContent, images: dsImages } =
       collectDesignSystemInputs(canvasNodes, canvasEdges, nodeId);
 
@@ -140,7 +145,7 @@ export function useHypothesisGeneration({
         generate(
           model.providerId,
           prompts,
-          { model: model.modelId },
+          { model: model.modelId, mode: agentMode, thinkingLevel },
           {
             onPlaceholdersReady: (phs) => {
               syncAfterGenerate(phs, nodeId);

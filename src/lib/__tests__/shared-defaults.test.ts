@@ -5,6 +5,7 @@ const EXPECTED_KEYS = [
   'compilerSystem',
   'compilerUser',
   'genSystemHtml',
+  'genSystemHtmlAgentic',
   'variant',
   'designSystemExtract',
 ] as const;
@@ -31,6 +32,13 @@ describe('PROMPT_DEFAULTS', () => {
 
   it('genSystemHtml contains HTML instruction', () => {
     expect(PROMPT_DEFAULTS.genSystemHtml).toContain('HTML');
+  });
+
+  it('genSystemHtmlAgentic references hypothesis-driven reasoning', () => {
+    expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('hypothesis');
+    expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('plan_files');
+    expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('write_file');
+    expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('read_file');
   });
 
   it('variant prompt contains template variables', () => {

@@ -10,6 +10,7 @@ import { STORAGE_KEYS } from '../lib/storage-keys';
 
 const codeStore = createStore(STORAGE_KEYS.IDB_CODE, 'code');
 const provenanceStore = createStore(STORAGE_KEYS.IDB_PROVENANCE, 'provenance');
+const filesStore = createStore(STORAGE_KEYS.IDB_FILES, 'files');
 
 // ── Generated code ────────────────────────────────────────────────────
 
@@ -46,14 +47,33 @@ export function deleteProvenance(resultId: string): Promise<void> {
   return del(resultId, provenanceStore);
 }
 
+// ── Virtual filesystem (multi-file agentic results) ──────────────────
+
+export function saveFiles(resultId: string, files: Record<string, string>): Promise<void> {
+  return set(resultId, files, filesStore);
+}
+
+export function loadFiles(resultId: string): Promise<Record<string, string> | undefined> {
+  return get(resultId, filesStore);
+}
+
+export function deleteFiles(resultId: string): Promise<void> {
+  return del(resultId, filesStore);
+}
+
+export function clearAllFiles(): Promise<void> {
+  return clear(filesStore);
+}
+
 // ── Garbage collection ────────────────────────────────────────────────
 
 /** Delete IndexedDB entries whose keys aren't in the active set. */
 export async function garbageCollect(
   activeResultIds: Set<string>,
-): Promise<{ codesRemoved: number; provenanceRemoved: number }> {
+): Promise<{ codesRemoved: number; provenanceRemoved: number; filesRemoved: number }> {
   let codesRemoved = 0;
   let provenanceRemoved = 0;
+  let filesRemoved = 0;
 
   const codeKeys = await getCodeKeys();
   for (const key of codeKeys) {
@@ -71,5 +91,13 @@ export async function garbageCollect(
     }
   }
 
-  return { codesRemoved, provenanceRemoved };
+  const fileKeys = (await keys(filesStore)) as string[];
+  for (const key of fileKeys) {
+    if (!activeResultIds.has(key as string)) {
+      await del(key, filesStore);
+      filesRemoved++;
+    }
+  }
+
+  return { codesRemoved, provenanceRemoved, filesRemoved };
 }

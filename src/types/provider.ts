@@ -43,6 +43,12 @@ export interface GenerationResult {
   providerId: string;
   status: GenerationStatus;
   code?: string;
+  /** In-memory only — live preview during agentic generation. Never persisted. */
+  liveCode?: string;
+  /** In-memory only — live file map during agentic generation. Never persisted. */
+  liveFiles?: Record<string, string>;
+  /** In-memory only — files the agent declared it will create. Never persisted. */
+  liveFilesPlan?: string[];
   error?: string;
   runId: string;
   runNumber: number;
