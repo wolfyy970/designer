@@ -1,4 +1,12 @@
 import type { GenerationStatus } from '../constants/generation';
+import type {
+  AgenticCheckpoint,
+  AggregatedEvaluationReport,
+  AgenticPhase,
+  EvaluationRoundSnapshot,
+} from './evaluation';
+
+export type { EvaluationContextPayload } from './evaluation';
 
 export type { GenerationStatus };
 
@@ -16,6 +24,7 @@ export interface ProviderModel {
   name: string;
   contextLength?: number;
   supportsVision?: boolean;
+  supportsReasoning?: boolean;
 }
 
 export interface ProviderOptions {
@@ -35,6 +44,19 @@ export interface Provenance {
   provider: string;
   model: string;
   timestamp: string;
+  /** Agentic evaluator harness: persisted when evaluation completed */
+  evaluation?: {
+    rounds: EvaluationRoundSnapshot[];
+    finalAggregate: AggregatedEvaluationReport;
+  };
+  /** Lightweight run checkpoint for observability and future continuation */
+  checkpoint?: AgenticCheckpoint;
+}
+
+export interface TodoItem {
+  id: string;
+  task: string;
+  status: 'pending' | 'in_progress' | 'completed';
 }
 
 export interface GenerationResult {
@@ -49,6 +71,8 @@ export interface GenerationResult {
   liveFiles?: Record<string, string>;
   /** In-memory only — files the agent declared it will create. Never persisted. */
   liveFilesPlan?: string[];
+  /** In-memory only — current agent task list. Never persisted. */
+  liveTodos?: TodoItem[];
   error?: string;
   runId: string;
   runNumber: number;
@@ -61,6 +85,14 @@ export interface GenerationResult {
   };
   progressMessage?: string;
   activityLog?: string[];
+  /** Agentic harness: high-level phase for UI */
+  agenticPhase?: AgenticPhase;
+  /** Live evaluation progress label during SSE */
+  evaluationStatus?: string;
+  /** Latest aggregate report while evaluating / after complete */
+  evaluationSummary?: AggregatedEvaluationReport;
+  /** Full rounds (typically 1–2) after run completes */
+  evaluationRounds?: EvaluationRoundSnapshot[];
 }
 
 export interface ChatResponse {

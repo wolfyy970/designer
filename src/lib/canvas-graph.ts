@@ -1,18 +1,19 @@
-import type { Node, Edge } from '@xyflow/react';
 import type { DesignSpec, ReferenceImage } from '../types/spec';
 import type { GenerationResult } from '../types/provider';
 import type { CritiqueInput } from './prompts/compiler-user';
 import type { DesignSystemNodeData, CritiqueNodeData, VariantNodeData } from '../types/canvas-data';
 import { loadCode } from '../services/idb-storage';
+import { SECTION_NODE_TYPES } from '../lib/canvas-layout';
 import {
   NODE_TYPE_TO_SECTION,
-  SECTION_NODE_TYPES,
   type CanvasNodeType,
-  type CanvasNodeData,
-} from '../stores/canvas-store';
+  type WorkspaceEdge,
+  type WorkspaceNode,
+} from '../types/workspace-graph';
+import type { DomainIncubatorWiring } from '../types/workspace-domain';
 
-type AnyNode = Node<CanvasNodeData, string>;
-type AnyEdge = Edge;
+type AnyNode = WorkspaceNode;
+type AnyEdge = WorkspaceEdge;
 
 // ── Design system inputs ────────────────────────────────────────────
 
@@ -116,10 +117,26 @@ export async function buildCompileInputs(
   spec: DesignSpec,
   compilerId: string,
   results: GenerationResult[],
+  wiring?: DomainIncubatorWiring | null,
 ): Promise<CompileInputs> {
-  const incomingEdges = edges.filter((e) => e.target === compilerId);
-  const connectedNodeIds = new Set(incomingEdges.map((e) => e.source));
-  const connectedNodes = nodes.filter((n) => connectedNodeIds.has(n.id));
+  let connectedNodes: AnyNode[];
+  if (
+    wiring &&
+    (wiring.sectionNodeIds.length > 0 ||
+      wiring.variantNodeIds.length > 0 ||
+      wiring.critiqueNodeIds.length > 0)
+  ) {
+    const idSet = new Set<string>([
+      ...wiring.sectionNodeIds,
+      ...wiring.variantNodeIds,
+      ...wiring.critiqueNodeIds,
+    ]);
+    connectedNodes = nodes.filter((n) => idSet.has(n.id));
+  } else {
+    const incomingEdges = edges.filter((e) => e.target === compilerId);
+    const connectedNodeIds = new Set(incomingEdges.map((e) => e.source));
+    connectedNodes = nodes.filter((n) => connectedNodeIds.has(n.id));
+  }
 
   // Build partial spec: keep connected sections, blank out disconnected ones
   const connectedSectionIds = new Set<string>();

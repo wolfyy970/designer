@@ -22,9 +22,6 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "exclude": [
-    "server/services/_archived"
-  ],
   "include": [
     "server",
     "api",

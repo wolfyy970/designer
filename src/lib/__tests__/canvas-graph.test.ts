@@ -1,8 +1,15 @@
 import { describe, it, expect } from 'vitest';
+import { EDGE_STATUS, EDGE_TYPES } from '../../constants/canvas';
 import { computeLineage } from '../canvas-graph';
 
 function makeEdge(source: string, target: string) {
-  return { id: `edge-${source}-to-${target}`, source, target };
+  return {
+    id: `edge-${source}-to-${target}`,
+    source,
+    target,
+    type: EDGE_TYPES.DATA_FLOW,
+    data: { status: EDGE_STATUS.IDLE },
+  };
 }
 
 describe('computeLineage', () => {

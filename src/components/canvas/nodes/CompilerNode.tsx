@@ -16,8 +16,8 @@ import {
 import type { CompilerNodeData } from '../../../types/canvas-data';
 import type { VariantStrategy } from '../../../types/compiler';
 import { compile as apiCompile } from '../../../api/client';
-import { getPrompt } from '../../../stores/prompt-store';
 import { buildCompileInputs } from '../../../lib/canvas-graph';
+import { useWorkspaceDomainStore } from '../../../stores/workspace-domain-store';
 import { FIT_VIEW_DELAY_MS, FIT_VIEW_DURATION_MS } from '../../../lib/constants';
 import { processingOrFilled } from '../../../lib/node-status';
 import { EDGE_STATUS } from '../../../constants/canvas';
@@ -52,6 +52,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
   const setEdgeStatusBySource = useCanvasStore((s) => s.setEdgeStatusBySource);
   const edges = useCanvasStore((s) => s.edges);
   const nodes = useCanvasStore((s) => s.nodes);
+  const domainWiring = useWorkspaceDomainStore((s) => s.incubatorWirings[id]);
 
   const { providerId, modelId, supportsVision } = useConnectedModel(id);
 
@@ -59,6 +60,18 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
 
   // Count connected input nodes (sections + variants + critiques)
   const connectedInputCount = useMemo(() => {
+    if (
+      domainWiring &&
+      (domainWiring.sectionNodeIds.length > 0 ||
+        domainWiring.variantNodeIds.length > 0 ||
+        domainWiring.critiqueNodeIds.length > 0)
+    ) {
+      return (
+        domainWiring.sectionNodeIds.length +
+        domainWiring.variantNodeIds.length +
+        domainWiring.critiqueNodeIds.length
+      );
+    }
     const incomingEdges = edges.filter((e) => e.target === id);
     return incomingEdges.filter((e) => {
       const sourceNode = nodes.find((n) => n.id === e.source);
@@ -68,7 +81,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
         sourceNode.type === 'critique'
       );
     }).length;
-  }, [edges, nodes, id]);
+  }, [domainWiring, edges, nodes, id]);
 
   // Total hypothesis count from dimension map
   const totalHypotheses = dimensionMap?.variants.length ?? 0;
@@ -82,16 +95,16 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
 
   const handleCompile = useCallback(async () => {
     const results = useGenerationStore.getState().results;
+    const wiring = useWorkspaceDomainStore.getState().incubatorWirings[id];
     const { partialSpec, referenceDesigns, critiques } =
-      await buildCompileInputs(nodes, edges, spec, id, results);
+      await buildCompileInputs(nodes, edges, spec, id, results, wiring);
 
     const dimensionMaps = useCompilerStore.getState().dimensionMaps;
     const existingStrategies: VariantStrategy[] = [];
-    for (const edge of edges) {
-      if (edge.source !== id) continue;
-      const target = nodes.find((n) => n.id === edge.target && n.type === 'hypothesis');
-      if (!target?.data.refId) continue;
-      const strategy = findVariantStrategy(dimensionMaps, target.data.refId as string);
+    const hypotheses = useWorkspaceDomainStore.getState().hypotheses;
+    for (const h of Object.values(hypotheses)) {
+      if (h.incubatorId !== id || h.placeholder) continue;
+      const strategy = findVariantStrategy(dimensionMaps, h.variantStrategyId);
       if (strategy) existingStrategies.push(strategy);
     }
 
@@ -106,10 +119,6 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
         spec: partialSpec,
         providerId: providerId!,
         modelId: modelId!,
-        promptOverrides: {
-          compilerSystem: getPrompt('compilerSystem'),
-          compilerUser: getPrompt('compilerUser'),
-        },
         referenceDesigns,
         critiques: critiques.length > 0 ? critiques : undefined,
         supportsVision,

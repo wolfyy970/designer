@@ -7,6 +7,7 @@ import type {
 } from '../../../src/types/provider.ts';
 import { env } from '../../env.ts';
 import { buildChatRequestFromMessages, fetchChatCompletion, fetchModelList, parseChatResponse } from '../../lib/provider-helpers.ts';
+import { supportsReasoningModel } from '../../../src/lib/model-capabilities.ts';
 
 function authHeaders(): Record<string, string> {
   return {
@@ -30,6 +31,7 @@ export class OpenRouterGenerationProvider implements GenerationProvider {
           name: (m.name as string) ?? (m.id as string),
           contextLength: m.context_length as number | undefined,
           supportsVision: typeof m.modality === 'string' && (m.modality as string).includes('image'),
+          supportsReasoning: supportsReasoningModel(m.id as string),
         })),
       authHeaders(),
     );

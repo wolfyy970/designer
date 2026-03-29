@@ -9,6 +9,8 @@ import type {
   DesignSystemExtractRequest,
   DesignSystemExtractResponse,
 } from './types';
+import type { TodoItem } from '../types/provider';
+import type { AgenticCheckpoint, AgenticPhase, EvaluationRoundSnapshot } from '../types/evaluation';
 import { normalizeError } from '../lib/error-utils';
 
 const API_BASE = '/api';
@@ -48,6 +50,12 @@ export interface GenerateStreamCallbacks {
   onError?: (error: string) => void;
   onFile?: (path: string, content: string) => void;
   onPlan?: (files: string[]) => void;
+  onTodos?: (todos: TodoItem[]) => void;
+  onPhase?: (phase: AgenticPhase) => void;
+  onEvaluationProgress?: (round: number, phase: string, message?: string) => void;
+  onEvaluationReport?: (round: number, snapshot: EvaluationRoundSnapshot) => void;
+  onRevisionRound?: (round: number, brief: string) => void;
+  onCheckpoint?: (checkpoint: AgenticCheckpoint) => void;
   onDone?: () => void;
 }
 
@@ -116,6 +124,24 @@ export async function generate(
               break;
             case 'plan':
               callbacks.onPlan?.(event.files);
+              break;
+            case 'todos':
+              callbacks.onTodos?.(event.todos);
+              break;
+            case 'phase':
+              callbacks.onPhase?.(event.phase);
+              break;
+            case 'evaluation_progress':
+              callbacks.onEvaluationProgress?.(event.round, event.phase, event.message);
+              break;
+            case 'evaluation_report':
+              callbacks.onEvaluationReport?.(event.round, event.snapshot);
+              break;
+            case 'revision_round':
+              callbacks.onRevisionRound?.(event.round, event.brief);
+              break;
+            case 'checkpoint':
+              callbacks.onCheckpoint?.(event.checkpoint);
               break;
             case 'done':
               callbacks.onDone?.();

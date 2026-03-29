@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { ReferenceImage } from '../../src/types/spec.ts';
 import { callLLM } from '../services/compiler.ts';
-import { resolvePrompt } from '../lib/prompts/defaults.ts';
+import { getPromptBody } from '../db/prompts.ts';
 import { normalizeError } from '../lib/error-utils.ts';
 
 const designSystem = new Hono();
@@ -15,9 +15,6 @@ const ExtractRequestSchema = z.object({
   }).passthrough()),
   providerId: z.string().min(1),
   modelId: z.string().min(1),
-  promptOverrides: z.object({
-    designSystemExtract: z.string().optional(),
-  }).optional(),
 });
 
 designSystem.post('/extract', async (c) => {
@@ -28,7 +25,7 @@ designSystem.post('/extract', async (c) => {
   }
   const body = parsed.data;
 
-  const systemPrompt = resolvePrompt('designSystemExtract', body.promptOverrides);
+  const systemPrompt = await getPromptBody('designSystemExtract');
 
   try {
     const response = await callLLM(

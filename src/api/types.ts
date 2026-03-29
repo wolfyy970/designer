@@ -1,6 +1,12 @@
 import type { DesignSpec, ReferenceImage } from '../types/spec';
 import type { DimensionMap, VariantStrategy } from '../types/compiler';
-import type { ProviderModel } from '../types/provider';
+import type { ProviderModel, TodoItem } from '../types/provider';
+import type {
+  AgenticCheckpoint,
+  AgenticPhase,
+  EvaluationContextPayload,
+  EvaluationRoundSnapshot,
+} from '../types/evaluation';
 
 // ── Compile ─────────────────────────────────────────────────────────
 
@@ -8,10 +14,6 @@ export interface CompileRequest {
   spec: DesignSpec;
   providerId: string;
   modelId: string;
-  promptOverrides?: {
-    compilerSystem?: string;
-    compilerUser?: string;
-  };
   referenceDesigns?: { name: string; code: string }[];
   critiques?: CritiqueInput[];
   supportsVision?: boolean;
@@ -38,14 +40,13 @@ export interface GenerateRequest {
   images?: ReferenceImage[];
   providerId: string;
   modelId: string;
-  promptOverrides?: {
-    genSystemHtml?: string;
-    genSystemHtmlAgentic?: string;
-    variant?: string;
-  };
   supportsVision?: boolean;
   mode?: 'single' | 'agentic';
   thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high';
+  evaluationContext?: EvaluationContextPayload;
+  /** Optional separate provider/model for LLM evaluators; defaults to builder's when unset */
+  evaluatorProviderId?: string;
+  evaluatorModelId?: string;
 }
 
 export type GenerateSSEEvent =
@@ -55,6 +56,12 @@ export type GenerateSSEEvent =
   | { type: 'error'; error: string }
   | { type: 'file'; path: string; content: string }
   | { type: 'plan'; files: string[] }
+  | { type: 'todos'; todos: TodoItem[] }
+  | { type: 'phase'; phase: AgenticPhase }
+  | { type: 'evaluation_progress'; round: number; phase: string; message?: string }
+  | { type: 'evaluation_report'; round: number; snapshot: EvaluationRoundSnapshot }
+  | { type: 'revision_round'; round: number; brief: string }
+  | { type: 'checkpoint'; checkpoint: AgenticCheckpoint }
   | { type: 'done' };
 
 // ── Models ──────────────────────────────────────────────────────────
@@ -90,9 +97,6 @@ export interface DesignSystemExtractRequest {
   images: ReferenceImage[];
   providerId: string;
   modelId: string;
-  promptOverrides?: {
-    designSystemExtract?: string;
-  };
 }
 
 export interface DesignSystemExtractResponse {

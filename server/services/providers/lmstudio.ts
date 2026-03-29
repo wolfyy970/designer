@@ -7,6 +7,7 @@ import type {
 } from '../../../src/types/provider.ts';
 import { env } from '../../env.ts';
 import { buildChatRequestFromMessages, fetchChatCompletion, fetchModelList, parseChatResponse } from '../../lib/provider-helpers.ts';
+import { supportsReasoningModel } from '../../../src/lib/model-capabilities.ts';
 
 const DEFAULT_MODEL = 'qwen/qwen3-coder-next';
 
@@ -21,7 +22,7 @@ export class LMStudioProvider implements GenerationProvider {
     return fetchModelList(`${env.LMSTUDIO_URL}/v1/models`, (models) =>
       models.map((m) => {
         const id = m.id as string;
-        return { id, name: id };
+        return { id, name: id, supportsReasoning: supportsReasoningModel(id) };
       }),
     );
   }

@@ -59,6 +59,22 @@
 └─────────────────────────────────────────────┘
 ```
 
+## Domain model, canvas projection, and session DTOs
+
+**Canonical client model** — `src/stores/workspace-domain-store.ts` (persisted) holds workflow semantics without requiring a graph: incubator input wiring (section / variant / critique node ids), model assignments per incubator and per hypothesis, design-system attachments, hypothesis ↔ incubator ↔ variant-strategy links, variant slots (active result / pins), and mirrors for model/design-system/critique payloads synced from the canvas. `src/types/workspace-domain.ts` defines the shapes.
+
+**Canvas as projection** — `src/stores/canvas-store.ts` still persists React Flow–backed **nodes and edges** for layout and interaction. Graph edits call `src/workspace/domain-commands.ts` so domain relations stay the source of truth for compile/generate. `src/workspace/domain-to-graph.ts` holds small view helpers derived from domain state.
+
+**Compile inputs** — `buildCompileInputs()` in `src/lib/canvas-graph.ts` accepts optional `DomainIncubatorWiring`; when present, structural inputs come from the domain list instead of only incoming edges to the compiler node.
+
+**Graph queries** (`src/workspace/graph-queries.ts`) remain pure helpers over `WorkspaceNode[]` + `WorkspaceEdge[]` for legacy paths and visualization (e.g. lineage).
+
+**Session DTOs** (`src/workspace/workspace-session.ts`) — contexts such as `HypothesisGenerationContext` prefer domain-backed model credentials and design-system text when a hypothesis exists in the domain store, with graph snapshot fallback.
+
+**Provenance** for `/api/generate` lives in `src/types/provenance-context.ts`.
+
+The **server** LLM engine stays UI-agnostic; client-only modules under `src/workspace/` are excluded from `tsconfig.server.json` so Vite-only imports do not typecheck as Node.
+
 ## Data Flow
 
 ```
@@ -102,6 +118,8 @@ Next iteration cycle
 | `/api/logs` | GET | Fetch LLM call log entries (dev-only) | JSON: `LlmLogEntry[]` |
 | `/api/logs` | DELETE | Clear log entries (dev-only) | 204 |
 | `/api/design-system/extract` | POST | Extract design tokens from screenshots | JSON: extracted tokens |
+| `/api/prompts/*` | GET | Versioned prompt bodies (e.g. variant template) from DB | JSON |
+| `/api/skills/*` | GET | Versioned skill definitions from DB | JSON |
 | `/api/health` | GET | Health check | JSON: `{ ok: true }` |
 
 **`/api/generate` request fields:** `prompt`, `providerId`, `modelId`, `promptOverrides` (`genSystemHtml`, `genSystemHtmlAgentic`, `variant`), `supportsVision`, `mode` (`single` | `agentic`), `thinkingLevel` (`off` | `minimal` | `low` | `medium` | `high`).
@@ -123,7 +141,14 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 | `routes/models.ts` | GET /api/models/:provider |
 | `routes/logs.ts` | GET/DELETE /api/logs |
 | `routes/design-system.ts` | POST /api/design-system/extract |
+| `routes/prompts.ts` | GET `/api/prompts/:key` — latest prompt body from Prisma |
+| `routes/skills.ts` | GET `/api/skills`, `/api/skills/:key` — skill metadata and bodies |
+| `db/` | Prisma client singleton (`DATABASE_URL`, SQLite in dev) |
 | `services/pi-agent-service.ts` | PI Agent adapter — single import boundary for `@mariozechner/pi-agent-core`. Defines virtual filesystem, tool implementations (`plan_files`, `write_file`, `read_file`), context compaction, and SSE event emission. |
+| `services/agentic-orchestrator.ts` | Agentic evaluation / tool orchestration helpers |
+| `services/pi-agent-tools.ts` | Tool definitions wired into the PI agent |
+| `services/design-evaluation-service.ts` | Design evaluation payload handling |
+| `services/browser-qa-evaluator.ts` | Browser-based QA evaluation (when used) |
 | `services/compiler.ts` | LLM compilation — Zod-validates request/response boundaries |
 | `services/providers/openrouter.ts` | OpenRouter provider (direct API, auth header) |
 | `services/providers/lmstudio.ts` | LM Studio provider (direct URL) |
@@ -191,9 +216,11 @@ Centralized rules for what connects to what when nodes are added or generated:
 
 Model connections are column-scoped: a Model node connects only to adjacent-column nodes.
 
-### Lineage & Dimming (`canvas-graph.ts`)
+### Lineage & compile topology (`canvas-graph.ts`)
 
 `computeLineage` performs a full connected-component walk (bidirectional BFS). Selecting a node highlights every node reachable through any chain of edges — including sibling inputs to shared targets. Unconnected nodes dim to 40%.
+
+`buildCompileInputs` builds the partial spec, reference designs, and critiques for `/api/compile`; it can use **domain incubator wiring** when provided so compile does not depend solely on edge topology.
 
 ### Version Stacking
 
@@ -234,9 +261,10 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 | Store | Persistence | What it owns |
 |-------|-------------|--------------|
 | `spec-store` | localStorage | Active `DesignSpec`, section/image CRUD |
-| `compiler-store` | localStorage | `DimensionMap` per compiler node, `CompiledPrompt[]`, variant editing |
+| `compiler-store` | localStorage | `DimensionMap` per **incubator id** (same id as the Incubator canvas node today), `CompiledPrompt[]`, variant editing |
 | `generation-store` | localStorage + StoragePort | `GenerationResult[]` metadata in localStorage, code in IndexedDB (`code` store), multi-file in IndexedDB (`files` store). `liveCode`, `liveFiles`, `liveFilesPlan` are in-memory only, stripped by `partialize`. |
-| `canvas-store` | localStorage | Nodes, edges, viewport, auto-layout preferences |
+| `workspace-domain-store` | localStorage | Domain-first relations and payloads (hypotheses, incubator wiring, model assignments, variant slots, mirrored node content). Prefer this for workflow semantics. |
+| `canvas-store` | localStorage | React Flow nodes/edges, viewport, auto-layout, transient UI (lineage, edge status, `variantNodeIdMap`). Kept in sync with domain on connect/disconnect and compile/generate lifecycle. |
 | `prompt-store` | localStorage | Prompt template overrides (sent as per-request overrides to server). Includes `genSystemHtmlAgentic`. |
 | `theme-store` | — | Theme mode (always `dark`; static store) |
 
@@ -249,7 +277,7 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 | `useResultCode.ts` | Loads generated code from StoragePort (single-file results) |
 | `useResultFiles.ts` | Loads multi-file result from StoragePort (agentic results) |
 | `useProviderModels.ts` | React Query hook — calls `apiClient.listModels()` |
-| `useConnectedModel.ts` | Reads provider/model config from a connected Model node |
+| `useConnectedModel.ts` | Resolves provider/model: prefers domain (`incubatorModelNodeIds` / hypothesis `modelNodeIds`), then first upstream model edge |
 | `useNodeRemoval.ts` | Shared node + associated-edges removal logic |
 
 ### Constants (`src/constants/`)
@@ -270,7 +298,7 @@ Single source of truth for string literals shared across the codebase. Eliminate
 | `node-status.ts` | `filledOrEmpty`, `processingOrFilled`, `variantStatus` — pure helpers for node visual state |
 | `provider-fetch.ts` | Environment-agnostic fetch utilities shared by client and server (`fetchChatCompletion`, `fetchModelList`, `parseChatResponse`, `extractMessageText`) |
 | `canvas-connections.ts` | Connection validation rules and auto-connect edge builders |
-| `canvas-graph.ts` | Lineage BFS (`computeLineage`) |
+| `canvas-graph.ts` | Lineage BFS (`computeLineage`); `buildCompileInputs` for compile (optional domain wiring) |
 | `canvas-layout.ts` | Sugiyama-style layout (`computeLayout`) |
 | `extract-code.ts` | LLM response code-block extraction |
 | `error-utils.ts` | `normalizeError` — consistent error normalization |

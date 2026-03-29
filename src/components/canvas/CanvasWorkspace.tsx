@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -12,6 +12,7 @@ import {
 import '@xyflow/react/dist/base.css';
 
 import { useCanvasStore, SECTION_NODE_TYPES, GRID_SIZE, type CanvasNodeType } from '../../stores/canvas-store';
+import { toReactFlowEdges, toReactFlowNodes } from '../../workspace/reactflow-adapter';
 import { nodeTypes } from './nodes/node-types';
 import { edgeTypes } from './edges/edge-types';
 import CanvasHeader from './CanvasHeader';
@@ -31,6 +32,8 @@ function CanvasInner() {
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
   const viewport = useCanvasStore((s) => s.viewport);
+  const rfNodes = useMemo(() => toReactFlowNodes(nodes), [nodes]);
+  const rfEdges = useMemo(() => toReactFlowEdges(edges), [edges]);
   const onNodesChange = useCanvasStore((s) => s.onNodesChange);
   const onEdgesChange = useCanvasStore((s) => s.onEdgesChange);
   const isValidConnection = useCanvasStore((s) => s.isValidConnection);
@@ -134,8 +137,8 @@ function CanvasInner() {
       <CanvasHeader />
       <ReactFlow
         colorMode="dark"
-        nodes={nodes}
-        edges={edges}
+        nodes={rfNodes}
+        edges={rfEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={handleConnect}

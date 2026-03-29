@@ -15,6 +15,9 @@ export const ENV_KEYS: Record<PromptKey, string> = {
   genSystemHtmlAgentic: 'VITE_PROMPT_GEN_SYSTEM_HTML_AGENTIC',
   variant: 'VITE_PROMPT_VARIANT',
   designSystemExtract: 'VITE_PROMPT_DESIGN_SYSTEM_EXTRACT',
+  evalDesignSystem: 'VITE_PROMPT_EVAL_DESIGN_SYSTEM',
+  evalStrategySystem: 'VITE_PROMPT_EVAL_STRATEGY_SYSTEM',
+  evalImplementationSystem: 'VITE_PROMPT_EVAL_IMPLEMENTATION_SYSTEM',
 };
 
 // ── Prompt metadata (for the editor UI) ─────────────────────────────
@@ -58,5 +61,23 @@ export const PROMPT_META: PromptMeta[] = [
     key: 'designSystemExtract',
     label: 'Design System — Extract',
     description: 'System prompt for extracting design tokens, components, and patterns from uploaded design system screenshots.',
+  },
+  {
+    key: 'evalDesignSystem',
+    label: 'Evaluator — Design quality',
+    description:
+      'System prompt for the design-quality evaluator (originality, coherence, craft, usability). Output must be JSON per contract.',
+  },
+  {
+    key: 'evalStrategySystem',
+    label: 'Evaluator — Strategy / KPI',
+    description:
+      'System prompt for hypothesis, KPI, constraint, and design-system adherence scoring. Output must be JSON per contract.',
+  },
+  {
+    key: 'evalImplementationSystem',
+    label: 'Evaluator — Implementation',
+    description:
+      'System prompt for static HTML/CSS/JS structural review. Output must be JSON per contract.',
   },
 ];

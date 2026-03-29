@@ -1,15 +1,41 @@
 /**
- * PI Agent adapter — single import boundary for @mariozechner/pi-agent-core.
+ * PI Agent session runner + stable re-exports.
  *
- * This is the ONLY file in the codebase that imports from @mariozechner/*.
- * PI is pre-1.0 (pinned at ~0.58.x). When upgrading, TypeScript will surface
- * any breaking API changes here in isolation.
+ * `pi-agent-service.ts` and `pi-agent-tools.ts` are the only modules that import
+ * `@mariozechner/pi-agent-core`. PI is pre-1.0 (pinned at ~0.58.x); keep upgrades scoped here.
  */
 import { Agent } from '@mariozechner/pi-agent-core';
-import type { AgentTool, AgentMessage } from '@mariozechner/pi-agent-core';
-import type { Model } from '@mariozechner/pi-ai';
-import { Type, type Static } from '@sinclair/typebox';
-import { env } from '../env.ts';
+import type { AgentMessage } from '@mariozechner/pi-agent-core';
+import type { TodoItem } from '../../src/types/provider.ts';
+import { buildModel, compactWithLLM, type ThinkingLevel } from './pi-agent-compaction.ts';
+import {
+  makeEditFileTool,
+  makeGrepTool,
+  makeListFilesTool,
+  makePlanFilesTool,
+  makeReadFileTool,
+  makeTodoWriteTool,
+  makeValidateHtmlTool,
+  makeValidateJsTool,
+  makeWriteFileTool,
+} from './pi-agent-tools.ts';
+
+// ── Re-exports (stable import surface for orchestrator + tests) ───────────────
+
+export {
+  buildModel,
+  buildFallbackSummary,
+  compactWithLLM,
+} from './pi-agent-compaction.ts';
+export type { ThinkingLevel } from './pi-agent-compaction.ts';
+export {
+  makeEditFileTool,
+  makeListFilesTool,
+  makeTodoWriteTool,
+  makeGrepTool,
+  makeValidateJsTool,
+  makeValidateHtmlTool,
+} from './pi-agent-tools.ts';
 
 // ── Public API types (app-domain only, no PI types cross this boundary) ───────
 
@@ -18,171 +44,55 @@ export interface AgentRunParams {
   userPrompt: string;
   providerId: string;
   modelId: string;
-  thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high';
+  thinkingLevel?: ThinkingLevel;
   signal?: AbortSignal;
 }
 
-export type AgentRunEventType = 'activity' | 'progress' | 'code' | 'error' | 'file' | 'plan';
+/** Extended session for revision rounds: seeded virtual FS + compaction hint */
+export interface AgentSessionParams extends AgentRunParams {
+  seedFiles?: Record<string, string>;
+  /** Appended to compaction summaries so the model retains evaluation context */
+  compactionNote?: string;
+  /** First progress line (default: initial build message) */
+  initialProgressMessage?: string;
+}
+
+export interface DesignAgentSessionResult {
+  files: Record<string, string>;
+  todos: TodoItem[];
+}
 
 export type AgentRunEvent =
   | { type: 'activity' | 'progress' | 'code' | 'error'; payload: string }
   | { type: 'file'; path: string; content: string }
-  | { type: 'plan'; files: string[] };
-
-// ── Internal helpers ──────────────────────────────────────────────────────────
-
-const ZEROED_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-
-/**
- * Construct a PI Model object for the given provider/model pair.
- * Uses manual construction (NOT getModel() from PI's curated registry)
- * so any OpenRouter or LM Studio model ID works without PI needing to know it.
- */
-function buildModel(
-  providerId: string,
-  modelId: string,
-  thinkingLevel?: AgentRunParams['thinkingLevel'],
-): Model<'openai-completions'> {
-  // `reasoning: true` tells PI to include `reasoning_effort` in the API request.
-  // Only set when the user has explicitly opted into a thinking level.
-  // Models that don't support extended reasoning will either ignore the parameter
-  // or return a clear API error — not a silent no-op.
-  const reasoning = !!thinkingLevel && thinkingLevel !== 'off';
-
-  if (providerId === 'lmstudio') {
-    return {
-      id: modelId,
-      name: modelId,
-      api: 'openai-completions',
-      provider: 'lmstudio',
-      baseUrl: `${env.LMSTUDIO_URL}/v1`,
-      reasoning,
-      input: ['text'],
-      cost: ZEROED_COST,
-      contextWindow: 131072,
-      maxTokens: 16384,
-    };
-  }
-
-  // Default: OpenRouter.
-  // PI recognizes provider='openrouter' and resolves OPENROUTER_API_KEY from env automatically,
-  // so no explicit Authorization header is needed here.
-  return {
-    id: modelId,
-    name: modelId,
-    api: 'openai-completions',
-    provider: 'openrouter',
-    baseUrl: `${env.OPENROUTER_BASE_URL}/api/v1`,
-    reasoning,
-    input: ['text'],
-    cost: ZEROED_COST,
-    contextWindow: 131072,
-    maxTokens: 16384,
-  };
-}
-
-const writeFileSchema = Type.Object({
-  path: Type.String({ description: 'File path relative to project root (e.g. index.html, styles.css, app.js).' }),
-  content: Type.String({ description: 'Complete file content.' }),
-  reasoning: Type.Optional(
-    Type.String({ description: 'Brief note on key decisions for this file (optional).' }),
-  ),
-});
-
-type WriteFileParams = Static<typeof writeFileSchema>;
-
-const readFileSchema = Type.Object({
-  path: Type.String({ description: 'File path to read.' }),
-});
-
-type ReadFileParams = Static<typeof readFileSchema>;
-
-function makeWriteFileTool(
-  virtualFS: Map<string, string>,
-  onFile: (path: string, content: string) => void,
-): AgentTool<typeof writeFileSchema> {
-  return {
-    name: 'write_file',
-    label: 'write_file',
-    description:
-      'Write or overwrite a file in the project. Each call updates the live preview immediately. ' +
-      'Use this to build the project file by file — index.html first, then styles.css, then app.js. ' +
-      'The last version of each file you write becomes the final design.',
-    parameters: writeFileSchema,
-    execute: async (_toolCallId, params: WriteFileParams) => {
-      virtualFS.set(params.path, params.content);
-      onFile(params.path, params.content);
-      return {
-        content: [{ type: 'text' as const, text: `File written: ${params.path}. Preview updated.` }],
-        details: null,
-      };
-    },
-  };
-}
-
-const planFilesSchema = Type.Object({
-  files: Type.Array(Type.String(), {
-    description: 'Ordered list of file paths you plan to create (e.g. ["index.html", "styles.css", "app.js"]).',
-  }),
-  reasoning: Type.Optional(
-    Type.String({ description: 'Brief note on the project structure and why (optional).' }),
-  ),
-});
-
-type PlanFilesParams = Static<typeof planFilesSchema>;
-
-function makePlanFilesTool(
-  onPlan: (files: string[]) => void,
-): AgentTool<typeof planFilesSchema> {
-  return {
-    name: 'plan_files',
-    label: 'plan_files',
-    description:
-      'Declare the files you plan to create before writing any of them. ' +
-      'Call this once at the start. The user sees this plan immediately so they know what to expect.',
-    parameters: planFilesSchema,
-    execute: async (_toolCallId, params: PlanFilesParams) => {
-      onPlan(params.files);
-      return {
-        content: [{ type: 'text' as const, text: `Plan registered: ${params.files.join(', ')}. Now write each file with write_file.` }],
-        details: null,
-      };
-    },
-  };
-}
-
-function makeReadFileTool(virtualFS: Map<string, string>): AgentTool<typeof readFileSchema> {
-  return {
-    name: 'read_file',
-    label: 'read_file',
-    description: 'Read a file you previously wrote to review or verify it before refining.',
-    parameters: readFileSchema,
-    execute: async (_toolCallId, params: ReadFileParams) => {
-      const content = virtualFS.get(params.path);
-      return {
-        content: [{ type: 'text' as const, text: content ?? `File not found: ${params.path}` }],
-        details: null,
-      };
-    },
-  };
-}
+  | { type: 'plan'; files: string[] }
+  | { type: 'todos'; todos: TodoItem[] };
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
- * Run the PI agentic design loop.
+ * Run the PI agentic design loop (possibly with seeded files for revision).
  *
- * Streams events back via `onEvent` as the agent reasons and generates.
- * Resolves when the agent finishes (or errors). Never throws — errors are
- * emitted as `{ type: 'error' }` events.
+ * Returns final file map + todos, or null on error (emitted as `{ type: 'error' }`).
  */
-export async function runDesignAgent(
-  params: AgentRunParams,
+export async function runDesignAgentSession(
+  params: AgentSessionParams,
   onEvent: (event: AgentRunEvent) => void | Promise<void>,
-): Promise<void> {
-  await onEvent({ type: 'progress', payload: 'Starting agentic generation...' });
+): Promise<DesignAgentSessionResult | null> {
+  await onEvent({
+    type: 'progress',
+    payload: params.initialProgressMessage ?? 'Starting agentic generation...',
+  });
 
   const virtualFS = new Map<string, string>();
+  if (params.seedFiles) {
+    for (const [path, content] of Object.entries(params.seedFiles)) {
+      virtualFS.set(path, content);
+    }
+  }
+
+  const todoState: { current: TodoItem[] } = { current: [] };
+  const hasSeed = !!params.seedFiles && Object.keys(params.seedFiles).length > 0;
 
   const model = buildModel(params.providerId, params.modelId, params.thinkingLevel);
   const planTool = makePlanFilesTool((files) => {
@@ -191,32 +101,63 @@ export async function runDesignAgent(
   const writeTool = makeWriteFileTool(virtualFS, (path, content) => {
     void onEvent({ type: 'file', path, content });
   });
+  const editTool = makeEditFileTool(virtualFS, (path, content) => {
+    void onEvent({ type: 'file', path, content });
+  });
   const readTool = makeReadFileTool(virtualFS);
+  const listTool = makeListFilesTool(virtualFS);
+  const todoTool = makeTodoWriteTool(todoState, (todos) => {
+    void onEvent({ type: 'todos', todos });
+  });
+  const grepTool = makeGrepTool(virtualFS);
+  const validateJsTool = makeValidateJsTool(virtualFS);
+  const validateHtmlTool = makeValidateHtmlTool(virtualFS);
 
   const KEEP_RECENT = 20;
   const COMPACT_THRESHOLD = 30;
+
+  const compactionExtra = params.compactionNote?.trim()
+    ? `[Evaluation / revision context]\n${params.compactionNote.trim()}`
+    : undefined;
 
   const agent = new Agent({
     initialState: {
       systemPrompt: params.systemPrompt,
       model,
       thinkingLevel: params.thinkingLevel ?? 'off',
-      tools: [planTool, writeTool, readTool],
+      tools: [planTool, writeTool, editTool, readTool, listTool, todoTool, grepTool, validateJsTool, validateHtmlTool],
     },
     transformContext: async (messages) => {
       if (messages.length <= COMPACT_THRESHOLD) return messages;
 
       const first = messages[0];
       const recent = messages.slice(-KEEP_RECENT);
-      const dropped = messages.length - 1 - KEEP_RECENT;
+      const toSummarize = messages.slice(1, messages.length - KEEP_RECENT);
       const filesWritten = [...virtualFS.keys()];
+
+      await onEvent({ type: 'progress', payload: 'Compacting context...' });
+      const summaryText = await compactWithLLM(
+        toSummarize,
+        filesWritten,
+        params.providerId,
+        params.modelId,
+        compactionExtra,
+      );
+
+      const todoAppendix =
+        todoState.current.length > 0
+          ? '\n\n[Current todo list at time of compaction]\n' +
+            todoState.current
+              .map((t) => {
+                const icon = t.status === 'completed' ? '✓' : t.status === 'in_progress' ? '●' : '○';
+                return `${icon} [${t.status}] ${t.task}`;
+              })
+              .join('\n')
+          : '';
 
       const summary: AgentMessage = {
         role: 'user',
-        content:
-          `[Context window managed: ${dropped} earlier turns summarized.]\n` +
-          `Files written so far: ${filesWritten.length > 0 ? filesWritten.join(', ') : 'none yet'}.\n` +
-          `Continue the design work from your current state.`,
+        content: `[Context checkpoint]\n${summaryText}${todoAppendix}`,
         timestamp: Date.now(),
       };
 
@@ -224,7 +165,6 @@ export async function runDesignAgent(
     },
   });
 
-  // Wire abort signal
   if (params.signal) {
     params.signal.addEventListener('abort', () => agent.abort());
   }
@@ -241,9 +181,20 @@ export async function runDesignAgent(
       } else if (e.type === 'thinking_delta' && e.delta) {
         void onEvent({ type: 'activity', payload: e.delta });
       }
-    } else if (event.type === 'tool_execution_start' && event.toolName === 'write_file') {
-      const path = (event.args as { path?: string })?.path ?? 'file';
-      void onEvent({ type: 'progress', payload: `Writing ${path}...` });
+    } else if (event.type === 'tool_execution_start') {
+      if (event.toolName === 'write_file') {
+        const path = (event.args as { path?: string })?.path ?? 'file';
+        void onEvent({ type: 'progress', payload: `Writing ${path}...` });
+      } else if (event.toolName === 'edit_file') {
+        const path = (event.args as { path?: string })?.path ?? 'file';
+        void onEvent({ type: 'progress', payload: `Editing ${path}...` });
+      } else if (event.toolName === 'grep') {
+        const pattern = (event.args as { pattern?: string })?.pattern ?? '';
+        void onEvent({ type: 'progress', payload: `Searching for "${pattern}"...` });
+      } else if (event.toolName === 'validate_js' || event.toolName === 'validate_html') {
+        const path = (event.args as { path?: string })?.path ?? 'file';
+        void onEvent({ type: 'progress', payload: `Validating ${path}...` });
+      }
     }
   });
 
@@ -252,14 +203,20 @@ export async function runDesignAgent(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await onEvent({ type: 'error', payload: `Agent error: ${message}` });
-    return;
+    return null;
   }
 
-  if (virtualFS.size === 0 && !params.signal?.aborted) {
+  if (!hasSeed && virtualFS.size === 0 && !params.signal?.aborted) {
     await onEvent({
       type: 'error',
       payload:
         'Agent completed without calling write_file. Try a model that supports tool use.',
     });
+    return null;
   }
+
+  return {
+    files: Object.fromEntries(virtualFS),
+    todos: [...todoState.current],
+  };
 }

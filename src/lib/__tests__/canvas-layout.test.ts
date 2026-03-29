@@ -8,7 +8,8 @@ import {
   GRID_SIZE,
   DEFAULT_COL_GAP,
 } from '../canvas-layout';
-import type { Edge } from '@xyflow/react';
+import { EDGE_STATUS, EDGE_TYPES } from '../../constants/canvas';
+import type { WorkspaceEdge } from '../../types/workspace-graph';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeNode(
@@ -21,8 +22,14 @@ function makeNode(
   return { id, type, position, data: {}, ...(measured ? { measured } : {}) };
 }
 
-function makeEdge(source: string, target: string): Edge {
-  return { id: `e-${source}-${target}`, source, target } as Edge;
+function makeEdge(source: string, target: string): WorkspaceEdge {
+  return {
+    id: `e-${source}-${target}`,
+    source,
+    target,
+    type: EDGE_TYPES.DATA_FLOW,
+    data: { status: EDGE_STATUS.IDLE },
+  };
 }
 
 // ─── columnX ────────────────────────────────────────────────────────

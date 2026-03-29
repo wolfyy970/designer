@@ -10,9 +10,15 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dev:server": "tsx watch server/dev.ts"
+    "dev:server": "tsx watch server/dev.ts",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "prisma db seed"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.2",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@hono/node-server": "^1.19.9",
@@ -22,9 +28,9 @@
     "@tanstack/react-query": "^5.90.20",
     "@xyflow/react": "^12.10.0",
     "dotenv": "^17.3.1",
+    "fflate": "^0.8.2",
     "hono": "^4.12.0",
     "html2canvas": "^1.4.1",
-    "fflate": "^0.8.2",
     "idb-keyval": "^6.2.2",
     "lucide-react": "^0.563.0",
     "react": "^19.2.0",
@@ -46,6 +52,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "prisma": "^6.19.2",
     "tailwindcss": "^4.1.18",
     "tsx": "^4.21.0",
     "typescript": "~5.9.3",

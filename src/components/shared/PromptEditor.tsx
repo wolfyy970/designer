@@ -1,12 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, AlertTriangle } from 'lucide-react';
-import {
-  usePromptStore,
-  getPrompt,
-  getPromptDefault,
-  PROMPT_META,
-  type PromptKey,
-} from '../../stores/prompt-store';
+import { PROMPT_META, type PromptKey } from '../../stores/prompt-store';
+import { PROMPT_DEFAULTS } from '../../lib/prompts/shared-defaults';
 
 // ── Validation ──────────────────────────────────────────────────────
 
@@ -65,8 +61,12 @@ function validatePrompt(key: PromptKey, value: string): Diagnostic[] {
 
 const GROUPS: { label: string; keys: PromptKey[] }[] = [
   { label: 'Incubator', keys: ['compilerSystem', 'compilerUser'] },
-  { label: 'Designer', keys: ['variant', 'genSystemHtml'] },
+  { label: 'Designer', keys: ['variant', 'genSystemHtml', 'genSystemHtmlAgentic'] },
   { label: 'Design System', keys: ['designSystemExtract'] },
+  {
+    label: 'Evaluator',
+    keys: ['evalDesignSystem', 'evalStrategySystem', 'evalImplementationSystem'],
+  },
 ];
 
 /** Strip the group prefix for sidebar labels */
@@ -80,31 +80,95 @@ function shortLabel(key: PromptKey): string {
 
 export default function PromptEditor() {
   const [selectedKey, setSelectedKey] = useState<PromptKey>('compilerSystem');
-  const overrides = usePromptStore((s) => s.overrides);
-  const setOverride = usePromptStore((s) => s.setOverride);
-  const clearOverride = usePromptStore((s) => s.clearOverride);
-  const clearAll = usePromptStore((s) => s.clearAll);
+  const queryClient = useQueryClient();
+
+  // Fetch current prompt from server
+  const { data } = useQuery({
+    queryKey: ['prompt', selectedKey],
+    queryFn: () => fetch(`/api/prompts/${selectedKey}`).then((r) => r.json()),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Fetch all prompts to check for any overrides
+  const { data: allPrompts } = useQuery({
+    queryKey: ['prompts'],
+    queryFn: () => fetch('/api/prompts').then((r) => r.json()) as Promise<{ key: string; isDefault: boolean }[]>,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const mutation = useMutation({
+    mutationFn: (body: string) =>
+      fetch(`/api/prompts/${selectedKey}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body }),
+      }).then((r) => r.json()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['prompt', selectedKey] });
+      queryClient.invalidateQueries({ queryKey: ['prompts'] });
+    },
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: (key: PromptKey) =>
+      fetch(`/api/prompts/${key}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: PROMPT_DEFAULTS[key] }),
+      }).then((r) => r.json()),
+    onSuccess: (_data, key) => {
+      queryClient.invalidateQueries({ queryKey: ['prompt', key] });
+      queryClient.invalidateQueries({ queryKey: ['prompts'] });
+    },
+  });
+
+  const currentValue = data?.body ?? PROMPT_DEFAULTS[selectedKey];
+  const isModified = data?.isDefault === false;
+  const hasAnyOverrides = allPrompts?.some((p) => p.isDefault === false) ?? false;
 
   const meta = PROMPT_META.find((m) => m.key === selectedKey)!;
-  const currentValue = getPrompt(selectedKey);
-  const defaultValue = getPromptDefault(selectedKey);
-  const isModified = overrides[selectedKey] !== undefined;
-  const hasAnyOverrides = Object.keys(overrides).length > 0;
 
-  const diagnostics = useMemo(
-    () => validatePrompt(selectedKey, currentValue),
-    [selectedKey, currentValue]
-  );
+  // Local draft state — saves on blur to avoid hammering the DB on every keystroke
+  const [draft, setDraft] = useState<string | null>(null);
+  const displayValue = draft ?? currentValue;
+
+  // Reset draft when switching keys
+  const handleSelectKey = useCallback((key: PromptKey) => {
+    setSelectedKey(key);
+    setDraft(null);
+  }, []);
 
   const handleChange = (value: string) => {
-    if (value === defaultValue) {
-      clearOverride(selectedKey);
-    } else {
-      setOverride(selectedKey, value);
+    setDraft(value);
+  };
+
+  const handleBlur = () => {
+    if (draft !== null && draft !== currentValue) {
+      mutation.mutate(draft);
+    }
+    setDraft(null);
+  };
+
+  const handleReset = () => {
+    setDraft(null);
+    resetMutation.mutate(selectedKey);
+  };
+
+  const handleResetAll = () => {
+    const keys = (allPrompts ?? [])
+      .filter((p) => !p.isDefault)
+      .map((p) => p.key as PromptKey);
+    for (const key of keys) {
+      resetMutation.mutate(key);
     }
   };
 
-  const charCount = currentValue.length;
+  const diagnostics = useMemo(
+    () => validatePrompt(selectedKey, displayValue),
+    [selectedKey, displayValue]
+  );
+
+  const charCount = displayValue.length;
   const approxTokens = Math.round(charCount / 4);
 
   return (
@@ -118,12 +182,12 @@ export default function PromptEditor() {
                 {group.label}
               </p>
               {group.keys.map((key) => {
-                const modified = overrides[key] !== undefined;
+                const modified = allPrompts?.find((p) => p.key === key)?.isDefault === false;
                 const active = key === selectedKey;
                 return (
                   <button
                     key={key}
-                    onClick={() => setSelectedKey(key)}
+                    onClick={() => handleSelectKey(key)}
                     className={`mb-0.5 flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
                       active
                         ? 'bg-fg text-bg'
@@ -147,7 +211,7 @@ export default function PromptEditor() {
 
         {hasAnyOverrides && (
           <button
-            onClick={clearAll}
+            onClick={handleResetAll}
             className="mt-2 flex w-full items-center justify-center gap-1 rounded-md border border-border px-2 py-1.5 text-nano text-fg-secondary hover:bg-surface"
           >
             <RotateCcw size={10} />
@@ -166,7 +230,7 @@ export default function PromptEditor() {
           </div>
           {isModified && (
             <button
-              onClick={() => clearOverride(selectedKey)}
+              onClick={handleReset}
               className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-micro text-fg-secondary hover:bg-surface"
             >
               <RotateCcw size={10} />
@@ -183,7 +247,7 @@ export default function PromptEditor() {
             </p>
             <div className="flex flex-wrap gap-1">
               {meta.variables.map((v) => {
-                const present = currentValue.includes(`{{${v}}}`);
+                const present = displayValue.includes(`{{${v}}}`);
                 return (
                   <code
                     key={v}
@@ -205,8 +269,9 @@ export default function PromptEditor() {
 
         {/* Textarea — fills remaining vertical space */}
         <textarea
-          value={currentValue}
+          value={displayValue}
           onChange={(e) => handleChange(e.target.value)}
+          onBlur={handleBlur}
           spellCheck={false}
           className="min-h-0 flex-1 resize-none rounded-md border border-border px-3 py-2 font-mono text-xs leading-relaxed text-fg-secondary input-focus"
         />

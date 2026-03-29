@@ -16,7 +16,10 @@ export type PromptKey =
   | 'genSystemHtml'
   | 'genSystemHtmlAgentic'
   | 'variant'
-  | 'designSystemExtract';
+  | 'designSystemExtract'
+  | 'evalDesignSystem'
+  | 'evalStrategySystem'
+  | 'evalImplementationSystem';
 
 // ── Store ────────────────────────────────────────────────────────────
 

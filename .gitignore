@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Database (SQLite dev artifacts; never commit working DBs)
+prisma/**/*.db
+prisma/**/*.db-journal
+
 # Test files
 test*.html
 

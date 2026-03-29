@@ -1,22 +1,6 @@
-import type { Node, Edge } from '@xyflow/react';
+import type { CanvasNodeType, WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 
-// ── Types (re-derive from store types to keep this module pure) ──────
-
-type CanvasNodeType =
-  | 'designBrief'
-  | 'existingDesign'
-  | 'researchContext'
-  | 'objectivesMetrics'
-  | 'designConstraints'
-  | 'designSystem'
-  | 'compiler'
-  | 'hypothesis'
-  | 'variant'
-  | 'critique'
-  | 'model';
-
-type CanvasNodeData = Record<string, unknown> & { refId?: string };
-type CanvasNode = Node<CanvasNodeData, CanvasNodeType>;
+type CanvasNode = WorkspaceNode;
 
 export const SECTION_NODE_TYPES = new Set<CanvasNodeType>([
   'designBrief', 'existingDesign', 'researchContext',
@@ -163,7 +147,7 @@ export function computeHypothesisPositions(
 
 export function computeAutoLayout(
   nodes: CanvasNode[],
-  edges: Edge[],
+  edges: WorkspaceEdge[],
   gap: number
 ): CanvasNode[] {
   if (nodes.length === 0) return nodes;

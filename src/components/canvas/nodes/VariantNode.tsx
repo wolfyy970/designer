@@ -1,4 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { TodoItem } from '../../../types/provider';
+import type { AggregatedEvaluationReport, EvaluationRoundSnapshot } from '../../../types/evaluation';
 import { type NodeProps, type Node } from '@xyflow/react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { useGenerationStore } from '../../../stores/generation-store';
@@ -23,9 +25,155 @@ import FileExplorer from './FileExplorer';
 
 type VariantNodeType = Node<VariantNodeData, 'variant'>;
 
+function BrowserQASection({ snapshot }: { snapshot?: EvaluationRoundSnapshot }) {
+  const browserReport = snapshot?.browser;
+  if (!browserReport) return null;
+
+  const runtimeErr = browserReport.findings.filter((f) => f.summary === 'JS runtime error');
+  const otherFindings = browserReport.findings.filter((f) => f.summary !== 'JS runtime error');
+  const jsScore = browserReport.scores['js_runtime']?.score;
+  const interactiveScore = browserReport.scores['interactive_elems']?.score;
+  const hasHardFails = browserReport.hardFails.length > 0;
+
+  const statusColor = hasHardFails || (jsScore !== undefined && jsScore <= 2)
+    ? 'text-error'
+    : runtimeErr.length > 0
+      ? 'text-warning'
+      : 'text-fg-faint';
+
+  return (
+    <div className="border-t border-border-subtle px-3 pt-1.5 pb-2 shrink-0">
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className={`text-[9px] font-medium uppercase tracking-wider ${statusColor}`}>
+          Runtime QA
+        </span>
+        {jsScore !== undefined && (
+          <span className="tabular-nums font-mono text-[10px] text-fg-faint ml-auto">
+            JS {jsScore}/5 · CTA {interactiveScore ?? '?'}/5
+          </span>
+        )}
+      </div>
+      {browserReport.hardFails.length > 0 && (
+        <div className="text-[10px] text-error mb-1">
+          {browserReport.hardFails.map((hf) => hf.message.slice(0, 80)).join(' · ')}
+        </div>
+      )}
+      {runtimeErr.length > 0 && (
+        <ul className="list-disc pl-3 text-[10px] text-warning space-y-0.5 leading-snug mb-1">
+          {runtimeErr.slice(0, 2).map((f, i) => (
+            <li key={i} className="truncate" title={f.detail}>{f.detail.slice(0, 90)}</li>
+          ))}
+        </ul>
+      )}
+      {otherFindings.length > 0 && (
+        <ul className="list-disc pl-3 text-[10px] text-fg-muted space-y-0.5 leading-snug">
+          {otherFindings.slice(0, 2).map((f, i) => (
+            <li key={i}>{f.summary}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function EvaluationScorecard({
+  summary,
+  latestSnapshot,
+}: {
+  summary: AggregatedEvaluationReport;
+  latestSnapshot?: EvaluationRoundSnapshot;
+}) {
+  return (
+    <div className="nodrag nowheel border-t border-border-subtle px-3 py-2 shrink-0 max-h-[180px] overflow-y-auto bg-surface-secondary/50">
+      <div className="flex justify-between items-center mb-1 gap-2">
+        <span className="text-[9px] font-medium uppercase tracking-wider text-fg-faint">
+          Eval · {summary.shouldRevise ? 'revise suggested' : 'pass'}
+        </span>
+        <span className="tabular-nums font-mono text-[11px] text-accent">
+          {summary.overallScore.toFixed(1)}
+        </span>
+      </div>
+      {summary.hardFails.length > 0 && (
+        <div className="text-[10px] text-error mb-1">
+          {summary.hardFails.filter((hf) => hf.source !== 'browser').length > 0 && (
+            <span>{summary.hardFails.filter((hf) => hf.source !== 'browser').length} design/strategy fail(s) · </span>
+          )}
+        </div>
+      )}
+      <ul className="list-disc pl-3 text-[10px] text-fg-muted space-y-0.5 leading-snug">
+        {summary.prioritizedFixes
+          .filter((f) => !f.startsWith('[hard_fail:missing_assets') && !f.startsWith('[hard_fail:js_') && !f.startsWith('[hard_fail:empty_'))
+          .slice(0, 4)
+          .map((f, i) => (
+            <li key={i}>{f}</li>
+          ))}
+      </ul>
+      {latestSnapshot?.browser && <BrowserQASection snapshot={latestSnapshot} />}
+    </div>
+  );
+}
+
+function AgenticHarnessStripe({
+  phase,
+  evaluationStatus,
+}: {
+  phase?: string;
+  evaluationStatus?: string;
+}) {
+  if (!phase && !evaluationStatus) return null;
+  return (
+    <div className="border-b border-border-subtle px-3 py-1.5 shrink-0 bg-surface-secondary/80">
+      {phase ? (
+        <div className="text-[9px] font-medium uppercase tracking-wider text-fg-faint">{phase}</div>
+      ) : null}
+      {evaluationStatus ? (
+        <div className="text-[10px] text-fg-muted truncate nodrag nowheel" title={evaluationStatus}>
+          {evaluationStatus}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Live task checklist shown during agentic generation */
+function TodoTracker({ todos }: { todos: TodoItem[] }) {
+  if (todos.length === 0) return null;
+  return (
+    <div className="border-b border-border-subtle px-3 py-2 shrink-0">
+      <div className="text-[9px] font-medium uppercase tracking-wider text-fg-faint mb-1.5">Tasks</div>
+      <div className="flex flex-col gap-0.5">
+        {todos.map((todo) => (
+          <div key={todo.id} className="flex items-start gap-1.5">
+            <span className={`mt-px shrink-0 font-mono text-[10px] leading-tight ${
+              todo.status === 'completed' ? 'text-accent' :
+              todo.status === 'in_progress' ? 'text-fg-secondary' : 'text-fg-faint'
+            }`}>
+              {todo.status === 'completed' ? '✓' : todo.status === 'in_progress' ? '●' : '○'}
+            </span>
+            <span className={`text-[10px] leading-tight ${
+              todo.status === 'completed' ? 'text-fg-muted line-through' :
+              todo.status === 'in_progress' ? 'text-fg-secondary' : 'text-fg-faint'
+            }`}>
+              {todo.task}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Scrolling terminal-like activity log during generation */
 function ActivityLog({ entries }: { entries?: string[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Streaming token deltas arrive as a single growing string in entries[0]
+  const text = entries && entries.length > 0 ? entries.join('') : '';
+
+  useEffect(() => {
+    if (!text) return;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [text]);
 
   if (!entries || entries.length === 0) {
     return (
@@ -50,15 +198,6 @@ function ActivityLog({ entries }: { entries?: string[] }) {
       </div>
     );
   }
-
-  // Streaming token deltas arrive as a single growing string in entries[0]
-  const text = entries.join('');
-
-  // Scroll on content change (entries.length always 1 now, must track text length)
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [text.length]);
 
   return (
     <div
@@ -309,7 +448,21 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
         {/* States 1 & 2: GENERATING */}
         {result?.status === GENERATION_STATUS.GENERATING && (
           <div className="absolute inset-0 flex flex-col bg-surface">
-            <div className="flex flex-1 min-h-0 overflow-hidden">
+            <div className="flex flex-1 min-h-0 overflow-hidden flex-col">
+              {result.liveTodos && result.liveTodos.length > 0 && (
+                <TodoTracker todos={result.liveTodos} />
+              )}
+              <AgenticHarnessStripe
+                phase={result.agenticPhase}
+                evaluationStatus={result.evaluationStatus}
+              />
+              {result.evaluationSummary && (
+                <EvaluationScorecard
+                  summary={result.evaluationSummary}
+                  latestSnapshot={result.evaluationRounds?.[result.evaluationRounds.length - 1]}
+                />
+              )}
+              <div className="flex flex-1 min-h-0 overflow-hidden">
               {/* File explorer sidebar — shown once a plan or files exist */}
               {(result.liveFilesPlan || result.liveFiles) && (
                 <div className="w-28 shrink-0 border-r border-border-subtle overflow-hidden flex flex-col">
@@ -329,6 +482,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
               )}
               {/* Activity log */}
               <ActivityLog entries={result.activityLog} />
+              </div>
             </div>
             {/* Progress footer */}
             <GeneratingFooter
@@ -458,6 +612,14 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
           </div>
         )}
       </div>
+
+      {/* ── Evaluation (completed agentic runs) ───────────────── */}
+      {result?.status === GENERATION_STATUS.COMPLETE && result.evaluationSummary && (
+        <EvaluationScorecard
+          summary={result.evaluationSummary}
+          latestSnapshot={result.evaluationRounds?.[result.evaluationRounds.length - 1]}
+        />
+      )}
 
       {/* ── Metadata footer ─────────────────────────────────── */}
       {result?.status === GENERATION_STATUS.COMPLETE && (

@@ -1,5 +1,10 @@
 import type { ChatMessage } from '../types/provider';
 
+/** Vite injects `env`; Node project refs (e.g. tsconfig.server) don't ship `ImportMeta.env` typings. */
+function viteMaxOutputTokensFromEnv(): string | undefined {
+  return (import.meta as { env?: { VITE_MAX_OUTPUT_TOKENS?: string } }).env?.VITE_MAX_OUTPUT_TOKENS;
+}
+
 export {
   extractMessageText,
   fetchChatCompletion,
@@ -11,10 +16,11 @@ export {
 export function buildChatRequestFromMessages(
   model: string,
   messages: ChatMessage[],
-  extraFields?: Record<string, unknown>
+  extraFields?: Record<string, unknown>,
+  maxTokens?: number,
 ): Record<string, unknown> {
-  const maxTokensEnv = import.meta.env.VITE_MAX_OUTPUT_TOKENS;
-  const maxTokens = maxTokensEnv ? parseInt(maxTokensEnv, 10) : undefined;
+  const envMax = viteMaxOutputTokensFromEnv();
+  const resolved = maxTokens ?? (envMax ? parseInt(envMax, 10) : undefined);
 
   const body: Record<string, unknown> = {
     model,
@@ -23,8 +29,8 @@ export function buildChatRequestFromMessages(
     ...extraFields,
   };
 
-  if (maxTokens) {
-    body.max_tokens = maxTokens;
+  if (resolved) {
+    body.max_tokens = resolved;
   }
 
   return body;

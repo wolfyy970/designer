@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   test: {
-    exclude: ['src/services/_archived/**', 'node_modules/**'],
+    exclude: ['node_modules/**'],
   },
   plugins: [react(), tailwindcss()],
   server: {

@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { compileVariantPrompts } from '../compiler';
+import { PROMPT_DEFAULTS } from '../../lib/prompts/shared-defaults';
 import type { DesignSpec, SpecSectionId, ReferenceImage } from '../../types/spec';
 import type { DimensionMap, VariantStrategy } from '../../types/compiler';
+
+const VARIANT_TEMPLATE = PROMPT_DEFAULTS['variant'];
 
 function makeSection(id: SpecSectionId, content = '') {
   return {
@@ -60,7 +63,7 @@ describe('compileVariantPrompts', () => {
     const strategies = [makeStrategy({ id: 's-1' }), makeStrategy({ id: 's-2' })];
     const dm = makeDimensionMap(strategies);
 
-    const results = compileVariantPrompts(spec, dm);
+    const results = compileVariantPrompts(spec, dm, VARIANT_TEMPLATE);
 
     expect(results).toHaveLength(2);
   });
@@ -70,7 +73,7 @@ describe('compileVariantPrompts', () => {
     const strategy = makeStrategy({ id: 'strategy-abc' });
     const dm = makeDimensionMap([strategy]);
 
-    const [result] = compileVariantPrompts(spec, dm);
+    const [result] = compileVariantPrompts(spec, dm, VARIANT_TEMPLATE);
 
     expect(result.variantStrategyId).toBe('strategy-abc');
     expect(result.specId).toBe('spec-1');
@@ -80,7 +83,7 @@ describe('compileVariantPrompts', () => {
     const spec = makeSpec();
     const dm = makeDimensionMap([makeStrategy({ id: 's-1' }), makeStrategy({ id: 's-2' })]);
 
-    const results = compileVariantPrompts(spec, dm);
+    const results = compileVariantPrompts(spec, dm, VARIANT_TEMPLATE);
 
     expect(results[0].id).not.toBe(results[1].id);
     expect(typeof results[0].prompt).toBe('string');
@@ -104,7 +107,7 @@ describe('compileVariantPrompts', () => {
     });
     const dm = makeDimensionMap([makeStrategy()]);
 
-    const [result] = compileVariantPrompts(spec, dm);
+    const [result] = compileVariantPrompts(spec, dm, VARIANT_TEMPLATE);
 
     expect(result.images).toHaveLength(1);
     expect(result.images[0].id).toBe('img-1');
@@ -129,7 +132,7 @@ describe('compileVariantPrompts', () => {
     });
     const dm = makeDimensionMap([makeStrategy()]);
 
-    const [result] = compileVariantPrompts(spec, dm, undefined, [extraImg]);
+    const [result] = compileVariantPrompts(spec, dm, VARIANT_TEMPLATE, undefined, [extraImg]);
 
     expect(result.images).toHaveLength(2);
     const ids = result.images.map((i) => i.id);
@@ -141,7 +144,7 @@ describe('compileVariantPrompts', () => {
     const spec = makeSpec();
     const dm = makeDimensionMap([]);
 
-    const results = compileVariantPrompts(spec, dm);
+    const results = compileVariantPrompts(spec, dm, VARIANT_TEMPLATE);
 
     expect(results).toHaveLength(0);
   });
@@ -150,7 +153,7 @@ describe('compileVariantPrompts', () => {
     const spec = makeSpec();
     const dm = makeDimensionMap([makeStrategy()]);
 
-    const [result] = compileVariantPrompts(spec, dm);
+    const [result] = compileVariantPrompts(spec, dm, VARIANT_TEMPLATE);
 
     expect(typeof result.compiledAt).toBe('string');
     expect(result.compiledAt.length).toBeGreaterThan(0);

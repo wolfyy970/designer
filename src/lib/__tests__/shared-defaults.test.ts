@@ -8,6 +8,9 @@ const EXPECTED_KEYS = [
   'genSystemHtmlAgentic',
   'variant',
   'designSystemExtract',
+  'evalDesignSystem',
+  'evalStrategySystem',
+  'evalImplementationSystem',
 ] as const;
 
 describe('PROMPT_DEFAULTS', () => {
@@ -41,6 +44,12 @@ describe('PROMPT_DEFAULTS', () => {
     expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('read_file');
   });
 
+  it('genSystemHtmlAgentic documents all 9 agent tools', () => {
+    const p = PROMPT_DEFAULTS.genSystemHtmlAgentic;
+    ['plan_files', 'write_file', 'edit_file', 'read_file', 'ls_files', 'todo_write', 'grep', 'validate_js', 'validate_html']
+      .forEach((tool) => expect(p).toContain(tool));
+  });
+
   it('variant prompt contains template variables', () => {
     expect(PROMPT_DEFAULTS.variant).toContain('{{STRATEGY_NAME}}');
     expect(PROMPT_DEFAULTS.variant).toContain('{{DESIGN_BRIEF}}');
@@ -49,5 +58,11 @@ describe('PROMPT_DEFAULTS', () => {
   it('compilerUser prompt contains template variables', () => {
     expect(PROMPT_DEFAULTS.compilerUser).toContain('{{SPEC_TITLE}}');
     expect(PROMPT_DEFAULTS.compilerUser).toContain('{{DESIGN_CONSTRAINTS}}');
+  });
+
+  it('evaluator prompts require JSON output', () => {
+    expect(PROMPT_DEFAULTS.evalDesignSystem).toContain('JSON');
+    expect(PROMPT_DEFAULTS.evalStrategySystem).toContain('JSON');
+    expect(PROMPT_DEFAULTS.evalImplementationSystem).toContain('JSON');
   });
 });

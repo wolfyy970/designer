@@ -95,10 +95,20 @@ export const useGenerationStore = create<GenerationStore>()(
     }),
     {
       name: STORAGE_KEYS.GENERATION,
-      version: 2,
+      version: 3,
       partialize: (state) => ({
         // Strip `code`, `liveCode`, and `liveFiles` from persisted results — code lives in IndexedDB
-        results: state.results.map(({ code: _, liveCode: __, liveFiles: ___, liveFilesPlan: ____, ...rest }) => rest),
+        results: state.results.map((r) => {
+          const persisted = { ...r };
+          delete persisted.code;
+          delete persisted.liveCode;
+          delete persisted.liveFiles;
+          delete persisted.liveFilesPlan;
+          delete persisted.liveTodos;
+          delete persisted.agenticPhase;
+          delete persisted.evaluationStatus;
+          return persisted;
+        }),
         selectedVersions: state.selectedVersions,
       }),
       migrate: (persisted, version) => {
@@ -112,6 +122,16 @@ export const useGenerationStore = create<GenerationStore>()(
             runNumber: r.runNumber ?? 1,
           }));
           state.selectedVersions = state.selectedVersions ?? {};
+        }
+        if (version < 3) {
+          const results = (state.results as GenerationResult[]) ?? [];
+          state.results = results.map((r) => {
+            const next = { ...r };
+            delete next.evaluationSummary;
+            delete next.evaluationRounds;
+            delete next.evaluationStatus;
+            return next;
+          });
         }
         // Zustand merges migrated state with initial state — partial is expected
         return state as unknown as GenerationStore;

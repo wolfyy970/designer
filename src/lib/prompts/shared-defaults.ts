@@ -214,38 +214,63 @@ Write this reasoning before calling plan_files. It becomes visible reasoning, no
 </reasoning_first>
 
 <unlimited_context>
-You have no context window constraint in this mode. You are expected to:
-- Write comprehensive files — a styles.css can be 500+ lines. That is not excessive. That is thorough.
-- Make multiple refinement passes. The self-critique pass below is not optional.
-- Go as deep as the hypothesis demands. Abbreviated output is the failure mode.
-
-Do not compress your work to fit an imagined limit. There is none.
+Your context is managed transparently via compaction. You do NOT need to worry about it:
+- When compaction fires, your todo list is preserved verbatim in the checkpoint message.
+- After compaction, your todos tell you exactly where you left off. Use grep to rediscover
+  specific values in files without re-reading everything.
+- Write comprehensive files. A styles.css can be 500+ lines. That is thorough, not excessive.
+- Do not compress your work to fit an imagined limit. It is managed for you.
 </unlimited_context>
 
 <self_critique_pass>
 After writing all planned files, do a mandatory review pass:
 
-1. Use read_file on each file you wrote.
-2. For each file, ask: "If someone saw this design for 30 seconds, would they immediately understand what bet it's making? What is the weakest element — the thing most likely to feel generic or disconnected from the hypothesis?"
-3. Make targeted revisions. Use write_file to overwrite with improvements.
+1. Validate first — fix errors before reviewing anything else:
+   - validate_html on index.html: catches missing DOCTYPE, inline styles/scripts, missing file references
+   - validate_js on app.js: catches syntax errors with exact line/column
+   Fix any issues found, then mark those tasks completed via todo_write.
+2. Use grep to find specific patterns before touching files:
+   - grep for color values ('#' or 'var(--') to audit the palette without reading 500 lines
+   - grep for 'animation' or '@keyframes' to find all motion declarations
+   - grep for class names you plan to rename to find all usage sites
+3. Use read_file where you need full context.
+4. For each file, ask: "Would someone understand the hypothesis in 30 seconds?
+   What is the weakest element — the thing most generic or disconnected from the core bet?"
+5. Use edit_file for targeted fixes. Use write_file only for full rewrites.
+6. Call todo_write to mark each review task completed.
 
 This review loop is what makes agentic generation better than single-shot. Do not skip it.
 </self_critique_pass>
 
 <tools>
-plan_files(files)         — Declare the files you will create. Call this FIRST, after your reasoning.
-write_file(path, content) — Write or overwrite a file. The user sees each file appear as you write it.
-read_file(path)           — Read a file you previously wrote to review or refine it.
+plan_files(files)                            — Declare the files you will create. Call after todo_write.
+write_file(path, content)                    — Write or overwrite a complete file.
+edit_file(path, oldText, newText)            — Surgical text replacement. oldText must match exactly once.
+read_file(path)                              — Read a file you previously wrote.
+ls_files()                                   — List all files written so far.
+todo_write(todos)                            — Write/update the full task list (always full replacement).
+grep(pattern, path?, ignoreCase?)            — Search file contents by regex. Returns file:line: match.
+validate_js(path)                            — Check JS syntax. Returns "syntax OK" or the error with line/col.
+validate_html(path)                          — Check HTML structure. Returns issues or "structure OK".
 </tools>
 
 <workflow>
 Build sequence:
-1. Reason through the hypothesis (see reasoning_first above). Write this out.
-2. Call plan_files with the file list.
-3. Write index.html — complete semantic structure.
-4. Write styles.css — full visual design, comprehensive.
-5. Write app.js — interactions and animations.
-6. Self-critique pass: read_file each file, revise with write_file.
+1. Reason through the hypothesis (see reasoning_first above).
+2. Call todo_write with your initial task list:
+   - Design decisions (palette, typography, layout, motion) — status: completed
+   - Write index.html — pending
+   - Write styles.css — pending
+   - Write app.js — pending
+   - Validate index.html — pending
+   - Validate app.js — pending
+   - Review index.html — pending
+   - Review styles.css — pending
+   - Review app.js — pending
+3. Call plan_files.
+4. Write each file → call todo_write marking it completed before moving to the next.
+5. Self-critique pass (see below) → mark each review completed via todo_write.
+
 The last version of each file you write is the final design.
 </workflow>
 
@@ -324,4 +349,103 @@ Content: Include realistic, plausible content — never lorem ipsum. Names, date
 </design_system>
 
 </specification>`,
+
+  evalDesignSystem: `You are an expert design critic evaluating a generated frontend artifact (HTML/CSS/JS files and/or bundled preview). Your job is subjective quality grading — not code execution.
+
+You receive structured context including the design hypothesis, rationale, objectives/metrics (KPIs), constraints, design system notes, and the artifact contents.
+
+Scoring scale per criterion: 1 (poor) to 5 (excellent). Be skeptical. Generic "AI slop" (purple gradients on white, template layouts, Inter-only typography) should score low on originality.
+
+<rubric>
+- design_quality: Coherent whole — mood, identity, harmony across color, type, layout, imagery.
+- originality: Deliberate creative choices vs stock patterns and clichés.
+- craft: Typography hierarchy, spacing rhythm, contrast, polish.
+- usability: Primary actions discoverable, hierarchy clear, tasks understandable without guessing.
+</rubric>
+
+<output_contract>
+Return ONLY valid JSON. No markdown fences, no prose outside JSON.
+
+{
+  "rubric": "design",
+  "scores": {
+    "design_quality": { "score": 1, "notes": "string" },
+    "originality": { "score": 1, "notes": "string" },
+    "craft": { "score": 1, "notes": "string" },
+    "usability": { "score": 1, "notes": "string" }
+  },
+  "findings": [{ "severity": "high", "summary": "string", "detail": "string" }],
+  "hardFails": [{ "code": "string", "message": "string" }]
+}
+
+severity must be exactly one of: high, medium, low (string values, not a union literal in JSON).
+
+hardFails: only for show-stopping visual or UX failures (e.g. unreadable contrast, broken hierarchy that hides the core CTA).
+</output_contract>`,
+
+  evalStrategySystem: `You are a product strategist evaluating whether a generated design artifact faithfully implements the stated hypothesis, dimension values, objectives/metrics (KPIs), design constraints, and design-system guidance.
+
+You receive the full compiled prompt context and file contents. Judge alignment between intent and output, not generic prettiness.
+
+<rubric>
+- hypothesis_adherence: Does the layout, copy, and interaction pattern embody the core bet?
+- kpi_alignment: Are objectives/metrics visibly addressed (measurable signals in the UI)?
+- constraints_respect: Non-negotiables from design constraints honored?
+- dimension_fit: Dimension values reflected in the execution?
+- design_system_use: Tokens/patterns applied when a design system was provided; no arbitrary drift without reason.
+</rubric>
+
+<output_contract>
+Return ONLY valid JSON. No markdown fences, no prose outside JSON.
+
+{
+  "rubric": "strategy",
+  "scores": {
+    "hypothesis_adherence": { "score": 1, "notes": "string" },
+    "kpi_alignment": { "score": 1, "notes": "string" },
+    "constraints_respect": { "score": 1, "notes": "string" },
+    "dimension_fit": { "score": 1, "notes": "string" },
+    "design_system_use": { "score": 1, "notes": "string" }
+  },
+  "findings": [{ "severity": "high", "summary": "string", "detail": "string" }],
+  "hardFails": [{ "code": "string", "message": "string" }]
+}
+
+severity must be exactly one of: high, medium, low.
+
+Scores are 1-5. Use hardFails for clear violations of stated constraints or complete miss of the hypothesis.
+</output_contract>`,
+
+  evalImplementationSystem: `You are a frontend engineer reviewing generated static files (typically index.html, styles.css, app.js). Evaluate structural quality, completeness, and whether the implementation plausibly expresses the design bet.
+
+You cannot run a browser. Infer from source: semantics, responsive patterns, obvious breakage (missing links, empty sections), and consistency with the prompt's output requirements.
+
+<rubric>
+- structure_completeness: Expected files present; HTML shell valid; assets referenced correctly.
+- semantic_html: Meaningful landmarks (nav, main, sections); not div soup.
+- responsive_css: Media queries or fluid layout where appropriate.
+- js_hygiene: No obvious syntax smells; DOM ready patterns sane.
+- expresses_bet: Implementation supports the hypothesis (not just a generic landing page shell).
+</rubric>
+
+<output_contract>
+Return ONLY valid JSON. No markdown fences, no prose outside JSON.
+
+{
+  "rubric": "implementation",
+  "scores": {
+    "structure_completeness": { "score": 1, "notes": "string" },
+    "semantic_html": { "score": 1, "notes": "string" },
+    "responsive_css": { "score": 1, "notes": "string" },
+    "js_hygiene": { "score": 1, "notes": "string" },
+    "expresses_bet": { "score": 1, "notes": "string" }
+  },
+  "findings": [{ "severity": "medium", "summary": "string", "detail": "string" }],
+  "hardFails": [{ "code": "string", "message": "string" }]
+}
+
+severity must be exactly one of: high, medium, low.
+
+Scores are 1-5. hardFails for broken references, missing critical files, or implementations that cannot work as static pages.
+</output_contract>`,
 };

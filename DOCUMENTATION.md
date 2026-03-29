@@ -61,6 +61,8 @@ README.md (Hub)
 2. Update or remove outdated content
 3. Verify cross-references still work
 
+**Where architecture lives:** Client domain model vs canvas projection, API routes, stores, and data flow are described only in [ARCHITECTURE.md](ARCHITECTURE.md) — avoid duplicating that narrative in other files.
+
 **Documentation bloat indicators:**
 - Same information in multiple places
 - Docs describing features that no longer exist

@@ -33,7 +33,10 @@ export function allVariantStrategyIds(
 // ── Store interface ────────────────────────────────────────────────
 
 interface CompilerStore {
-  /** All dimension maps keyed by compiler node ID */
+  /**
+   * Dimension maps keyed by incubator id (1:1 with compiler canvas node id).
+   * Domain / compile flows treat this as `incubatorId`, not graph layout.
+   */
   dimensionMaps: Record<string, DimensionMap>;
   compiledPrompts: CompiledPrompt[];
   isCompiling: boolean;
@@ -42,19 +45,19 @@ interface CompilerStore {
   selectedProvider: string;
   selectedModel: string;
 
-  setDimensionMapForNode: (nodeId: string, map: DimensionMap) => void;
-  removeDimensionMapForNode: (nodeId: string) => void;
+  setDimensionMapForNode: (incubatorId: string, map: DimensionMap) => void;
+  removeDimensionMapForNode: (incubatorId: string) => void;
   setCompiledPrompts: (prompts: CompiledPrompt[]) => void;
   setCompiling: (isCompiling: boolean) => void;
   setError: (error: string | null) => void;
   setSelectedProvider: (provider: string) => void;
   setSelectedModel: (model: string) => void;
 
-  appendVariantsToNode: (nodeId: string, newMap: DimensionMap) => void;
+  appendVariantsToNode: (incubatorId: string, newMap: DimensionMap) => void;
   updateVariant: (variantId: string, updates: Partial<VariantStrategy>) => void;
   removeVariant: (variantId: string) => void;
-  addVariantToNode: (nodeId: string) => void;
-  approveMapForNode: (nodeId: string) => void;
+  addVariantToNode: (incubatorId: string) => void;
+  approveMapForNode: (incubatorId: string) => void;
 
   reset: () => void;
 }
@@ -120,7 +123,8 @@ export const useCompilerStore = create<CompilerStore>()(
 
       removeDimensionMapForNode: (nodeId) =>
         set((state) => {
-          const { [nodeId]: _, ...rest } = state.dimensionMaps;
+          const rest = { ...state.dimensionMaps };
+          delete rest[nodeId];
           return { dimensionMaps: rest };
         }),
 

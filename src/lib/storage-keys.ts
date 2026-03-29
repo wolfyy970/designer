@@ -6,6 +6,7 @@ export const STORAGE_KEYS = {
   // localStorage (Zustand persist)
   ACTIVE_CANVAS: 'lattice-active-canvas',
   CANVAS: 'lattice-canvas',
+  WORKSPACE_DOMAIN: 'lattice-workspace-domain',
   COMPILER: 'lattice-compiler',
   GENERATION: 'lattice-generation',
   PROMPTS: 'lattice-prompts',

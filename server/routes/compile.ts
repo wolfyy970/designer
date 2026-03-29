@@ -4,7 +4,7 @@ import type { DesignSpec } from '../../src/types/spec.ts';
 import type { CritiqueInput } from '../lib/prompts/compiler-user.ts';
 import type { CompilerPromptOptions } from '../lib/prompts/compiler-user.ts';
 import { compileSpec } from '../services/compiler.ts';
-import { resolvePrompt } from '../lib/prompts/defaults.ts';
+import { getPromptBody } from '../db/prompts.ts';
 import { normalizeError } from '../lib/error-utils.ts';
 
 const compile = new Hono();
@@ -13,10 +13,6 @@ const CompileRequestSchema = z.object({
   spec: z.object({ id: z.string() }).passthrough(),
   providerId: z.string().min(1),
   modelId: z.string().min(1),
-  promptOverrides: z.object({
-    compilerSystem: z.string().optional(),
-    compilerUser: z.string().optional(),
-  }).optional(),
   referenceDesigns: z.array(z.object({
     name: z.string(),
     code: z.string(),
@@ -37,8 +33,10 @@ compile.post('/', async (c) => {
   }
   const body = parsed.data;
 
-  const systemPrompt = resolvePrompt('compilerSystem', body.promptOverrides ? { compilerSystem: body.promptOverrides.compilerSystem } : undefined);
-  const userPromptTemplate = resolvePrompt('compilerUser', body.promptOverrides ? { compilerUser: body.promptOverrides.compilerUser } : undefined);
+  const [systemPrompt, userPromptTemplate] = await Promise.all([
+    getPromptBody('compilerSystem'),
+    getPromptBody('compilerUser'),
+  ]);
 
   try {
     const result = await compileSpec(

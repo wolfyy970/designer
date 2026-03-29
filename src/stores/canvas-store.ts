@@ -1,19 +1,26 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import {
-  type Node,
-  type Edge,
-  type Viewport,
-  type NodeChange,
-  type EdgeChange,
-  type Connection,
-  applyNodeChanges,
-  applyEdgeChanges,
-} from '@xyflow/react';
 import type { VariantStrategy } from '../types/compiler';
 import type { GenerationResult } from '../types/provider';
-import type { SpecSectionId } from '../types/spec';
-import type { HypothesisNodeData, VariantNodeData } from '../types/canvas-data';
+import type {
+  CritiqueNodeData,
+  DesignSystemNodeData,
+  HypothesisNodeData,
+  ModelNodeData,
+  VariantNodeData,
+} from '../types/canvas-data';
+import type { Connection } from '../workspace/reactflow-adapter';
+import {
+  applyWorkspaceEdgeChanges,
+  applyWorkspaceNodeChanges,
+} from '../workspace/reactflow-adapter';
+import {
+  type CanvasNodeData,
+  type CanvasNodeType,
+  type WorkspaceEdge,
+  type WorkspaceNode,
+  type WorkspaceViewport,
+} from '../types/workspace-graph';
 import { useCompilerStore } from './compiler-store';
 import { useGenerationStore } from './generation-store';
 import { useSpecStore } from './spec-store';
@@ -35,6 +42,13 @@ import { computeLineage } from '../lib/canvas-graph';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 import { PREREQUISITE_DEFAULTS, AUTO_LAYOUT_DEBOUNCE_MS } from '../lib/constants';
 import { migrateCanvasState } from './canvas-migrations';
+import { hydrateDomainFromCanvasGraph, useWorkspaceDomainStore } from './workspace-domain-store';
+import {
+  linkHypothesesAfterCompile,
+  syncDomainForNewEdge,
+  syncDomainForRemovedEdge,
+  syncDomainForRemovedNode,
+} from '../workspace/domain-commands';
 
 // Debounced auto-layout on dimension changes (avoids infinite loop)
 let dimensionLayoutTimer: ReturnType<typeof setTimeout> | null = null;
@@ -46,48 +60,16 @@ const HYPOTHESIS_STACK_SPACING = 60;
 
 // Re-export for consumers
 export { GRID_SIZE, SECTION_NODE_TYPES } from '../lib/canvas-layout';
-
-// ── Node type system ────────────────────────────────────────────────
-
-export type CanvasNodeType =
-  | 'designBrief'
-  | 'existingDesign'
-  | 'researchContext'
-  | 'objectivesMetrics'
-  | 'designConstraints'
-  | 'designSystem'
-  | 'compiler'
-  | 'hypothesis'
-  | 'variant'
-  | 'critique'
-  | 'model';
-
-export type CanvasNodeData = Record<string, unknown> & {
-  refId?: string;
-  variantStrategyId?: string;
-};
-
+export type { CanvasNodeData, CanvasNodeType } from '../types/workspace-graph';
+export { NODE_TYPE_TO_SECTION } from '../types/workspace-graph';
 export type { EdgeStatus } from '../constants/canvas';
-
-type CanvasNode = Node<CanvasNodeData, CanvasNodeType>;
-type CanvasEdge = Edge<{ status: EdgeStatus }>;
-
-/** Map canvas node types to their spec section IDs */
-export const NODE_TYPE_TO_SECTION: Partial<Record<CanvasNodeType, SpecSectionId>> = {
-  designBrief: 'design-brief',
-  existingDesign: 'existing-design',
-  researchContext: 'research-context',
-  objectivesMetrics: 'objectives-metrics',
-  designConstraints: 'design-constraints',
-};
-
 
 // ── Store interface ─────────────────────────────────────────────────
 
 interface CanvasStore {
-  nodes: CanvasNode[];
-  edges: CanvasEdge[];
-  viewport: Viewport;
+  nodes: WorkspaceNode[];
+  edges: WorkspaceEdge[];
+  viewport: WorkspaceViewport;
 
   showMiniMap: boolean;
   showGrid: boolean;
@@ -102,9 +84,9 @@ interface CanvasStore {
   /** Transient: which node type + handle type is currently being dragged from (for handle glow) */
   connectingFrom: { nodeType: CanvasNodeType; handleType: 'source' | 'target' } | null;
 
-  onNodesChange: (changes: NodeChange<CanvasNode>[]) => void;
-  onEdgesChange: (changes: EdgeChange<CanvasEdge>[]) => void;
-  setViewport: (viewport: Viewport) => void;
+  onNodesChange: (changes: Parameters<typeof applyWorkspaceNodeChanges>[0]) => void;
+  onEdgesChange: (changes: Parameters<typeof applyWorkspaceEdgeChanges>[0]) => void;
+  setViewport: (viewport: WorkspaceViewport) => void;
 
   toggleMiniMap: () => void;
   toggleGrid: () => void;
@@ -117,7 +99,7 @@ interface CanvasStore {
   updateNodeData: (nodeId: string, data: Partial<CanvasNodeData>) => void;
   disconnectOutputs: (nodeId: string) => void;
   onConnect: (connection: Connection) => void;
-  isValidConnection: (connection: Edge | Connection) => boolean;
+  isValidConnection: (connection: Connection | Pick<WorkspaceEdge, 'source' | 'target'>) => boolean;
 
   setExpandedVariant: (id: string | null) => void;
   computeLineage: (selectedNodeId: string | null) => void;
@@ -159,11 +141,11 @@ export const useCanvasStore = create<CanvasStore>()(
       connectingFrom: null,
 
       onNodesChange: (changes) => {
-        set({ nodes: applyNodeChanges(changes, get().nodes) });
+        set({ nodes: applyWorkspaceNodeChanges(changes, get().nodes) });
         // Debounced re-layout on dimension changes (e.g. image added makes node taller)
         if (
           get().autoLayout &&
-          changes.some((c: NodeChange) => c.type === 'dimensions')
+          changes.some((c) => (c as { type?: string }).type === 'dimensions')
         ) {
           if (dimensionLayoutTimer) clearTimeout(dimensionLayoutTimer);
           dimensionLayoutTimer = setTimeout(() => {
@@ -173,8 +155,17 @@ export const useCanvasStore = create<CanvasStore>()(
         }
       },
 
-      onEdgesChange: (changes) =>
-        set({ edges: applyEdgeChanges(changes, get().edges) }),
+      onEdgesChange: (changes) => {
+        const prev = get().edges;
+        const next = applyWorkspaceEdgeChanges(changes, prev);
+        const nextIds = new Set(next.map((e) => e.id));
+        const removed = prev.filter((e) => !nextIds.has(e.id));
+        const nodes = get().nodes;
+        for (const e of removed) {
+          syncDomainForRemovedEdge(e, nodes);
+        }
+        set({ edges: next });
+      },
 
       setViewport: (viewport) => set({ viewport }),
 
@@ -205,18 +196,16 @@ export const useCanvasStore = create<CanvasStore>()(
         if (!get().isValidConnection(connection)) return;
         const edgeId = buildEdgeId(connection.source!, connection.target!);
         if (get().edges.some((e) => e.id === edgeId)) return;
-        set({
-          edges: [
-            ...get().edges,
-            {
-              id: edgeId,
-              source: connection.source!,
-              target: connection.target!,
-              type: EDGE_TYPES.DATA_FLOW,
-              data: { status: EDGE_STATUS.IDLE },
-            },
-          ],
-        });
+        const newEdge: WorkspaceEdge = {
+          id: edgeId,
+          source: connection.source!,
+          target: connection.target!,
+          type: EDGE_TYPES.DATA_FLOW,
+          data: { status: EDGE_STATUS.IDLE },
+        };
+        const edges = [...get().edges, newEdge];
+        set({ edges });
+        syncDomainForNewEdge(newEdge, get().nodes, edges);
       },
 
       // ── Add node with auto-connect ──────────────────────────────
@@ -232,7 +221,7 @@ export const useCanvasStore = create<CanvasStore>()(
         const col = columnX(state.colGap);
         const targetPos = snap(position ?? computeDefaultPosition(type, state.nodes, col));
 
-        const newNode: CanvasNode = {
+        const newNode: WorkspaceNode = {
           id,
           type,
           position: targetPos,
@@ -244,7 +233,7 @@ export const useCanvasStore = create<CanvasStore>()(
         const prereqType = findMissingPrerequisite(type, state.nodes);
         if (prereqType) {
           const prereqId = `${prereqType}-${generateId()}`;
-          const prereqNode: CanvasNode = {
+          const prereqNode: WorkspaceNode = {
             id: prereqId,
             type: prereqType as CanvasNodeType,
             position: computeAdjacentPosition(targetPos, state.colGap),
@@ -275,6 +264,9 @@ export const useCanvasStore = create<CanvasStore>()(
           const lastVariant = map?.variants[map.variants.length - 1];
           if (lastVariant) {
             newNode.data = { refId: lastVariant.id };
+            useWorkspaceDomainStore
+              .getState()
+              .linkHypothesisToIncubator(id, targetCompilerId, lastVariant.id);
           }
         }
 
@@ -291,6 +283,8 @@ export const useCanvasStore = create<CanvasStore>()(
         const state = get();
         const node = state.nodes.find((n) => n.id === nodeId);
         if (!node) return;
+
+        syncDomainForRemovedNode(node);
 
         // If removing a compiler, also clean up its dimension map
         if (node.type === 'compiler') {
@@ -327,12 +321,52 @@ export const useCanvasStore = create<CanvasStore>()(
 
       // ── Update node data (for critique text, etc.) ───────────────
 
-      updateNodeData: (nodeId, data) =>
+      updateNodeData: (nodeId, data) => {
         set({
           nodes: get().nodes.map((n) =>
             n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n
           ),
-        }),
+        });
+        const n = get().nodes.find((x) => x.id === nodeId);
+        if (!n) return;
+        const dom = useWorkspaceDomainStore.getState();
+        const merged = { ...n.data, ...data };
+        if (n.type === 'hypothesis') {
+          if ('agentMode' in data || 'thinkingLevel' in data) {
+            dom.setHypothesisGenerationSettings(nodeId, {
+              agentMode: merged.agentMode as HypothesisNodeData['agentMode'] | undefined,
+              thinkingLevel: merged.thinkingLevel as HypothesisNodeData['thinkingLevel'],
+            });
+          }
+        }
+        if (n.type === 'model') {
+          const m = merged as ModelNodeData;
+          dom.upsertModelProfile(nodeId, {
+            providerId: m.providerId,
+            modelId: m.modelId,
+            title: m.title,
+          });
+        }
+        if (n.type === 'designSystem') {
+          const ds = merged as DesignSystemNodeData;
+          dom.upsertDesignSystem(nodeId, {
+            title: ds.title ?? '',
+            content: ds.content ?? '',
+            images: ds.images ?? [],
+            providerMigration: ds.providerId,
+            modelMigration: ds.modelId,
+          });
+        }
+        if (n.type === 'critique') {
+          const c = merged as CritiqueNodeData;
+          dom.upsertCritique(nodeId, {
+            title: c.title ?? '',
+            strengths: c.strengths ?? '',
+            improvements: c.improvements ?? '',
+            direction: c.direction ?? '',
+          });
+        }
+      },
 
       // ── Disconnect outgoing edges from a node ────────────────────
 
@@ -422,7 +456,10 @@ export const useCanvasStore = create<CanvasStore>()(
       initializeCanvas: () => {
         const state = get();
         if (state.nodes.length > 0) {
-          // Orphan cleanup is handled by useCanvasOrchestrator
+          hydrateDomainFromCanvasGraph({
+            nodes: state.nodes as { id: string; type: CanvasNodeType; data: Record<string, unknown> }[],
+            edges: state.edges,
+          });
           if (get().autoLayout) get().applyAutoLayout();
           return;
         }
@@ -471,6 +508,10 @@ export const useCanvasStore = create<CanvasStore>()(
             },
           ],
         });
+        hydrateDomainFromCanvasGraph({
+          nodes: get().nodes as { id: string; type: CanvasNodeType; data: Record<string, unknown> }[],
+          edges: get().edges,
+        });
       },
 
       // ── Sync after compilation (scoped to a specific compiler) ──
@@ -502,7 +543,7 @@ export const useCanvasStore = create<CanvasStore>()(
         const addedEdges = [...state.edges];
         let placed = 0;
 
-        const newHypothesisIds: string[] = [];
+        const compileLinkPairs: { hypothesisNodeId: string; variantStrategyId: string }[] = [];
 
         newVariants.forEach((variant) => {
           if (existingHypIds.has(variant.id)) return;
@@ -515,7 +556,7 @@ export const useCanvasStore = create<CanvasStore>()(
             data: { refId: variant.id },
           });
           placed++;
-          newHypothesisIds.push(nodeId);
+          compileLinkPairs.push({ hypothesisNodeId: nodeId, variantStrategyId: variant.id });
 
           addedEdges.push({
             id: buildEdgeId(compilerNodeId, nodeId),
@@ -532,6 +573,8 @@ export const useCanvasStore = create<CanvasStore>()(
 
         if (placed === 0) return;
 
+        const newHypothesisIds = compileLinkPairs.map((p) => p.hypothesisNodeId);
+
         // Propagate the compiler's model to all new hypotheses
         const modelEdges = buildModelEdgesFromParent(
           compilerNodeId, newHypothesisIds, addedNodes, addedEdges,
@@ -539,6 +582,15 @@ export const useCanvasStore = create<CanvasStore>()(
         addedEdges.push(...modelEdges);
 
         set({ nodes: addedNodes, edges: addedEdges });
+        linkHypothesesAfterCompile(compilerNodeId, compileLinkPairs);
+        const prevEdgeIds = new Set(state.edges.map((e) => e.id));
+        const graphNodes = get().nodes;
+        const graphEdges = get().edges;
+        for (const e of addedEdges) {
+          if (!prevEdgeIds.has(e.id)) {
+            syncDomainForNewEdge(e, graphNodes, graphEdges);
+          }
+        }
 
         if (get().autoLayout) get().applyAutoLayout();
       },
@@ -629,6 +681,15 @@ export const useCanvasStore = create<CanvasStore>()(
 
         set({ nodes: newNodes, edges: newEdges, variantNodeIdMap: nodeIdMap });
 
+        const dom = useWorkspaceDomainStore.getState();
+        for (const result of results) {
+          const variantNodeId = nodeIdMap.get(result.variantStrategyId) ?? null;
+          dom.setVariantSlot(hypothesisNodeId, result.variantStrategyId, {
+            variantNodeId,
+            activeResultId: result.id,
+          });
+        }
+
         if (get().autoLayout) get().applyAutoLayout();
       },
 
@@ -684,6 +745,16 @@ export const useCanvasStore = create<CanvasStore>()(
         );
 
         set({ nodes: newNodes, edges: newEdges });
+
+        const dom = useWorkspaceDomainStore.getState();
+        for (const n of newNodes) {
+          if (!variantIdSet.has(n.id)) continue;
+          const vsId = (n.data as VariantNodeData).variantStrategyId;
+          const pin = (n.data as VariantNodeData).pinnedRunId;
+          if (vsId && pin) {
+            dom.setVariantSlot(hypothesisNodeId, vsId, { pinnedRunId: pin });
+          }
+        }
       },
 
       clearVariantNodeIdMap: () => set({ variantNodeIdMap: new Map() }),

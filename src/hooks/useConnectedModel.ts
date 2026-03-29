@@ -1,28 +1,30 @@
 import { useMemo } from 'react';
 import { useCanvasStore } from '../stores/canvas-store';
+import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
 import { useProviderModels } from './useProviderModels';
 import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
 import type { ModelNodeData } from '../types/canvas-data';
-import { NODE_TYPES } from '../constants/canvas';
+import { findFirstUpstreamModelNodeId } from '../workspace/graph-queries';
 
 /**
  * Reads provider/model config from a connected Model node.
  *
- * Traverses incoming edges to find a source node with type === 'model',
- * then reads its providerId/modelId from node data.
+ * Prefers domain bindings (incubator / hypothesis); falls back to graph edges.
  *
  * Uses primitive Zustand selectors to avoid useSyncExternalStore infinite loops.
  */
 export function useConnectedModel(nodeId: string) {
-  // Find the connected Model node ID via incoming edges
-  const modelNodeId = useCanvasStore((s) => {
-    for (const e of s.edges) {
-      if (e.target !== nodeId) continue;
-      const source = s.nodes.find((n) => n.id === e.source);
-      if (source?.type === NODE_TYPES.MODEL) return source.id;
-    }
-    return null;
+  const domainModelNodeId = useWorkspaceDomainStore((s) => {
+    const fromIncubator = s.incubatorModelNodeIds[nodeId]?.[0];
+    if (fromIncubator) return fromIncubator;
+    return s.hypotheses[nodeId]?.modelNodeIds[0] ?? null;
   });
+
+  const graphModelNodeId = useCanvasStore((s) =>
+    findFirstUpstreamModelNodeId(nodeId, { nodes: s.nodes, edges: s.edges }),
+  );
+
+  const modelNodeId = domainModelNodeId ?? graphModelNodeId;
 
   // Read primitive values from Model node data (stable selectors).
   // Fall back to DEFAULT_COMPILER_PROVIDER when the Model node exists
@@ -51,10 +53,16 @@ export function useConnectedModel(nodeId: string) {
     [models, modelId],
   );
 
+  const supportsReasoning = useMemo(
+    () => models?.find((m) => m.id === modelId)?.supportsReasoning ?? false,
+    [models, modelId],
+  );
+
   return {
     providerId,
     modelId,
     supportsVision,
+    supportsReasoning,
     isConnected: modelNodeId !== null,
   };
 }

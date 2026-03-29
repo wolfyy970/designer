@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { Connection } from '@xyflow/react';
 import { useCanvasStore } from '../../../stores/canvas-store';
+import { nodeById } from '../../../workspace/graph-queries';
 import { useGenerationStore, getActiveResult } from '../../../stores/generation-store';
 import { useSpecStore } from '../../../stores/spec-store';
 import { loadCode } from '../../../services/idb-storage';
@@ -16,7 +17,8 @@ async function captureVariantIntoExistingDesign(
   variantNodeId: string,
   _existingDesignNodeId: string
 ) {
-  const node = useCanvasStore.getState().nodes.find((n) => n.id === variantNodeId);
+  const snap = useCanvasStore.getState();
+  const node = nodeById(snap, variantNodeId);
   const vsId = node?.data.variantStrategyId as string | undefined;
   if (!vsId) return;
 
@@ -61,10 +63,9 @@ export function useFeedbackLoopConnection() {
       // Create the edge via the store
       storeOnConnect(connection);
 
-      // If variant → existingDesign, capture screenshot
-      const storeNodes = useCanvasStore.getState().nodes;
-      const sourceNode = storeNodes.find((n) => n.id === connection.source);
-      const targetNode = storeNodes.find((n) => n.id === connection.target);
+      const snap = useCanvasStore.getState();
+      const sourceNode = connection.source ? nodeById(snap, connection.source) : undefined;
+      const targetNode = connection.target ? nodeById(snap, connection.target) : undefined;
       
       if (
         sourceNode?.type === 'variant' &&

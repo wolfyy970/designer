@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Loader2, ChevronDown, AlertCircle, Eye } from 'lucide-react';
+import { Loader2, ChevronDown, AlertCircle, Eye, Brain } from 'lucide-react';
 import { useProviderModels } from '../../hooks/useProviderModels';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -156,6 +156,9 @@ export default function ModelSelector({
             {!isOpen && selectedModel?.supportsVision && (
               <Eye size={10} className="text-info" />
             )}
+            {!isOpen && selectedModel?.supportsReasoning && (
+              <Brain size={10} className="text-accent" />
+            )}
             {isLoading ? (
               <Loader2 size={12} className="animate-spin" />
             ) : (
@@ -209,6 +212,9 @@ export default function ModelSelector({
                   {m.name}
                   {m.supportsVision && (
                     <Eye size={10} className="shrink-0 text-info" />
+                  )}
+                  {m.supportsReasoning && (
+                    <Brain size={10} className="shrink-0 text-accent" />
                   )}
                 </div>
                 {m.name !== m.id && (

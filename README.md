@@ -47,6 +47,8 @@ Nodes connect left-to-right. Auto-layout arranges everything based on connection
 | `pnpm build` | Type-check and production build |
 | `pnpm test` | Run unit tests (Vitest) |
 | `pnpm lint` | Run ESLint |
+| `pnpm db:migrate` | Apply Prisma migrations (set `DATABASE_URL` in `.env`) |
+| `pnpm db:seed` | Seed prompts/skills into the DB |
 
 ## Documentation
 

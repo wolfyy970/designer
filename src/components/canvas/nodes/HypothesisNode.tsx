@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { type NodeProps, type Node, Handle, Position } from '@xyflow/react';
 import { ChevronDown, ChevronRight, X, Sparkles, Loader2, Pencil, Zap } from 'lucide-react';
 import { useCompilerStore, findVariantStrategy } from '../../../stores/compiler-store';
@@ -6,11 +6,16 @@ import { useCanvasStore } from '../../../stores/canvas-store';
 import { useGenerationStore } from '../../../stores/generation-store';
 import type { HypothesisNodeData } from '../../../types/canvas-data';
 import { useHypothesisGeneration } from '../../../hooks/useHypothesisGeneration';
+import { useConnectedModel } from '../../../hooks/useConnectedModel';
 import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
 import { processingOrFilled } from '../../../lib/node-status';
 import { GENERATION_STATUS } from '../../../constants/generation';
-import { NODE_STATUS } from '../../../constants/canvas';
+import { NODE_STATUS, NODE_TYPES } from '../../../constants/canvas';
+import {
+  countIncomingModelsWithModelSelected,
+  countOutgoingNodesOfType,
+} from '../../../workspace/graph-queries';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
 import GeneratingSkeleton from './GeneratingSkeleton';
@@ -43,18 +48,19 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
     [nodeId],
   );
 
+  const { supportsReasoning } = useConnectedModel(nodeId);
+
+  useEffect(() => {
+    if (!supportsReasoning && thinkingLevel !== 'off') {
+      setThinkingLevel('off');
+    }
+  }, [supportsReasoning, thinkingLevel, setThinkingLevel]);
+
   const handleRemove = useNodeRemoval(nodeId);
 
-  // Count connected Model nodes with a selected model (reactive for UI)
-  const connectedModelCount = useCanvasStore((s) => {
-    let count = 0;
-    for (const e of s.edges) {
-      if (e.target !== nodeId) continue;
-      const src = s.nodes.find((n) => n.id === e.source);
-      if (src?.type === 'model' && src.data.modelId) count++;
-    }
-    return count;
-  });
+  const connectedModelCount = useCanvasStore((s) =>
+    countIncomingModelsWithModelSelected(nodeId, { nodes: s.nodes, edges: s.edges }),
+  );
 
   // Check if THIS hypothesis is generating (not global)
   const isGenerating = useGenerationStore((s) =>
@@ -77,14 +83,8 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
   );
 
   const handleDelete = useCallback(() => {
-    const { edges: storeEdges, nodes: storeNodes } = useCanvasStore.getState();
-    let variantCount = 0;
-    for (const e of storeEdges) {
-      if (e.source !== nodeId) continue;
-      if (storeNodes.find((n) => n.id === e.target && n.type === 'variant')) {
-        variantCount++;
-      }
-    }
+    const snap = useCanvasStore.getState();
+    const variantCount = countOutgoingNodesOfType(nodeId, NODE_TYPES.VARIANT, snap);
     if (variantCount > 0) {
       if (!window.confirm(`Delete this hypothesis and ${variantCount} connected ${variantCount === 1 ? 'variant' : 'variants'}?`)) return;
     }
@@ -258,7 +258,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
             </button>
           </div>
 
-          {agentMode === 'agentic' && (
+          {agentMode === 'agentic' && supportsReasoning && (
             <div className="flex items-center justify-between">
               <span className="text-nano text-fg-muted">Thinking</span>
               <div className="flex gap-0.5 rounded border border-border bg-surface p-0.5">

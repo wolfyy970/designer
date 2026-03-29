@@ -6,7 +6,6 @@ import { normalizeError } from '../../../lib/error-utils';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import type { DesignSystemNodeData } from '../../../types/canvas-data';
 import { extractDesignSystem } from '../../../api/client';
-import { getPrompt } from '../../../stores/prompt-store';
 import { generateId, now } from '../../../lib/utils';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
 import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
@@ -87,9 +86,6 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
         images,
         providerId: providerId!,
         modelId: modelId!,
-        promptOverrides: {
-          designSystemExtract: getPrompt('designSystemExtract'),
-        },
       });
       const result = response.result;
 

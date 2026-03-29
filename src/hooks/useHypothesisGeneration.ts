@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
+import { useQuery } from '@tanstack/react-query';
 import { useSpecStore } from '../stores/spec-store';
 import { useCompilerStore, findVariantStrategy } from '../stores/compiler-store';
 import { useGenerationStore } from '../stores/generation-store';
 import { useCanvasStore } from '../stores/canvas-store';
 import { compileVariantPrompts } from '../services/compiler';
-import { useGenerate, type ProvenanceContext } from './useGenerate';
-import { collectDesignSystemInputs } from '../lib/canvas-graph';
+import { useGenerate } from './useGenerate';
 import { generateId, now } from '../lib/utils';
-import { DEFAULT_COMPILER_PROVIDER, FIT_VIEW_DELAY_MS, FIT_VIEW_DURATION_MS } from '../lib/constants';
+import {
+  buildHypothesisGenerationContext,
+  evaluationPayloadFromHypothesisContext,
+  provenanceFromHypothesisContext,
+} from '../workspace/workspace-session';
+import { FIT_VIEW_DELAY_MS, FIT_VIEW_DURATION_MS } from '../lib/constants';
 import { GENERATION_STATUS } from '../constants/generation';
 import { EDGE_STATUS } from '../constants/canvas';
+import { PROMPT_DEFAULTS } from '../lib/prompts/shared-defaults';
 
 // Version stacking: when the user changes model and regenerates,
 // results accumulate within the same variant node (navigable with
@@ -24,27 +30,6 @@ interface HypothesisGenerationParams {
 interface GenerationProgress {
   completed: number;
   total: number;
-}
-
-interface ConnectedModel {
-  providerId: string;
-  modelId: string;
-}
-
-/** Read all Model nodes connected to a hypothesis node (imperative, from store snapshot). */
-function getConnectedModels(nodeId: string): ConnectedModel[] {
-  const { nodes, edges } = useCanvasStore.getState();
-  const models: ConnectedModel[] = [];
-  for (const e of edges) {
-    if (e.target !== nodeId) continue;
-    const source = nodes.find((n) => n.id === e.source);
-    if (source?.type !== 'model') continue;
-    const providerId = (source.data.providerId as string) || DEFAULT_COMPILER_PROVIDER;
-    const modelId = source.data.modelId as string;
-    if (!modelId) continue;
-    models.push({ providerId, modelId });
-  }
-  return models;
 }
 
 /**
@@ -79,6 +64,13 @@ export function useHypothesisGeneration({
 
   const generate = useGenerate();
 
+  const { data: variantPromptData } = useQuery({
+    queryKey: ['prompt', 'variant'],
+    queryFn: () => fetch('/api/prompts/variant').then((r) => r.json()),
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+
   const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
 
@@ -90,18 +82,14 @@ export function useHypothesisGeneration({
   const handleGenerate = useCallback(async () => {
     if (!strategy) return;
 
-    const connectedModels = getConnectedModels(nodeId);
-    if (connectedModels.length === 0) return;
-
-    // Read agentic settings from node data at generation time
-    const { nodes: canvasNodes, edges: canvasEdges } = useCanvasStore.getState();
-    const thisNode = canvasNodes.find((n) => n.id === nodeId);
-    const agentMode = (thisNode?.data?.agentMode as 'single' | 'agentic' | undefined) ?? 'single';
-    const thinkingLevel = thisNode?.data?.thinkingLevel as 'off' | 'minimal' | 'low' | 'medium' | 'high' | undefined;
-
-    // Collect design system content from connected DesignSystem nodes
-    const { content: dsContent, images: dsImages } =
-      collectDesignSystemInputs(canvasNodes, canvasEdges, nodeId);
+    const snapshot = useCanvasStore.getState();
+    const genCtx = buildHypothesisGenerationContext({
+      hypothesisNodeId: nodeId,
+      variantStrategy: strategy,
+      snapshot: { nodes: snapshot.nodes, edges: snapshot.edges },
+      spec,
+    });
+    if (!genCtx) return;
 
     // Build a single-variant dimension map for prompt compilation
     const filteredMap = {
@@ -113,39 +101,41 @@ export function useHypothesisGeneration({
       compilerModel: 'merged',
     };
 
-    const prompts = compileVariantPrompts(spec, filteredMap, dsContent, dsImages);
+    const variantTemplate = variantPromptData?.body ?? PROMPT_DEFAULTS['variant'];
+    const prompts = compileVariantPrompts(
+      spec,
+      filteredMap,
+      variantTemplate,
+      genCtx.designSystemContent,
+      [...genCtx.designSystemImages],
+    );
     setCompiledPrompts(prompts);
 
     setEdgeStatusBySource(nodeId, EDGE_STATUS.PROCESSING);
     setGenerationError(null);
 
-    // Build provenance context
-    const provenanceCtx: ProvenanceContext = {
-      strategies: {
-        [strategy.id]: {
-          name: strategy.name,
-          hypothesis: strategy.hypothesis,
-          rationale: strategy.rationale,
-          dimensionValues: strategy.dimensionValues,
-        },
-      },
-      designSystemSnapshot: dsContent || undefined,
-    };
+    const provenanceCtx = provenanceFromHypothesisContext(genCtx);
+    const evaluationContext = evaluationPayloadFromHypothesisContext(genCtx);
 
     // Multi-model: generate one design per connected Model node.
     // Manage the isGenerating flag externally so it stays true across
     // the entire loop (no flicker between sequential model calls).
     setGenerating(true);
-    setGenerationProgress({ completed: 0, total: connectedModels.length });
+    setGenerationProgress({ completed: 0, total: genCtx.modelCredentials.length });
 
     let hasFitView = false;
 
     const allResults = await Promise.all(
-      connectedModels.map((model) =>
+      genCtx.modelCredentials.map((model) =>
         generate(
           model.providerId,
           prompts,
-          { model: model.modelId, mode: agentMode, thinkingLevel },
+          {
+            model: model.modelId,
+            mode: genCtx.agentMode,
+            thinkingLevel: genCtx.thinkingLevel,
+            evaluationContext,
+          },
           {
             onPlaceholdersReady: (phs) => {
               syncAfterGenerate(phs, nodeId);
@@ -190,10 +180,11 @@ export function useHypothesisGeneration({
       }).length;
 
     if (errorCount > 0) {
+      const n = genCtx.modelCredentials.length;
       setGenerationError(
-        errorCount === connectedModels.length
+        errorCount === n
           ? 'Generation failed'
-          : `${errorCount} of ${connectedModels.length} failed`,
+          : `${errorCount} of ${n} failed`,
       );
     }
 
@@ -203,6 +194,7 @@ export function useHypothesisGeneration({
     strategy,
     nodeId,
     spec,
+    variantPromptData,
     setCompiledPrompts,
     setGenerating,
     generate,

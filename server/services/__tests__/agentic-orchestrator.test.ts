@@ -1,0 +1,257 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import {
+  runAgenticWithEvaluation,
+  buildRevisionUserContext,
+} from '../agentic-orchestrator.ts';
+import type { EvaluatorWorkerReport } from '../../../src/types/evaluation.ts';
+import { buildDegradedReport } from '../design-evaluation-service.ts';
+
+const mocks = vi.hoisted(() => ({
+  runDesignAgentSession: vi.fn(),
+  runEvaluationWorkers: vi.fn(),
+}));
+
+vi.mock('../pi-agent-service.ts', () => ({
+  runDesignAgentSession: mocks.runDesignAgentSession,
+}));
+
+vi.mock('../design-evaluation-service.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../design-evaluation-service.ts')>();
+  return {
+    ...actual,
+    runEvaluationWorkers: mocks.runEvaluationWorkers,
+  };
+});
+
+function healthyReport(rubric: EvaluatorWorkerReport['rubric']): EvaluatorWorkerReport {
+  return {
+    rubric,
+    scores: {
+      a: { score: 4, notes: 'ok' },
+      b: { score: 4, notes: 'ok' },
+    },
+    findings: [],
+    hardFails: [],
+  };
+}
+
+function failingReport(rubric: EvaluatorWorkerReport['rubric']): EvaluatorWorkerReport {
+  return {
+    rubric,
+    scores: { weak: { score: 1, notes: 'fails gate' } },
+    findings: [{ severity: 'high', summary: 'Problem', detail: 'Needs work' }],
+    hardFails: [],
+  };
+}
+
+describe('buildRevisionUserContext', () => {
+  it('truncates long compiled prompt and includes hypothesis context', () => {
+    const long = 'x'.repeat(5000);
+    const body = buildRevisionUserContext(long, {
+      strategyName: 'S',
+      hypothesis: 'H',
+      objectivesMetrics: 'O',
+    });
+    expect(body.length).toBeLessThan(long.length);
+    expect(body).toContain('H');
+    expect(body).toContain('S');
+    expect(body).toContain('O');
+    expect(body).toContain('preserve intent');
+  });
+});
+
+describe('runAgenticWithEvaluation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const baseOpts = {
+    build: {
+      systemPrompt: 'sys',
+      userPrompt: 'user',
+      providerId: 'openrouter',
+      modelId: 'test/model',
+    },
+    compiledPrompt: 'compiled full prompt',
+    getPromptBody: vi.fn().mockResolvedValue('eval system'),
+    onStream: vi.fn(),
+  };
+
+  const allHealthy = () => ({
+    design: healthyReport('design'),
+    strategy: healthyReport('strategy'),
+    implementation: healthyReport('implementation'),
+    browser: healthyReport('browser'),
+  });
+
+  it('stops after one evaluation round when scores pass revision gate', async () => {
+    mocks.runDesignAgentSession.mockResolvedValueOnce({
+      files: { 'index.html': '<html></html>' },
+      todos: [],
+    });
+    mocks.runEvaluationWorkers.mockResolvedValue(allHealthy());
+
+    const result = await runAgenticWithEvaluation(baseOpts);
+
+    expect(result).not.toBeNull();
+    expect(mocks.runDesignAgentSession).toHaveBeenCalledTimes(1);
+    expect(mocks.runEvaluationWorkers).toHaveBeenCalledTimes(1);
+    expect(result?.rounds).toHaveLength(1);
+    expect(result?.finalAggregate.shouldRevise).toBe(false);
+  });
+
+  it('returns a checkpoint on the first result', async () => {
+    mocks.runDesignAgentSession.mockResolvedValueOnce({
+      files: { 'index.html': '<html></html>', 'styles.css': 'body{}' },
+      todos: [],
+    });
+    mocks.runEvaluationWorkers.mockResolvedValue(allHealthy());
+
+    const result = await runAgenticWithEvaluation(baseOpts);
+
+    expect(result?.checkpoint).toBeDefined();
+    expect(result?.checkpoint.totalRounds).toBe(1);
+    expect(result?.checkpoint.filesWritten).toContain('index.html');
+    expect(result?.checkpoint.filesWritten).toContain('styles.css');
+  });
+
+  it('runs one revision pass and a second evaluation round when gate requires revision', async () => {
+    mocks.runDesignAgentSession
+      .mockResolvedValueOnce({
+        files: { 'index.html': '<html></html>' },
+        todos: [],
+      })
+      .mockResolvedValueOnce({
+        files: { 'index.html': '<html>revised</html>' },
+        todos: [],
+      });
+
+    mocks.runEvaluationWorkers
+      .mockResolvedValueOnce({
+        design: failingReport('design'),
+        strategy: healthyReport('strategy'),
+        implementation: healthyReport('implementation'),
+        browser: healthyReport('browser'),
+      })
+      .mockResolvedValueOnce(allHealthy());
+
+    const result = await runAgenticWithEvaluation(baseOpts);
+
+    expect(result).not.toBeNull();
+    expect(mocks.runDesignAgentSession).toHaveBeenCalledTimes(2);
+    expect(mocks.runEvaluationWorkers).toHaveBeenCalledTimes(2);
+    expect(result?.rounds).toHaveLength(2);
+    const secondUserPrompt = mocks.runDesignAgentSession.mock.calls[1][0].userPrompt as string;
+    expect(secondUserPrompt).toContain('compiled full prompt');
+    expect(secondUserPrompt).toContain('Original design request');
+    expect(result?.checkpoint.totalRounds).toBe(2);
+    expect(result?.checkpoint.revisionBriefApplied).toBeDefined();
+  });
+
+  it('returns null when build session yields no result', async () => {
+    mocks.runDesignAgentSession.mockResolvedValueOnce(null);
+
+    const result = await runAgenticWithEvaluation(baseOpts);
+
+    expect(result).toBeNull();
+    expect(mocks.runEvaluationWorkers).not.toHaveBeenCalled();
+  });
+
+  it('returns null when revision session yields no result (no second eval)', async () => {
+    mocks.runDesignAgentSession
+      .mockResolvedValueOnce({
+        files: { 'index.html': '<html></html>' },
+        todos: [],
+      })
+      .mockResolvedValueOnce(null);
+
+    mocks.runEvaluationWorkers.mockResolvedValueOnce({
+      design: failingReport('design'),
+      strategy: healthyReport('strategy'),
+      implementation: healthyReport('implementation'),
+      browser: healthyReport('browser'),
+    });
+
+    const result = await runAgenticWithEvaluation(baseOpts);
+
+    expect(result).toBeNull();
+    expect(mocks.runEvaluationWorkers).toHaveBeenCalledTimes(1);
+  });
+
+  it('produces a final aggregate when one worker returns a degraded report', async () => {
+    mocks.runDesignAgentSession
+      .mockResolvedValueOnce({
+        files: { 'index.html': '<html></html>' },
+        todos: [],
+      })
+      .mockResolvedValueOnce({
+        files: { 'index.html': '<html></html>' },
+        todos: [],
+      });
+
+    mocks.runEvaluationWorkers
+      .mockResolvedValueOnce({
+        design: buildDegradedReport('design', new Error('parse failed')),
+        strategy: healthyReport('strategy'),
+        implementation: healthyReport('implementation'),
+        browser: healthyReport('browser'),
+      })
+      .mockResolvedValueOnce(allHealthy());
+
+    const result = await runAgenticWithEvaluation(baseOpts);
+
+    expect(result).not.toBeNull();
+    expect(result?.finalAggregate.hardFails.length).toBe(0);
+    expect(result?.finalAggregate.shouldRevise).toBe(false);
+    expect(result?.rounds[0].aggregate.hardFails.length).toBeGreaterThan(0);
+    expect(result?.rounds[0].aggregate.shouldRevise).toBe(true);
+  });
+
+  it('passes browser worker hard fail through to aggregate and triggers revision gate', async () => {
+    mocks.runDesignAgentSession
+      .mockResolvedValueOnce({ files: { 'index.html': '<html></html>' }, todos: [] })
+      .mockResolvedValueOnce({ files: { 'index.html': '<html>fixed</html>' }, todos: [] });
+
+    const browserFailing = {
+      rubric: 'browser' as const,
+      scores: { js_runtime: { score: 1, notes: 'crash' } },
+      findings: [],
+      hardFails: [{ code: 'js_execution_failure', message: 'ReferenceError: go is not defined' }],
+    };
+
+    mocks.runEvaluationWorkers
+      .mockResolvedValueOnce({
+        design: healthyReport('design'),
+        strategy: healthyReport('strategy'),
+        implementation: healthyReport('implementation'),
+        browser: browserFailing,
+      })
+      .mockResolvedValueOnce(allHealthy());
+
+    const result = await runAgenticWithEvaluation(baseOpts);
+
+    expect(result).not.toBeNull();
+    expect(result?.rounds[0].browser?.rubric).toBe('browser');
+    expect(result?.rounds[0].aggregate.hardFails.some((hf) => hf.source === 'browser')).toBe(true);
+    expect(result?.rounds[0].aggregate.shouldRevise).toBe(true);
+    expect(mocks.runDesignAgentSession).toHaveBeenCalledTimes(2);
+  });
+
+  it('passes evaluator provider/model override to runEvaluationWorkers', async () => {
+    mocks.runDesignAgentSession.mockResolvedValueOnce({
+      files: { 'index.html': '<html></html>' },
+      todos: [],
+    });
+    mocks.runEvaluationWorkers.mockResolvedValue(allHealthy());
+
+    await runAgenticWithEvaluation({
+      ...baseOpts,
+      evaluatorProviderId: 'openrouter',
+      evaluatorModelId: 'anthropic/claude-3-haiku',
+    });
+
+    const callArgs = mocks.runEvaluationWorkers.mock.calls[0][0];
+    expect(callArgs.evaluatorProviderId).toBe('openrouter');
+    expect(callArgs.evaluatorModelId).toBe('anthropic/claude-3-haiku');
+  });
+});

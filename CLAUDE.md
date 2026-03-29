@@ -25,12 +25,7 @@ pnpm vitest run src/lib/__tests__/extract-code.test.ts  # single test file
 The frontend (Vite, port 5173) proxies `/api/*` to the API server (Hono/Node.js, port 3001). **Both must run together in development.** API keys live on the server only — never exposed to the browser.
 
 ### Server (`server/`)
-Hono app with five route groups:
-- `POST /api/compile` — runs spec sections through LLM to produce variant prompts (SSE)
-- `POST /api/generate` — generates HTML/React code from a prompt (SSE)
-- `GET /api/models` — lists available models from a provider
-- `GET/POST /api/design-system` — vision-extracts design tokens from images
-- `GET /api/logs` — returns recent LLM call logs (dev debugging)
+Hono app under `/api`: compile, generate (SSE), models, design-system extract, prompts and skills (Prisma-backed GET), logs (dev). See [ARCHITECTURE.md](ARCHITECTURE.md) for the route table.
 
 Provider implementations are in `server/services/providers/` (OpenRouter + LM Studio). Both implement `generateChat()` and `listModels()`. **LM Studio runs on a remote machine at `192.168.252.213:1234`, not localhost.**
 
@@ -38,10 +33,11 @@ Provider implementations are in `server/services/providers/` (OpenRouter + LM St
 A single-page app with one route: `/canvas`. Everything else redirects there.
 
 **State management** — Zustand stores with `persist` middleware:
-- `canvas-store` — nodes, edges, viewport, layout settings (persist v13)
+- `workspace-domain-store` — canonical workflow relations (incubator wiring, hypotheses, model assignments, variant slots, mirrored DS/model/critique payloads)
+- `canvas-store` — React Flow nodes, edges, viewport, layout (persist v13); kept in sync with domain via `workspace/domain-commands.ts`
 - `generation-store` — result metadata only; code is in IndexedDB (persist v2)
 - `spec-store` — 8-section spec document
-- `compiler-store` — compiled variant prompts
+- `compiler-store` — `DimensionMap` per incubator id + compiled prompts
 - `prompt-store` — user-overridable system/user prompt text
 
 **Heavy data in IndexedDB** — generated code + provenance snapshots are stored via `idb-keyval` (`src/services/idb-storage.ts`), not localStorage. The generation store only persists metadata; code is stripped via `partialize`. GC runs 3s after App mount.
@@ -54,7 +50,7 @@ Uses `@xyflow/react` v12. The canvas has 11 node types in a 4-column layout:
 4. **Variant nodes** (col 3) — sandboxed iframe previews of generated code; accumulate across runs (version stacking)
 5. **Critique node** — feedback input for iterating on variants
 
-**Model config** flows via edges: `ModelNode → CompilerNode | HypothesisNode | DesignSystemNode`. The `useConnectedModel(nodeId)` hook traverses edges to read provider/model. There is no inline provider/model on processing nodes.
+**Model config** — Domain store records models per incubator and per hypothesis; `useConnectedModel(nodeId)` prefers that, then incoming model edges. There is no inline provider/model on processing nodes.
 
 **Canvas migrations** (`src/stores/canvas-migrations.ts`) run on every hydration via Zustand's `migrate` option. Current version: 13. Any schema change to canvas node data requires a new migration function.
 

@@ -6,9 +6,15 @@ export type PromptKey =
   | 'genSystemHtml'
   | 'genSystemHtmlAgentic'
   | 'variant'
-  | 'designSystemExtract';
+  | 'designSystemExtract'
+  | 'evalDesignSystem'
+  | 'evalStrategySystem'
+  | 'evalImplementationSystem';
 
 export const DEFAULTS: Record<PromptKey, string> = PROMPT_DEFAULTS as Record<PromptKey, string>;
+
+/** Canonical ordered list of prompt keys (single source of truth with `PromptKey` + `DEFAULTS`). */
+export const PROMPT_KEYS = Object.keys(DEFAULTS) as PromptKey[];
 
 export function resolvePrompt(
   key: PromptKey,
