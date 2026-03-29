@@ -142,13 +142,16 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 | `routes/logs.ts` | GET/DELETE /api/logs |
 | `routes/design-system.ts` | POST /api/design-system/extract |
 | `routes/prompts.ts` | GET `/api/prompts/:key` — latest prompt body from Prisma |
-| `routes/skills.ts` | GET `/api/skills`, `/api/skills/:key` — skill metadata and bodies |
+| `routes/skills.ts` | GET `/api/skills`, `/api/skills/:key` — latest skill versions (metadata + body + optional `filesJson`) |
 | `db/` | Prisma client singleton (`DATABASE_URL`, SQLite in dev) |
 | `services/pi-agent-service.ts` | PI Agent adapter — single import boundary for `@mariozechner/pi-agent-core`. Defines virtual filesystem, tool implementations (`plan_files`, `write_file`, `read_file`), context compaction, and SSE event emission. |
 | `services/agentic-orchestrator.ts` | Agentic evaluation / tool orchestration helpers |
 | `services/pi-agent-tools.ts` | Tool definitions wired into the PI agent |
 | `services/design-evaluation-service.ts` | Design evaluation payload handling |
-| `services/browser-qa-evaluator.ts` | Browser-based QA evaluation (when used) |
+| `services/browser-qa-evaluator.ts` | Deterministic browser QA preflight (HTML + VM) |
+| `services/browser-playwright-evaluator.ts` | Playwright headless render + DOM/console checks |
+| `db/skills.ts` | List skill versions, build virtual skill file maps (`filesJson` or `body`) |
+| `lib/skills/*` | Skill catalog XML (`format-for-prompt`), selection (`select-skills`) |
 | `services/compiler.ts` | LLM compilation — Zod-validates request/response boundaries |
 | `services/providers/openrouter.ts` | OpenRouter provider (direct API, auth header) |
 | `services/providers/lmstudio.ts` | LM Studio provider (direct URL) |
@@ -172,14 +175,17 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 
 ### Agentic
 
-`server/routes/generate.ts` delegates to `server/services/pi-agent-service.ts` (when `mode === 'agentic'`).
+`server/routes/generate.ts` (when `mode === 'agentic'`) loads **versioned skills** from Prisma (`listLatestSkillVersions`), selects them with `selectSkillsForContext` using `evaluationContext.outputFormat` and `Skill.nodeTypes`, hydrates virtual paths under `skills/{key}/…` (`buildVirtualSkillFiles`), appends an Agent Skills–style `<available_skills>` catalog via `formatSkillsForPrompt`, then calls `server/services/agentic-orchestrator.ts` → `runAgenticWithEvaluation`.
 
-`runDesignAgent()`:
-1. Creates a virtual filesystem (`Map<string, string>`)
-2. Constructs a PI Agent with `plan_files`, `write_file`, `read_file` tools
-3. Configures `transformContext` for automatic context compaction: when message history exceeds 30 turns, keeps the original user message + last 20 turns + a synthetic summary listing which files have been written
-4. Calls `agent.prompt(userPrompt)` — the agent runs autonomously until it stops calling tools
-5. Streams SSE events as the agent emits them: `activity` (text deltas), `progress` (status), `plan` (file plan), `file` (per-file write), `error`
+**Orchestrator (`runAgenticWithEvaluation`):**
+1. **Build:** `runDesignAgentSession` in `pi-agent-service.ts` — virtual FS is seeded with `virtualSkillFiles` (read-only; stripped from returned design `files`), then the agent writes design artifacts.
+2. **Evaluate:** `runEvaluationWorkers` in `design-evaluation-service.ts` runs design / strategy / implementation LLM rubrics plus **browser** checks:
+   - **Preflight:** `browser-qa-evaluator.ts` — HTML/VM heuristics (fast).
+   - **Grounded:** `browser-playwright-evaluator.ts` — headless Chromium via Playwright (`setContent` on bundled HTML), console/page errors, visible text, layout box, broken images. Disabled when `VITEST=true` or `BROWSER_PLAYWRIGHT_EVAL=0`.
+3. **Revision loop:** Until `isEvalSatisfied` (primary: `!shouldRevise` after `enforceRevisionGate`; optional: `agenticMinOverallScore` + zero hard fails) or **`maxRevisionRounds`** is reached, or abort. Each revision re-seeds prior design files merged with skill files.
+4. **Checkpoint:** `AgenticCheckpoint` includes `stopReason` (`satisfied` | `max_revisions` | `aborted` | `revision_failed`) and `revisionAttempts`.
+
+**Env defaults** (`server/env.ts`): `AGENTIC_MAX_REVISION_ROUNDS` (default `5`, clamped 0–20), optional `AGENTIC_MIN_OVERALL_SCORE`. Request body may pass `agenticMaxRevisionRounds` / `agenticMinOverallScore`. For Playwright in production: install browsers once (`pnpm exec playwright install chromium`).
 
 `server/services/pi-agent-service.ts` is the **only** file that imports from `@mariozechner/pi-agent-core`. All PI types are isolated here.
 

@@ -1,10 +1,11 @@
 /**
- * Agentic design build + parallel evaluators + bounded revision pass.
+ * Agentic design build + parallel evaluators + bounded multi-round revision loop.
  */
 import type { PromptKey } from '../lib/prompts/defaults.ts';
 import type {
   AgenticCheckpoint,
   AgenticPhase,
+  AgenticStopReason,
   AggregatedEvaluationReport,
   EvaluationContextPayload,
   EvaluationRoundSnapshot,
@@ -13,6 +14,7 @@ import { getProvider } from './providers/registry.ts';
 import {
   aggregateEvaluationReports,
   enforceRevisionGate,
+  isEvalSatisfied,
   runEvaluationWorkers,
 } from './design-evaluation-service.ts';
 import { runDesignAgentSession, type AgentRunEvent, type AgentSessionParams } from './pi-agent-service.ts';
@@ -31,6 +33,10 @@ export interface AgenticOrchestratorOptions {
   /** Override provider/model for LLM evaluators; defaults to build provider/model */
   evaluatorProviderId?: string;
   evaluatorModelId?: string;
+  /** Max PI revision sessions after the first evaluation (not counting initial build). */
+  maxRevisionRounds: number;
+  /** Optional early exit when overall score is high enough and there are no hard fails. */
+  minOverallScore?: number;
   getPromptBody: (key: PromptKey) => Promise<string>;
   onStream: (e: AgenticOrchestratorEvent) => void | Promise<void>;
 }
@@ -82,7 +88,9 @@ async function runEvaluationRound(
     type: 'evaluation_progress',
     round,
     phase: 'parallel_start',
-    message: parallel ? 'Running design, strategy, and implementation evaluators in parallel…' : 'Running evaluators sequentially…',
+    message: parallel
+      ? 'Running design, strategy, and implementation evaluators in parallel…'
+      : 'Running evaluators sequentially…',
   });
 
   const workers = await runEvaluationWorkers({
@@ -116,25 +124,37 @@ async function runEvaluationRound(
 function buildCheckpoint(
   files: Record<string, string>,
   rounds: EvaluationRoundSnapshot[],
-  revisionBriefApplied?: string,
+  opts: {
+    stopReason: AgenticStopReason;
+    revisionAttempts: number;
+    revisionBriefApplied?: string;
+  },
 ): AgenticCheckpoint {
   const finalRound = rounds[rounds.length - 1];
   const completedTodos = finalRound
-    ? [
-        ...(finalRound.design?.findings.map((f) => f.summary) ?? []),
-      ].slice(0, 5)
+    ? [...(finalRound.design?.findings.map((f) => f.summary) ?? [])].slice(0, 5)
     : [];
   return {
     totalRounds: rounds.length,
     filesWritten: Object.keys(files),
     finalTodosSummary: completedTodos.join('; ') || 'No findings recorded',
-    revisionBriefApplied,
+    revisionBriefApplied: opts.revisionBriefApplied,
     completedAt: new Date().toISOString(),
+    stopReason: opts.stopReason,
+    revisionAttempts: opts.revisionAttempts,
   };
 }
 
+function mergeSeedWithDesign(
+  designFiles: Record<string, string>,
+  skillFiles?: Record<string, string>,
+): Record<string, string> {
+  if (!skillFiles || Object.keys(skillFiles).length === 0) return { ...designFiles };
+  return { ...skillFiles, ...designFiles };
+}
+
 /**
- * Full pipeline: PI build → eval (×4 + aggregate) → optional single revision → re-eval.
+ * Full pipeline: PI build → eval rounds → bounded revision loop until satisfied or cap.
  */
 export async function runAgenticWithEvaluation(
   options: AgenticOrchestratorOptions,
@@ -142,6 +162,11 @@ export async function runAgenticWithEvaluation(
   const provider = getProvider(options.build.providerId);
   const parallel = provider?.supportsParallel ?? false;
   const signal = options.build.signal;
+  const maxRevisions = Math.max(0, Math.min(20, options.maxRevisionRounds));
+  const satisfactionOpts =
+    options.minOverallScore != null && Number.isFinite(options.minOverallScore)
+      ? { minOverallScore: options.minOverallScore }
+      : undefined;
 
   const forward = async (e: AgentRunEvent) => {
     await options.onStream(e);
@@ -154,18 +179,42 @@ export async function runAgenticWithEvaluation(
 
   let files = buildResult.files;
   const rounds: EvaluationRoundSnapshot[] = [];
+  let revisionAttempts = 0;
+  let lastRevisionBrief: string | undefined;
 
   await emit(options.onStream, { type: 'phase', phase: 'evaluating' });
-  const snap1 = await runEvaluationRound(options, 1, files, parallel);
-  rounds.push(snap1);
-  const agg1 = snap1.aggregate;
+  let evalRound = 1;
+  let snapshot = await runEvaluationRound(options, evalRound, files, parallel);
+  rounds.push(snapshot);
 
-  if (agg1.shouldRevise && !signal?.aborted) {
+  if (signal?.aborted) {
+    return {
+      files,
+      rounds,
+      finalAggregate: snapshot.aggregate,
+      checkpoint: buildCheckpoint(files, rounds, {
+        stopReason: 'aborted',
+        revisionAttempts,
+        revisionBriefApplied: lastRevisionBrief,
+      }),
+    };
+  }
+
+  const skillSeed = options.build.virtualSkillFiles;
+
+  while (
+    !isEvalSatisfied(snapshot.aggregate, satisfactionOpts) &&
+    revisionAttempts < maxRevisions &&
+    !signal?.aborted
+  ) {
     await emit(options.onStream, { type: 'phase', phase: 'revising' });
+    const brief = snapshot.aggregate.revisionBrief;
+    lastRevisionBrief = brief;
+
     await emit(options.onStream, {
       type: 'revision_round',
-      round: 1,
-      brief: agg1.revisionBrief,
+      round: revisionAttempts + 1,
+      brief,
     });
 
     const revisionUser = [
@@ -175,44 +224,75 @@ export async function runAgenticWithEvaluation(
       'Do not remove the design hypothesis — strengthen how it shows up in the UI and copy.',
       '',
       '## Revision brief',
-      agg1.revisionBrief,
+      brief,
       '',
       '## Prioritized fixes',
-      ...agg1.prioritizedFixes.map((f, i) => `${i + 1}. ${f}`),
+      ...snapshot.aggregate.prioritizedFixes.map((f, i) => `${i + 1}. ${f}`),
     ].join('\n');
 
     const revised = await runDesignAgentSession(
       {
         ...options.build,
         userPrompt: revisionUser,
-        seedFiles: files,
-        compactionNote: `Post-evaluation revision requested. Overall ${agg1.overallScore.toFixed(2)}. Hard fails: ${agg1.hardFails.length}.`,
+        seedFiles: mergeSeedWithDesign(files, skillSeed),
+        compactionNote: `Post-evaluation revision requested. Overall ${snapshot.aggregate.overallScore.toFixed(2)}. Hard fails: ${snapshot.aggregate.hardFails.length}.`,
         initialProgressMessage: 'Revising design from evaluation feedback…',
       },
       forward,
     );
 
-    if (!revised || signal?.aborted) return null;
+    if (!revised || signal?.aborted) {
+      const stopReason: AgenticStopReason = signal?.aborted ? 'aborted' : 'revision_failed';
+      return {
+        files,
+        rounds,
+        finalAggregate: snapshot.aggregate,
+        checkpoint: buildCheckpoint(files, rounds, {
+          stopReason,
+          revisionAttempts,
+          revisionBriefApplied: lastRevisionBrief,
+        }),
+      };
+    }
+
     files = revised.files;
+    revisionAttempts += 1;
+    evalRound += 1;
 
     await emit(options.onStream, { type: 'phase', phase: 'evaluating' });
-    const snap2 = await runEvaluationRound(options, 2, files, parallel);
-    rounds.push(snap2);
+    snapshot = await runEvaluationRound(options, evalRound, files, parallel);
+    rounds.push(snapshot);
 
-    await emit(options.onStream, { type: 'phase', phase: 'complete' });
-    return {
-      files,
-      rounds,
-      finalAggregate: snap2.aggregate,
-      checkpoint: buildCheckpoint(files, rounds, agg1.revisionBrief),
-    };
+    if (signal?.aborted) {
+      return {
+        files,
+        rounds,
+        finalAggregate: snapshot.aggregate,
+        checkpoint: buildCheckpoint(files, rounds, {
+          stopReason: 'aborted',
+          revisionAttempts,
+          revisionBriefApplied: lastRevisionBrief,
+        }),
+      };
+    }
   }
+
+  const satisfied = isEvalSatisfied(snapshot.aggregate, satisfactionOpts);
+  const stopReason: AgenticStopReason = signal?.aborted
+    ? 'aborted'
+    : satisfied
+      ? 'satisfied'
+      : 'max_revisions';
 
   await emit(options.onStream, { type: 'phase', phase: 'complete' });
   return {
     files,
     rounds,
-    finalAggregate: agg1,
-    checkpoint: buildCheckpoint(files, rounds),
+    finalAggregate: snapshot.aggregate,
+    checkpoint: buildCheckpoint(files, rounds, {
+      stopReason,
+      revisionAttempts,
+      revisionBriefApplied: lastRevisionBrief,
+    }),
   };
 }

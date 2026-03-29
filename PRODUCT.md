@@ -1,6 +1,6 @@
 # Product — What Exists Today
 
-**Status:** Canvas interface complete. Single-shot and agentic generation operational. Vision support implemented.
+**Status:** Canvas interface complete. Single-shot and agentic generation operational with post-build evaluation, bounded revision rounds, and optional headless browser QA. Vision support implemented. Versioned skills in DB feed the agentic builder when selected by context.
 
 ## Canvas Interface (`/canvas` — default route)
 
@@ -19,7 +19,7 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 | Design System | Processing | Self-contained design token definitions. Supports multiple instances (e.g., Material Design vs custom tokens). Content stored in node data, not spec store. Optional vision-based extraction from uploaded images. |
 | Incubator | Processing | Compiles connected inputs → hypothesis strategies via LLM |
 | Hypothesis | Processing | Editable strategy card with built-in generation controls. Toggle between single-shot and agentic modes. Connect a Model node, then click Create or Think & Create. |
-| Variant | Output | Rendered design preview. Single-file results show an HTML iframe. Multi-file (agentic) results show a file explorer + preview/code tabs + zip download. Version navigation across all results. |
+| Variant | Output | Rendered design preview. Single-file results show an HTML iframe. Multi-file (agentic) results show a file explorer + preview/code tabs + zip download. Completed agentic runs show an **evaluation scorecard** (aggregate score, prioritized fixes, runtime QA) and, when available, a **headless browser thumbnail**. Version navigation across all results. |
 | Critique | Processing | Structured feedback (strengths, improvements, direction) for iteration |
 
 ### Canvas Features
@@ -45,7 +45,7 @@ Variants can connect back to Existing Design (or to a Critique node, then to Inc
 
 ## Generation Engine
 
-Each hypothesis-model pair produces a variant via one of two modes.
+Each hypothesis-model pair produces a variant via one of two modes. Server routes, SSE events, and store boundaries are summarized in [ARCHITECTURE.md](ARCHITECTURE.md); this section is the product-facing behavior.
 
 ### Single-Shot Mode
 
@@ -55,28 +55,28 @@ The server sends the compiled variant prompt (hypothesis + spec context) to the 
 
 ### Agentic Mode
 
-Enabled by the **Agentic** toggle on a Hypothesis node. Powered by `@mariozechner/pi-agent-core`.
+Enabled by the **Agentic** toggle on a Hypothesis node; use **Think & Create** to run it. Powered by `@mariozechner/pi-agent-core`.
 
-The agent runs a multi-turn tool-use loop with three tools:
-- `plan_files` — Declares the file structure before writing (visible as a progress plan)
-- `write_file` — Writes or overwrites files one at a time (live preview updates per file)
-- `read_file` — Reads a file back for review before revising
+**Server pipeline (not a single LLM call):**
+1. **Build** — PI multi-turn tool loop produces the file tree (streaming events: plan, files, activity, todos).
+2. **Evaluate** — Four workers run: **design**, **strategy**, and **implementation** rubrics (structured JSON from the LLM) plus **browser QA**. Browser QA starts with a fast **VM/preflight** pass on bundled HTML (structure, assets, inline script checks). When Playwright browsers are installed, a **headless Chromium** pass adds real render signals (console/page errors, layout/text heuristics) and may attach a **viewport screenshot** that appears on the variant scorecard. If Chromium is unavailable, the merge keeps preflight only and records a note — setup gaps do not hard-fail the whole evaluation.
+3. **Revise** — If the merged scores trip the revision gate, the server can run additional PI sessions seeded with the current files and an evaluation brief, until satisfied or until **max revision rounds** (server default / env / API). Provenance stores **checkpoint** metadata (e.g. stop reason, revision attempt count).
 
-**What the agent does:**
-1. Reads the hypothesis and reasons out loud — this appears in the activity log
-2. Calls `plan_files` to declare the file structure
-3. Writes each file comprehensively (no length limit — a styles.css can be 500+ lines)
-4. Self-critique pass: reads each file back, identifies weak points, revises with `write_file`
+**Tools** (virtual workspace): `plan_files`, `write_file`, `edit_file`, `read_file`, `ls_files`, `todo_write`, `grep`, `validate_js`, `validate_html`.
+
+**Typical flow:** declare a plan → write files → validate / read / edit → optional self-critique. Live file events update the variant preview as files land.
+
+**Skills.** Versioned skill packages live in the database (starter seed + `GET /api/skills` for inspection). Each agentic request selects skills using tags on the skill row and hypothesis context (including **output format** hints from dimension values when present). Matching skills are mounted read-only under `skills/…`; the system prompt includes an Agent Skills–style catalog so the model can load full instructions with `read_file`.
 
 **Files are bundled for preview.** `bundleVirtualFS()` inlines linked CSS and JS into a single HTML document for sandboxed iframe rendering. The original files remain separately accessible in the code tab.
 
 **Multi-file output.** Agentic variants show a file explorer sidebar, Preview/Code tab bar, and a download button that produces a `.zip` file.
 
-**Context compaction.** For long agent runs (> 30 turns), the context is automatically compacted: the original hypothesis prompt and the 20 most recent turns are preserved; earlier turns are replaced with a summary listing which files have been written. This prevents context-limit failures on complex generations.
+**Context compaction.** For long agent runs (turn count threshold), the context is compacted: the first message (full hypothesis/spec context), a fresh **LLM summary** of the middle turns, and the most recent turns are kept, with file paths and todos surfaced in the summary so work is not lost.
 
-**Thinking levels.** When agentic mode is on, a thinking-level selector appears on the Hypothesis node: None / Light / Deep. When a non-None level is selected, `reasoning_effort` is sent to the provider API. Only models that support extended reasoning (e.g. Claude 3.5+, o1/o3, DeepSeek-R1, Qwen3) will act on it — other models ignore the parameter or return an API error.
+**Thinking** (Hypothesis node). When the connected model advertises reasoning support: **None / Light / Deep** map to API levels *off* / *minimal* / *medium*. Other levels exist in the stack but are not exposed in this UI.
 
-**Prompt override.** The agentic system prompt (`genSystemHtmlAgentic`) is exposed in the Prompt Editor and can be overridden per-session.
+**Prompt override.** The agentic system prompt (`genSystemHtmlAgentic`) is in the Prompt Editor. Evaluator system prompts for the three LLM rubrics are editable there too. Loop limits (e.g. max revision rounds) are server-configured; there is no dedicated canvas control yet.
 
 ## Prompt Editor
 
@@ -89,6 +89,9 @@ All LLM prompts are exposed to the user and editable at runtime via the Prompt E
 | Designer — System | System prompt for single-shot HTML generation |
 | Designer — System (Agentic) | System prompt for the agentic multi-file loop. Includes hypothesis reasoning framework, self-critique instructions, and tool mechanics. |
 | Designer — User | User prompt template for variant generation (variables: `{{STRATEGY_NAME}}`, `{{DESIGN_BRIEF}}`, etc.) |
+| Evaluator — Design | System prompt for the design-quality JSON rubric (agentic evaluation) |
+| Evaluator — Strategy | System prompt for the strategy/hypothesis JSON rubric |
+| Evaluator — Implementation | System prompt for the implementation/craft JSON rubric |
 | Design System — Extract | Prompt for vision-based token extraction from screenshots |
 
 Overrides persist in localStorage. All overrides are sent per-request to the server — the server is stateless.
@@ -122,3 +125,5 @@ Overrides persist in localStorage. All overrides are sent per-request to the ser
 - Experimentation/deployment integration
 - Spec version history
 - Role-based collaboration
+- Admin/canvas UI for skill upload and versioning (zip ingest, validation); skills are DB-backed but maintained out-of-band today
+- End-user controls for agentic **max revision rounds** and optional **early-stop score** thresholds (server env and API already support overrides)

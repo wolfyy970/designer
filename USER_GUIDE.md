@@ -5,6 +5,8 @@
 ```bash
 pnpm install
 cp .env.example .env.local
+# Optional but recommended for agentic mode: headless Chromium for browser-grounded eval
+pnpm exec playwright install chromium
 ```
 
 Add your API key to `.env.local`:
@@ -72,13 +74,11 @@ Each hypothesis has built-in generation controls at the bottom. Connect a Model 
 
 **Single-shot (default):** Click **Create**. The server makes one LLM call and returns a complete self-contained HTML document. Fast — typically 10–30 seconds.
 
-**Agentic:** Toggle **Agentic** on the hypothesis node, choose a thinking level (None / Light / Deep), then click **Think & Create**. The agent:
-1. Reasons out loud about the hypothesis before touching any tool
-2. Plans the file structure (`plan_files`)
-3. Writes each file comprehensively — CSS can be 500+ lines
-4. Reads files back and revises (self-critique pass)
+**Agentic:** Toggle **Agentic** on the hypothesis node, choose a thinking level (None / Light / Deep), then click **Think & Create**. The agent plans files, writes/edits/validates them, and streams progress to the variant. The **server** then runs **evaluation** (LLM rubrics plus browser QA), and may run **additional revision passes** until scores settle or limits are hit — see **[PRODUCT.md](PRODUCT.md)** for the full pipeline.
 
-Agentic runs take longer (1–5 minutes) but produce more considered designs. The file explorer sidebar and progress bar show what the agent is doing in real time.
+Agentic runs take longer (often several minutes) but produce more considered designs. When a run completes, the variant shows an **evaluation summary** and, if Playwright is installed, a small **browser capture** under Runtime QA.
+
+**Output format hint:** If your compiled strategy dimensions include a value for **format** (or `output_format`), it is sent as evaluation context so the server can pick matching **skills** for the agent. Details live in PRODUCT / ARCHITECTURE — you do not need to set this unless you use those dimensions.
 
 Running generation again adds new versions — use the version navigation arrows to browse previous results.
 
@@ -95,6 +95,7 @@ Variant nodes render the generated code in sandboxed iframes.
 - **Preview tab** — Bundled preview (CSS and JS inlined into the HTML)
 - **Code tab** — File explorer on the left, raw file content on the right
 - **Download** — Zip button downloads all files as a `.zip` archive
+- **Eval strip** — Aggregate score, suggested fixes, and runtime QA (including optional headless screenshot)
 - **Full-screen** — Same as single-file
 
 **Version badges** — v1, v2, etc. with ChevronLeft/Right to browse accumulated versions across runs.

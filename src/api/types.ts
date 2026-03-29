@@ -47,6 +47,10 @@ export interface GenerateRequest {
   /** Optional separate provider/model for LLM evaluators; defaults to builder's when unset */
   evaluatorProviderId?: string;
   evaluatorModelId?: string;
+  /** Override server default max PI revision rounds (0–20). */
+  agenticMaxRevisionRounds?: number;
+  /** Optional early satisfaction when overall score ≥ this and no hard fails. */
+  agenticMinOverallScore?: number;
 }
 
 export type GenerateSSEEvent =

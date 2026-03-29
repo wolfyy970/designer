@@ -55,12 +55,13 @@ Uses `@xyflow/react` v12. The canvas has 11 node types in a 4-column layout:
 **Canvas migrations** (`src/stores/canvas-migrations.ts`) run on every hydration via Zustand's `migrate` option. Current version: 13. Any schema change to canvas node data requires a new migration function.
 
 ### Generation flow
-1. User clicks Generate on a HypothesisNode
-2. `useGenerate()` hook POSTs to `/api/generate` (SSE)
-3. Server calls provider's `generateChat()`, extracts code via `extractCode()`
-4. Code streams back as SSE events; stored in IndexedDB via `saveCode()`
-5. Variant node reads code via `useResultCode()` async hook and renders in sandboxed iframe
-6. OpenRouter runs variants in parallel; LM Studio runs sequentially (returns 500 on concurrent requests)
+**Single-shot:** User clicks Generate → `useGenerate()` POSTs `/api/generate` (SSE) → server `generateChat` + `extractCode()` → streamed code → IndexedDB → variant iframe.
+
+**Agentic:** Same entrypoint with `mode: 'agentic'` → `runAgenticWithEvaluation` runs a PI tool loop (`server/services/pi-agent-service.ts`), then parallel evaluator workers (`design-evaluation-service.ts`): LLM rubrics (design/strategy/implementation) + browser preflight (`browser-qa-evaluator.ts`), merged with optional Playwright (`browser-playwright-evaluator.ts`) when `BROWSER_PLAYWRIGHT_EVAL` is on and Chromium is installed. Bounded revision rounds re-seed the agent with eval feedback. Versioned **skills** load from Prisma into a virtual `skills/` tree and extend the agentic system prompt (`generate.ts`, `db/skills.ts`, `lib/skills/*`).
+
+**Multi-file persistence:** Agentic file maps go to IndexedDB via `saveFiles()`; provenance can include evaluation rounds + checkpoint.
+
+**Provider concurrency:** OpenRouter runs variants in parallel; LM Studio runs sequentially (returns 500 on concurrent requests).
 
 ### Iframe rendering
 Generated code renders in `sandbox="allow-scripts"` iframes. `wrapReactCode()` in `src/lib/iframe-utils.ts` prepares React components for browser Babel — it **must** strip `export default` and `import` statements because Babel standalone converts them to CommonJS but `exports` doesn't exist in a plain browser iframe.

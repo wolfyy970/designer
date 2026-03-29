@@ -72,6 +72,13 @@ function BrowserQASection({ snapshot }: { snapshot?: EvaluationRoundSnapshot }) 
           ))}
         </ul>
       )}
+      {browserReport.artifacts?.browserScreenshot?.base64 && (
+        <img
+          className="mt-1.5 w-full max-h-24 object-cover object-top rounded border border-border-subtle"
+          alt="Headless browser capture"
+          src={`data:${browserReport.artifacts.browserScreenshot.mediaType};base64,${browserReport.artifacts.browserScreenshot.base64}`}
+        />
+      )}
     </div>
   );
 }

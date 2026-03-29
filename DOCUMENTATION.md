@@ -17,6 +17,7 @@ README.md (Hub)
 ├── PRODUCT.md        — Feature spec, what exists
 ├── USER_GUIDE.md     — Setup, canvas workflow, managing specs
 ├── ARCHITECTURE.md   — System design, data flow, module boundaries
+├── CLAUDE.md         — Conventions for AI coding agents (not a human onboarding path)
 └── DOCUMENTATION.md  — This file (meta-documentation)
 ```
 
@@ -30,6 +31,7 @@ README.md (Hub)
 | **PRODUCT.md** | Feature source of truth (prevents hallucination) | Feature launches |
 | **USER_GUIDE.md** | Setup, canvas workflow, managing specs | UX changes |
 | **ARCHITECTURE.md** | System design, module boundaries, data flow | Architecture changes |
+| **CLAUDE.md** | Agent-focused commands and repo gotchas | Workflow or stack shifts |
 | **DOCUMENTATION.md** | Meta: documentation philosophy and rules | Rarely |
 
 ---
@@ -57,7 +59,7 @@ README.md (Hub)
 ## Maintenance
 
 **After code changes:**
-1. Check which docs are affected
+1. Check which docs are affected (agentic server behavior → **ARCHITECTURE.md** + **PRODUCT.md**; UX/setup → **USER_GUIDE.md** or **README.md**)
 2. Update or remove outdated content
 3. Verify cross-references still work
 

@@ -6,6 +6,10 @@ import { getPromptBody } from '../db/prompts.ts';
 import { extractCode } from '../lib/extract-code.ts';
 import { logLlmCall } from '../log-store.ts';
 import { normalizeError } from '../lib/error-utils.ts';
+import { env } from '../env.ts';
+import { buildVirtualSkillFiles, listLatestSkillVersions } from '../db/skills.ts';
+import { formatSkillsForPrompt } from '../lib/skills/format-for-prompt.ts';
+import { selectSkillsForContext } from '../lib/skills/select-skills.ts';
 import { runAgenticWithEvaluation, type AgenticOrchestratorEvent } from '../services/agentic-orchestrator.ts';
 import type { ChatMessage } from '../../src/types/provider.ts';
 const generate = new Hono();
@@ -20,6 +24,7 @@ const EvaluationContextSchema = z
     objectivesMetrics: z.string().optional(),
     designConstraints: z.string().optional(),
     designSystemSnapshot: z.string().optional(),
+    outputFormat: z.string().optional(),
   })
   .optional();
 
@@ -33,6 +38,8 @@ const GenerateRequestSchema = z.object({
   evaluationContext: EvaluationContextSchema,
   evaluatorProviderId: z.string().optional(),
   evaluatorModelId: z.string().optional(),
+  agenticMaxRevisionRounds: z.number().int().min(0).max(20).optional(),
+  agenticMinOverallScore: z.number().min(0).max(5).optional(),
 });
 
 generate.post('/', async (c) => {
@@ -132,19 +139,48 @@ generate.post('/', async (c) => {
           }
         };
 
+        const latestSkills = await listLatestSkillVersions();
+        const skillRows = latestSkills.map((r) => ({
+          key: r.skillKey,
+          name: r.name,
+          description: r.description,
+          nodeTypes: r.nodeTypes,
+        }));
+        const selectedSkills = selectSkillsForContext(skillRows, body.evaluationContext);
+        const selectedKeys = new Set(selectedSkills.map((s) => s.key));
+        const virtualSkillFiles: Record<string, string> = {};
+        for (const r of latestSkills) {
+          if (selectedKeys.has(r.skillKey)) {
+            Object.assign(virtualSkillFiles, buildVirtualSkillFiles(r));
+          }
+        }
+        const skillCatalog = formatSkillsForPrompt(
+          selectedSkills.map((s) => ({
+            name: s.key,
+            description: s.description,
+            location: `skills/${s.key}/SKILL.md`,
+          })),
+        );
+        const baseAgenticPrompt = await getPromptBody('genSystemHtmlAgentic');
+        const systemPrompt = skillCatalog ? `${baseAgenticPrompt}\n${skillCatalog}` : baseAgenticPrompt;
+
         const agenticResult = await runAgenticWithEvaluation({
           build: {
-            systemPrompt: await getPromptBody('genSystemHtmlAgentic'),
+            systemPrompt,
             userPrompt: body.prompt,
             providerId: body.providerId,
             modelId: body.modelId,
             thinkingLevel: body.thinkingLevel,
             signal: abortSignal,
+            virtualSkillFiles:
+              Object.keys(virtualSkillFiles).length > 0 ? virtualSkillFiles : undefined,
           },
           compiledPrompt: body.prompt,
           evaluationContext: body.evaluationContext,
           evaluatorProviderId: body.evaluatorProviderId,
           evaluatorModelId: body.evaluatorModelId,
+          maxRevisionRounds: body.agenticMaxRevisionRounds ?? env.AGENTIC_MAX_REVISION_ROUNDS,
+          minOverallScore: body.agenticMinOverallScore ?? env.AGENTIC_MIN_OVERALL_SCORE,
           getPromptBody,
           onStream: writeAgentic,
         });

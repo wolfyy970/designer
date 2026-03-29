@@ -42,6 +42,8 @@ export function useGenerate() {
         evaluationContext?: EvaluationContextPayload;
         evaluatorProviderId?: string;
         evaluatorModelId?: string;
+        agenticMaxRevisionRounds?: number;
+        agenticMinOverallScore?: number;
       },
       callbacks?: {
         onPlaceholdersReady?: (placeholders: GenerationResult[]) => void;
@@ -102,6 +104,8 @@ export function useGenerate() {
               evaluationContext: options.evaluationContext,
               evaluatorProviderId: options.evaluatorProviderId,
               evaluatorModelId: options.evaluatorModelId,
+              agenticMaxRevisionRounds: options.agenticMaxRevisionRounds,
+              agenticMinOverallScore: options.agenticMinOverallScore,
             },
             {
               onPhase: (phase) => {

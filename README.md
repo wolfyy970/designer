@@ -9,6 +9,8 @@ Designers write structured inputs. The compiler reasons about the exploration sp
 ```bash
 pnpm install
 cp .env.example .env.local  # add your API keys
+# Agentic mode uses Playwright for browser-grounded evaluation (after first run):
+pnpm exec playwright install chromium
 pnpm dev                     # Vite SPA on http://localhost:5173
 pnpm dev:server              # Hono API on http://localhost:3001
 ```
@@ -34,7 +36,7 @@ The primary interface is a visual node-graph canvas (`/canvas`, the default rout
 3. **Incubator** — Connect input nodes and a Model node, then click Generate to produce hypothesis strategies
 4. **Hypotheses** — Editable strategy cards. Connect a Model node and click **Create** (single-shot) or **Think & Create** (agentic) to generate a variant
 5. **Design System** (optional) — Connect to hypotheses to inject design tokens into generation
-6. **Variants** — Rendered design previews with zoom, version navigation, and full-screen. Agentic results include a file explorer and zip download.
+6. **Variants** — Rendered design previews with zoom, version navigation, and full-screen. Agentic results include a file explorer, zip download, and (when the run finishes) an evaluation scorecard plus optional headless-browser thumbnail.
 
 Nodes connect left-to-right. Auto-layout arranges everything based on connections. Variants can connect back to Existing Design for iterative feedback loops.
 
@@ -57,7 +59,8 @@ Nodes connect left-to-right. Auto-layout arranges everything based on connection
 | [PRODUCT.md](PRODUCT.md) | What exists today — features, generation modes, canvas nodes, providers |
 | [USER_GUIDE.md](USER_GUIDE.md) | How to use the canvas workflow |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System design, generation engine, module boundaries |
-| [DOCUMENTATION.md](DOCUMENTATION.md) | Documentation philosophy and rules |
+| [DOCUMENTATION.md](DOCUMENTATION.md) | How docs are organized and maintained |
+| [CLAUDE.md](CLAUDE.md) | Commands and conventions for AI-assisted development |
 
 ## Tech Stack
 

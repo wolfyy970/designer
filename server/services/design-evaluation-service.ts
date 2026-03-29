@@ -13,8 +13,10 @@ import type {
   EvaluatorWorkerReport,
 } from '../../src/types/evaluation.ts';
 import type { PromptKey } from '../lib/prompts/defaults.ts';
+import { env } from '../env.ts';
 import { getProvider } from './providers/registry.ts';
 import { runBrowserQA } from './browser-qa-evaluator.ts';
+import { mergePreflightWithPlaywright, runBrowserPlaywrightEval } from './browser-playwright-evaluator.ts';
 
 const criterionSchema = z.object({
   score: z.number(),
@@ -135,6 +137,9 @@ export function buildEvaluatorUserContent(
   if (context?.designSystemSnapshot) {
     ctxParts.push(`<design_system>\n${context.designSystemSnapshot}\n</design_system>`);
   }
+  if (context?.outputFormat) {
+    ctxParts.push(`<output_format>\n${context.outputFormat}\n</output_format>`);
+  }
 
   return [
     '<instruction>Evaluate the artifact below. Return ONLY the JSON object specified in your system contract.</instruction>',
@@ -236,11 +241,16 @@ export async function runEvaluationWorkers(
     runEvaluatorWorker('strategy', sysStrategy, userContent, evalProviderId, evalModelId);
   const runImpl = () =>
     runEvaluatorWorker('implementation', sysImpl, userContent, evalProviderId, evalModelId);
-  const runBrowser = () => {
+  const runBrowser = async () => {
     try {
-      return Promise.resolve(runBrowserQA({ files: input.files }));
+      const preflight = runBrowserQA({ files: input.files });
+      if (!env.BROWSER_PLAYWRIGHT_EVAL) {
+        return preflight;
+      }
+      const pw = await runBrowserPlaywrightEval({ files: input.files });
+      return mergePreflightWithPlaywright(preflight, pw);
     } catch (err) {
-      return Promise.resolve(buildDegradedReport('browser', err));
+      return buildDegradedReport('browser', err);
     }
   };
 
@@ -338,6 +348,30 @@ export function aggregateEvaluationReports(reports: WorkerBundle): AggregatedEva
     shouldRevise: false,
     revisionBrief,
   };
+}
+
+export interface IsEvalSatisfiedOptions {
+  /** If set, treat as satisfied when overallScore >= this and there are zero hard fails, even if shouldRevise is still true. */
+  minOverallScore?: number;
+}
+
+/**
+ * Whether to stop the revision loop for this aggregate.
+ * Primary: !shouldRevise after enforceRevisionGate.
+ * Optional: minOverallScore + no hard fails (OR semantics with primary).
+ */
+export function isEvalSatisfied(
+  aggregate: AggregatedEvaluationReport,
+  opts?: IsEvalSatisfiedOptions,
+): boolean {
+  if (!aggregate.shouldRevise) return true;
+  const threshold = opts?.minOverallScore;
+  if (threshold != null && Number.isFinite(threshold)) {
+    if (aggregate.hardFails.length === 0 && aggregate.overallScore >= threshold) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Apply rule-based shouldRevise if aggregate model omits or is lenient */

@@ -6,6 +6,7 @@ import {
   buildEvaluatorUserContent,
   buildDegradedReport,
   aggregateEvaluationReports,
+  isEvalSatisfied,
 } from '../design-evaluation-service.ts';
 import { runBrowserQA } from '../browser-qa-evaluator.ts';
 import type { AggregatedEvaluationReport } from '../../../src/types/evaluation.ts';
@@ -64,6 +65,55 @@ describe('enforceRevisionGate', () => {
       overallScore: 4,
     });
     expect(r.shouldRevise).toBe(false);
+  });
+});
+
+describe('isEvalSatisfied', () => {
+  const agg = (partial: Partial<AggregatedEvaluationReport>): AggregatedEvaluationReport => ({
+    overallScore: 3,
+    normalizedScores: {},
+    hardFails: [],
+    prioritizedFixes: [],
+    shouldRevise: true,
+    revisionBrief: '',
+    ...partial,
+  });
+
+  it('is satisfied when shouldRevise is false', () => {
+    expect(isEvalSatisfied(agg({ shouldRevise: false }))).toBe(true);
+  });
+
+  it('is not satisfied when shouldRevise true and no min threshold', () => {
+    expect(isEvalSatisfied(agg({ shouldRevise: true, overallScore: 5 }))).toBe(false);
+  });
+
+  it('is satisfied with minOverallScore when score met and no hard fails', () => {
+    expect(
+      isEvalSatisfied(agg({ shouldRevise: true, overallScore: 4.5, hardFails: [] }), {
+        minOverallScore: 4,
+      }),
+    ).toBe(true);
+  });
+
+  it('is not satisfied with minOverallScore when hard fails exist', () => {
+    expect(
+      isEvalSatisfied(
+        agg({
+          shouldRevise: true,
+          overallScore: 5,
+          hardFails: [{ code: 'x', message: 'bad', source: 'design' }],
+        }),
+        { minOverallScore: 3 },
+      ),
+    ).toBe(false);
+  });
+
+  it('is not satisfied when score below minOverallScore', () => {
+    expect(
+      isEvalSatisfied(agg({ shouldRevise: true, overallScore: 3, hardFails: [] }), {
+        minOverallScore: 4,
+      }),
+    ).toBe(false);
   });
 });
 

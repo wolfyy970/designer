@@ -151,6 +151,10 @@ export function evaluationPayloadFromHypothesisContext(
 ): EvaluationContextPayload | undefined {
   if (ctx.agentMode !== 'agentic') return undefined;
   const s = ctx.variantStrategy;
+  const dv = s.dimensionValues;
+  const outputFormat =
+    dv['format'] ?? dv['output_format'] ?? dv['Output format'] ?? dv['Output Format'];
+
   return {
     strategyName: s.name,
     hypothesis: s.hypothesis,
@@ -160,5 +164,6 @@ export function evaluationPayloadFromHypothesisContext(
     objectivesMetrics: ctx.spec.sections['objectives-metrics']?.content,
     designConstraints: ctx.spec.sections['design-constraints']?.content,
     designSystemSnapshot: ctx.designSystemContent || undefined,
+    ...(outputFormat ? { outputFormat: String(outputFormat).trim() } : {}),
   };
 }

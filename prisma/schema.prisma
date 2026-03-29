@@ -37,6 +37,8 @@ model SkillVersion {
   skillKey  String
   skill     Skill    @relation(fields: [skillKey], references: [key])
   body      String
+  /** JSON map of relative path → file text for multi-file Agent Skills packages */
+  filesJson String?
   version   Int
   createdAt DateTime @default(now())
 

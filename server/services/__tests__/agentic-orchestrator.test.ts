@@ -44,6 +44,19 @@ function failingReport(rubric: EvaluatorWorkerReport['rubric']): EvaluatorWorker
   };
 }
 
+/** All rubrics score 3 → gate requests revision (avg < 3.5) without hard fails. */
+function marginalReport(rubric: EvaluatorWorkerReport['rubric']): EvaluatorWorkerReport {
+  return {
+    rubric,
+    scores: {
+      a: { score: 3, notes: 'marginal' },
+      b: { score: 3, notes: 'marginal' },
+    },
+    findings: [],
+    hardFails: [],
+  };
+}
+
 describe('buildRevisionUserContext', () => {
   it('truncates long compiled prompt and includes hypothesis context', () => {
     const long = 'x'.repeat(5000);
@@ -73,6 +86,7 @@ describe('runAgenticWithEvaluation', () => {
       modelId: 'test/model',
     },
     compiledPrompt: 'compiled full prompt',
+    maxRevisionRounds: 5,
     getPromptBody: vi.fn().mockResolvedValue('eval system'),
     onStream: vi.fn(),
   };
@@ -157,7 +171,7 @@ describe('runAgenticWithEvaluation', () => {
     expect(mocks.runEvaluationWorkers).not.toHaveBeenCalled();
   });
 
-  it('returns null when revision session yields no result (no second eval)', async () => {
+  it('returns partial result when revision session yields no result', async () => {
     mocks.runDesignAgentSession
       .mockResolvedValueOnce({
         files: { 'index.html': '<html></html>' },
@@ -174,8 +188,10 @@ describe('runAgenticWithEvaluation', () => {
 
     const result = await runAgenticWithEvaluation(baseOpts);
 
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result?.checkpoint.stopReason).toBe('revision_failed');
     expect(mocks.runEvaluationWorkers).toHaveBeenCalledTimes(1);
+    expect(mocks.runDesignAgentSession).toHaveBeenCalledTimes(2);
   });
 
   it('produces a final aggregate when one worker returns a degraded report', async () => {
@@ -235,6 +251,87 @@ describe('runAgenticWithEvaluation', () => {
     expect(result?.rounds[0].aggregate.hardFails.some((hf) => hf.source === 'browser')).toBe(true);
     expect(result?.rounds[0].aggregate.shouldRevise).toBe(true);
     expect(mocks.runDesignAgentSession).toHaveBeenCalledTimes(2);
+  });
+
+  it('runs multiple revision rounds until satisfied', async () => {
+    mocks.runDesignAgentSession
+      .mockResolvedValueOnce({ files: { 'index.html': '<html>v1</html>' }, todos: [] })
+      .mockResolvedValueOnce({ files: { 'index.html': '<html>v2</html>' }, todos: [] })
+      .mockResolvedValueOnce({ files: { 'index.html': '<html>v3</html>' }, todos: [] });
+
+    mocks.runEvaluationWorkers
+      .mockResolvedValueOnce({
+        design: failingReport('design'),
+        strategy: healthyReport('strategy'),
+        implementation: healthyReport('implementation'),
+        browser: healthyReport('browser'),
+      })
+      .mockResolvedValueOnce({
+        design: failingReport('design'),
+        strategy: healthyReport('strategy'),
+        implementation: healthyReport('implementation'),
+        browser: healthyReport('browser'),
+      })
+      .mockResolvedValueOnce(allHealthy());
+
+    const result = await runAgenticWithEvaluation({
+      ...baseOpts,
+      maxRevisionRounds: 5,
+    });
+
+    expect(result).not.toBeNull();
+    expect(mocks.runDesignAgentSession).toHaveBeenCalledTimes(3);
+    expect(mocks.runEvaluationWorkers).toHaveBeenCalledTimes(3);
+    expect(result?.rounds).toHaveLength(3);
+    expect(result?.checkpoint.stopReason).toBe('satisfied');
+    expect(result?.checkpoint.revisionAttempts).toBe(2);
+  });
+
+  it('stops with max_revisions when gate never clears', async () => {
+    mocks.runDesignAgentSession
+      .mockResolvedValue({ files: { 'index.html': '<html></html>' }, todos: [] });
+
+    mocks.runEvaluationWorkers.mockResolvedValue({
+      design: failingReport('design'),
+      strategy: healthyReport('strategy'),
+      implementation: healthyReport('implementation'),
+      browser: healthyReport('browser'),
+    });
+
+    const result = await runAgenticWithEvaluation({
+      ...baseOpts,
+      maxRevisionRounds: 2,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.checkpoint.stopReason).toBe('max_revisions');
+    expect(result?.checkpoint.revisionAttempts).toBe(2);
+    expect(mocks.runDesignAgentSession).toHaveBeenCalledTimes(3);
+    expect(mocks.runEvaluationWorkers).toHaveBeenCalledTimes(3);
+  });
+
+  it('exits without revision when minOverallScore overrides gate', async () => {
+    mocks.runDesignAgentSession.mockResolvedValueOnce({
+      files: { 'index.html': '<html></html>' },
+      todos: [],
+    });
+    mocks.runEvaluationWorkers.mockResolvedValueOnce({
+      design: marginalReport('design'),
+      strategy: marginalReport('strategy'),
+      implementation: marginalReport('implementation'),
+      browser: marginalReport('browser'),
+    });
+
+    const result = await runAgenticWithEvaluation({
+      ...baseOpts,
+      minOverallScore: 2.5,
+    });
+
+    expect(result).not.toBeNull();
+    expect(mocks.runDesignAgentSession).toHaveBeenCalledTimes(1);
+    expect(mocks.runEvaluationWorkers).toHaveBeenCalledTimes(1);
+    expect(result?.checkpoint.stopReason).toBe('satisfied');
+    expect(result?.checkpoint.revisionAttempts).toBe(0);
   });
 
   it('passes evaluator provider/model override to runEvaluationWorkers', async () => {

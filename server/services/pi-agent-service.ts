@@ -51,6 +51,11 @@ export interface AgentRunParams {
 /** Extended session for revision rounds: seeded virtual FS + compaction hint */
 export interface AgentSessionParams extends AgentRunParams {
   seedFiles?: Record<string, string>;
+  /**
+   * Read-only skill files (e.g. under `skills/…`) preloaded before the first turn.
+   * Stripped from the returned `files` map so evaluators only see design artifacts.
+   */
+  virtualSkillFiles?: Record<string, string>;
   /** Appended to compaction summaries so the model retains evaluation context */
   compactionNote?: string;
   /** First progress line (default: initial build message) */
@@ -85,6 +90,11 @@ export async function runDesignAgentSession(
   });
 
   const virtualFS = new Map<string, string>();
+  if (params.virtualSkillFiles) {
+    for (const [path, content] of Object.entries(params.virtualSkillFiles)) {
+      virtualFS.set(path, content);
+    }
+  }
   if (params.seedFiles) {
     for (const [path, content] of Object.entries(params.seedFiles)) {
       virtualFS.set(path, content);
@@ -206,7 +216,8 @@ export async function runDesignAgentSession(
     return null;
   }
 
-  if (!hasSeed && virtualFS.size === 0 && !params.signal?.aborted) {
+  const designPaths = [...virtualFS.keys()].filter((p) => !p.startsWith('skills/'));
+  if (!hasSeed && designPaths.length === 0 && !params.signal?.aborted) {
     await onEvent({
       type: 'error',
       payload:
@@ -215,8 +226,13 @@ export async function runDesignAgentSession(
     return null;
   }
 
+  const filesOut: Record<string, string> = {};
+  for (const [path, content] of virtualFS.entries()) {
+    if (!path.startsWith('skills/')) filesOut[path] = content;
+  }
+
   return {
-    files: Object.fromEntries(virtualFS),
+    files: filesOut,
     todos: [...todoState.current],
   };
 }
