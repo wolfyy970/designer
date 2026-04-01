@@ -22,7 +22,8 @@ export interface DomainHypothesis {
   modelNodeIds: string[];
   designSystemNodeIds: string[];
   agentMode: AgentMode;
-  thinkingLevel: ThinkingLevel | undefined;
+  /** Omitted on wire when unset (same meaning as `undefined`). */
+  thinkingLevel?: ThinkingLevel;
   placeholder: boolean;
 }
 

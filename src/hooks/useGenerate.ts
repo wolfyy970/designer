@@ -5,19 +5,15 @@ import {
   nextRunNumber,
 } from '../stores/generation-store';
 import { GENERATION_STATUS } from '../constants/generation';
-import { storage } from '../storage';
 import { generate as apiGenerate } from '../api/client';
 import type { CompiledPrompt } from '../types/compiler';
-import type {
-  AgenticCheckpoint,
-  EvaluationContextPayload,
-  EvaluationRoundSnapshot,
-} from '../types/evaluation';
-import type {
-  GenerationResult,
-  Provenance,
-} from '../types/provider';
+import type { EvaluationContextPayload } from '../types/evaluation';
+import type { GenerationResult } from '../types/provider';
 import type { ProvenanceContext } from '../types/provenance-context';
+import {
+  createPlaceholderGenerationSession,
+  runFinalizeWithCatch,
+} from './placeholder-generation-session';
 
 export type { ProvenanceContext };
 
@@ -84,14 +80,17 @@ export function useGenerate() {
       const generateOne = async (prompt: CompiledPrompt) => {
         const placeholderId = placeholderMap.get(prompt.variantStrategyId)!;
         try {
-          // Single growing string — streaming token deltas are appended and flushed
-          // to the store at animation-frame rate (not per-token) to avoid 50+ renders/sec.
-          let activityText = '';
-          let rafId: ReturnType<typeof requestAnimationFrame> | null = null;
-          let generatedCode = '';
-          let liveFiles: Record<string, string> = {};
-          let evaluationRounds: EvaluationRoundSnapshot[] = [];
-          let agenticCheckpoint: AgenticCheckpoint | undefined;
+          const { callbacks: streamCallbacks, finalizeAfterStream } =
+            createPlaceholderGenerationSession({
+              placeholderId,
+              prompt,
+              providerId,
+              model: options.model,
+              mode: options.mode,
+              provenanceCtx,
+              updateResult,
+              onResultComplete: callbacks?.onResultComplete,
+            });
 
           await apiGenerate(
             {
@@ -107,115 +106,10 @@ export function useGenerate() {
               agenticMaxRevisionRounds: options.agenticMaxRevisionRounds,
               agenticMinOverallScore: options.agenticMinOverallScore,
             },
-            {
-              onPhase: (phase) => {
-                updateResult(placeholderId, { agenticPhase: phase });
-              },
-              onEvaluationProgress: (round, phase, message) => {
-                updateResult(placeholderId, {
-                  agenticPhase: 'evaluating',
-                  evaluationStatus: [message ?? phase, `round ${round}`].filter(Boolean).join(' · '),
-                });
-              },
-              onEvaluationReport: (_round, snapshot) => {
-                evaluationRounds = [
-                  ...evaluationRounds.filter((r) => r.round !== snapshot.round),
-                  snapshot,
-                ].sort((a, b) => a.round - b.round);
-                updateResult(placeholderId, {
-                  evaluationRounds,
-                  evaluationSummary: snapshot.aggregate,
-                  agenticPhase: 'evaluating',
-                });
-              },
-              onRevisionRound: (round, brief) => {
-                updateResult(placeholderId, {
-                  agenticPhase: 'revising',
-                  evaluationStatus: `Revision round ${round}`,
-                  progressMessage: brief.length > 180 ? `${brief.slice(0, 180)}…` : brief,
-                });
-              },
-              onCheckpoint: (checkpoint) => {
-                agenticCheckpoint = checkpoint;
-              },
-              onActivity: (entry) => {
-                activityText += entry;
-                if (rafId === null) {
-                  rafId = requestAnimationFrame(() => {
-                    updateResult(placeholderId, { activityLog: [activityText] });
-                    rafId = null;
-                  });
-                }
-              },
-              onProgress: (status) => {
-                updateResult(placeholderId, { progressMessage: status });
-              },
-              onCode: (code) => {
-                generatedCode = code;
-                updateResult(placeholderId, { liveCode: code });
-              },
-              onFile: (path, content) => {
-                liveFiles = { ...liveFiles, [path]: content };
-                updateResult(placeholderId, { liveFiles });
-              },
-              onPlan: (files) => {
-                updateResult(placeholderId, { liveFilesPlan: files });
-              },
-              onTodos: (todos) => {
-                updateResult(placeholderId, { liveTodos: todos });
-              },
-              onError: (error) => {
-                updateResult(placeholderId, { status: GENERATION_STATUS.ERROR, error });
-              },
-            },
+            streamCallbacks,
           );
 
-          if (!generatedCode && Object.keys(liveFiles).length === 0) {
-            updateResult(placeholderId, {
-              status: GENERATION_STATUS.ERROR,
-              error: 'Server returned no code.',
-            });
-            return;
-          }
-
-          if (generatedCode) await storage.saveCode(placeholderId, generatedCode);
-          if (Object.keys(liveFiles).length > 0) await storage.saveFiles(placeholderId, liveFiles);
-
-          if (provenanceCtx) {
-            const strategySnapshot =
-              provenanceCtx.strategies[prompt.variantStrategyId];
-            if (strategySnapshot) {
-              const provenance: Provenance = {
-                hypothesisSnapshot: strategySnapshot,
-                designSystemSnapshot: provenanceCtx.designSystemSnapshot,
-                compiledPrompt: prompt.prompt,
-                provider: providerId,
-                model: options.model,
-                timestamp: new Date().toISOString(),
-                evaluation:
-                  evaluationRounds.length > 0
-                    ? {
-                        rounds: evaluationRounds,
-                        finalAggregate: evaluationRounds[evaluationRounds.length - 1]!.aggregate,
-                      }
-                    : undefined,
-              checkpoint: agenticCheckpoint,
-              };
-              await storage.saveProvenance(placeholderId, provenance);
-            }
-          }
-
-          updateResult(placeholderId, {
-            id: placeholderId,
-            status: GENERATION_STATUS.COMPLETE,
-            agenticPhase: options.mode === 'agentic' ? 'complete' : undefined,
-            evaluationStatus: undefined,
-            metadata: {
-              model: options.model,
-              completedAt: new Date().toISOString(),
-            },
-          });
-          callbacks?.onResultComplete?.(placeholderId);
+          await runFinalizeWithCatch(finalizeAfterStream, placeholderId, updateResult);
         } catch (err) {
           updateResult(placeholderId, {
             status: GENERATION_STATUS.ERROR,

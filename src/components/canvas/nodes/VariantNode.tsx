@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TodoItem } from '../../../types/provider';
-import type { AggregatedEvaluationReport, EvaluationRoundSnapshot } from '../../../types/evaluation';
+import type { AggregatedEvaluationReport, AgenticPhase, EvaluationRoundSnapshot } from '../../../types/evaluation';
 import { type NodeProps, type Node } from '@xyflow/react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { useGenerationStore } from '../../../stores/generation-store';
@@ -209,9 +209,9 @@ function ActivityLog({ entries }: { entries?: string[] }) {
   return (
     <div
       ref={scrollRef}
-      className="nodrag nowheel min-h-0 flex-1 overflow-y-auto px-4 py-3 font-mono text-[11px] leading-relaxed"
+      className="nodrag nowheel min-h-0 flex-1 overflow-y-auto px-3 py-2 font-mono text-[10px] leading-snug text-fg-muted"
     >
-      <span className="whitespace-pre-wrap italic text-fg-muted">{text}</span>
+      <span className="whitespace-pre-wrap italic">{text}</span>
     </div>
   );
 }
@@ -221,19 +221,95 @@ function GeneratingFooter({
   written,
   progressMessage,
   elapsed,
+  lastAgentFileAt,
+  lastActivityAt,
+  lastTraceAt,
+  activeToolName,
+  activeToolPath,
+  liveTodos,
+  agenticPhase,
+  evaluationStatus,
 }: {
   plan: string[] | undefined;
   written: number;
   progressMessage: string | undefined;
   elapsed: number;
+  lastAgentFileAt?: number;
+  lastActivityAt?: number;
+  lastTraceAt?: number;
+  activeToolName?: string;
+  activeToolPath?: string;
+  liveTodos?: TodoItem[];
+  agenticPhase?: AgenticPhase;
+  evaluationStatus?: string;
 }) {
   const total = plan?.length ?? 0;
   const hasPlan = total > 0;
   const progress = hasPlan ? written / total : 0;
+  const isBuilding = !agenticPhase || agenticPhase === 'building';
+  const isEvaluating = agenticPhase === 'evaluating';
+  const isRevising = agenticPhase === 'revising';
+
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 2000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const todoHint = useMemo(() => {
+    if (!liveTodos?.length) return undefined;
+    const cur = liveTodos.find((t) => t.status === 'in_progress')?.task;
+    if (cur) return { label: 'Current' as const, task: cur };
+    const next = liveTodos.find((t) => t.status === 'pending')?.task;
+    if (next) return { label: 'Next' as const, task: next };
+    return undefined;
+  }, [liveTodos]);
+
+  const activeToolLabel = useMemo(() => {
+    if (!activeToolName) return undefined;
+    return activeToolPath ? `${activeToolName} → ${activeToolPath}` : activeToolName;
+  }, [activeToolName, activeToolPath]);
+
+  const noPlanBuildingLine = useMemo(() => {
+    if (!isBuilding) return progressMessage || 'Generating…';
+    if (progressMessage && progressMessage !== 'Generating…') return progressMessage;
+    if (activeToolLabel) {
+      return written > 0 ? `${written} file(s) · ${activeToolLabel}` : activeToolLabel;
+    }
+    if (written > 0) return `${written} design file(s) saved`;
+    return 'Exploring & generating…';
+  }, [isBuilding, progressMessage, activeToolLabel, written]);
+
+  const primaryLine = isEvaluating
+    ? (evaluationStatus || progressMessage || 'Running evaluators…')
+    : isRevising
+      ? (evaluationStatus || progressMessage || 'Revising…')
+      : hasPlan
+        ? `${written} / ${total} files`
+        : noPlanBuildingLine;
+
+  /** Avoid duplicating tool details when the primary line already names the tool or path (milestone-first builds). */
+  const toolLineRedundant = useMemo(() => {
+    if (!isBuilding || hasPlan || !activeToolName) return false;
+    if (activeToolPath && primaryLine.includes(activeToolPath)) return true;
+    return primaryLine.includes(activeToolName);
+  }, [isBuilding, hasPlan, activeToolName, activeToolPath, primaryLine]);
+
+  const fileStallSec =
+    isBuilding && lastAgentFileAt != null && (!hasPlan || written < total)
+      ? Math.max(0, Math.floor((now - lastAgentFileAt) / 1000))
+      : 0;
+  const lastModelTokenSec =
+    lastActivityAt != null ? Math.max(0, Math.floor((now - lastActivityAt) / 1000)) : undefined;
+  const lastTraceSec =
+    lastTraceAt != null ? Math.max(0, Math.floor((now - lastTraceAt) / 1000)) : undefined;
+  const showFileStall = fileStallSec >= 40;
+  const firstFileWait =
+    isBuilding && written === 0 && lastAgentFileAt == null && elapsed >= 50;
 
   return (
     <div className="flex flex-col gap-2 border-t border-border-subtle px-4 py-3">
-      {hasPlan ? (
+      {hasPlan && isBuilding ? (
         <div className="h-1 w-full overflow-hidden rounded-full bg-border">
           <div
             className="h-full rounded-full bg-accent/70 transition-all duration-500"
@@ -245,14 +321,59 @@ function GeneratingFooter({
           <div className="h-full w-full animate-pulse rounded-full bg-accent/60" />
         </div>
       )}
-      <div className="flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-xs text-fg-secondary">
-          <Loader2 size={10} className="animate-spin text-accent" />
-          {hasPlan
-            ? `${written} / ${total} files`
-            : (progressMessage || 'Generating…')}
-        </span>
-        <span className="tabular-nums text-xs text-fg-muted">{elapsed}s</span>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex items-center gap-1.5 text-[10px] leading-tight text-fg-secondary">
+            <Loader2 size={10} className="shrink-0 animate-spin text-accent" />
+            <span className="truncate">{primaryLine}</span>
+          </span>
+          {(isEvaluating || isRevising) && hasPlan && (
+            <span className="pl-[18px] text-[10px] leading-snug text-fg-muted">
+              Build: {written} / {total} files
+            </span>
+          )}
+          {(isEvaluating || isRevising) && !hasPlan && written > 0 && (
+            <span className="pl-[18px] text-[10px] leading-snug text-fg-muted">
+              Saved {written} design file{written === 1 ? '' : 's'}
+            </span>
+          )}
+          {hasPlan && progressMessage && progressMessage !== primaryLine && !isEvaluating && !isRevising && (
+            <span
+              className="pl-[18px] text-[10px] leading-snug text-fg-muted"
+              title={progressMessage}
+            >
+              {progressMessage}
+            </span>
+          )}
+          {todoHint && (
+            <span className="pl-[18px] text-[10px] leading-snug text-fg-muted">
+              {todoHint.label}: <span className="text-fg-secondary">{todoHint.task}</span>
+            </span>
+          )}
+          {(activeToolName || activeToolPath) && !toolLineRedundant && (
+            <span className="pl-[18px] text-[10px] leading-snug text-fg-muted">
+              Tool:{' '}
+              <span className="text-fg-secondary">
+                {activeToolName ?? 'running'}
+                {activeToolPath ? ` · ${activeToolPath}` : ''}
+              </span>
+            </span>
+          )}
+          {(lastModelTokenSec != null || lastTraceSec != null) && (
+            <span className="pl-[18px] text-[10px] leading-snug text-fg-muted">
+              {lastModelTokenSec != null ? `Last model token ${lastModelTokenSec}s ago` : 'No model tokens yet'}
+              {lastTraceSec != null ? ` · last trace ${lastTraceSec}s ago` : ''}
+            </span>
+          )}
+          {(showFileStall || firstFileWait) && (
+            <span className="pl-[18px] text-[10px] leading-snug text-amber-700/90 dark:text-amber-400/85">
+              {firstFileWait
+                ? `No files saved yet after ${elapsed}s — planning or drafting first write may be slow on this model.`
+                : `No new file saved for ${fileStallSec}s — the model may still be streaming a large write_file argument (typical for big CSS/HTML). Check the activity log; cancel and retry if it is clearly stuck.`}
+            </span>
+          )}
+        </div>
+        <span className="shrink-0 tabular-nums text-[10px] leading-tight text-fg-muted">{elapsed}s</span>
       </div>
     </div>
   );
@@ -268,6 +389,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
     stack,
     activeResult,
     completedStack,
+    isActiveBest,
     stackIndex,
     stackTotal,
     versionKey,
@@ -308,24 +430,6 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
   // Tab state for multi-file complete view
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
   const [activeCodeFile, setActiveCodeFile] = useState<string | undefined>(undefined);
-
-  // Track most-recently-written file during generation
-  const [writingFile, setWritingFile] = useState<string | undefined>(undefined);
-  const prevLiveFilesRef = useRef<Record<string, string> | undefined>(undefined);
-
-  useEffect(() => {
-    const lf = result?.liveFiles;
-    if (!lf) return;
-    const prev = prevLiveFilesRef.current ?? {};
-    const newKey = Object.keys(lf).find((k) => !(k in prev));
-    if (newKey) {
-      setWritingFile(newKey);
-      const t = setTimeout(() => setWritingFile(undefined), 1000);
-      prevLiveFilesRef.current = lf;
-      return () => clearTimeout(t);
-    }
-    prevLiveFilesRef.current = lf;
-  }, [result?.liveFiles]);
 
   // Determine whether we're in multi-file mode
   const currentFiles = files ?? result?.liveFiles;
@@ -433,6 +537,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
       <VariantToolbar
         variantName={variantName}
         isArchived={isArchived}
+        isBestCurrent={isActiveBest && result?.status !== GENERATION_STATUS.GENERATING}
         hasCode={hasCode}
         nodeId={id}
         stackTotal={stackTotal}
@@ -469,26 +574,8 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
                   latestSnapshot={result.evaluationRounds?.[result.evaluationRounds.length - 1]}
                 />
               )}
-              <div className="flex flex-1 min-h-0 overflow-hidden">
-              {/* File explorer sidebar — shown once a plan or files exist */}
-              {(result.liveFilesPlan || result.liveFiles) && (
-                <div className="w-28 shrink-0 border-r border-border-subtle overflow-hidden flex flex-col">
-                  <div className="px-2 py-1.5 border-b border-border-subtle">
-                    <span className="text-[9px] font-medium uppercase tracking-wider text-fg-faint">Files</span>
-                  </div>
-                  <FileExplorer
-                    files={result.liveFiles ?? {}}
-                    plannedFiles={result.liveFilesPlan}
-                    activeFile={undefined}
-                    onSelectFile={() => {}}
-                    isGenerating={true}
-                    writingFile={writingFile}
-                    className="flex-1"
-                  />
-                </div>
-              )}
-              {/* Activity log */}
-              <ActivityLog entries={result.activityLog} />
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <ActivityLog entries={result.activityLog} />
               </div>
             </div>
             {/* Progress footer */}
@@ -497,6 +584,14 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
               written={Object.keys(result.liveFiles ?? {}).length}
               progressMessage={result.progressMessage}
               elapsed={elapsed}
+              lastAgentFileAt={result.lastAgentFileAt}
+              lastActivityAt={result.lastActivityAt}
+              lastTraceAt={result.lastTraceAt}
+              activeToolName={result.activeToolName}
+              activeToolPath={result.activeToolPath}
+              liveTodos={result.liveTodos}
+              agenticPhase={result.agenticPhase}
+              evaluationStatus={result.evaluationStatus}
             />
           </div>
         )}

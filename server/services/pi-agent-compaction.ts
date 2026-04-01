@@ -5,7 +5,9 @@ import type { AgentMessage } from '@mariozechner/pi-agent-core';
 import type { Model } from '@mariozechner/pi-ai';
 import { env } from '../env.ts';
 import { getProvider } from './providers/registry.ts';
+import { loggedGenerateChat } from '../lib/llm-call-logger.ts';
 import type { TodoItem } from '../../src/types/provider.ts';
+import type { WorkspaceFileSnapshot } from './virtual-workspace.ts';
 
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high';
 
@@ -13,18 +15,12 @@ const ZEROED_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
 /**
  * Construct a PI Model object for the given provider/model pair.
- * Uses manual construction (NOT getModel() from PI's curated registry)
- * so any OpenRouter or LM Studio model ID works without PI needing to know it.
  */
 export function buildModel(
   providerId: string,
   modelId: string,
   thinkingLevel?: ThinkingLevel,
 ): Model<'openai-completions'> {
-  // `reasoning: true` tells PI to include `reasoning_effort` in the API request.
-  // Only set when the user has explicitly opted into a thinking level.
-  // Models that don't support extended reasoning will either ignore the parameter
-  // or return a clear API error — not a silent no-op.
   const reasoning = !!thinkingLevel && thinkingLevel !== 'off';
 
   if (providerId === 'lmstudio') {
@@ -42,9 +38,6 @@ export function buildModel(
     };
   }
 
-  // Default: OpenRouter.
-  // PI recognizes provider='openrouter' and resolves OPENROUTER_API_KEY from env automatically,
-  // so no explicit Authorization header is needed here.
   return {
     id: modelId,
     name: modelId,
@@ -59,16 +52,71 @@ export function buildModel(
   };
 }
 
+function formatFileOpsXml(snapshot: WorkspaceFileSnapshot): string {
+  const parts: string[] = [];
+  if (snapshot.readFiles.length > 0) {
+    parts.push(`<read-files>\n${snapshot.readFiles.join('\n')}\n</read-files>`);
+  }
+  if (snapshot.modifiedFiles.length > 0) {
+    parts.push(`<modified-files>\n${snapshot.modifiedFiles.join('\n')}\n</modified-files>`);
+  }
+  if (snapshot.allPaths.length > 0 && parts.length === 0) {
+    parts.push(`<workspace-paths>\n${snapshot.allPaths.join('\n')}\n</workspace-paths>`);
+  }
+  return parts.length > 0 ? `\n\n${parts.join('\n\n')}` : '';
+}
+
+export const COMPACTION_SYSTEM_PROMPT = `You are summarizing a design agent session for context window management.
+
+Output a structured checkpoint another model will use to continue seamlessly.
+
+Use this EXACT section structure (markdown headings):
+
+## Goal
+What design hypothesis or user intent is being implemented (one short paragraph).
+
+## Constraints & Preferences
+Product rules that matter (e.g. static local web artifact with a clear HTML entry such as index.html, flexible multi-file layout, relative local asset links only, no CDN unless explicitly allowed).
+
+## Progress
+### Done
+- [x] substantive milestones completed
+
+### In Progress
+- [ ] what is being worked on now
+
+### Blocked
+- issues, if any (or "(none)")
+
+## Key Decisions
+- Bullet list: palette, typography, layout, motion, content choices tied to the hypothesis.
+
+## Next Steps
+1. Ordered list of what to do next (concrete, tool-oriented).
+
+## Critical Context
+- Anything that must not be lost: exact error messages, evaluator feedback, or risky edge cases.
+- Short note on important file roles only if essential (paths only, not full contents).
+
+Be specific. Do NOT continue the conversation. Do NOT answer questions from the transcript.`;
+
 /**
- * Fallback summary used when LLM compaction is unavailable or fails.
+ * Fallback summary when LLM compaction is unavailable or fails.
  */
-export function buildFallbackSummary(droppedCount: number, filesWritten: string[], todos?: TodoItem[]): string {
+export function buildFallbackSummary(
+  droppedCount: number,
+  snapshot: WorkspaceFileSnapshot,
+  todos?: TodoItem[],
+): string {
+  const modified = snapshot.modifiedFiles.length > 0 ? snapshot.modifiedFiles.join(', ') : 'none yet';
+  const read = snapshot.readFiles.length > 0 ? snapshot.readFiles.join(', ') : 'none';
   const base =
     `[Context compacted: ${droppedCount} earlier messages summarized.]\n` +
-    `Files written: ${filesWritten.length > 0 ? filesWritten.join(', ') : 'none yet'}.\n` +
-    `Continue the design work from your current state.`;
+    `Modified design files: ${modified}.\n` +
+    `Files read (not modified): ${read}.\n` +
+    `Continue using read / grep / edit / write as needed.`;
 
-  if (!todos || todos.length === 0) return base;
+  if (!todos || todos.length === 0) return base + formatFileOpsXml(snapshot);
 
   const todoAppendix =
     '\n\n[Current todo list at time of compaction]\n' +
@@ -79,24 +127,32 @@ export function buildFallbackSummary(droppedCount: number, filesWritten: string[
       })
       .join('\n');
 
-  return base + todoAppendix;
+  return base + todoAppendix + formatFileOpsXml(snapshot);
+}
+
+export interface CompactWithLLMOptions {
+  extraContext?: string;
+  snapshot?: WorkspaceFileSnapshot;
 }
 
 /**
  * Calls the provider to produce a structured LLM summary of dropped messages.
- * Falls back to buildFallbackSummary if the provider is unavailable or throws.
  */
 export async function compactWithLLM(
   messages: AgentMessage[],
-  filesWritten: string[],
   providerId: string,
   modelId: string,
-  extraContext?: string,
+  options?: CompactWithLLMOptions,
 ): Promise<string> {
   const provider = getProvider(providerId);
-  if (!provider) return buildFallbackSummary(messages.length, filesWritten);
+  const snapshot: WorkspaceFileSnapshot = options?.snapshot ?? {
+    allPaths: [],
+    readFiles: [],
+    modifiedFiles: [],
+  };
 
-  // Convert messages to a readable transcript, capped per-message to control prompt size.
+  if (!provider) return buildFallbackSummary(messages.length, snapshot);
+
   const MAX_MSG_CHARS = 1500;
   const transcript = messages
     .map((m) => {
@@ -107,32 +163,31 @@ export async function compactWithLLM(
     })
     .join('\n\n');
 
+  const fileBlock = formatFileOpsXml(snapshot);
+  const userBody =
+    `Summarize this design session transcript:\n\n${transcript}` +
+    fileBlock +
+    (options?.extraContext ? `\n\n${options.extraContext}` : '');
+
   try {
-    const response = await provider.generateChat(
+    const response = await loggedGenerateChat(
+      provider,
+      providerId,
       [
         {
           role: 'system',
-          content:
-            'You are summarizing a design agent session for context window management. ' +
-            'Produce a structured checkpoint covering: ' +
-            '(1) the design hypothesis being implemented, ' +
-            '(2) key decisions made — palette, typography, layout, architecture, ' +
-            '(3) each file written and its current purpose/state, ' +
-            '(4) what was revised and why, ' +
-            '(5) current state and what remains to be done. ' +
-            'Be specific. Another AI will use this summary to continue the work seamlessly.',
+          content: COMPACTION_SYSTEM_PROMPT,
         },
         {
           role: 'user',
-          content:
-            `Summarize this design session:\n\n${transcript}` +
-            (extraContext ? `\n\n${extraContext}` : ''),
+          content: userBody,
         },
       ],
       { model: modelId },
+      { source: 'agentCompaction', phase: 'Context window compaction' },
     );
     return response.raw;
   } catch {
-    return buildFallbackSummary(messages.length, filesWritten);
+    return buildFallbackSummary(messages.length, snapshot);
   }
 }

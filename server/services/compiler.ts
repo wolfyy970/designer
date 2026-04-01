@@ -1,13 +1,16 @@
 import { z } from 'zod';
+import { jsonrepair } from 'jsonrepair';
 import type { DesignSpec, ReferenceImage } from '../../src/types/spec.ts';
 import type { CompiledPrompt, DimensionMap, VariantStrategy } from '../../src/types/compiler.ts';
-import type { ContentPart, ChatMessage } from '../../src/types/provider.ts';
+import type { ChatResponse, ContentPart, ChatMessage } from '../../src/types/provider.ts';
 import { buildCompilerUserPrompt, type CritiqueInput, type CompilerPromptOptions } from '../lib/prompts/compiler-user.ts';
 import { buildVariantPrompt } from '../lib/prompts/variant-prompt.ts';
 import { generateId, now } from '../lib/utils.ts';
 import { env } from '../env.ts';
-import { fetchChatCompletion, extractMessageText } from '../lib/provider-helpers.ts';
+import { fetchChatCompletion, parseChatResponse } from '../lib/provider-helpers.ts';
 import { logLlmCall } from '../log-store.ts';
+import { loggedCallLLM } from '../lib/llm-call-logger.ts';
+import { getProvider } from './providers/registry.ts';
 
 export type { ChatMessage };
 
@@ -54,7 +57,7 @@ export async function callLLM(
   model: string,
   providerId: string,
   options: { temperature?: number; max_tokens?: number; images?: ReferenceImage[] } = {}
-): Promise<string> {
+): Promise<ChatResponse> {
   const config = getProviderConfig(providerId);
   const { images, ...requestOptions } = options;
 
@@ -74,7 +77,7 @@ export async function callLLM(
     config.label,
     config.extraHeaders,
   );
-  return extractMessageText(data);
+  return parseChatResponse(data);
 }
 
 function extractJSON(text: string): string {
@@ -160,64 +163,43 @@ export async function compileSpec(
     : undefined;
 
   const systemPrompt = options.systemPrompt;
-  const t0 = performance.now();
-  let response: string;
-  let logError: string | undefined;
-  try {
-    response = await callLLM(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      model,
-      providerId,
-      { temperature: 0.7, max_tokens: 4096, images }
-    );
-  } catch (err) {
-    logError = String(err);
-    logLlmCall({
-      source: 'compiler',
-      model,
-      provider: providerId,
-      systemPrompt,
-      userPrompt,
-      response: '',
-      durationMs: Math.round(performance.now() - t0),
-      error: logError,
-    });
-    throw err;
-  }
-  const durationMs = Math.round(performance.now() - t0);
+  const chat = await loggedCallLLM(
+    [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+    model,
+    providerId,
+    { temperature: 0.7, max_tokens: 4096, images },
+    { source: 'compiler', phase: 'Compile spec → dimension map' },
+  );
 
-  const jsonStr = extractJSON(response);
+  const jsonStr = extractJSON(chat);
   let raw: unknown;
   try {
     raw = JSON.parse(jsonStr);
   } catch {
-    logLlmCall({
-      source: 'compiler',
-      model,
-      provider: providerId,
-      systemPrompt,
-      userPrompt,
-      response,
-      durationMs,
-      error: 'Invalid JSON response',
-    });
-    throw new Error(
-      `Compiler returned invalid JSON. Try re-compiling or switching models.\n\nRaw response:\n${response.slice(0, 500)}`
-    );
+    try {
+      raw = JSON.parse(jsonrepair(jsonStr));
+    } catch {
+      const reg = getProvider(providerId);
+      logLlmCall({
+        source: 'compiler',
+        phase: 'Compile spec → dimension map',
+        model,
+        provider: providerId,
+        ...(reg?.name && reg.name !== providerId ? { providerName: reg.name } : {}),
+        systemPrompt,
+        userPrompt,
+        response: chat,
+        durationMs: 0,
+        error: 'Invalid JSON response',
+      });
+      throw new Error(
+        `Compiler returned invalid JSON. Try re-compiling or switching models.\n\nRaw response:\n${chat.slice(0, 500)}`
+      );
+    }
   }
-
-  logLlmCall({
-    source: 'compiler',
-    model,
-    provider: providerId,
-    systemPrompt,
-    userPrompt,
-    response,
-    durationMs,
-  });
 
   return parseDimensionMap(raw, spec.id, model);
 }

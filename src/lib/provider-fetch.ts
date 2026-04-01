@@ -2,7 +2,7 @@
  * Shared fetch utilities for OpenAI-compatible providers.
  * No environment-specific imports — safe for both client and server.
  */
-import type { ProviderModel, ChatResponse } from '../types/provider';
+import type { ProviderModel, ChatResponse, ChatResponseMetadata } from '../types/provider';
 
 /** Extract the assistant message text from a chat completion response */
 export function extractMessageText(data: Record<string, unknown>): string {
@@ -64,23 +64,58 @@ export async function fetchModelList(
   }
 }
 
-/** Parse chat completion response into a ChatResponse */
-export function parseChatResponse(
-  data: Record<string, unknown>,
-  _providerId: string,
-): ChatResponse {
+function num(v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+}
+
+/**
+ * Parse OpenAI-compatible chat completion JSON into ChatResponse.
+ * OpenRouter documents prompt_tokens, completion_tokens, total_tokens, details, and cost.
+ */
+export function parseChatResponse(data: Record<string, unknown>): ChatResponse {
   const choices = data.choices as Array<Record<string, unknown>> | undefined;
   const firstChoice = choices?.[0] as Record<string, unknown> | undefined;
   const finishReason = firstChoice?.finish_reason as string | undefined;
   const rawText = extractMessageText(data);
 
   const usage = data.usage as Record<string, unknown> | undefined;
+  const promptTok = num(usage?.prompt_tokens);
+  const completionTok = num(usage?.completion_tokens);
+  const totalTok = num(usage?.total_tokens);
+
+  const promptDetails = usage?.prompt_tokens_details as Record<string, unknown> | undefined;
+  const completionDetails = usage?.completion_tokens_details as Record<string, unknown> | undefined;
+
+  const reasoningTok = num(completionDetails?.reasoning_tokens);
+  const cachedTok = num(promptDetails?.cached_tokens);
+  const cost = num(usage?.cost);
+
+  const truncated = finishReason === 'length';
+  const hasUsageNumbers =
+    promptTok !== undefined ||
+    completionTok !== undefined ||
+    totalTok !== undefined ||
+    reasoningTok !== undefined ||
+    cachedTok !== undefined ||
+    cost !== undefined;
+
+  if (!hasUsageNumbers && !truncated) {
+    return { raw: rawText };
+  }
+
+  const metadata: ChatResponseMetadata = { truncated };
+  if (completionTok !== undefined) {
+    metadata.completionTokens = completionTok;
+    metadata.tokensUsed = completionTok;
+  }
+  if (promptTok !== undefined) metadata.promptTokens = promptTok;
+  if (totalTok !== undefined) metadata.totalTokens = totalTok;
+  if (reasoningTok !== undefined) metadata.reasoningTokens = reasoningTok;
+  if (cachedTok !== undefined) metadata.cachedPromptTokens = cachedTok;
+  if (cost !== undefined) metadata.costCredits = cost;
 
   return {
     raw: rawText,
-    metadata: {
-      tokensUsed: usage?.completion_tokens as number | undefined,
-      truncated: finishReason === 'length',
-    },
+    metadata,
   };
 }

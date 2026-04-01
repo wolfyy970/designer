@@ -1,10 +1,11 @@
 /**
- * PI agent tool factories and TypeBox schemas (virtual FS, todos, validation).
+ * PI agent tool factories and TypeBox schemas (virtual workspace, todos, validation).
  */
 import type { AgentTool } from '@mariozechner/pi-agent-core';
 import { Type, type Static } from '@sinclair/typebox';
 import { Script } from 'node:vm';
 import type { TodoItem } from '../../src/types/provider.ts';
+import type { VirtualWorkspace } from './virtual-workspace.ts';
 
 // ── Tool schemas ──────────────────────────────────────────────────────────────
 
@@ -18,37 +19,68 @@ const writeFileSchema = Type.Object({
 
 type WriteFileParams = Static<typeof writeFileSchema>;
 
+const editPairSchema = Type.Object({
+  oldText: Type.String({ description: 'Exact snippet to replace; must appear exactly once in the file.' }),
+  newText: Type.String({ description: 'Replacement text.' }),
+});
+
 const editFileSchema = Type.Object({
   path: Type.String({ description: 'File path to edit.' }),
-  oldText: Type.String({ description: 'The exact text to replace. Must appear exactly once in the file.' }),
-  newText: Type.String({ description: 'The replacement text.' }),
+  edits: Type.Optional(
+    Type.Array(editPairSchema, {
+      description:
+        'Multiple disjoint replacements in one call (preferred). Each oldText must appear exactly once. Apply in one batch.',
+    }),
+  ),
+  oldText: Type.Optional(Type.String({ description: 'Legacy: single replacement (use edits[] for multiple).' })),
+  newText: Type.Optional(Type.String({ description: 'Legacy: single replacement.' })),
 });
 
 type EditFileParams = Static<typeof editFileSchema>;
 
 const readFileSchema = Type.Object({
   path: Type.String({ description: 'File path to read.' }),
+  offset: Type.Optional(Type.Number({ description: '1-based line number to start from (default 1).' })),
+  limit: Type.Optional(Type.Number({ description: 'Maximum number of lines to return (omit for remainder of file).' })),
 });
 
 type ReadFileParams = Static<typeof readFileSchema>;
 
 const planFilesSchema = Type.Object({
   files: Type.Array(Type.String(), {
-    description: 'Ordered list of file paths you plan to create (e.g. ["index.html", "styles.css", "app.js"]).',
+    description: 'Optional: paths you expect to touch. UI-only hint; you may skip if using todos + tools alone.',
   }),
   reasoning: Type.Optional(
-    Type.String({ description: 'Brief note on the project structure and why (optional).' }),
+    Type.String({ description: 'Brief note on structure (optional).' }),
   ),
 });
 
 type PlanFilesParams = Static<typeof planFilesSchema>;
 
-const listFilesSchema = Type.Object({});
+const lsSchema = Type.Object({
+  path: Type.Optional(
+    Type.String({
+      description: 'Directory prefix to list (e.g. skills, .). Omit or use . for all workspace paths.',
+    }),
+  ),
+});
+
+type LsParams = Static<typeof lsSchema>;
+
+const findSchema = Type.Object({
+  pattern: Type.String({
+    description: 'Glob pattern on full paths (e.g. "*.css", "**/*.html", "index.*").',
+  }),
+  path: Type.Optional(Type.String({ description: 'Optional prefix; only paths under this prefix are considered.' })),
+  limit: Type.Optional(Type.Number({ description: 'Max results (default 1000).' })),
+});
+
+type FindParams = Static<typeof findSchema>;
 
 // ── Tool factories ────────────────────────────────────────────────────────────
 
 export function makeWriteFileTool(
-  virtualFS: Map<string, string>,
+  workspace: VirtualWorkspace,
   onFile: (path: string, content: string) => void,
 ): AgentTool<typeof writeFileSchema> {
   return {
@@ -56,68 +88,89 @@ export function makeWriteFileTool(
     label: 'write_file',
     description:
       'Write or overwrite a complete file. Use for new files or when a full rewrite is warranted. ' +
-      'For targeted changes to an existing file, prefer edit_file instead.',
+      'For targeted changes, prefer edit_file. Paths under skills/ are read-only.',
     parameters: writeFileSchema,
     execute: async (_toolCallId, params: WriteFileParams) => {
-      virtualFS.set(params.path, params.content);
-      onFile(params.path, params.content);
-      return {
-        content: [{ type: 'text' as const, text: `File written: ${params.path}.` }],
-        details: null,
-      };
+      return workspace.enqueueMutation(params.path, async () => {
+        workspace.write(params.path, params.content);
+        onFile(params.path, params.content);
+        return {
+          content: [{ type: 'text' as const, text: `File written: ${params.path}.` }],
+          details: null,
+        };
+      });
     },
   };
 }
 
 export function makeEditFileTool(
-  virtualFS: Map<string, string>,
+  workspace: VirtualWorkspace,
   onFile: (path: string, content: string) => void,
 ): AgentTool<typeof editFileSchema> {
   return {
     name: 'edit_file',
     label: 'edit_file',
     description:
-      'Make a surgical text replacement in an existing file. ' +
-      'oldText must match exactly and appear exactly once in the file. ' +
-      'Prefer this over write_file for targeted changes during the self-critique pass.',
+      'Surgical text replacement(s). Prefer edits[] with multiple disjoint changes in one call. ' +
+      'Each oldText must match exactly once. For a single change you may use oldText/newText instead.',
     parameters: editFileSchema,
     execute: async (_toolCallId, params: EditFileParams) => {
-      const content = virtualFS.get(params.path);
-      if (content === undefined) {
-        throw new Error(`File not found: ${params.path}. Use write_file to create it first.`);
+      const edits =
+        params.edits && params.edits.length > 0
+          ? params.edits
+          : params.oldText != null && params.newText != null
+            ? [{ oldText: params.oldText, newText: params.newText }]
+            : [];
+      if (edits.length === 0) {
+        throw new Error('edit_file requires either edits[] or both oldText and newText.');
       }
-      const occurrences = content.split(params.oldText).length - 1;
-      if (occurrences === 0) {
-        throw new Error(`Text not found in ${params.path}. Check that oldText matches exactly.`);
-      }
-      if (occurrences > 1) {
-        throw new Error(
-          `Found ${occurrences} matches in ${params.path}. Make oldText more specific to target exactly one location.`,
-        );
-      }
-      const updated = content.replace(params.oldText, params.newText);
-      virtualFS.set(params.path, updated);
-      onFile(params.path, updated);
+      return workspace.enqueueMutation(params.path, async () => {
+        const updated = workspace.applyEdits(params.path, edits);
+        onFile(params.path, updated);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Edited ${params.path} (${edits.length} replacement${edits.length === 1 ? '' : 's'}).`,
+            },
+          ],
+          details: null,
+        };
+      });
+    },
+  };
+}
+
+export function makeLsTool(workspace: VirtualWorkspace): AgentTool<typeof lsSchema> {
+  return {
+    name: 'ls',
+    label: 'ls',
+    description:
+      'List paths in the virtual workspace. Optional path prefix filters to that directory (e.g. skills).',
+    parameters: lsSchema,
+    execute: async (_toolCallId, params: LsParams) => {
+      const text = workspace.list(params.path);
       return {
-        content: [{ type: 'text' as const, text: `Edited ${params.path}.` }],
+        content: [{ type: 'text' as const, text }],
         details: null,
       };
     },
   };
 }
 
-export function makeListFilesTool(
-  virtualFS: Map<string, string>,
-): AgentTool<typeof listFilesSchema> {
+export function makeFindTool(workspace: VirtualWorkspace): AgentTool<typeof findSchema> {
   return {
-    name: 'ls_files',
-    label: 'ls_files',
-    description: 'List all files you have written so far.',
-    parameters: listFilesSchema,
-    execute: async () => {
-      const files = [...virtualFS.keys()];
+    name: 'find',
+    label: 'find',
+    description: 'Find workspace paths matching a glob pattern. Useful to discover files before reading or editing.',
+    parameters: findSchema,
+    execute: async (_toolCallId, params: FindParams) => {
+      const limit = params.limit ?? 1000;
+      const found = workspace.find(params.pattern, params.path, limit);
       const text =
-        files.length > 0 ? `Files written:\n${files.join('\n')}` : 'No files written yet.';
+        found.length > 0
+          ? found.join('\n') + (found.length >= limit ? `\n[${limit} result limit reached]` : '')
+          : `No paths match pattern: ${params.pattern}`;
       return {
         content: [{ type: 'text' as const, text }],
         details: null,
@@ -133,29 +186,37 @@ export function makePlanFilesTool(
     name: 'plan_files',
     label: 'plan_files',
     description:
-      'Declare the files you plan to create before writing any of them. ' +
-      'Call this once at the start. The user sees this plan immediately so they know what to expect.',
+      'Optional: register expected artifact paths for UI progress. You can skip this and rely on todo_write + tools.',
     parameters: planFilesSchema,
     execute: async (_toolCallId, params: PlanFilesParams) => {
       onPlan(params.files);
       return {
-        content: [{ type: 'text' as const, text: `Plan registered: ${params.files.join(', ')}. Now write each file with write_file.` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Plan registered (${params.files.length} path(s)). Continue with read/grep/edit/write as needed.`,
+          },
+        ],
         details: null,
       };
     },
   };
 }
 
-export function makeReadFileTool(virtualFS: Map<string, string>): AgentTool<typeof readFileSchema> {
+export function makeReadFileTool(workspace: VirtualWorkspace): AgentTool<typeof readFileSchema> {
   return {
     name: 'read_file',
     label: 'read_file',
-    description: 'Read a file you previously wrote to review or verify it before refining.',
+    description:
+      'Read file contents from the workspace. Use offset/limit to page through large files. Lines are numbered as line|text.',
     parameters: readFileSchema,
     execute: async (_toolCallId, params: ReadFileParams) => {
-      const content = virtualFS.get(params.path);
+      const { text } = workspace.read(params.path, {
+        offset: params.offset,
+        limit: params.limit,
+      });
       return {
-        content: [{ type: 'text' as const, text: content ?? `File not found: ${params.path}` }],
+        content: [{ type: 'text' as const, text }],
         details: null,
       };
     },
@@ -180,9 +241,15 @@ const todoWriteSchema = Type.Object({
 type TodoWriteParams = Static<typeof todoWriteSchema>;
 
 const grepSchema = Type.Object({
-  pattern: Type.String({ description: 'Regex pattern to search for.' }),
-  path: Type.Optional(Type.String({ description: 'Specific file to search. If omitted, searches all files.' })),
+  pattern: Type.String({ description: 'Regex pattern (or literal if literal=true).' }),
+  path: Type.Optional(Type.String({ description: 'Scope to one file, or a path prefix for directory-style filtering.' })),
+  glob: Type.Optional(
+    Type.String({ description: 'Only search files whose path matches this glob (e.g. "*.css").' }),
+  ),
   ignoreCase: Type.Optional(Type.Boolean({ description: 'Case-insensitive search (default false).' })),
+  literal: Type.Optional(Type.Boolean({ description: 'Treat pattern as fixed string (default false).' })),
+  context: Type.Optional(Type.Number({ description: 'Lines of context before/after each match (default 0).' })),
+  limit: Type.Optional(Type.Number({ description: 'Max matches (default 100).' })),
 });
 
 type GrepParams = Static<typeof grepSchema>;
@@ -215,58 +282,31 @@ export function makeTodoWriteTool(
   };
 }
 
-export function makeGrepTool(
-  virtualFS: Map<string, string>,
-): AgentTool<typeof grepSchema> {
+export function makeGrepTool(workspace: VirtualWorkspace): AgentTool<typeof grepSchema> {
   return {
     name: 'grep',
     label: 'grep',
     description:
-      'Search file contents by regex pattern. Useful for finding specific values (colors, class names, selectors) ' +
-      'without reading entire files. Returns file:line: match format. Max 50 matches.',
+      'Search file contents line-by-line. Supports regex or literal, optional glob filter on paths, line context, and match limits.',
     parameters: grepSchema,
     execute: async (_toolCallId, params: GrepParams) => {
-      let regex: RegExp;
-      try {
-        regex = new RegExp(params.pattern, params.ignoreCase ? 'i' : '');
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+      const result = workspace.grepContent({
+        pattern: params.pattern,
+        path: params.path,
+        glob: params.glob,
+        ignoreCase: params.ignoreCase,
+        literal: params.literal,
+        context: params.context,
+        limit: params.limit,
+      });
+      if (!result.ok) {
         return {
-          content: [{ type: 'text' as const, text: `Invalid regex pattern: ${msg}` }],
+          content: [{ type: 'text' as const, text: result.error }],
           details: null,
         };
       }
-
-      const MAX_MATCHES = 50;
-      const MAX_LINE_LEN = 200;
-      const results: string[] = [];
-
-      const entriesToSearch: [string, string][] = params.path
-        ? virtualFS.has(params.path)
-          ? [[params.path, virtualFS.get(params.path)!]]
-          : []
-        : [...virtualFS.entries()];
-
-      for (const [filePath, content] of entriesToSearch) {
-        if (results.length >= MAX_MATCHES) break;
-        const lines = content.split('\n');
-        for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-          if (results.length >= MAX_MATCHES) break;
-          const line = lines[lineNum];
-          if (regex.test(line)) {
-            const truncated = line.length > MAX_LINE_LEN ? line.slice(0, MAX_LINE_LEN) + '…' : line;
-            results.push(`${filePath}:${lineNum + 1}: ${truncated}`);
-          }
-        }
-      }
-
-      const text =
-        results.length > 0
-          ? results.join('\n') + (results.length === MAX_MATCHES ? '\n[50 match limit reached]' : '')
-          : `No matches found for pattern: ${params.pattern}`;
-
       return {
-        content: [{ type: 'text' as const, text }],
+        content: [{ type: 'text' as const, text: result.text }],
         details: null,
       };
     },
@@ -286,18 +326,16 @@ const validateHtmlSchema = Type.Object({
 type ValidateHtmlParams = Static<typeof validateHtmlSchema>;
 
 export function makeValidateJsTool(
-  virtualFS: Map<string, string>,
+  workspace: VirtualWorkspace,
 ): AgentTool<typeof validateJsSchema> {
   return {
     name: 'validate_js',
     label: 'validate_js',
     description:
-      'Check a JS file for syntax errors using the Node.js parser. ' +
-      'Returns "syntax OK" or the exact error with line and column number. ' +
-      'Call this at the start of the self-critique pass before reading or editing.',
+      'Review tool: check JS syntax with the Node parser. Prefer after substantive edits.',
     parameters: validateJsSchema,
     execute: async (_toolCallId, params: ValidateJsParams) => {
-      const content = virtualFS.get(params.path);
+      const content = workspace.get(params.path);
       if (content === undefined) {
         return {
           content: [{ type: 'text' as const, text: `File not found: ${params.path}` }],
@@ -322,18 +360,16 @@ export function makeValidateJsTool(
 }
 
 export function makeValidateHtmlTool(
-  virtualFS: Map<string, string>,
+  workspace: VirtualWorkspace,
 ): AgentTool<typeof validateHtmlSchema> {
   return {
     name: 'validate_html',
     label: 'validate_html',
     description:
-      'Check an HTML file for structural issues: missing DOCTYPE, missing tags, ' +
-      'unbalanced script/style tags, inline style/script content, missing CSS/JS references. ' +
-      'Call this at the start of the self-critique pass before reading or editing.',
+      'Review tool: structural checks for entry HTML (local linked assets, no inline style/script blocks).',
     parameters: validateHtmlSchema,
     execute: async (_toolCallId, params: ValidateHtmlParams) => {
-      const content = virtualFS.get(params.path);
+      const content = workspace.get(params.path);
       if (content === undefined) {
         return {
           content: [{ type: 'text' as const, text: `File not found: ${params.path}` }],
@@ -365,24 +401,41 @@ export function makeValidateHtmlTool(
         issues.push(`Unbalanced <style> tags: ${styleOpen} opening, ${styleClose} closing`);
       }
 
-      // Detect inline <style> blocks with actual content
       const inlineStyles = content.match(/<style[^>]*>([\s\S]*?)<\/style>/gi) ?? [];
       if (inlineStyles.some((m) => m.replace(/<style[^>]*>/i, '').replace(/<\/style>/i, '').trim())) {
-        issues.push('Inline <style> content found — move styles to styles.css');
+        issues.push('Inline <style> content found — move styles into linked local CSS files');
       }
 
-      // Detect inline <script> blocks with actual content
       const inlineScripts = content.match(/<script[^>]*>([\s\S]*?)<\/script>/gi) ?? [];
       if (inlineScripts.some((m) => m.replace(/<script[^>]*>/i, '').replace(/<\/script>/i, '').trim())) {
-        issues.push('Inline <script> content found — move scripts to app.js');
+        issues.push('Inline <script> content found — move scripts into linked local JS files');
       }
 
-      if (!/href=["']\.?\/?(styles\.css)["']/i.test(content)) {
-        issues.push('Missing <link rel="stylesheet" href="styles.css">');
-      }
-
-      if (!/src=["']\.?\/?(app\.js)["']/i.test(content)) {
-        issues.push('Missing <script src="app.js">');
+      const normalizeAssetRef = (rawRef: string): string => rawRef.split('#')[0]!.split('?')[0]!.replace(/^\.\//, '');
+      const classifyRef = (rawRef: string): 'external' | 'absolute' | 'relative' => {
+        if (/^(https?:)?\/\//i.test(rawRef) || rawRef.startsWith('data:')) return 'external';
+        if (rawRef.startsWith('/')) return 'absolute';
+        return 'relative';
+      };
+      const stylesheetRefs = [...content.matchAll(/<link\s+[^>]*rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*\/?>/gi)]
+        .map((match) => match[1] ?? '');
+      const scriptRefs = [...content.matchAll(/<script\s+[^>]*src=["']([^"']+)["'][^>]*><\/script>/gi)]
+        .map((match) => match[1] ?? '');
+      for (const ref of [...stylesheetRefs, ...scriptRefs]) {
+        const kind = classifyRef(ref);
+        if (kind === 'external') {
+          issues.push(`External asset reference found: ${ref}`);
+          continue;
+        }
+        if (kind === 'absolute') {
+          issues.push(`Use relative asset paths instead of root-absolute paths: ${ref}`);
+          continue;
+        }
+        const normalized = normalizeAssetRef(ref);
+        if (!normalized) continue;
+        if (!workspace.has(normalized)) {
+          issues.push(`Referenced asset not found in workspace: ${ref}`);
+        }
       }
 
       const text =
@@ -397,3 +450,4 @@ export function makeValidateHtmlTool(
     },
   };
 }
+

@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { ReferenceImage } from '../../src/types/spec.ts';
-import { callLLM } from '../services/compiler.ts';
 import { getPromptBody } from '../db/prompts.ts';
 import { normalizeError } from '../lib/error-utils.ts';
+import { loggedCallLLM } from '../lib/llm-call-logger.ts';
 
 const designSystem = new Hono();
 
@@ -26,16 +26,18 @@ designSystem.post('/extract', async (c) => {
   const body = parsed.data;
 
   const systemPrompt = await getPromptBody('designSystemExtract');
+  const userPrompt = 'Extract the design system from the provided screenshots.';
 
   try {
-    const response = await callLLM(
+    const response = await loggedCallLLM(
       [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: 'Extract the design system from the provided screenshots.' },
+        { role: 'user', content: userPrompt },
       ],
       body.modelId,
       body.providerId,
-      { images: body.images as ReferenceImage[] }
+      { images: body.images as ReferenceImage[] },
+      { source: 'designSystem', phase: 'Extract from screenshots' },
     );
     return c.json({ result: response });
   } catch (err) {

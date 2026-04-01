@@ -1,26 +1,33 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import { useQuery } from '@tanstack/react-query';
 import { useSpecStore } from '../stores/spec-store';
 import { useCompilerStore, findVariantStrategy } from '../stores/compiler-store';
-import { useGenerationStore } from '../stores/generation-store';
+import { useGenerationStore, nextRunNumber } from '../stores/generation-store';
 import { useCanvasStore } from '../stores/canvas-store';
-import { compileVariantPrompts } from '../services/compiler';
-import { useGenerate } from './useGenerate';
-import { generateId, now } from '../lib/utils';
+import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
+import {
+  DEFAULT_COMPILER_PROVIDER,
+  FIT_VIEW_DELAY_MS,
+  FIT_VIEW_DURATION_MS,
+} from '../lib/constants';
+import { warnIfWorkspaceSnapshotInvalid } from '../lib/workspace-snapshot-warn';
 import {
   buildHypothesisGenerationContext,
-  evaluationPayloadFromHypothesisContext,
   provenanceFromHypothesisContext,
 } from '../workspace/workspace-session';
-import { FIT_VIEW_DELAY_MS, FIT_VIEW_DURATION_MS } from '../lib/constants';
 import { GENERATION_STATUS } from '../constants/generation';
 import { EDGE_STATUS } from '../constants/canvas';
-import { PROMPT_DEFAULTS } from '../lib/prompts/shared-defaults';
-
-// Version stacking: when the user changes model and regenerates,
-// results accumulate within the same variant node (navigable with
-// version arrows). No forking — one variant node per hypothesis strategy.
+import {
+  fetchHypothesisPromptBundle,
+  generateHypothesisStream,
+  type HypothesisLaneSession,
+} from '../api/client';
+import type { HypothesisGenerateApiPayload } from '../api/types';
+import type { GenerationResult } from '../types/provider';
+import {
+  createPlaceholderGenerationSession,
+  runFinalizeWithCatch,
+} from './placeholder-generation-session';
 
 interface HypothesisGenerationParams {
   nodeId: string;
@@ -34,11 +41,8 @@ interface GenerationProgress {
 
 /**
  * Encapsulates all generation orchestration for a HypothesisNode.
- *
- * Discovers connected Model nodes at generation time. If multiple
- * Model nodes are connected, generates one design per model. All
- * results share the same variantStrategyId and stack on one variant
- * node — the user navigates versions to compare models.
+ * Prompt assembly runs on the server (`/api/hypothesis/prompt-bundle`);
+ * multi-model runs use one multiplexed SSE stream (`/api/hypothesis/generate`).
  */
 export function useHypothesisGeneration({
   nodeId,
@@ -52,7 +56,9 @@ export function useHypothesisGeneration({
   );
   const setCompiledPrompts = useCompilerStore((s) => s.setCompiledPrompts);
   const setGenerating = useGenerationStore((s) => s.setGenerating);
-  // Check if THIS hypothesis is generating (not global)
+  const addResult = useGenerationStore((s) => s.addResult);
+  const updateResult = useGenerationStore((s) => s.updateResult);
+
   const isGenerating = useGenerationStore((s) =>
     s.results.some((r) => r.variantStrategyId === strategyId && r.status === GENERATION_STATUS.GENERATING),
   );
@@ -62,19 +68,9 @@ export function useHypothesisGeneration({
   const setEdgeStatusByTarget = useCanvasStore((s) => s.setEdgeStatusByTarget);
   const clearVariantNodeIdMap = useCanvasStore((s) => s.clearVariantNodeIdMap);
 
-  const generate = useGenerate();
-
-  const { data: variantPromptData } = useQuery({
-    queryKey: ['prompt', 'variant'],
-    queryFn: () => fetch('/api/prompts/variant').then((r) => r.json()),
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
-  });
-
   const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
 
-  // Clear progress when generation ends
   useEffect(() => {
     if (!isGenerating) setGenerationProgress(null);
   }, [isGenerating]);
@@ -91,118 +87,147 @@ export function useHypothesisGeneration({
     });
     if (!genCtx) return;
 
-    // Build a single-variant dimension map for prompt compilation
-    const filteredMap = {
-      id: generateId(),
-      specId: spec.id,
-      dimensions: [],
-      variants: [strategy],
-      generatedAt: now(),
-      compilerModel: 'merged',
-    };
-
-    const variantTemplate = variantPromptData?.body ?? PROMPT_DEFAULTS['variant'];
-    const prompts = compileVariantPrompts(
+    const domain = useWorkspaceDomainStore.getState();
+    const workspacePayload: HypothesisGenerateApiPayload = {
+      hypothesisNodeId: nodeId,
+      variantStrategy: strategy,
       spec,
-      filteredMap,
-      variantTemplate,
-      genCtx.designSystemContent,
-      [...genCtx.designSystemImages],
-    );
-    setCompiledPrompts(prompts);
+      snapshot: { nodes: snapshot.nodes, edges: snapshot.edges },
+      domainHypothesis: domain.hypotheses[nodeId] ?? null,
+      modelProfiles: domain.modelProfiles,
+      designSystems: domain.designSystems,
+      defaultCompilerProvider: DEFAULT_COMPILER_PROVIDER,
+    };
+    warnIfWorkspaceSnapshotInvalid(workspacePayload.snapshot, 'useHypothesisGeneration');
 
     setEdgeStatusBySource(nodeId, EDGE_STATUS.PROCESSING);
     setGenerationError(null);
 
-    const provenanceCtx = provenanceFromHypothesisContext(genCtx);
-    const evaluationContext = evaluationPayloadFromHypothesisContext(genCtx);
-
-    // Multi-model: generate one design per connected Model node.
-    // Manage the isGenerating flag externally so it stays true across
-    // the entire loop (no flicker between sequential model calls).
     setGenerating(true);
-    setGenerationProgress({ completed: 0, total: genCtx.modelCredentials.length });
+    setGenerationProgress({
+      completed: 0,
+      total: genCtx.modelCredentials.length,
+    });
 
-    let hasFitView = false;
+    const runId = crypto.randomUUID();
 
-    const allResults = await Promise.all(
-      genCtx.modelCredentials.map((model) =>
-        generate(
-          model.providerId,
-          prompts,
-          {
-            model: model.modelId,
-            mode: genCtx.agentMode,
-            thinkingLevel: genCtx.thinkingLevel,
-            evaluationContext,
-          },
-          {
-            onPlaceholdersReady: (phs) => {
-              syncAfterGenerate(phs, nodeId);
-              if (!hasFitView) {
-                hasFitView = true;
-                setTimeout(() => fitView({ duration: FIT_VIEW_DURATION_MS, padding: 0.15 }), FIT_VIEW_DELAY_MS);
-              }
-            },
-            onResultComplete: (placeholderId) => {
-              setGenerationProgress((prev) =>
-                prev ? { ...prev, completed: prev.completed + 1 } : null,
-              );
-              const result = useGenerationStore.getState().results.find(
-                (r) => r.id === placeholderId,
-              );
-              if (result) {
-                const variantNodeId = useCanvasStore.getState().variantNodeIdMap.get(
-                  result.variantStrategyId,
-                );
-                if (variantNodeId) {
-                  setEdgeStatusByTarget(variantNodeId, EDGE_STATUS.COMPLETE);
-                }
-              }
-            },
-          },
+    try {
+      const bundle = await fetchHypothesisPromptBundle(workspacePayload);
+      setCompiledPrompts(bundle.prompts);
+
+      const prompt = bundle.prompts[0];
+      if (!prompt) {
+        setGenerationError('No prompt from server');
+        setGenerating(false);
+        setEdgeStatusBySource(nodeId, EDGE_STATUS.ERROR);
+        return;
+      }
+
+      const provenanceCtx =
+        bundle.provenance ?? provenanceFromHypothesisContext(genCtx);
+
+      const placeholderResults: GenerationResult[] = [];
+      const laneSessions: HypothesisLaneSession[] = [];
+
+      for (const cred of bundle.generationContext.modelCredentials) {
+        const placeholderId = crypto.randomUUID();
+        const currentRunNumber = nextRunNumber(
+          useGenerationStore.getState(),
+          prompt.variantStrategyId,
+        );
+        const result: GenerationResult = {
+          id: placeholderId,
+          variantStrategyId: prompt.variantStrategyId,
+          providerId: cred.providerId,
+          status: GENERATION_STATUS.GENERATING,
+          runId,
+          runNumber: currentRunNumber,
+          metadata: { model: cred.modelId },
+        };
+        addResult(result);
+        placeholderResults.push(result);
+
+        const { callbacks, finalizeAfterStream } = createPlaceholderGenerationSession({
+          placeholderId,
+          prompt,
+          providerId: cred.providerId,
+          model: cred.modelId,
+          mode: bundle.generationContext.agentMode,
           provenanceCtx,
-          { manageGenerating: false },
-        ),
-      ),
-    );
+          updateResult,
+          onResultComplete: (id) => {
+            setGenerationProgress((prev) =>
+              prev ? { ...prev, completed: prev.completed + 1 } : null,
+            );
+            const r = useGenerationStore.getState().results.find((x) => x.id === id);
+            if (r) {
+              const variantNodeId = useCanvasStore.getState().variantNodeIdMap.get(
+                r.variantStrategyId,
+              );
+              if (variantNodeId) {
+                setEdgeStatusByTarget(variantNodeId, EDGE_STATUS.COMPLETE);
+              }
+            }
+          },
+        });
 
-    const stillGenerating = useGenerationStore.getState().results.some(
-      (r) => r.status === GENERATION_STATUS.GENERATING,
-    );
-    if (!stillGenerating) setGenerating(false);
+        laneSessions.push({
+          callbacks,
+          finalizeAfterStream: () =>
+            runFinalizeWithCatch(finalizeAfterStream, placeholderId, updateResult),
+        });
+      }
 
-    const errorCount = allResults
-      .flat()
-      .filter((ph) => {
-        const r = useGenerationStore.getState().results.find((x) => x.id === ph.id);
-        return r?.status === GENERATION_STATUS.ERROR;
-      }).length;
+      syncAfterGenerate(placeholderResults, nodeId);
+      setTimeout(() => fitView({ duration: FIT_VIEW_DURATION_MS, padding: 0.15 }), FIT_VIEW_DELAY_MS);
 
-    if (errorCount > 0) {
-      const n = genCtx.modelCredentials.length;
-      setGenerationError(
-        errorCount === n
-          ? 'Generation failed'
-          : `${errorCount} of ${n} failed`,
+      await generateHypothesisStream(workspacePayload, laneSessions);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      for (const r of useGenerationStore.getState().results) {
+        if (r.runId === runId && r.status === GENERATION_STATUS.GENERATING) {
+          updateResult(r.id, { status: GENERATION_STATUS.ERROR, error: msg });
+        }
+      }
+      setGenerationError(msg);
+      setEdgeStatusBySource(nodeId, EDGE_STATUS.ERROR);
+    } finally {
+      clearVariantNodeIdMap();
+      setEdgeStatusBySource(nodeId, EDGE_STATUS.COMPLETE);
+      const stillGenerating = useGenerationStore.getState().results.some(
+        (r) => r.status === GENERATION_STATUS.GENERATING,
       );
-    }
+      if (!stillGenerating) setGenerating(false);
 
-    clearVariantNodeIdMap();
-    setEdgeStatusBySource(nodeId, EDGE_STATUS.COMPLETE);
+      const n = genCtx.modelCredentials.length;
+      const errorCount = useGenerationStore
+        .getState()
+        .results.filter(
+          (r) =>
+            r.variantStrategyId === strategyId &&
+            r.runId === runId &&
+            r.status === GENERATION_STATUS.ERROR,
+        ).length;
+      if (errorCount > 0) {
+        setGenerationError(
+          errorCount === n ? 'Generation failed' : `${errorCount} of ${n} failed`,
+        );
+      }
+    }
   }, [
     strategy,
     nodeId,
     spec,
-    variantPromptData,
     setCompiledPrompts,
     setGenerating,
-    generate,
+    addResult,
+    updateResult,
     syncAfterGenerate,
     clearVariantNodeIdMap,
     setEdgeStatusBySource,
     setEdgeStatusByTarget,
     fitView,
+    strategyId,
   ]);
 
   return { handleGenerate, generationProgress, generationError };

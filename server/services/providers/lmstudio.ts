@@ -40,7 +40,7 @@ export class LMStudioProvider implements GenerationProvider {
       { 404: 'LM Studio not available. Make sure LM Studio is running and the server is enabled.' },
       'LM Studio',
     );
-    return parseChatResponse(data, this.id);
+    return parseChatResponse(data);
   }
 
   isAvailable(): boolean {

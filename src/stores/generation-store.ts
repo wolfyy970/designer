@@ -105,8 +105,14 @@ export const useGenerationStore = create<GenerationStore>()(
           delete persisted.liveFiles;
           delete persisted.liveFilesPlan;
           delete persisted.liveTodos;
+          delete persisted.liveTrace;
           delete persisted.agenticPhase;
           delete persisted.evaluationStatus;
+          delete persisted.lastAgentFileAt;
+          delete persisted.lastActivityAt;
+          delete persisted.lastTraceAt;
+          delete persisted.activeToolName;
+          delete persisted.activeToolPath;
           return persisted;
         }),
         selectedVersions: state.selectedVersions,
@@ -148,6 +154,29 @@ export interface GenerationState {
   selectedVersions: Record<string, string>;
 }
 
+function getEvaluationRank(result: GenerationResult): number {
+  if (result.status !== GENERATION_STATUS.COMPLETE) return Number.NEGATIVE_INFINITY;
+  return result.evaluationSummary?.overallScore ?? Number.NEGATIVE_INFINITY;
+}
+
+export function getBestCompleteResult(
+  results: GenerationResult[],
+): GenerationResult | undefined {
+  const completed = results.filter((r) => r.status === GENERATION_STATUS.COMPLETE);
+  if (completed.length === 0) return undefined;
+
+  const withEval = completed.filter((r) => r.evaluationSummary);
+  if (withEval.length === 0) {
+    return completed.sort((a, b) => b.runNumber - a.runNumber)[0];
+  }
+
+  return withEval.sort((a, b) => {
+    const scoreDiff = getEvaluationRank(b) - getEvaluationRank(a);
+    if (Math.abs(scoreDiff) > 0.0001) return scoreDiff;
+    return b.runNumber - a.runNumber;
+  })[0];
+}
+
 /** Get all results for a hypothesis, newest first */
 export function getStack(
   state: GenerationState,
@@ -158,7 +187,7 @@ export function getStack(
     .sort((a, b) => b.runNumber - a.runNumber);
 }
 
-/** Get the active result for a hypothesis (selected or latest complete) */
+/** Get the active result for a hypothesis (selected, generating, or best complete) */
 export function getActiveResult(
   state: GenerationState,
   variantStrategyId: string,
@@ -172,7 +201,7 @@ export function getActiveResult(
   const stack = getStack(state, variantStrategyId);
   return (
     stack.find((r) => r.status === GENERATION_STATUS.GENERATING) ??
-    stack.find((r) => r.status === GENERATION_STATUS.COMPLETE) ??
+    getBestCompleteResult(stack) ??
     stack[0]
   );
 }
@@ -204,7 +233,7 @@ export function getScopedActiveResult(
   const stack = getScopedStack(state, variantStrategyId, runId);
   return (
     stack.find((r) => r.status === GENERATION_STATUS.GENERATING) ??
-    stack.find((r) => r.status === GENERATION_STATUS.COMPLETE) ??
+    getBestCompleteResult(stack) ??
     stack[0]
   );
 }

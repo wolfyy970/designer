@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import {
   useGenerationStore,
+  getBestCompleteResult,
   getStack,
   getActiveResult,
   getScopedStack,
@@ -48,6 +49,11 @@ export function useVersionStack(
     () => stack.filter((r) => r.status === GENERATION_STATUS.COMPLETE),
     [stack],
   );
+  const bestCompletedResult = useMemo(
+    () => getBestCompleteResult(completedStack),
+    [completedStack],
+  );
+  const isActiveBest = !!activeResult && activeResult.id === bestCompletedResult?.id;
 
   const stackIndex = completedStack.findIndex((r) => r.id === activeResult?.id);
   const stackTotal = completedStack.length;
@@ -67,6 +73,8 @@ export function useVersionStack(
     stack,
     activeResult,
     completedStack,
+    bestCompletedResult,
+    isActiveBest,
     stackIndex,
     stackTotal,
     versionKey,

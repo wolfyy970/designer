@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { STORAGE_KEYS } from '../../lib/storage-keys';
 import { saveCanvas, loadCanvas, deleteCanvas, getCanvasList, importCanvas } from '../persistence';
 import type { DesignSpec, SpecSection, SpecSectionId } from '../../types/spec';
 
@@ -43,22 +44,22 @@ describe('loadCanvas / getAllCanvases validation', () => {
   });
 
   it('handles corrupt localStorage (not JSON)', () => {
-    storage.set('lattice-canvases', '{{invalid json}}');
+    storage.set(STORAGE_KEYS.CANVASES, '{{invalid json}}');
     expect(loadCanvas('any')).toBeNull();
   });
 
   it('handles localStorage containing an array instead of object', () => {
-    storage.set('lattice-canvases', '[1,2,3]');
+    storage.set(STORAGE_KEYS.CANVASES, '[1,2,3]');
     expect(loadCanvas('any')).toBeNull();
   });
 
   it('handles localStorage containing a string instead of object', () => {
-    storage.set('lattice-canvases', '"just a string"');
+    storage.set(STORAGE_KEYS.CANVASES, '"just a string"');
     expect(loadCanvas('any')).toBeNull();
   });
 
   it('handles localStorage containing null', () => {
-    storage.set('lattice-canvases', 'null');
+    storage.set(STORAGE_KEYS.CANVASES, 'null');
     expect(loadCanvas('any')).toBeNull();
   });
 });

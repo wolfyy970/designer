@@ -3,6 +3,7 @@
  * Uses GenerationProvider generateChat — not PI — so harness stays lightweight.
  */
 import { z } from 'zod';
+import { jsonrepair } from 'jsonrepair';
 import { bundleVirtualFS } from '../../src/lib/bundle-virtual-fs.ts';
 import type {
   AggregatedEvaluationReport,
@@ -15,6 +16,7 @@ import type {
 import type { PromptKey } from '../lib/prompts/defaults.ts';
 import { env } from '../env.ts';
 import { getProvider } from './providers/registry.ts';
+import { loggedGenerateChat } from '../lib/llm-call-logger.ts';
 import { runBrowserQA } from './browser-qa-evaluator.ts';
 import { mergePreflightWithPlaywright, runBrowserPlaywrightEval } from './browser-playwright-evaluator.ts';
 
@@ -68,7 +70,12 @@ export function parseModelJsonObject<T>(raw: string, schema: z.ZodType<T>): T {
     throw new Error('Evaluator model returned no JSON object');
   }
   const jsonStr = s.slice(start, end + 1);
-  const parsed: unknown = JSON.parse(jsonStr);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    parsed = JSON.parse(jsonrepair(jsonStr));
+  }
   return schema.parse(parsed);
 }
 
@@ -161,6 +168,7 @@ export function buildEvaluatorUserContent(
 }
 
 async function runOneEvaluator(
+  rubric: EvaluatorRubricId,
   systemPrompt: string,
   userContent: string,
   providerId: string,
@@ -168,12 +176,15 @@ async function runOneEvaluator(
 ): Promise<EvaluatorWorkerReport> {
   const provider = getProvider(providerId);
   if (!provider) throw new Error(`Unknown provider: ${providerId}`);
-  const response = await provider.generateChat(
+  const response = await loggedGenerateChat(
+    provider,
+    providerId,
     [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent },
     ],
     { model: modelId },
+    { source: 'evaluator', phase: `Rubric: ${rubric}` },
   );
   return parseModelJsonObject(response.raw, workerReportSchema);
 }
@@ -186,7 +197,7 @@ async function runEvaluatorWorker(
   modelId: string,
 ): Promise<EvaluatorWorkerReport> {
   try {
-    const report = await runOneEvaluator(systemPrompt, userContent, providerId, modelId);
+    const report = await runOneEvaluator(rubric, systemPrompt, userContent, providerId, modelId);
     if (report.rubric !== rubric) {
       return buildDegradedReport(
         rubric,

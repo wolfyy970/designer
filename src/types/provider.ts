@@ -59,6 +59,34 @@ export interface TodoItem {
   status: 'pending' | 'in_progress' | 'completed';
 }
 
+export type RunTraceKind =
+  | 'run_started'
+  | 'phase'
+  | 'model_turn_start'
+  | 'model_first_token'
+  | 'tool_started'
+  | 'tool_finished'
+  | 'tool_failed'
+  | 'files_planned'
+  | 'file_written'
+  | 'evaluation_progress'
+  | 'evaluation_report'
+  | 'revision_round'
+  | 'checkpoint'
+  | 'compaction';
+
+export interface RunTraceEvent {
+  id: string;
+  at: string;
+  kind: RunTraceKind;
+  label: string;
+  phase?: AgenticPhase;
+  round?: number;
+  toolName?: string;
+  path?: string;
+  status?: 'info' | 'success' | 'warning' | 'error';
+}
+
 export interface GenerationResult {
   id: string;
   variantStrategyId: string;
@@ -84,7 +112,18 @@ export interface GenerationResult {
     truncated?: boolean;
   };
   progressMessage?: string;
+  /** Unix ms when `onFile` last ran — for "no new file" stall hints */
+  lastAgentFileAt?: number;
+  /** Unix ms when streamed model text last arrived. */
+  lastActivityAt?: number;
+  /** Unix ms when the latest structured trace event arrived. */
+  lastTraceAt?: number;
+  /** Active tool name/path inferred from structured run traces. */
+  activeToolName?: string;
+  activeToolPath?: string;
   activityLog?: string[];
+  /** Capped structured trace for this in-flight run. Never persisted. */
+  liveTrace?: RunTraceEvent[];
   /** Agentic harness: high-level phase for UI */
   agenticPhase?: AgenticPhase;
   /** Live evaluation progress label during SSE */
@@ -95,12 +134,28 @@ export interface GenerationResult {
   evaluationRounds?: EvaluationRoundSnapshot[];
 }
 
+/**
+ * OpenRouter (OpenAI-compatible) `usage` plus normalized fields for logging.
+ * @see https://openrouter.ai/docs/api/reference/overview — ResponseUsage
+ */
+export interface ChatResponseMetadata {
+  /** Completion tokens only (legacy name; same as completionTokens when set). */
+  tokensUsed?: number;
+  truncated?: boolean;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  /** OpenRouter usage.completion_tokens_details.reasoning_tokens */
+  reasoningTokens?: number;
+  /** OpenRouter usage.prompt_tokens_details.cached_tokens */
+  cachedPromptTokens?: number;
+  /** OpenRouter usage.cost (credits) */
+  costCredits?: number;
+}
+
 export interface ChatResponse {
   raw: string;
-  metadata?: {
-    tokensUsed?: number;
-    truncated?: boolean;
-  };
+  metadata?: ChatResponseMetadata;
 }
 
 export interface GenerationProvider {

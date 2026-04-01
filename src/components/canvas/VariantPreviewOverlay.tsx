@@ -35,7 +35,9 @@ export default function VariantPreviewOverlay() {
 
   const {
     results,
+    stack,
     activeResult,
+    isActiveBest,
     stackIndex,
     stackTotal,
     goNewer,
@@ -56,16 +58,16 @@ export default function VariantPreviewOverlay() {
   const { code, isLoading: codeLoading } = useResultCode(result?.id, result?.status);
   const { files } = useResultFiles(result?.id, result?.status);
   const compareResult = useMemo(
-    () => (compareId ? results.find((r) => r.id === compareId) : undefined),
-    [compareId, results],
+    () => (compareId ? stack.find((r) => r.id === compareId) : undefined),
+    [compareId, stack],
   );
   const { code: compareCode, isLoading: compareCodeLoading } = useResultCode(compareResult?.id, compareResult?.status);
   const { files: compareFiles } = useResultFiles(compareResult?.id, compareResult?.status);
 
   // Other complete results (for compare mode)
   const otherResults = useMemo(
-    () => results.filter((r: GenerationResult) => r.status === GENERATION_STATUS.COMPLETE && r.id !== result?.id),
-    [results, result?.id],
+    () => stack.filter((r: GenerationResult) => r.status === GENERATION_STATUS.COMPLETE && r.id !== result?.id),
+    [stack, result?.id],
   );
 
   const close = useCallback(() => {
@@ -179,6 +181,11 @@ export default function VariantPreviewOverlay() {
           <div>
             <h2 className="text-sm font-semibold text-white">
               {strategy?.name ?? 'Variant Preview'}
+              {!pinnedRunId && isActiveBest && (
+                <span className="ml-2 rounded bg-success/15 px-1.5 py-px text-badge font-medium text-success">
+                  Best current
+                </span>
+              )}
               {pinnedRunId && (
                 <span className="ml-2 text-xs font-normal text-white/40">
                   (Archived)

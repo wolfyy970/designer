@@ -81,18 +81,26 @@ function shortLabel(key: PromptKey): string {
 export default function PromptEditor() {
   const [selectedKey, setSelectedKey] = useState<PromptKey>('compilerSystem');
   const queryClient = useQueryClient();
+  const fetchJsonOrThrow = useCallback(async (url: string) => {
+    const response = await fetch(url);
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error((json as { error?: string }).error ?? `Request failed for ${url}`);
+    }
+    return json;
+  }, []);
 
   // Fetch current prompt from server
-  const { data } = useQuery({
+  const { data, error: promptError } = useQuery({
     queryKey: ['prompt', selectedKey],
-    queryFn: () => fetch(`/api/prompts/${selectedKey}`).then((r) => r.json()),
+    queryFn: () => fetchJsonOrThrow(`/api/prompts/${selectedKey}`),
     staleTime: 5 * 60 * 1000,
   });
 
   // Fetch all prompts to check for any overrides
-  const { data: allPrompts } = useQuery({
+  const { data: allPrompts, error: promptsError } = useQuery({
     queryKey: ['prompts'],
-    queryFn: () => fetch('/api/prompts').then((r) => r.json()) as Promise<{ key: string; isDefault: boolean }[]>,
+    queryFn: () => fetchJsonOrThrow('/api/prompts') as Promise<{ key: string; isDefault: boolean }[]>,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -102,7 +110,11 @@ export default function PromptEditor() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ body }),
-      }).then((r) => r.json()),
+      }).then(async (r) => {
+        const json = await r.json();
+        if (!r.ok) throw new Error(json.error ?? `Failed to save prompt ${selectedKey}`);
+        return json;
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['prompt', selectedKey] });
       queryClient.invalidateQueries({ queryKey: ['prompts'] });
@@ -115,14 +127,18 @@ export default function PromptEditor() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ body: PROMPT_DEFAULTS[key] }),
-      }).then((r) => r.json()),
+      }).then(async (r) => {
+        const json = await r.json();
+        if (!r.ok) throw new Error(json.error ?? `Failed to reset prompt ${key}`);
+        return json;
+      }),
     onSuccess: (_data, key) => {
       queryClient.invalidateQueries({ queryKey: ['prompt', key] });
       queryClient.invalidateQueries({ queryKey: ['prompts'] });
     },
   });
 
-  const currentValue = data?.body ?? PROMPT_DEFAULTS[selectedKey];
+  const currentValue = data?.body ?? '';
   const isModified = data?.isDefault === false;
   const hasAnyOverrides = allPrompts?.some((p) => p.isDefault === false) ?? false;
 
@@ -170,6 +186,20 @@ export default function PromptEditor() {
 
   const charCount = displayValue.length;
   const approxTokens = Math.round(charCount / 4);
+  const loadError = promptError ?? promptsError;
+
+  if (loadError) {
+    const message = loadError instanceof Error ? loadError.message : String(loadError);
+    return (
+      <div className="rounded-lg border border-amber-500/30 bg-amber-500/8 p-4 text-sm text-fg-secondary">
+        <p className="font-medium text-fg">Prompt loading failed</p>
+        <p className="mt-1">{message}</p>
+        <p className="mt-2 text-fg-muted">
+          Prompt bodies must exist in the database. Run <code>pnpm db:seed</code> if prompts are missing.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[calc(80vh-7rem)]">

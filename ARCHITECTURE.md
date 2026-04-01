@@ -1,5 +1,7 @@
 # Architecture
 
+For a **readable end-to-end walkthrough** (canvas roles, prompts, PI agent, evaluation), see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md). This file stays the **technical** reference: layouts, routes, modules, and data flow.
+
 ## Client-Server Overview
 
 ```
@@ -96,7 +98,7 @@ CompiledPrompt[] (one full prompt per variant)
     │  Client: code → StoragePort (code store), meta → Zustand   │
     │                                                            │
     └─ mode=agentic ─────────────────────────────────────────────┤
-       Server: PI Agent loop (plan_files, write_file, read_file) │
+       Server: PI Agent loop (virtual workspace: read/grep/edit/write, ls, find, optional plan_files) │
        SSE events: activity, progress, plan, file, done          │
        Client: files → StoragePort (files store), meta → Zustand │
     │
@@ -113,6 +115,8 @@ Next iteration cycle
 |---|---|---|---|
 | `/api/compile` | POST | Compile spec into dimension map | JSON: `DimensionMap` |
 | `/api/generate` | POST | Generate one variant (single-shot or agentic) | SSE stream |
+| `/api/hypothesis/prompt-bundle` | POST | Build compiled prompts + eval/provenance from workspace slice (authoritative variant template) | JSON |
+| `/api/hypothesis/generate` | POST | Run all models for one hypothesis; multiplexed SSE (`laneIndex` on events, `lane_done` per lane) | SSE stream |
 | `/api/models/:provider` | GET | List available models | JSON: `ProviderModel[]` |
 | `/api/models` | GET | List available providers | JSON: `ProviderInfo[]` |
 | `/api/logs` | GET | Fetch LLM call log entries (dev-only) | JSON: `LlmLogEntry[]` |
@@ -126,6 +130,8 @@ Next iteration cycle
 
 **SSE events:** `progress` (status label), `activity` (streaming agent text), `code` (final HTML in single-shot), `file` (path + content in agentic), `plan` (declared file list in agentic), `error`, `done`.
 
+**Hypothesis flow:** The canvas still owns graph/domain state (Zustand + React Flow), but **prompt assembly and multi-model orchestration** for a hypothesis go through `/api/hypothesis/*`. Pure workspace helpers live in `src/workspace/hypothesis-generation-pure.ts` (importable by the server). `/api/hypothesis/generate` adds `laneIndex` to each event payload and emits `lane_done` per model lane before a final `done`; the client demuxes into one `GenerationResult` per lane.
+
 All POST endpoints validate request bodies with Zod `safeParse` — malformed requests return a structured `400` before any LLM call is made.
 
 ## Server Architecture (`server/`)
@@ -137,14 +143,17 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 | `dev.ts` | Local dev entry (Hono + `@hono/node-server` on 3001) |
 | `log-store.ts` | In-memory LLM call log (dev-only, no Zustand) |
 | `routes/compile.ts` | POST /api/compile |
-| `routes/generate.ts` | POST /api/generate — branches on `mode` to single-shot or agentic path |
+| `routes/generate.ts` | POST /api/generate — delegates to `services/generate-execution.ts` |
+| `routes/hypothesis.ts` | POST `/api/hypothesis/prompt-bundle`, `/api/hypothesis/generate` |
+| `services/generate-execution.ts` | Shared single-lane generate stream (optional `laneIndex` + `lane_done` for multiplex) |
+| `lib/generate-stream-schema.ts` | Zod schema shared by generate + hypothesis routes |
 | `routes/models.ts` | GET /api/models/:provider |
 | `routes/logs.ts` | GET/DELETE /api/logs |
 | `routes/design-system.ts` | POST /api/design-system/extract |
 | `routes/prompts.ts` | GET `/api/prompts/:key` — latest prompt body from Prisma |
 | `routes/skills.ts` | GET `/api/skills`, `/api/skills/:key` — latest skill versions (metadata + body + optional `filesJson`) |
 | `db/` | Prisma client singleton (`DATABASE_URL`, SQLite in dev) |
-| `services/pi-agent-service.ts` | PI Agent adapter — single import boundary for `@mariozechner/pi-agent-core`. Defines virtual filesystem, tool implementations (`plan_files`, `write_file`, `read_file`), context compaction, and SSE event emission. |
+| `services/pi-agent-service.ts` | PI Agent adapter — single import boundary for `@mariozechner/pi-agent-core`. Hosts `VirtualWorkspace`, tool wiring (`write_file`, `edit_file`, `read_file`, `ls`, `find`, `grep`, validators, optional `plan_files`), context compaction, and SSE event emission. |
 | `services/agentic-orchestrator.ts` | Agentic evaluation / tool orchestration helpers |
 | `services/pi-agent-tools.ts` | Tool definitions wired into the PI agent |
 | `services/design-evaluation-service.ts` | Design evaluation payload handling |
@@ -203,7 +212,7 @@ The primary interface is a node-graph canvas built on `@xyflow/react` v12.
 
 ### HypothesisNode — Generation Controls
 
-`HypothesisNode` stores `agentMode` (`single` | `agentic`) and `thinkingLevel` in canvas node data. The **Agentic** toggle and **Thinking** segmented control are inline on the node. At generation time, `useHypothesisGeneration` reads these from canvas state and passes them to `useGenerate()`.
+`HypothesisNode` stores `agentMode` (`single` | `agentic`) and `thinkingLevel` in canvas node data. The **Direct** / **Agentic** mode control and **Thinking** segmented control are inline on the node. At generation time, `useHypothesisGeneration` reads these from canvas state and passes them to `useGenerate()`.
 
 ### Variant Node — Multi-File Display
 

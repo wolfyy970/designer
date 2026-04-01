@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   getStack,
   getActiveResult,
+  getBestCompleteResult,
   getScopedStack,
   getScopedActiveResult,
   nextRunNumber,
@@ -96,6 +97,36 @@ describe('getActiveResult', () => {
     expect(getActiveResult(state, 'vs-1')?.id).toBe('r2');
   });
 
+  it('prefers highest evaluated complete when no selection or generating', () => {
+    const state = mockState([
+      makeResult({
+        id: 'r1',
+        runNumber: 1,
+        evaluationSummary: {
+          overallScore: 4.8,
+          normalizedScores: {},
+          hardFails: [],
+          prioritizedFixes: [],
+          shouldRevise: false,
+          revisionBrief: '',
+        },
+      }),
+      makeResult({
+        id: 'r2',
+        runNumber: 3,
+        evaluationSummary: {
+          overallScore: 4.2,
+          normalizedScores: {},
+          hardFails: [],
+          prioritizedFixes: [],
+          shouldRevise: false,
+          revisionBrief: '',
+        },
+      }),
+    ]);
+    expect(getActiveResult(state, 'vs-1')?.id).toBe('r1');
+  });
+
   it('falls back to first in stack when no complete or generating', () => {
     const state = mockState([
       makeResult({ id: 'r1', runNumber: 1, status: 'error' }),
@@ -122,6 +153,32 @@ describe('getActiveResult', () => {
   it('returns undefined for empty results', () => {
     const state = mockState([]);
     expect(getActiveResult(state, 'vs-1')).toBeUndefined();
+  });
+});
+
+describe('getBestCompleteResult', () => {
+  it('returns newest complete when nothing has evaluation', () => {
+    const out = getBestCompleteResult([
+      makeResult({ id: 'r1', runNumber: 1 }),
+      makeResult({ id: 'r2', runNumber: 3 }),
+    ]);
+    expect(out?.id).toBe('r2');
+  });
+
+  it('breaks score ties by newer run', () => {
+    const summary = {
+      overallScore: 4.5,
+      normalizedScores: {},
+      hardFails: [],
+      prioritizedFixes: [],
+      shouldRevise: false,
+      revisionBrief: '',
+    };
+    const out = getBestCompleteResult([
+      makeResult({ id: 'r1', runNumber: 1, evaluationSummary: summary }),
+      makeResult({ id: 'r2', runNumber: 2, evaluationSummary: summary }),
+    ]);
+    expect(out?.id).toBe('r2');
   });
 });
 
@@ -165,10 +222,34 @@ describe('getScopedActiveResult', () => {
     expect(getScopedActiveResult(state, 'vs-1', 'run-1')?.id).toBe('r1');
   });
 
-  it('falls back to latest complete in run', () => {
+  it('falls back to best evaluated complete in run', () => {
     const state = mockState([
-      makeResult({ id: 'r1', runId: 'run-1', runNumber: 1 }),
-      makeResult({ id: 'r2', runId: 'run-1', runNumber: 2, status: 'error' }),
+      makeResult({
+        id: 'r1',
+        runId: 'run-1',
+        runNumber: 1,
+        evaluationSummary: {
+          overallScore: 4.9,
+          normalizedScores: {},
+          hardFails: [],
+          prioritizedFixes: [],
+          shouldRevise: false,
+          revisionBrief: '',
+        },
+      }),
+      makeResult({
+        id: 'r2',
+        runId: 'run-1',
+        runNumber: 2,
+        evaluationSummary: {
+          overallScore: 4.1,
+          normalizedScores: {},
+          hardFails: [],
+          prioritizedFixes: [],
+          shouldRevise: false,
+          revisionBrief: '',
+        },
+      }),
     ]);
     expect(getScopedActiveResult(state, 'vs-1', 'run-1')?.id).toBe('r1');
   });

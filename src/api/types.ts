@@ -1,12 +1,15 @@
 import type { DesignSpec, ReferenceImage } from '../types/spec';
-import type { DimensionMap, VariantStrategy } from '../types/compiler';
-import type { ProviderModel, TodoItem } from '../types/provider';
+import type { CompiledPrompt, DimensionMap, VariantStrategy } from '../types/compiler';
+import type { DomainDesignSystemContent, DomainHypothesis, DomainModelProfile } from '../types/workspace-domain';
+import type { ProvenanceContext } from '../types/provenance-context';
+import type { ProviderModel, RunTraceEvent, TodoItem } from '../types/provider';
 import type {
   AgenticCheckpoint,
   AgenticPhase,
   EvaluationContextPayload,
   EvaluationRoundSnapshot,
 } from '../types/evaluation';
+import type { WorkspaceSnapshotWire } from '../lib/workspace-snapshot-schema';
 
 // ── Compile ─────────────────────────────────────────────────────────
 
@@ -53,9 +56,42 @@ export interface GenerateRequest {
   agenticMinOverallScore?: number;
 }
 
+/** Workspace slice sent to `/api/hypothesis/*` (mirrors client domain + graph). */
+export interface HypothesisWorkspaceApiPayload {
+  hypothesisNodeId: string;
+  variantStrategy: VariantStrategy;
+  spec: DesignSpec;
+  snapshot: WorkspaceSnapshotWire;
+  domainHypothesis: DomainHypothesis | null;
+  modelProfiles: Record<string, DomainModelProfile>;
+  designSystems: Record<string, DomainDesignSystemContent>;
+  defaultCompilerProvider: string;
+}
+
+export interface HypothesisPromptBundleResponse {
+  prompts: CompiledPrompt[];
+  evaluationContext: EvaluationContextPayload | null;
+  provenance: ProvenanceContext;
+  generationContext: {
+    agentMode: 'single' | 'agentic';
+    thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high';
+    modelCredentials: { providerId: string; modelId: string }[];
+  };
+}
+
+export interface HypothesisGenerateApiPayload extends HypothesisWorkspaceApiPayload {
+  supportsVision?: boolean;
+  evaluatorProviderId?: string;
+  evaluatorModelId?: string;
+  agenticMaxRevisionRounds?: number;
+  agenticMinOverallScore?: number;
+  thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high';
+}
+
 export type GenerateSSEEvent =
   | { type: 'progress'; status: string }
   | { type: 'activity'; entry: string }
+  | { type: 'trace'; trace: RunTraceEvent }
   | { type: 'code'; code: string }
   | { type: 'error'; error: string }
   | { type: 'file'; path: string; content: string }
@@ -66,6 +102,7 @@ export type GenerateSSEEvent =
   | { type: 'evaluation_report'; round: number; snapshot: EvaluationRoundSnapshot }
   | { type: 'revision_round'; round: number; brief: string }
   | { type: 'checkpoint'; checkpoint: AgenticCheckpoint }
+  | { type: 'lane_done'; laneIndex: number }
   | { type: 'done' };
 
 // ── Models ──────────────────────────────────────────────────────────
@@ -83,14 +120,30 @@ export interface ProviderInfo {
 export interface LlmLogEntry {
   id: string;
   timestamp: string;
-  source: 'compiler' | 'generator' | 'other';
+  source:
+    | 'compiler'
+    | 'planner'
+    | 'builder'
+    | 'designSystem'
+    | 'evaluator'
+    | 'agentCompaction'
+    | 'other';
   phase?: string;
   model: string;
   provider: string;
+  /** Display name when known (e.g. OpenRouter) */
+  providerName?: string;
   systemPrompt: string;
   userPrompt: string;
   response: string;
   durationMs: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  reasoningTokens?: number;
+  cachedPromptTokens?: number;
+  costCredits?: number;
+  truncated?: boolean;
   toolCalls?: { name: string; path?: string }[];
   error?: string;
 }

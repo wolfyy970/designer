@@ -18,7 +18,7 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 | Model | Processing | Centralizes provider + model selection. Connect to Compiler, Hypothesis, or Design System nodes to configure which LLM they use. |
 | Design System | Processing | Self-contained design token definitions. Supports multiple instances (e.g., Material Design vs custom tokens). Content stored in node data, not spec store. Optional vision-based extraction from uploaded images. |
 | Incubator | Processing | Compiles connected inputs → hypothesis strategies via LLM |
-| Hypothesis | Processing | Editable strategy card with built-in generation controls. Toggle between single-shot and agentic modes. Connect a Model node, then click Create or Think & Create. |
+| Hypothesis | Processing | Editable strategy card with built-in generation controls. Mode **Direct** (one forward generation) vs **Agentic** (tool loop + evaluation). Connect a Model node, then **Generate** or **Run agent**. |
 | Variant | Output | Rendered design preview. Single-file results show an HTML iframe. Multi-file (agentic) results show a file explorer + preview/code tabs + zip download. Completed agentic runs show an **evaluation scorecard** (aggregate score, prioritized fixes, runtime QA) and, when available, a **headless browser thumbnail**. Version navigation across all results. |
 | Critique | Processing | Structured feedback (strengths, improvements, direction) for iteration |
 
@@ -55,14 +55,14 @@ The server sends the compiled variant prompt (hypothesis + spec context) to the 
 
 ### Agentic Mode
 
-Enabled by the **Agentic** toggle on a Hypothesis node; use **Think & Create** to run it. Powered by `@mariozechner/pi-agent-core`.
+Enabled by choosing **Agentic** in Mode on a Hypothesis node; use **Run agent** to start it. Powered by `@mariozechner/pi-agent-core`.
 
 **Server pipeline (not a single LLM call):**
 1. **Build** — PI multi-turn tool loop produces the file tree (streaming events: plan, files, activity, todos).
 2. **Evaluate** — Four workers run: **design**, **strategy**, and **implementation** rubrics (structured JSON from the LLM) plus **browser QA**. Browser QA starts with a fast **VM/preflight** pass on bundled HTML (structure, assets, inline script checks). When Playwright browsers are installed, a **headless Chromium** pass adds real render signals (console/page errors, layout/text heuristics) and may attach a **viewport screenshot** that appears on the variant scorecard. If Chromium is unavailable, the merge keeps preflight only and records a note — setup gaps do not hard-fail the whole evaluation.
 3. **Revise** — If the merged scores trip the revision gate, the server can run additional PI sessions seeded with the current files and an evaluation brief, until satisfied or until **max revision rounds** (server default / env / API). Provenance stores **checkpoint** metadata (e.g. stop reason, revision attempt count).
 
-**Tools** (virtual workspace): `plan_files`, `write_file`, `edit_file`, `read_file`, `ls_files`, `todo_write`, `grep`, `validate_js`, `validate_html`.
+**Tools** (virtual workspace): `write_file`, `edit_file`, `read_file` (with line windows), `ls`, `find`, `grep`, `todo_write`, optional `plan_files`, `validate_js`, `validate_html`.
 
 **Typical flow:** declare a plan → write files → validate / read / edit → optional self-critique. Live file events update the variant preview as files land.
 

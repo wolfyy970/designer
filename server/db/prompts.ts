@@ -1,14 +1,20 @@
 import { prisma } from './client.ts';
-import { DEFAULTS } from '../lib/prompts/defaults.ts';
 import type { PromptKey } from '../lib/prompts/defaults.ts';
 
-/** Resolve prompt body from DB; falls back to hardcoded default if not seeded. */
+function missingPromptMessage(key: PromptKey): string {
+  return `Prompt "${key}" was not found in the database. Run \`pnpm db:seed\` to seed prompts before using the app.`;
+}
+
+/** Resolve prompt body from DB. The database is the sole runtime source of truth. */
 export async function getPromptBody(key: PromptKey): Promise<string> {
   const version = await prisma.promptVersion.findFirst({
     where: { promptKey: key },
     orderBy: { version: 'desc' },
   });
-  return version?.body ?? DEFAULTS[key];
+  if (!version) {
+    throw new Error(missingPromptMessage(key));
+  }
+  return version.body;
 }
 
 /** Compute next version number for a prompt key. */

@@ -14,11 +14,12 @@
 
 ```
 README.md (Hub)
-├── PRODUCT.md        — Feature spec, what exists
-├── USER_GUIDE.md     — Setup, canvas workflow, managing specs
-├── ARCHITECTURE.md   — System design, data flow, module boundaries
-├── CLAUDE.md         — Conventions for AI coding agents (not a human onboarding path)
-└── DOCUMENTATION.md  — This file (meta-documentation)
+├── SYSTEM_OVERVIEW.md — End-to-end narrative: prompts, canvas roles, PI agent, evaluation
+├── PRODUCT.md         — Feature spec, what exists
+├── USER_GUIDE.md      — Setup, canvas workflow, managing specs
+├── ARCHITECTURE.md    — System design, data flow, module boundaries, API tables
+├── CLAUDE.md          — Conventions for AI coding agents (not a human onboarding path)
+└── DOCUMENTATION.md   — This file (meta-documentation)
 ```
 
 ---
@@ -59,7 +60,7 @@ README.md (Hub)
 ## Maintenance
 
 **After code changes:**
-1. Check which docs are affected (agentic server behavior → **ARCHITECTURE.md** + **PRODUCT.md**; UX/setup → **USER_GUIDE.md** or **README.md**)
+1. Check which docs are affected (agentic server behavior → **ARCHITECTURE.md** + **PRODUCT.md** + **SYSTEM_OVERVIEW.md** if the narrative changes; UX/setup → **USER_GUIDE.md** or **README.md**)
 2. Update or remove outdated content
 3. Verify cross-references still work
 

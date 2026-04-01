@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeError } from '../error-utils';
+import { normalizeError, parseApiErrorBody } from '../error-utils';
 
 describe('normalizeError', () => {
   it('returns the message from an Error instance', () => {
@@ -25,5 +25,20 @@ describe('normalizeError', () => {
   it('handles subclasses of Error', () => {
     class CustomError extends Error {}
     expect(normalizeError(new CustomError('custom'))).toBe('custom');
+  });
+});
+
+describe('parseApiErrorBody', () => {
+  it('reads JSON error string', () => {
+    expect(parseApiErrorBody('{"error":"bad"}')).toBe('bad');
+  });
+
+  it('falls back to raw body when no error field', () => {
+    expect(parseApiErrorBody('not json')).toBe('not json');
+    expect(parseApiErrorBody('{}')).toBe('{}');
+  });
+
+  it('stringifies numeric error', () => {
+    expect(parseApiErrorBody('{"error":429}')).toBe('429');
   });
 });

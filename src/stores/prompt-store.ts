@@ -38,7 +38,8 @@ export const usePromptStore = create<PromptStore>()(
         set((s) => ({ overrides: { ...s.overrides, [key]: value } })),
       clearOverride: (key) =>
         set((s) => {
-          const { [key]: _, ...rest } = s.overrides;
+          const rest = { ...s.overrides };
+          delete rest[key];
           return { overrides: rest };
         }),
       clearAll: () => set({ overrides: {} }),

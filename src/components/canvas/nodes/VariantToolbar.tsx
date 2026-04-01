@@ -13,6 +13,7 @@ import { ZOOM_MIN, ZOOM_MAX } from '../../../hooks/useVariantZoom';
 interface VariantToolbarProps {
   variantName: string;
   isArchived: boolean;
+  isBestCurrent?: boolean;
   hasCode: boolean;
   nodeId: string;
   stackTotal: number;
@@ -32,6 +33,7 @@ interface VariantToolbarProps {
 export default function VariantToolbar({
   variantName,
   isArchived,
+  isBestCurrent = false,
   hasCode,
   stackTotal,
   stackIndex,
@@ -54,6 +56,11 @@ export default function VariantToolbar({
       {isArchived && (
         <span className="shrink-0 rounded bg-fg-faint/10 px-1.5 py-px text-badge font-medium text-fg-muted">
           Archived
+        </span>
+      )}
+      {!isArchived && isBestCurrent && (
+        <span className="shrink-0 rounded bg-success/10 px-1.5 py-px text-badge font-medium text-success">
+          Best
         </span>
       )}
 

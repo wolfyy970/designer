@@ -54,7 +54,7 @@ export class OpenRouterGenerationProvider implements GenerationProvider {
       'OpenRouter',
       authHeaders(),
     );
-    return parseChatResponse(data, this.id);
+    return parseChatResponse(data);
   }
 
   isAvailable(): boolean {

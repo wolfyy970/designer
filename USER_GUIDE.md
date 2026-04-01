@@ -22,8 +22,8 @@ VITE_LMSTUDIO_VISION_MODELS=llava,minicpm-v,qwen2-vl
 ```
 
 ```bash
-pnpm dev          # Vite SPA (port 5173)
-pnpm dev:server   # Hono API (port 3001)
+pnpm dev:all      # recommended: API then Vite (avoids early proxy errors)
+# Or: pnpm dev:server  in one terminal, pnpm dev  in another
 ```
 
 Both processes are needed for local development.
@@ -72,9 +72,9 @@ Add a **Design System** node from the toolbar (Processing group). It auto-connec
 
 Each hypothesis has built-in generation controls at the bottom. Connect a Model node, then choose your mode:
 
-**Single-shot (default):** Click **Create**. The server makes one LLM call and returns a complete self-contained HTML document. Fast — typically 10–30 seconds.
+**Direct (default):** Choose **Direct** in Mode, then **Generate**. The server makes one LLM call and returns a complete self-contained HTML document. Fast — typically 10–30 seconds.
 
-**Agentic:** Toggle **Agentic** on the hypothesis node, choose a thinking level (None / Light / Deep), then click **Think & Create**. The agent plans files, writes/edits/validates them, and streams progress to the variant. The **server** then runs **evaluation** (LLM rubrics plus browser QA), and may run **additional revision passes** until scores settle or limits are hit — see **[PRODUCT.md](PRODUCT.md)** for the full pipeline.
+**Agentic:** Switch Mode to **Agentic**, choose a thinking level (None / Light / Deep), then **Run agent**. The agent plans files, writes/edits/validates them, and streams progress to the variant. The **server** then runs **evaluation** (LLM rubrics plus browser QA), and may run **additional revision passes** until scores settle or limits are hit — see **[PRODUCT.md](PRODUCT.md)** for the full pipeline.
 
 Agentic runs take longer (often several minutes) but produce more considered designs. When a run completes, the variant shows an **evaluation summary** and, if Playwright is installed, a small **browser capture** under Runtime QA.
 

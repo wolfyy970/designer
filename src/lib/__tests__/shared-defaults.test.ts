@@ -42,12 +42,37 @@ describe('PROMPT_DEFAULTS', () => {
     expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('plan_files');
     expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('write_file');
     expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('read_file');
+    expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('milestone');
   });
 
-  it('genSystemHtmlAgentic documents all 9 agent tools', () => {
+  it('genSystemHtmlAgentic documents virtual workspace tools including ls and find', () => {
     const p = PROMPT_DEFAULTS.genSystemHtmlAgentic;
-    ['plan_files', 'write_file', 'edit_file', 'read_file', 'ls_files', 'todo_write', 'grep', 'validate_js', 'validate_html']
-      .forEach((tool) => expect(p).toContain(tool));
+    [
+      'plan_files',
+      'write_file',
+      'edit_file',
+      'read_file',
+      'ls(',
+      'find(',
+      'todo_write',
+      'grep',
+      'validate_js',
+      'validate_html',
+    ].forEach((tool) => expect(p).toContain(tool));
+  });
+
+  it('genSystemHtmlAgentic describes grep as line-oriented with schema-aligned params', () => {
+    const p = PROMPT_DEFAULTS.genSystemHtmlAgentic;
+    expect(p).toContain('Line-oriented');
+    expect(p).toContain('literal?');
+    expect(p).toContain('ignoreCase?');
+  });
+
+  it('genSystemHtmlAgentic does not hardcode a three-file worldview', () => {
+    const p = PROMPT_DEFAULTS.genSystemHtmlAgentic;
+    expect(p).not.toContain('three-file bundle');
+    expect(p).toContain('file count is not a goal');
+    expect(p).toContain('local relative paths');
   });
 
   it('variant prompt contains template variables', () => {

@@ -3,19 +3,35 @@ import type {
   CompileResponse,
   GenerateRequest,
   GenerateSSEEvent,
+  HypothesisGenerateApiPayload,
+  HypothesisPromptBundleResponse,
   ModelsResponse,
   ProviderInfo,
   LlmLogEntry,
   DesignSystemExtractRequest,
   DesignSystemExtractResponse,
+  HypothesisWorkspaceApiPayload,
 } from './types';
-import type { TodoItem } from '../types/provider';
+import type { RunTraceEvent, TodoItem } from '../types/provider';
 import type { AgenticCheckpoint, AgenticPhase, EvaluationRoundSnapshot } from '../types/evaluation';
-import { normalizeError } from '../lib/error-utils';
+import { normalizeError, parseApiErrorBody } from '../lib/error-utils';
+import { safeParseGenerateSSEEvent } from '../lib/generate-sse-event-schema';
+import { readSseEventStream } from '../lib/sse-reader';
+import type { ZodError, ZodType } from 'zod';
+import {
+  CompileResponseSchema,
+  DesignSystemExtractResponseSchema,
+  HypothesisPromptBundleResponseSchema,
+  LlmLogListResponseSchema,
+  ModelsResponseSchema,
+  ProvidersListResponseSchema,
+} from './response-schemas';
 
 const API_BASE = '/api';
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+const INVALID_SERVER_RESPONSE = 'Invalid server response';
+
+async function postParsed<T>(path: string, body: unknown, schema: ZodType<T>): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -23,22 +39,48 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   });
   if (!response.ok) {
     const text = await response.text();
-    let message: string;
-    try {
-      const json = JSON.parse(text);
-      message = json.error ?? text;
-    } catch {
-      message = text;
-    }
-    throw new Error(message);
+    throw new Error(parseApiErrorBody(text));
   }
-  return response.json();
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    throw new Error(INVALID_SERVER_RESPONSE);
+  }
+  const r = schema.safeParse(json);
+  if (!r.success) {
+    if (import.meta.env.DEV) {
+      console.warn(`[api] POST ${path} response shape unexpected`, r.error.flatten());
+    }
+    throw new Error(INVALID_SERVER_RESPONSE);
+  }
+  return r.data;
+}
+
+/** GET helper: on !ok returns `empty`; on invalid JSON or schema mismatch returns `empty` (matches prior loose `json()` usage). */
+async function getParsedList<T>(path: string, schema: ZodType<T>, empty: T): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`);
+  if (!response.ok) return empty;
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    return empty;
+  }
+  const r = schema.safeParse(json);
+  if (!r.success) {
+    if (import.meta.env.DEV) {
+      console.warn(`[api] GET ${path} response shape unexpected`, r.error.flatten());
+    }
+    return empty;
+  }
+  return r.data;
 }
 
 // ── Compile ─────────────────────────────────────────────────────────
 
 export async function compile(req: CompileRequest): Promise<CompileResponse> {
-  return post<CompileResponse>('/compile', req);
+  return postParsed('/compile', req, CompileResponseSchema);
 }
 
 // ── Generate (SSE) ──────────────────────────────────────────────────
@@ -46,6 +88,7 @@ export async function compile(req: CompileRequest): Promise<CompileResponse> {
 export interface GenerateStreamCallbacks {
   onProgress?: (status: string) => void;
   onActivity?: (entry: string) => void;
+  onTrace?: (trace: RunTraceEvent) => void;
   onCode?: (code: string) => void;
   onError?: (error: string) => void;
   onFile?: (path: string, content: string) => void;
@@ -57,6 +100,91 @@ export interface GenerateStreamCallbacks {
   onRevisionRound?: (round: number, brief: string) => void;
   onCheckpoint?: (checkpoint: AgenticCheckpoint) => void;
   onDone?: () => void;
+  /** Fired when SSE JSON fails schema validation (wire `event:` name + body). */
+  onParseError?: (eventName: string, data: Record<string, unknown>, error: ZodError) => void;
+}
+
+/** Remove server multiplex field before building typed SSE events. */
+function stripLaneIndex(data: Record<string, unknown>): {
+  laneIndex?: number;
+  rest: Record<string, unknown>;
+} {
+  const laneIndex = data.laneIndex;
+  const rest = { ...data };
+  delete rest.laneIndex;
+  return {
+    laneIndex: typeof laneIndex === 'number' ? laneIndex : undefined,
+    rest,
+  };
+}
+
+/** Internal: assumes `event` already passed `safeParseGenerateSSEEvent`. */
+function dispatchParsedGenerateStreamEvent(
+  event: GenerateSSEEvent,
+  callbacks: GenerateStreamCallbacks,
+): void {
+  switch (event.type) {
+    case 'progress':
+      callbacks.onProgress?.(event.status);
+      break;
+    case 'activity':
+      callbacks.onActivity?.(event.entry);
+      break;
+    case 'trace':
+      callbacks.onTrace?.(event.trace);
+      break;
+    case 'code':
+      callbacks.onCode?.(event.code);
+      break;
+    case 'error':
+      callbacks.onError?.(event.error);
+      break;
+    case 'file':
+      callbacks.onFile?.(event.path, event.content);
+      break;
+    case 'plan':
+      callbacks.onPlan?.(event.files);
+      break;
+    case 'todos':
+      callbacks.onTodos?.(event.todos);
+      break;
+    case 'phase':
+      callbacks.onPhase?.(event.phase);
+      break;
+    case 'evaluation_progress':
+      callbacks.onEvaluationProgress?.(event.round, event.phase, event.message);
+      break;
+    case 'evaluation_report':
+      callbacks.onEvaluationReport?.(event.round, event.snapshot);
+      break;
+    case 'revision_round':
+      callbacks.onRevisionRound?.(event.round, event.brief);
+      break;
+    case 'checkpoint':
+      callbacks.onCheckpoint?.(event.checkpoint);
+      break;
+    case 'lane_done':
+      break;
+    case 'done':
+      callbacks.onDone?.();
+      break;
+  }
+}
+
+function dispatchGenerateStreamEvent(
+  currentEvent: string,
+  data: Record<string, unknown>,
+  callbacks: GenerateStreamCallbacks,
+): void {
+  const result = safeParseGenerateSSEEvent(currentEvent, data);
+  if (!result.ok) {
+    callbacks.onParseError?.(currentEvent, data, result.error);
+    if (import.meta.env.DEV) {
+      console.warn('[generate SSE] invalid payload', currentEvent, result.error.flatten(), data);
+    }
+    return;
+  }
+  dispatchParsedGenerateStreamEvent(result.event, callbacks);
 }
 
 export async function generate(
@@ -73,108 +201,104 @@ export async function generate(
 
   if (!response.ok) {
     const text = await response.text();
-    let message: string;
-    try {
-      const json = JSON.parse(text);
-      message = json.error ?? text;
-    } catch {
-      message = text;
-    }
-    throw new Error(normalizeError(message, 'Generation request failed'));
+    throw new Error(
+      normalizeError(parseApiErrorBody(text), 'Generation request failed'),
+    );
   }
 
   const reader = response.body?.getReader();
   if (!reader) throw new Error('No response body');
 
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
-
-    let currentEvent = '';
-    for (const line of lines) {
-      if (line.startsWith('event: ')) {
-        currentEvent = line.slice(7).trim();
-      } else if (line.startsWith('data: ')) {
-        const data = line.slice(6);
-        try {
-          const parsed = JSON.parse(data);
-          const event: GenerateSSEEvent = { type: currentEvent, ...parsed } as GenerateSSEEvent;
-          switch (event.type) {
-            case 'progress':
-              callbacks.onProgress?.(event.status);
-              break;
-            case 'activity':
-              callbacks.onActivity?.(event.entry);
-              break;
-            case 'code':
-              callbacks.onCode?.(event.code);
-              break;
-            case 'error':
-              callbacks.onError?.(event.error);
-              break;
-            case 'file':
-              callbacks.onFile?.(event.path, event.content);
-              break;
-            case 'plan':
-              callbacks.onPlan?.(event.files);
-              break;
-            case 'todos':
-              callbacks.onTodos?.(event.todos);
-              break;
-            case 'phase':
-              callbacks.onPhase?.(event.phase);
-              break;
-            case 'evaluation_progress':
-              callbacks.onEvaluationProgress?.(event.round, event.phase, event.message);
-              break;
-            case 'evaluation_report':
-              callbacks.onEvaluationReport?.(event.round, event.snapshot);
-              break;
-            case 'revision_round':
-              callbacks.onRevisionRound?.(event.round, event.brief);
-              break;
-            case 'checkpoint':
-              callbacks.onCheckpoint?.(event.checkpoint);
-              break;
-            case 'done':
-              callbacks.onDone?.();
-              break;
-          }
-        } catch {
-          // Skip malformed SSE data
-        }
+  await readSseEventStream(reader, (currentEvent, raw) => {
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const { rest } = stripLaneIndex(parsed);
+      dispatchGenerateStreamEvent(currentEvent, rest, callbacks);
+    } catch {
+      if (import.meta.env.DEV) {
+        console.warn('[generate SSE] malformed JSON line', currentEvent);
       }
     }
+  });
+}
+
+export async function fetchHypothesisPromptBundle(
+  body: HypothesisWorkspaceApiPayload,
+): Promise<HypothesisPromptBundleResponse> {
+  return postParsed('/hypothesis/prompt-bundle', body, HypothesisPromptBundleResponseSchema);
+}
+
+export interface HypothesisLaneSession {
+  callbacks: GenerateStreamCallbacks;
+  finalizeAfterStream: () => Promise<void>;
+}
+
+/**
+ * Multiplexed hypothesis generation: one SSE stream, `laneIndex` on each event (except final `done`).
+ */
+export async function generateHypothesisStream(
+  body: HypothesisGenerateApiPayload,
+  lanes: HypothesisLaneSession[],
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(`${API_BASE}/hypothesis/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      normalizeError(parseApiErrorBody(text), 'Generation request failed'),
+    );
   }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('No response body');
+
+  await readSseEventStream(reader, async (currentEvent, raw) => {
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      if (currentEvent === 'lane_done') {
+        const idx = parsed.laneIndex;
+        if (typeof idx === 'number' && lanes[idx]) {
+          await lanes[idx].finalizeAfterStream();
+        }
+        return;
+      }
+      if (currentEvent === 'done') {
+        return;
+      }
+      const { laneIndex, rest } = stripLaneIndex(parsed);
+      const cbs =
+        typeof laneIndex === 'number' && lanes[laneIndex]
+          ? lanes[laneIndex].callbacks
+          : lanes[0]?.callbacks;
+      if (cbs) dispatchGenerateStreamEvent(currentEvent, rest, cbs);
+    } catch {
+      if (import.meta.env.DEV) {
+        console.warn('[generate SSE] malformed JSON line', currentEvent);
+      }
+    }
+  });
 }
 
 // ── Models ──────────────────────────────────────────────────────────
 
 export async function listModels(providerId: string): Promise<ModelsResponse> {
-  const response = await fetch(`${API_BASE}/models/${providerId}`);
-  if (!response.ok) return [];
-  return response.json();
+  return getParsedList(`/models/${providerId}`, ModelsResponseSchema, []);
 }
 
 export async function listProviders(): Promise<ProviderInfo[]> {
-  const response = await fetch(`${API_BASE}/models`);
-  if (!response.ok) return [];
-  return response.json();
+  return getParsedList('/models', ProvidersListResponseSchema, []);
 }
 
 // ── Logs ────────────────────────────────────────────────────────────
 
 export async function getLogs(): Promise<LlmLogEntry[]> {
-  const response = await fetch(`${API_BASE}/logs`);
-  if (!response.ok) return [];
-  return response.json();
+  return getParsedList('/logs', LlmLogListResponseSchema, []);
 }
 
 export async function clearLogs(): Promise<void> {
@@ -186,5 +310,5 @@ export async function clearLogs(): Promise<void> {
 export async function extractDesignSystem(
   req: DesignSystemExtractRequest,
 ): Promise<DesignSystemExtractResponse> {
-  return post<DesignSystemExtractResponse>('/design-system/extract', req);
+  return postParsed('/design-system/extract', req, DesignSystemExtractResponseSchema);
 }

@@ -230,7 +230,12 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
       )}
 
       {/* Skeleton while generating */}
-      {isGenerating && <GeneratingSkeleton label={agentMode === 'agentic' ? 'Agent reasoning…' : 'Creating design…'} elapsed={elapsed} />}
+      {isGenerating && (
+        <GeneratingSkeleton
+          label={agentMode === 'agentic' ? 'Agent running…' : 'Generating…'}
+          elapsed={elapsed}
+        />
+      )}
 
       {/* ── Generation Controls ──────────────────────────────── */}
       <div className="border-t border-border-subtle px-3 py-2.5">
@@ -240,22 +245,30 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
           </div>
         )}
 
-        {/* Agentic mode toggle */}
+        {/* Mode: same segmented pattern as Thinking (neutral rail + fg pill) — avoids full-track accent */}
         <div className="nodrag nowheel mb-2 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1 text-nano text-fg-muted">
-              <Zap size={9} />
-              Agentic
-            </span>
-            <button
-              onPointerDown={() => setAgentMode(agentMode === 'agentic' ? 'single' : 'agentic')}
-              title={agentMode === 'agentic' ? 'Switch to single-shot mode' : 'Switch to agentic mode (uses more tokens)'}
-              className={`relative h-4 w-7 overflow-hidden rounded-full transition-colors ${agentMode === 'agentic' ? 'bg-accent' : 'bg-border'}`}
-            >
-              <span
-                className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${agentMode === 'agentic' ? 'translate-x-3.5' : 'translate-x-0.5'}`}
-              />
-            </button>
+          <div className="flex items-center justify-between gap-2">
+            <span className="shrink-0 text-nano text-fg-muted">Mode</span>
+            <div className="flex min-w-0 flex-1 gap-0.5 rounded border border-border bg-surface p-0.5">
+              <button
+                type="button"
+                onPointerDown={() => setAgentMode('single')}
+                title="Direct: one forward generation — fastest"
+                className={`nodrag nowheel flex min-w-0 flex-1 items-center justify-center gap-1 rounded px-1.5 py-0.5 text-nano transition-colors ${agentMode === 'single' ? 'bg-fg text-bg' : 'text-fg-muted hover:text-fg-secondary'}`}
+              >
+                <Sparkles size={9} className="shrink-0 opacity-90" />
+                Direct
+              </button>
+              <button
+                type="button"
+                onPointerDown={() => setAgentMode('agentic')}
+                title="Agentic: tools, files, and scored revision passes — slower, richer"
+                className={`nodrag nowheel flex min-w-0 flex-1 items-center justify-center gap-1 rounded px-1.5 py-0.5 text-nano transition-colors ${agentMode === 'agentic' ? 'bg-fg text-bg' : 'text-fg-muted hover:text-fg-secondary'}`}
+              >
+                <Zap size={9} className="shrink-0 opacity-90" />
+                Agentic
+              </button>
+            </div>
           </div>
 
           {agentMode === 'agentic' && supportsReasoning && (
@@ -293,16 +306,20 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
                 <Loader2 size={12} className="animate-spin" />
                 {generationProgress
                   ? generationProgress.completed === 0 && generationProgress.total > 1
-                    ? `Creating ${numberToWord(generationProgress.total)} designs...`
+                    ? `Generating ${numberToWord(generationProgress.total)} variants…`
                     : generationProgress.total > 1
-                      ? `${generationProgress.completed} of ${generationProgress.total} ready...`
-                      : 'Creating...'
-                  : 'Creating...'}
+                      ? `${generationProgress.completed} of ${generationProgress.total} ready…`
+                      : agentMode === 'agentic'
+                        ? 'Running agent…'
+                        : 'Generating…'
+                  : agentMode === 'agentic'
+                    ? 'Running agent…'
+                    : 'Generating…'}
               </>
             ) : (
               <>
                 {agentMode === 'agentic' ? <Zap size={12} /> : <Sparkles size={12} />}
-                {agentMode === 'agentic' ? 'Think & Create' : 'Create'}
+                {agentMode === 'agentic' ? 'Run agent' : 'Generate'}
               </>
             )}
           </button>

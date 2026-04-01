@@ -6,12 +6,16 @@
  */
 import { Agent } from '@mariozechner/pi-agent-core';
 import type { AgentMessage } from '@mariozechner/pi-agent-core';
-import type { TodoItem } from '../../src/types/provider.ts';
+import type { RunTraceEvent, TodoItem } from '../../src/types/provider.ts';
+import { PI_AGENT_CONTEXT_WINDOW, PI_LLM_LOG_PHASE } from '../constants/pi-agent.ts';
+import { makeLoggedPiStreamFn } from '../lib/pi-llm-log.ts';
+import { handlePiAgentSubscribeEvent } from './pi-agent-subscribe-handlers.ts';
 import { buildModel, compactWithLLM, type ThinkingLevel } from './pi-agent-compaction.ts';
 import {
   makeEditFileTool,
+  makeFindTool,
   makeGrepTool,
-  makeListFilesTool,
+  makeLsTool,
   makePlanFilesTool,
   makeReadFileTool,
   makeTodoWriteTool,
@@ -19,6 +23,7 @@ import {
   makeValidateJsTool,
   makeWriteFileTool,
 } from './pi-agent-tools.ts';
+import { VirtualWorkspace } from './virtual-workspace.ts';
 
 // ── Re-exports (stable import surface for orchestrator + tests) ───────────────
 
@@ -30,12 +35,16 @@ export {
 export type { ThinkingLevel } from './pi-agent-compaction.ts';
 export {
   makeEditFileTool,
-  makeListFilesTool,
+  makeReadFileTool,
+  makeLsTool,
+  makeFindTool,
   makeTodoWriteTool,
   makeGrepTool,
   makeValidateJsTool,
   makeValidateHtmlTool,
 } from './pi-agent-tools.ts';
+export { VirtualWorkspace } from './virtual-workspace.ts';
+export type { WorkspaceFileSnapshot } from './virtual-workspace.ts';
 
 // ── Public API types (app-domain only, no PI types cross this boundary) ───────
 
@@ -71,7 +80,8 @@ export type AgentRunEvent =
   | { type: 'activity' | 'progress' | 'code' | 'error'; payload: string }
   | { type: 'file'; path: string; content: string }
   | { type: 'plan'; files: string[] }
-  | { type: 'todos'; todos: TodoItem[] };
+  | { type: 'todos'; todos: TodoItem[] }
+  | { type: 'trace'; trace: RunTraceEvent };
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
@@ -84,20 +94,41 @@ export async function runDesignAgentSession(
   params: AgentSessionParams,
   onEvent: (event: AgentRunEvent) => void | Promise<void>,
 ): Promise<DesignAgentSessionResult | null> {
+  const trace = (
+    kind: RunTraceEvent['kind'],
+    label: string,
+    extra: Partial<RunTraceEvent> = {},
+  ): AgentRunEvent => ({
+    type: 'trace',
+    trace: {
+      id: crypto.randomUUID(),
+      at: new Date().toISOString(),
+      kind,
+      label,
+      status: 'info',
+      ...extra,
+    },
+  });
+
   await onEvent({
     type: 'progress',
     payload: params.initialProgressMessage ?? 'Starting agentic generation...',
   });
+  await onEvent(
+    trace('run_started', params.initialProgressMessage ?? 'Starting agentic generation...', {
+      phase: 'building',
+    }),
+  );
 
-  const virtualFS = new Map<string, string>();
+  const workspace = new VirtualWorkspace();
   if (params.virtualSkillFiles) {
     for (const [path, content] of Object.entries(params.virtualSkillFiles)) {
-      virtualFS.set(path, content);
+      workspace.seed(path, content);
     }
   }
   if (params.seedFiles) {
     for (const [path, content] of Object.entries(params.seedFiles)) {
-      virtualFS.set(path, content);
+      workspace.seed(path, content);
     }
   }
 
@@ -107,35 +138,74 @@ export async function runDesignAgentSession(
   const model = buildModel(params.providerId, params.modelId, params.thinkingLevel);
   const planTool = makePlanFilesTool((files) => {
     void onEvent({ type: 'plan', files });
+    void onEvent(
+      trace('files_planned', `Planned ${files.length} file${files.length === 1 ? '' : 's'}`, {
+        phase: 'building',
+        status: 'success',
+      }),
+    );
   });
-  const writeTool = makeWriteFileTool(virtualFS, (path, content) => {
+  const writeTool = makeWriteFileTool(workspace, (path, content) => {
     void onEvent({ type: 'file', path, content });
+    void onEvent(
+      trace('file_written', `Saved ${path}`, {
+        phase: 'building',
+        path,
+        status: 'success',
+      }),
+    );
   });
-  const editTool = makeEditFileTool(virtualFS, (path, content) => {
+  const editTool = makeEditFileTool(workspace, (path, content) => {
     void onEvent({ type: 'file', path, content });
+    void onEvent(
+      trace('file_written', `Updated ${path}`, {
+        phase: 'building',
+        path,
+        status: 'success',
+      }),
+    );
   });
-  const readTool = makeReadFileTool(virtualFS);
-  const listTool = makeListFilesTool(virtualFS);
+  const readTool = makeReadFileTool(workspace);
+  const lsTool = makeLsTool(workspace);
+  const findTool = makeFindTool(workspace);
   const todoTool = makeTodoWriteTool(todoState, (todos) => {
     void onEvent({ type: 'todos', todos });
   });
-  const grepTool = makeGrepTool(virtualFS);
-  const validateJsTool = makeValidateJsTool(virtualFS);
-  const validateHtmlTool = makeValidateHtmlTool(virtualFS);
+  const grepTool = makeGrepTool(workspace);
+  const validateJsTool = makeValidateJsTool(workspace);
+  const validateHtmlTool = makeValidateHtmlTool(workspace);
 
-  const KEEP_RECENT = 20;
-  const COMPACT_THRESHOLD = 30;
+  const { KEEP_RECENT, COMPACT_THRESHOLD } = PI_AGENT_CONTEXT_WINDOW;
 
   const compactionExtra = params.compactionNote?.trim()
     ? `[Evaluation / revision context]\n${params.compactionNote.trim()}`
     : undefined;
 
   const agent = new Agent({
+    streamFn: makeLoggedPiStreamFn({
+      providerId: params.providerId,
+      modelId: params.modelId,
+      source: 'builder',
+      phase: params.compactionNote?.trim()
+        ? PI_LLM_LOG_PHASE.REVISION
+        : PI_LLM_LOG_PHASE.AGENTIC_TURN,
+    }),
     initialState: {
       systemPrompt: params.systemPrompt,
       model,
       thinkingLevel: params.thinkingLevel ?? 'off',
-      tools: [planTool, writeTool, editTool, readTool, listTool, todoTool, grepTool, validateJsTool, validateHtmlTool],
+      tools: [
+        writeTool,
+        editTool,
+        readTool,
+        lsTool,
+        findTool,
+        grepTool,
+        todoTool,
+        planTool,
+        validateJsTool,
+        validateHtmlTool,
+      ],
     },
     transformContext: async (messages) => {
       if (messages.length <= COMPACT_THRESHOLD) return messages;
@@ -143,16 +213,18 @@ export async function runDesignAgentSession(
       const first = messages[0];
       const recent = messages.slice(-KEEP_RECENT);
       const toSummarize = messages.slice(1, messages.length - KEEP_RECENT);
-      const filesWritten = [...virtualFS.keys()];
+      const snapshot = workspace.getFileSnapshot();
 
       await onEvent({ type: 'progress', payload: 'Compacting context...' });
-      const summaryText = await compactWithLLM(
-        toSummarize,
-        filesWritten,
-        params.providerId,
-        params.modelId,
-        compactionExtra,
+      await onEvent(
+        trace('compaction', 'Compacting context window', {
+          phase: 'building',
+        }),
       );
+      const summaryText = await compactWithLLM(toSummarize, params.providerId, params.modelId, {
+        extraContext: compactionExtra,
+        snapshot,
+      });
 
       const todoAppendix =
         todoState.current.length > 0
@@ -179,33 +251,15 @@ export async function runDesignAgentSession(
     params.signal.addEventListener('abort', () => agent.abort());
   }
 
+  const subscribeCtx = {
+    onEvent,
+    trace,
+    toolPathByCallId: new Map<string, string | undefined>(),
+    waitingForFirstToken: { current: false },
+  };
   agent.subscribe((event) => {
     if (params.signal?.aborted) return;
-
-    if (event.type === 'turn_start') {
-      void onEvent({ type: 'progress', payload: 'Thinking...' });
-    } else if (event.type === 'message_update') {
-      const e = event.assistantMessageEvent;
-      if (e.type === 'text_delta' && e.delta) {
-        void onEvent({ type: 'activity', payload: e.delta });
-      } else if (e.type === 'thinking_delta' && e.delta) {
-        void onEvent({ type: 'activity', payload: e.delta });
-      }
-    } else if (event.type === 'tool_execution_start') {
-      if (event.toolName === 'write_file') {
-        const path = (event.args as { path?: string })?.path ?? 'file';
-        void onEvent({ type: 'progress', payload: `Writing ${path}...` });
-      } else if (event.toolName === 'edit_file') {
-        const path = (event.args as { path?: string })?.path ?? 'file';
-        void onEvent({ type: 'progress', payload: `Editing ${path}...` });
-      } else if (event.toolName === 'grep') {
-        const pattern = (event.args as { pattern?: string })?.pattern ?? '';
-        void onEvent({ type: 'progress', payload: `Searching for "${pattern}"...` });
-      } else if (event.toolName === 'validate_js' || event.toolName === 'validate_html') {
-        const path = (event.args as { path?: string })?.path ?? 'file';
-        void onEvent({ type: 'progress', payload: `Validating ${path}...` });
-      }
-    }
+    handlePiAgentSubscribeEvent(subscribeCtx, event);
   });
 
   try {
@@ -216,8 +270,7 @@ export async function runDesignAgentSession(
     return null;
   }
 
-  const designPaths = [...virtualFS.keys()].filter((p) => !p.startsWith('skills/'));
-  if (!hasSeed && designPaths.length === 0 && !params.signal?.aborted) {
+  if (!hasSeed && workspace.designPathCount() === 0 && !params.signal?.aborted) {
     await onEvent({
       type: 'error',
       payload:
@@ -226,13 +279,8 @@ export async function runDesignAgentSession(
     return null;
   }
 
-  const filesOut: Record<string, string> = {};
-  for (const [path, content] of virtualFS.entries()) {
-    if (!path.startsWith('skills/')) filesOut[path] = content;
-  }
-
   return {
-    files: filesOut,
+    files: workspace.entriesForDesignOutput(),
     todos: [...todoState.current],
   };
 }

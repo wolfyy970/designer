@@ -22,6 +22,16 @@ describe('parseModelJsonObject', () => {
     const raw = 'prefix {"ok":true} suffix';
     expect(parseModelJsonObject(raw, z.object({ ok: z.boolean() }))).toEqual({ ok: true });
   });
+
+  it('repairs malformed JSON when possible', () => {
+    const raw = '```json\n{"ok": true, trailing: "x",}\n```';
+    expect(
+      parseModelJsonObject(
+        raw,
+        z.object({ ok: z.boolean(), trailing: z.string() }),
+      ),
+    ).toEqual({ ok: true, trailing: 'x' });
+  });
 });
 
 describe('enforceRevisionGate', () => {

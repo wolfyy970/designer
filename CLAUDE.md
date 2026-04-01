@@ -5,7 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Development (requires two terminals)
+# Development (API + Vite — avoids proxy ECONNREFUSED race)
+pnpm dev:all         # API first, then Vite after http://localhost:3001/api/health
+pnpm dev:kill        # Free ports 3001 and 5173 (stuck dev servers)
+# Or two terminals: pnpm dev:server  and  pnpm dev
 pnpm dev             # Vite frontend at http://localhost:5173
 pnpm dev:server      # Hono API server at http://localhost:3001
 
@@ -22,7 +25,7 @@ pnpm vitest run src/lib/__tests__/extract-code.test.ts  # single test file
 ## Architecture
 
 ### Two-process dev setup
-The frontend (Vite, port 5173) proxies `/api/*` to the API server (Hono/Node.js, port 3001). **Both must run together in development.** API keys live on the server only — never exposed to the browser.
+The frontend (Vite, port 5173) proxies `/api/*` to the API server (Hono/Node.js, port 3001). **Both must run together in development.** Prefer `pnpm dev:all` so Vite starts only after `/api/health` responds; otherwise the UI’s first `/api/*` calls may get `ECONNREFUSED` until the API is up (hard refresh fixes it). Avoid `pnpm dev:server & pnpm dev` unless you manage the background job: **`Ctrl+C` may not stop the background API**, leaving port **3001** in use (`EADDRINUSE` on the next start). Free it with `lsof -nP -iTCP:3001 -sTCP:LISTEN` / `kill`, or `jobs` → `fg` → `Ctrl+C`. API keys live on the server only — never exposed to the browser.
 
 ### Server (`server/`)
 Hono app under `/api`: compile, generate (SSE), models, design-system extract, prompts and skills (Prisma-backed GET), logs (dev). See [ARCHITECTURE.md](ARCHITECTURE.md) for the route table.
@@ -46,7 +49,7 @@ A single-page app with one route: `/canvas`. Everything else redirects there.
 Uses `@xyflow/react` v12. The canvas has 11 node types in a 4-column layout:
 1. **Section nodes** (col 0) — `designBrief`, `existingDesign`, `researchContext`, `objectivesMetrics`, `designConstraints` — all rendered by the shared `SectionNode.tsx` component
 2. **Processing nodes** (col 1–2) — `compiler` (labeled "Incubator"), `designSystem`, `model`
-3. **Hypothesis nodes** (col 2) — strategy + format + Generate button; reads provider/model from connected ModelNode
+3. **Hypothesis nodes** (col 2) — strategy + format + **Generate** / **Run agent**; Mode **Direct** vs **Agentic**; reads provider/model from connected ModelNode
 4. **Variant nodes** (col 3) — sandboxed iframe previews of generated code; accumulate across runs (version stacking)
 5. **Critique node** — feedback input for iterating on variants
 

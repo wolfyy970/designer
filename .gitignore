@@ -8,6 +8,10 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+
+# Local mirror of upstream Pi (exploration only; not part of this repo)
+.vendor/
+
 dist
 dist-ssr
 *.local

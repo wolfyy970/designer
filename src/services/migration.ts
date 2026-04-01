@@ -1,15 +1,70 @@
 /**
- * One-time migration: move generated code from localStorage to IndexedDB.
- *
- * Runs on app startup. Checks a flag to avoid re-running.
- * After migration, generated code is stored in IndexedDB and
- * stripped from the localStorage-persisted generation store.
+ * Startup migrations: copy legacy `lattice-*` storage into `auto-designer-*`, then
+ * one-time move of generated code from localStorage to IndexedDB.
  */
+import { createStore, get, set, keys } from 'idb-keyval';
+import {
+  IDB_DATABASE_KEY_NAMES,
+  PERSISTED_LOCAL_STORAGE_KEY_NAMES,
+  STORAGE_KEYS,
+} from '../lib/storage-keys';
 import { saveCode } from './idb-storage';
-import { STORAGE_KEYS } from '../lib/storage-keys';
+
+const NEW_PREFIX = 'auto-designer-';
+const LEGACY_PREFIX = 'lattice-';
+const LEGACY_PREFIX_MIGRATION_FLAG = 'auto-designer-legacy-prefix-migrated-v1';
 
 const MIGRATION_FLAG = STORAGE_KEYS.MIGRATION_FLAG;
 const GENERATION_STORE_KEY = STORAGE_KEYS.GENERATION;
+
+function idbObjectStoreName(name: (typeof IDB_DATABASE_KEY_NAMES)[number]): string {
+  if (name === 'IDB_CODE') return 'code';
+  if (name === 'IDB_PROVENANCE') return 'provenance';
+  return 'files';
+}
+
+/**
+ * Copy data from legacy `lattice-*` localStorage / IndexedDB into `auto-designer-*`.
+ * Runs once per browser profile (flag in localStorage).
+ */
+export async function migrateLegacyStoragePrefixes(): Promise<void> {
+  if (localStorage.getItem(LEGACY_PREFIX_MIGRATION_FLAG)) return;
+
+  try {
+    for (const keyName of PERSISTED_LOCAL_STORAGE_KEY_NAMES) {
+      const newKey = STORAGE_KEYS[keyName];
+      const suffix = newKey.startsWith(NEW_PREFIX) ? newKey.slice(NEW_PREFIX.length) : newKey;
+      const oldKey = LEGACY_PREFIX + suffix;
+      if (localStorage.getItem(newKey) == null) {
+        const v = localStorage.getItem(oldKey);
+        if (v !== null) localStorage.setItem(newKey, v);
+      }
+      localStorage.removeItem(oldKey);
+    }
+
+    for (const name of IDB_DATABASE_KEY_NAMES) {
+      const newDb = STORAGE_KEYS[name];
+      const suffix = newDb.startsWith(NEW_PREFIX) ? newDb.slice(NEW_PREFIX.length) : newDb;
+      const oldDb = LEGACY_PREFIX + suffix;
+      const store = idbObjectStoreName(name);
+      const legacy = createStore(oldDb, store);
+      const next = createStore(newDb, store);
+      const nextKeyList = await keys(next);
+      if (nextKeyList.length > 0) continue;
+      const oldKeyList = await keys(legacy);
+      for (const k of oldKeyList) {
+        const v = await get(k, legacy);
+        if (v !== undefined) await set(k, v, next);
+      }
+    }
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[migration] Legacy storage prefix rename failed:', err);
+    }
+  }
+
+  localStorage.setItem(LEGACY_PREFIX_MIGRATION_FLAG, '1');
+}
 
 interface PersistedResult {
   id: string;
@@ -19,6 +74,10 @@ interface PersistedResult {
   [key: string]: unknown;
 }
 
+/**
+ * Move generated code from the persisted generation store into IndexedDB.
+ * Runs after branding migration so GENERATION_STORE_KEY matches on-disk data.
+ */
 export async function migrateToIndexedDB(): Promise<void> {
   if (localStorage.getItem(MIGRATION_FLAG)) return;
 

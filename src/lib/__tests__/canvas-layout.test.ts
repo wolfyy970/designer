@@ -11,7 +11,6 @@ import {
 import { EDGE_STATUS, EDGE_TYPES } from '../../constants/canvas';
 import type { WorkspaceEdge } from '../../types/workspace-graph';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeNode(
   id: string,
   type: string,

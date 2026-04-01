@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { STORAGE_KEYS } from '../../lib/storage-keys';
 import { migrateCanvasState } from '../canvas-migrations';
 
 // Mock localStorage for migration reads
@@ -78,7 +79,7 @@ describe('v5 → current: generator nodes handled', () => {
 
 describe('v6 → v7: add variantStrategyId', () => {
   it('maps refId to variantStrategyId via generation store results', () => {
-    storage.set('lattice-generation', JSON.stringify({
+    storage.set(STORAGE_KEYS.GENERATION, JSON.stringify({
       state: {
         results: [
           { id: 'result-1', variantStrategyId: 'vs-abc' },
@@ -103,7 +104,7 @@ describe('v6 → v7: add variantStrategyId', () => {
   });
 
   it('skips variants that already have variantStrategyId', () => {
-    storage.set('lattice-generation', JSON.stringify({
+    storage.set(STORAGE_KEYS.GENERATION, JSON.stringify({
       state: { results: [{ id: 'r1', variantStrategyId: 'vs-new' }] },
     }));
 
@@ -188,7 +189,7 @@ describe('v9 → v10: ensure hypothesis→variant edges', () => {
 
 describe('v10 → v11: designSystem node data from spec store', () => {
   it('copies content and images from spec store to designSystem node', () => {
-    storage.set('lattice-active-canvas', JSON.stringify({
+    storage.set(STORAGE_KEYS.ACTIVE_CANVAS, JSON.stringify({
       state: {
         spec: {
           sections: {
@@ -215,7 +216,7 @@ describe('v10 → v11: designSystem node data from spec store', () => {
   });
 
   it('creates designSystem→hypothesis edges', () => {
-    storage.set('lattice-active-canvas', JSON.stringify({
+    storage.set(STORAGE_KEYS.ACTIVE_CANVAS, JSON.stringify({
       state: { spec: { sections: { 'design-system': { content: '' } } } },
     }));
 
@@ -239,7 +240,7 @@ describe('v10 → v11: designSystem node data from spec store', () => {
 
 describe('v11 → v12: designSystem data recovery', () => {
   it('recovers content from spec store when node data is empty', () => {
-    storage.set('lattice-active-canvas', JSON.stringify({
+    storage.set(STORAGE_KEYS.ACTIVE_CANVAS, JSON.stringify({
       state: {
         spec: {
           sections: {
@@ -261,7 +262,7 @@ describe('v11 → v12: designSystem data recovery', () => {
   });
 
   it('does not overwrite existing node content', () => {
-    storage.set('lattice-active-canvas', JSON.stringify({
+    storage.set(STORAGE_KEYS.ACTIVE_CANVAS, JSON.stringify({
       state: {
         spec: {
           sections: {

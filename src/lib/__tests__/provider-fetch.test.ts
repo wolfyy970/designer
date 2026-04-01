@@ -38,17 +38,40 @@ describe('parseChatResponse', () => {
       choices: [{ message: { content: 'Design output' }, finish_reason: 'stop' }],
       usage: { completion_tokens: 42 },
     };
-    const result = parseChatResponse(data, 'openrouter');
+    const result = parseChatResponse(data);
     expect(result.raw).toBe('Design output');
     expect(result.metadata?.tokensUsed).toBe(42);
+    expect(result.metadata?.completionTokens).toBe(42);
     expect(result.metadata?.truncated).toBe(false);
+  });
+
+  it('maps OpenRouter-style usage (prompt, details, cost)', () => {
+    const data = {
+      choices: [{ message: { content: 'Hi' }, finish_reason: 'stop' }],
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 20,
+        total_tokens: 30,
+        prompt_tokens_details: { cached_tokens: 5 },
+        completion_tokens_details: { reasoning_tokens: 7 },
+        cost: 0.001234,
+      },
+    };
+    const result = parseChatResponse(data);
+    expect(result.metadata?.promptTokens).toBe(10);
+    expect(result.metadata?.completionTokens).toBe(20);
+    expect(result.metadata?.tokensUsed).toBe(20);
+    expect(result.metadata?.totalTokens).toBe(30);
+    expect(result.metadata?.cachedPromptTokens).toBe(5);
+    expect(result.metadata?.reasoningTokens).toBe(7);
+    expect(result.metadata?.costCredits).toBe(0.001234);
   });
 
   it('marks truncated when finish_reason is length', () => {
     const data = {
       choices: [{ message: { content: 'Partial' }, finish_reason: 'length' }],
     };
-    const result = parseChatResponse(data, 'openrouter');
+    const result = parseChatResponse(data);
     expect(result.metadata?.truncated).toBe(true);
   });
 
@@ -56,13 +79,12 @@ describe('parseChatResponse', () => {
     const data = {
       choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
     };
-    const result = parseChatResponse(data, 'openrouter');
-    expect(result.metadata?.tokensUsed).toBeUndefined();
-    expect(result.metadata?.truncated).toBe(false);
+    const result = parseChatResponse(data);
+    expect(result.metadata).toBeUndefined();
   });
 
   it('returns empty raw for empty response', () => {
-    const result = parseChatResponse({}, 'test');
+    const result = parseChatResponse({});
     expect(result.raw).toBe('');
   });
 });

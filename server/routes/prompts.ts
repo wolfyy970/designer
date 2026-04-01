@@ -8,13 +8,18 @@ const prompts = new Hono();
 
 // GET /api/prompts — list all with current body
 prompts.get('/', async (c) => {
-  const all = await Promise.all(
-    PROMPT_KEYS.map(async (key) => {
-      const body = await getPromptBody(key);
-      return { key, body, isDefault: body === DEFAULTS[key] };
-    }),
-  );
-  return c.json(all);
+  try {
+    const all = await Promise.all(
+      PROMPT_KEYS.map(async (key) => {
+        const body = await getPromptBody(key);
+        return { key, body, isDefault: body === DEFAULTS[key] };
+      }),
+    );
+    return c.json(all);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 500);
+  }
 });
 
 // GET /api/prompts/:key — single prompt
@@ -25,8 +30,13 @@ prompts.get('/:key', async (c) => {
     where: { promptKey: key },
     orderBy: { version: 'desc' },
   });
-  const body = version?.body ?? DEFAULTS[key];
-  return c.json({ key, body, version: version?.version ?? 0, isDefault: body === DEFAULTS[key] });
+  if (!version) {
+    return c.json(
+      { error: `Prompt "${key}" was not found in the database. Run \`pnpm db:seed\` to seed prompts.` },
+      500,
+    );
+  }
+  return c.json({ key, body: version.body, version: version.version, isDefault: version.body === DEFAULTS[key] });
 });
 
 // PUT /api/prompts/:key — create new version

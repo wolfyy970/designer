@@ -4,7 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   test: {
-    exclude: ['node_modules/**'],
+    // `.vendor` holds upstream Pi sources; their test suite expects optional packages we don't install.
+    exclude: ['node_modules/**', '.vendor/**'],
   },
   plugins: [react(), tailwindcss()],
   server: {

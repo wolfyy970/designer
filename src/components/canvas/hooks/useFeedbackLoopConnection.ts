@@ -13,10 +13,7 @@ import { generateId, now } from '../../../lib/utils';
  * capture a screenshot and add it as a reference image.
  * The edge persists as a visible feedback-loop connection.
  */
-async function captureVariantIntoExistingDesign(
-  variantNodeId: string,
-  _existingDesignNodeId: string
-) {
+async function captureVariantIntoExistingDesign(variantNodeId: string) {
   const snap = useCanvasStore.getState();
   const node = nodeById(snap, variantNodeId);
   const vsId = node?.data.variantStrategyId as string | undefined;
@@ -73,7 +70,7 @@ export function useFeedbackLoopConnection() {
         connection.source &&
         connection.target
       ) {
-        captureVariantIntoExistingDesign(connection.source, connection.target);
+        captureVariantIntoExistingDesign(connection.source);
       }
 
       // Re-layout after new edge

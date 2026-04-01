@@ -15,6 +15,15 @@ import { Script, createContext } from 'node:vm';
 import type { EvaluatorWorkerReport } from '../../src/types/evaluation.ts';
 import { bundleVirtualFS } from '../../src/lib/bundle-virtual-fs.ts';
 
+/** VM `runInContext` timeout per inline script (avoid infinite loops). */
+const INLINE_SCRIPT_VM_TIMEOUT_MS = 2000;
+/** First N non-empty inline scripts are executed (cap work per page). */
+const MAX_INLINE_SCRIPTS_TO_RUN = 5;
+/** Truncate stored runtime error messages for scoring payloads. */
+const RUNTIME_ERROR_MSG_MAX_LEN = 200;
+/** Console errors merged into the report (beyond inline script errors). */
+const MAX_CONSOLE_ERRORS_IN_REPORT = 3;
+
 // ── HTML parsing helpers ──────────────────────────────────────────────────────
 
 function hasTag(html: string, tag: string): boolean {
@@ -171,9 +180,9 @@ function checkJsRuntime(html: string): { score: number; notes: string; errors: s
   (sandbox as Record<string, unknown>).globalThis = sandbox;
 
   let scriptScore = 5;
-  for (const src of scripts.slice(0, 5)) {
+  for (const src of scripts.slice(0, MAX_INLINE_SCRIPTS_TO_RUN)) {
     try {
-      new Script(src).runInContext(sandbox, { timeout: 2000 });
+      new Script(src).runInContext(sandbox, { timeout: INLINE_SCRIPT_VM_TIMEOUT_MS });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       // Ignore missing browser APIs not worth penalising
@@ -188,12 +197,12 @@ function checkJsRuntime(html: string): { score: number; notes: string; errors: s
       ) {
         continue;
       }
-      runtimeErrors.push(msg.slice(0, 200));
+      runtimeErrors.push(msg.slice(0, RUNTIME_ERROR_MSG_MAX_LEN));
       scriptScore -= 1.5;
     }
   }
 
-  const allErrors = [...runtimeErrors, ...consoleErrors.slice(0, 3)];
+  const allErrors = [...runtimeErrors, ...consoleErrors.slice(0, MAX_CONSOLE_ERRORS_IN_REPORT)];
   const score = Math.max(1, Math.round(scriptScore));
 
   if (allErrors.length === 0) {
@@ -251,11 +260,16 @@ function checkContentPresence(html: string): { score: number; notes: string } {
   const paragraphs = countMatches(html, /<p[\s>]/gi);
   const sections = countMatches(html, /<(section|article|main|header|footer)[\s>]/gi);
 
+  const CONTENT_WORDS_T2 = 20;
+  const CONTENT_WORDS_T3 = 60;
+  const CONTENT_WORDS_T4 = 120;
+  const CONTENT_WORDS_T5 = 200;
+
   let score = 1;
-  if (wordCount >= 20) score = 2;
-  if (wordCount >= 60 || (headings >= 1 && paragraphs >= 1)) score = 3;
-  if (wordCount >= 120 && (headings >= 2 || sections >= 2)) score = 4;
-  if (wordCount >= 200 && headings >= 2 && (paragraphs >= 3 || sections >= 3)) score = 5;
+  if (wordCount >= CONTENT_WORDS_T2) score = 2;
+  if (wordCount >= CONTENT_WORDS_T3 || (headings >= 1 && paragraphs >= 1)) score = 3;
+  if (wordCount >= CONTENT_WORDS_T4 && (headings >= 2 || sections >= 2)) score = 4;
+  if (wordCount >= CONTENT_WORDS_T5 && headings >= 2 && (paragraphs >= 3 || sections >= 3)) score = 5;
 
   return {
     score,

@@ -9,9 +9,7 @@ import type { ReferenceImage } from './spec';
 type NodeData<T> = Record<string, unknown> & T;
 
 /** Section nodes (designBrief, existingDesign, etc.) store data in spec-store */
-export type SectionNodeData = NodeData<{
-  // intentionally empty — section content lives in the spec store
-}>;
+export type SectionNodeData = NodeData<Record<string, never>>;
 
 export type CompilerNodeData = NodeData<{
   hypothesisCount?: number;

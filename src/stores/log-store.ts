@@ -3,14 +3,29 @@ import { create } from 'zustand';
 export interface LlmLogEntry {
   id: string;
   timestamp: string;
-  source: 'compiler' | 'planner' | 'builder' | 'other';
+  source:
+    | 'compiler'
+    | 'planner'
+    | 'builder'
+    | 'designSystem'
+    | 'evaluator'
+    | 'agentCompaction'
+    | 'other';
   phase?: string;
   model: string;
   provider: string;
+  providerName?: string;
   systemPrompt: string;
   userPrompt: string;
   response: string;
   durationMs: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  reasoningTokens?: number;
+  cachedPromptTokens?: number;
+  costCredits?: number;
+  truncated?: boolean;
   toolCalls?: { name: string; path?: string }[];
   error?: string;
 }
