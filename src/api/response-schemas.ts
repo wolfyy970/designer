@@ -70,11 +70,11 @@ export const HypothesisPromptBundleResponseSchema = z.object({
   provenance: ProvenanceContextSchema,
   generationContext: z.object({
     agentMode: z.enum(['single', 'agentic']),
-    thinkingLevel: z.enum(['off', 'minimal', 'low', 'medium', 'high']).optional(),
     modelCredentials: z.array(
       z.object({
         providerId: z.string(),
         modelId: z.string(),
+        thinkingLevel: z.enum(['off', 'minimal', 'low', 'medium', 'high']),
       }),
     ),
   }),
@@ -102,6 +102,8 @@ const LlmLogEntrySchema = z
   .object({
     id: z.string(),
     timestamp: z.string(),
+    status: z.enum(['in_progress', 'complete', 'error']).optional(),
+    correlationId: z.string().optional(),
     source: z.enum([
       'compiler',
       'planner',
@@ -131,7 +133,40 @@ const LlmLogEntrySchema = z
   })
   .passthrough();
 
+export const ObservabilityLineTraceSchema = z.object({
+  v: z.literal(1),
+  ts: z.string(),
+  type: z.literal('trace'),
+  payload: z.object({
+    event: z.record(z.string(), z.unknown()),
+    correlationId: z.string().optional(),
+    resultId: z.string().optional(),
+  }),
+});
+
+export const ObservabilityLogsResponseSchema = z.object({
+  llm: z.array(LlmLogEntrySchema),
+  trace: z.array(ObservabilityLineTraceSchema),
+});
+
+/** @deprecated Use ObservabilityLogsResponseSchema */
 export const LlmLogListResponseSchema = z.array(LlmLogEntrySchema);
+
+/** GET /api/prompts/:key/history */
+export const PromptHistoryListSchema = z.array(
+  z.object({
+    version: z.number(),
+    createdAt: z.string(),
+  }),
+);
+
+/** GET /api/prompts/:key/versions/:v */
+export const PromptVersionBodySchema = z.object({
+  key: z.string(),
+  version: z.number(),
+  body: z.string(),
+  createdAt: z.string(),
+});
 
 /** POST /api/design-system/extract */
 export const DesignSystemExtractResponseSchema = z.object({

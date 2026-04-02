@@ -4,11 +4,33 @@
  */
 import type { ProviderModel, ChatResponse, ChatResponseMetadata } from '../types/provider';
 
-/** Extract the assistant message text from a chat completion response */
+/**
+ * Extract the assistant message text from a chat completion response.
+ * Handles string `content` and array parts (`{ type: 'text', text }`) used by OpenAI-compatible APIs.
+ */
 export function extractMessageText(data: Record<string, unknown>): string {
   const choices = data.choices as Array<Record<string, unknown>> | undefined;
   const message = choices?.[0]?.message as Record<string, unknown> | undefined;
-  return (message?.content as string) ?? '';
+  const content = message?.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    const parts: string[] = [];
+    for (const item of content) {
+      if (!item || typeof item !== 'object') continue;
+      const p = item as Record<string, unknown>;
+      const typ = p.type;
+      if (typ === 'text' && typeof p.text === 'string') {
+        parts.push(p.text);
+        continue;
+      }
+      if (typ === 'reasoning') {
+        if (typeof p.text === 'string') parts.push(p.text);
+        else if (typeof p.summary === 'string') parts.push(p.summary);
+      }
+    }
+    return parts.join('');
+  }
+  return '';
 }
 
 /**
@@ -26,6 +48,7 @@ export async function fetchChatCompletion(
   errorMap: Record<number, string>,
   providerLabel: string,
   extraHeaders?: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -36,6 +59,7 @@ export async function fetchChatCompletion(
     method: 'POST',
     headers,
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!response.ok) {

@@ -106,8 +106,8 @@ export interface CompileInputs {
 
 /**
  * Walk the graph from a compiler node to build all inputs
- * needed for compilation — a partial spec (connected sections only),
- * reference designs (from connected variant nodes), and critiques.
+ * needed for compilation — spec sections wired to this compiler **or** non-empty in the shared
+ * spec store, reference designs (from connected variant nodes), and critiques.
  *
  * Async because generated code is now stored in IndexedDB.
  */
@@ -138,19 +138,32 @@ export async function buildCompileInputs(
     connectedNodes = nodes.filter((n) => connectedNodeIds.has(n.id));
   }
 
-  // Build partial spec: keep connected sections, blank out disconnected ones
+  // Section node types wired to this compiler (graph or domain wiring).
   const connectedSectionIds = new Set<string>();
   for (const node of connectedNodes) {
     const sid = NODE_TYPE_TO_SECTION[node.type as CanvasNodeType];
     if (sid) connectedSectionIds.add(sid);
   }
 
+  /**
+   * Include spec content when the section is wired OR when the user filled it (or added images)
+   * in the global spec store. Previously only wired sections were kept — the default canvas wires
+   * only the design brief, so Research / Objectives / Constraints looked empty in incubator logs
+   * even though section nodes were filled.
+   */
+  const includeSection = (sectionId: string, section: DesignSpec['sections'][string]): boolean => {
+    if (connectedSectionIds.has(sectionId)) return true;
+    if (section.content.trim().length > 0) return true;
+    if (section.images.length > 0) return true;
+    return false;
+  };
+
   const partialSpec: DesignSpec = {
     ...spec,
     sections: Object.fromEntries(
       Object.entries(spec.sections).map(([sectionId, section]) => [
         sectionId,
-        connectedSectionIds.has(sectionId)
+        includeSection(sectionId, section)
           ? section
           : { ...section, content: '', images: [] as typeof section.images },
       ])

@@ -65,7 +65,6 @@ export function createWorkspaceDomainHypothesisSlice(set: DomainSet): Pick<
           modelNodeIds: prev?.modelNodeIds ?? [],
           designSystemNodeIds: prev?.designSystemNodeIds ?? [],
           agentMode: prev?.agentMode ?? 'single',
-          thinkingLevel: prev?.thinkingLevel,
           placeholder: prev?.placeholder ?? false,
         };
         const k = variantSlotKey(hypothesisId, variantStrategyId);
@@ -86,15 +85,13 @@ export function createWorkspaceDomainHypothesisSlice(set: DomainSet): Pick<
       set((s) => {
         const h = s.hypotheses[hypothesisId];
         if (!h) return s;
+        if (!('agentMode' in partial)) return s;
         return {
           hypotheses: {
             ...s.hypotheses,
             [hypothesisId]: {
               ...h,
-              ...('agentMode' in partial && partial.agentMode !== undefined
-                ? { agentMode: partial.agentMode }
-                : {}),
-              ...('thinkingLevel' in partial ? { thinkingLevel: partial.thinkingLevel } : {}),
+              agentMode: partial.agentMode,
             },
           },
         };

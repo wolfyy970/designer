@@ -410,3 +410,46 @@ describe('v12 → v13: extract inline model config into Model nodes', () => {
     expect(edges.find((e) => e.id === 'e1')).toBeDefined();
   });
 });
+
+describe('v13 → v15: hypothesis/model generation fields', () => {
+  it('applies v13→v14 then v14→v15: mode on hypothesis, thinking on model', () => {
+    const state = {
+      nodes: [
+        makeNode('m1', 'model', { modelId: 'x', providerId: 'openrouter' }),
+        makeNode('h1', 'hypothesis', { refId: 'vs1', agentMode: 'agentic' }),
+      ],
+      edges: [makeEdge('e1', 'm1', 'h1')],
+    };
+    const result = migrateCanvasState(state, 13);
+    const nodes = result.nodes as Array<Record<string, unknown>>;
+    const h = nodes.find((n) => n.id === 'h1');
+    const m = nodes.find((n) => n.id === 'm1');
+    expect((h!.data as Record<string, unknown>).agentMode).toBe('agentic');
+    expect((m!.data as Record<string, unknown>).agentMode).toBeUndefined();
+    expect((m!.data as Record<string, unknown>).thinkingLevel).toBe('minimal');
+  });
+});
+
+describe('v14 → v15: hypothesis agentMode, model thinkingLevel', () => {
+  it('moves agent mode back to hypothesis and thinking onto models', () => {
+    const state = {
+      nodes: [
+        makeNode('m1', 'model', {
+          modelId: 'x',
+          providerId: 'openrouter',
+          agentMode: 'agentic',
+        }),
+        makeNode('h1', 'hypothesis', { refId: 'vs1', thinkingLevel: 'medium' }),
+      ],
+      edges: [makeEdge('e1', 'm1', 'h1')],
+    };
+    const result = migrateCanvasState(state, 14);
+    const nodes = result.nodes as Array<Record<string, unknown>>;
+    const h = nodes.find((n) => n.id === 'h1');
+    const m = nodes.find((n) => n.id === 'm1');
+    expect((h!.data as Record<string, unknown>).agentMode).toBe('agentic');
+    expect((h!.data as Record<string, unknown>).thinkingLevel).toBeUndefined();
+    expect((m!.data as Record<string, unknown>).agentMode).toBeUndefined();
+    expect((m!.data as Record<string, unknown>).thinkingLevel).toBe('medium');
+  });
+});

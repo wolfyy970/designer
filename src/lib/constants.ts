@@ -61,7 +61,8 @@ export const DEFAULT_MODEL_ID = import.meta.env.VITE_DEFAULT_MODEL_ID || 'z-ai/g
  * Keyed by node type — extend this map when adding new prerequisite rules.
  */
 export const PREREQUISITE_DEFAULTS: Record<string, Record<string, unknown>> = {
-  model: { providerId: DEFAULT_COMPILER_PROVIDER, modelId: DEFAULT_MODEL_ID },
+  model: { providerId: DEFAULT_COMPILER_PROVIDER, modelId: DEFAULT_MODEL_ID, thinkingLevel: 'minimal' },
+  hypothesis: { agentMode: 'single' },
 };
 
 

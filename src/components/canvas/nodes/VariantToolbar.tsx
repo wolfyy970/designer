@@ -4,6 +4,7 @@ import {
   Minus,
   Plus,
   Maximize2,
+  PanelRight,
   ChevronLeft,
   ChevronRight,
   Trash2,
@@ -16,6 +17,8 @@ interface VariantToolbarProps {
   isBestCurrent?: boolean;
   hasCode: boolean;
   nodeId: string;
+  /** All results in this version stack (any status); used to choose X vs remove-node */
+  versionStackLength: number;
   stackTotal: number;
   stackIndex: number;
   goNewer: () => void;
@@ -27,6 +30,7 @@ interface VariantToolbarProps {
   onDownload: () => void;
   onDeleteVersion: () => void;
   onExpand: () => void;
+  onOpenWorkspace: () => void;
   onRemove: () => void;
 }
 
@@ -35,6 +39,7 @@ export default function VariantToolbar({
   isArchived,
   isBestCurrent = false,
   hasCode,
+  versionStackLength,
   stackTotal,
   stackIndex,
   goNewer,
@@ -46,6 +51,7 @@ export default function VariantToolbar({
   onDownload,
   onDeleteVersion,
   onExpand,
+  onOpenWorkspace,
   onRemove,
 }: VariantToolbarProps) {
   return (
@@ -127,9 +133,20 @@ export default function VariantToolbar({
       )}
 
       {/* Actions */}
+      <div className="h-3 w-px bg-border-subtle" />
+      <button
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onOpenWorkspace();
+        }}
+        className="nodrag rounded p-0.5 text-fg-faint transition-colors hover:text-fg-muted"
+        title="Open run workspace"
+      >
+        <PanelRight size={10} />
+      </button>
       {hasCode && (
         <>
-          <div className="h-3 w-px bg-border-subtle" />
           <button
             onClick={onDownload}
             className="nodrag rounded p-0.5 text-fg-faint transition-colors hover:text-fg-muted"
@@ -161,9 +178,18 @@ export default function VariantToolbar({
       )}
 
       <button
-        onClick={onRemove}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (versionStackLength > 1) onDeleteVersion();
+          else onRemove();
+        }}
         className="nodrag shrink-0 rounded p-0.5 text-fg-faint transition-colors hover:bg-error-subtle hover:text-error"
-        title="Remove"
+        title={
+          versionStackLength > 1
+            ? 'Remove this version (keep other versions in the stack)'
+            : 'Remove variant from canvas'
+        }
       >
         <X size={10} />
       </button>

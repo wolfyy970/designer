@@ -103,6 +103,8 @@ async function runEvaluationRound(
     evaluatorModelId: options.evaluatorModelId,
     parallel,
     getPromptBody: options.getPromptBody,
+    correlationId: options.build.correlationId,
+    signal: options.build.signal,
   });
 
   const rawAgg = aggregateEvaluationReports(workers);

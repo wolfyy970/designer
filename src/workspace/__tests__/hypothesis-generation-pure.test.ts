@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildHypothesisGenerationContextFromInputs,
   listIncomingModelCredentialsFromGraph,
+  normalizeModelProfilesForApi,
   workspaceSnapshotWireToGraph,
 } from '../hypothesis-generation-pure';
 import type { VariantStrategy } from '../../types/compiler';
@@ -25,6 +26,56 @@ const minimalSpec: DesignSpec = {
   lastModified: '',
   version: 1,
 };
+
+describe('normalizeModelProfilesForApi', () => {
+  it('coerces undefined providerId/modelId so API Zod accepts the record', () => {
+    const raw = {
+      m1: {
+        nodeId: 'm1',
+        providerId: 'openrouter',
+        modelId: 'ok',
+      },
+      ghost: {
+        nodeId: undefined as unknown as string,
+        providerId: undefined as unknown as string,
+        modelId: undefined as unknown as string,
+      },
+    };
+    const n = normalizeModelProfilesForApi(raw, 'default-provider');
+    expect(n.m1).toEqual({
+      nodeId: 'm1',
+      providerId: 'openrouter',
+      modelId: 'ok',
+    });
+    expect(n.ghost).toEqual({
+      nodeId: 'ghost',
+      providerId: 'default-provider',
+      modelId: '',
+    });
+  });
+
+  it('drops invalid thinkingLevel and keeps valid ones', () => {
+    const n = normalizeModelProfilesForApi(
+      {
+        a: {
+          nodeId: 'a',
+          providerId: 'p',
+          modelId: 'm',
+          thinkingLevel: 'nope' as never,
+        },
+        b: {
+          nodeId: 'b',
+          providerId: 'p',
+          modelId: 'm',
+          thinkingLevel: 'high',
+        },
+      },
+      'p',
+    );
+    expect(n.a.thinkingLevel).toBeUndefined();
+    expect(n.b.thinkingLevel).toBe('high');
+  });
+});
 
 describe('hypothesis-generation-pure', () => {
   it('workspaceSnapshotWireToGraph passes nodes and edges through for graph helpers', () => {
@@ -61,7 +112,7 @@ describe('hypothesis-generation-pure', () => {
       ],
     };
     expect(listIncomingModelCredentialsFromGraph('h1', snapshot, 'openrouter')).toEqual([
-      { providerId: 'openrouter', modelId: 'gpt-4' },
+      { providerId: 'openrouter', modelId: 'gpt-4', thinkingLevel: 'minimal' },
     ]);
   });
 
@@ -78,11 +129,10 @@ describe('hypothesis-generation-pure', () => {
         modelNodeIds: ['mod1'],
         designSystemNodeIds: ['ds1'],
         agentMode: 'agentic',
-        thinkingLevel: 'medium',
         placeholder: false,
       },
       modelProfiles: {
-        mod1: { nodeId: 'mod1', providerId: 'openrouter', modelId: 'x' },
+        mod1: { nodeId: 'mod1', providerId: 'openrouter', modelId: 'x', thinkingLevel: 'medium' },
       },
       designSystems: {
         ds1: { nodeId: 'ds1', title: 'T', content: 'Body', images: [] },
@@ -91,8 +141,9 @@ describe('hypothesis-generation-pure', () => {
     });
     expect(ctx).not.toBeNull();
     expect(ctx!.agentMode).toBe('agentic');
-    expect(ctx!.thinkingLevel).toBe('medium');
-    expect(ctx!.modelCredentials).toEqual([{ providerId: 'openrouter', modelId: 'x' }]);
+    expect(ctx!.modelCredentials).toEqual([
+      { providerId: 'openrouter', modelId: 'x', thinkingLevel: 'medium' },
+    ]);
     expect(ctx!.designSystemContent).toContain('Body');
   });
 
@@ -103,7 +154,7 @@ describe('hypothesis-generation-pure', () => {
           id: 'm1',
           type: NODE_TYPES.MODEL,
           position: { x: 0, y: 0 },
-          data: { modelId: 'lm', providerId: 'lmstudio' },
+          data: { modelId: 'lm', providerId: 'lmstudio', thinkingLevel: 'low' },
         },
         {
           id: 'h1',
@@ -133,8 +184,6 @@ describe('hypothesis-generation-pure', () => {
         variantStrategyId: 'vs1',
         modelNodeIds: [],
         designSystemNodeIds: [],
-        agentMode: 'agentic',
-        thinkingLevel: undefined,
         placeholder: false,
       },
       modelProfiles: {},
@@ -142,6 +191,9 @@ describe('hypothesis-generation-pure', () => {
       defaultCompilerProvider: 'openrouter',
     });
     expect(ctx).not.toBeNull();
-    expect(ctx!.modelCredentials).toEqual([{ providerId: 'lmstudio', modelId: 'lm' }]);
+    expect(ctx!.agentMode).toBe('single');
+    expect(ctx!.modelCredentials).toEqual([
+      { providerId: 'lmstudio', modelId: 'lm', thinkingLevel: 'low' },
+    ]);
   });
 });

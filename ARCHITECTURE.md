@@ -134,6 +134,11 @@ Next iteration cycle
 
 All POST endpoints validate request bodies with Zod `safeParse` — malformed requests return a structured `400` before any LLM call is made.
 
+### Validation stacks (Zod vs TypeBox)
+
+- **Zod** — HTTP request and response shapes, shared client/server DTOs, and guarded deserialization from persistence (for example skill `filesJson` in `server/db/skills.ts`).
+- **TypeBox** — Tool argument schemas in [`server/services/pi-agent-tools.ts`](server/services/pi-agent-tools.ts) for `@mariozechner/pi-agent-core`. Keep these aligned with PI’s tool API; do not migrate to Zod unless the PI stack documents equivalent support.
+
 ## Server Architecture (`server/`)
 
 | File | Responsibility |
@@ -141,14 +146,15 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 | `app.ts` | Hono app: mounts routes, CORS |
 | `env.ts` | `process.env` config (replaces `import.meta.env`) |
 | `dev.ts` | Local dev entry (Hono + `@hono/node-server` on 3001) |
-| `log-store.ts` | In-memory LLM call log (dev-only, no Zustand) |
+| `log-store.ts` | In-memory LLM call ring (dev); finalized rows + one-shots → single `writeObservabilityLine` NDJSON via `server/lib/observability-sink.ts` |
+| `trace-log-store.ts` | Run-trace ring (dedupe by `event.id`); client POST `/api/logs/trace`; same NDJSON sink |
 | `routes/compile.ts` | POST /api/compile |
 | `routes/generate.ts` | POST /api/generate — delegates to `services/generate-execution.ts` |
 | `routes/hypothesis.ts` | POST `/api/hypothesis/prompt-bundle`, `/api/hypothesis/generate` |
 | `services/generate-execution.ts` | Shared single-lane generate stream (optional `laneIndex` + `lane_done` for multiplex) |
 | `lib/generate-stream-schema.ts` | Zod schema shared by generate + hypothesis routes |
 | `routes/models.ts` | GET /api/models/:provider |
-| `routes/logs.ts` | GET/DELETE /api/logs |
+| `routes/logs.ts` | GET `/api/logs` → `{ llm, trace }`; POST `/api/logs/trace` (Zod); DELETE clears both rings (file append-only) |
 | `routes/design-system.ts` | POST /api/design-system/extract |
 | `routes/prompts.ts` | GET `/api/prompts/:key` — latest prompt body from Prisma |
 | `routes/skills.ts` | GET `/api/skills`, `/api/skills/:key` — latest skill versions (metadata + body + optional `filesJson`) |

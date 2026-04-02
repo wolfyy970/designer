@@ -24,6 +24,8 @@ import {
   makeWriteFileTool,
 } from './pi-agent-tools.ts';
 import { VirtualWorkspace } from './virtual-workspace.ts';
+import { getProviderModelContextWindow } from '../lib/provider-model-context.ts';
+import { env } from '../env.ts';
 
 // ── Re-exports (stable import surface for orchestrator + tests) ───────────────
 
@@ -59,6 +61,8 @@ export interface AgentRunParams {
 
 /** Extended session for revision rounds: seeded virtual FS + compaction hint */
 export interface AgentSessionParams extends AgentRunParams {
+  /** Ties Pi turns and compaction LLM rows to one generate / hypothesis run */
+  correlationId?: string;
   seedFiles?: Record<string, string>;
   /**
    * Read-only skill files (e.g. under `skills/…`) preloaded before the first turn.
@@ -135,7 +139,19 @@ export async function runDesignAgentSession(
   const todoState: { current: TodoItem[] } = { current: [] };
   const hasSeed = !!params.seedFiles && Object.keys(params.seedFiles).length > 0;
 
-  const model = buildModel(params.providerId, params.modelId, params.thinkingLevel);
+  const registryCw = await getProviderModelContextWindow(
+    params.providerId,
+    params.modelId,
+  );
+  const fallbackCw =
+    params.providerId === 'lmstudio' ? env.LM_STUDIO_CONTEXT_WINDOW : 131_072;
+  const contextWindow = registryCw ?? fallbackCw;
+  const model = buildModel(
+    params.providerId,
+    params.modelId,
+    params.thinkingLevel,
+    contextWindow,
+  );
   const planTool = makePlanFilesTool((files) => {
     void onEvent({ type: 'plan', files });
     void onEvent(
@@ -181,6 +197,8 @@ export async function runDesignAgentSession(
     ? `[Evaluation / revision context]\n${params.compactionNote.trim()}`
     : undefined;
 
+  const llmTurnLogRef: { current?: string } = {};
+
   const agent = new Agent({
     streamFn: makeLoggedPiStreamFn({
       providerId: params.providerId,
@@ -189,6 +207,8 @@ export async function runDesignAgentSession(
       phase: params.compactionNote?.trim()
         ? PI_LLM_LOG_PHASE.REVISION
         : PI_LLM_LOG_PHASE.AGENTIC_TURN,
+      turnLogRef: llmTurnLogRef,
+      correlationId: params.correlationId,
     }),
     initialState: {
       systemPrompt: params.systemPrompt,
@@ -224,6 +244,10 @@ export async function runDesignAgentSession(
       const summaryText = await compactWithLLM(toSummarize, params.providerId, params.modelId, {
         extraContext: compactionExtra,
         snapshot,
+        signal: params.signal,
+        correlationId: params.correlationId
+          ? `${params.correlationId}:compact`
+          : undefined,
       });
 
       const todoAppendix =
@@ -256,6 +280,7 @@ export async function runDesignAgentSession(
     trace,
     toolPathByCallId: new Map<string, string | undefined>(),
     waitingForFirstToken: { current: false },
+    turnLogRef: llmTurnLogRef,
   };
   agent.subscribe((event) => {
     if (params.signal?.aborted) return;

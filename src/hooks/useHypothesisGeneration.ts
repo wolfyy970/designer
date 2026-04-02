@@ -15,6 +15,7 @@ import {
   buildHypothesisGenerationContext,
   provenanceFromHypothesisContext,
 } from '../workspace/workspace-session';
+import { normalizeModelProfilesForApi } from '../workspace/hypothesis-generation-pure';
 import { GENERATION_STATUS } from '../constants/generation';
 import { EDGE_STATUS } from '../constants/canvas';
 import {
@@ -87,6 +88,8 @@ export function useHypothesisGeneration({
     });
     if (!genCtx) return;
 
+    const runId = crypto.randomUUID();
+
     const domain = useWorkspaceDomainStore.getState();
     const workspacePayload: HypothesisGenerateApiPayload = {
       hypothesisNodeId: nodeId,
@@ -94,9 +97,13 @@ export function useHypothesisGeneration({
       spec,
       snapshot: { nodes: snapshot.nodes, edges: snapshot.edges },
       domainHypothesis: domain.hypotheses[nodeId] ?? null,
-      modelProfiles: domain.modelProfiles,
+      modelProfiles: normalizeModelProfilesForApi(
+        domain.modelProfiles,
+        DEFAULT_COMPILER_PROVIDER,
+      ),
       designSystems: domain.designSystems,
       defaultCompilerProvider: DEFAULT_COMPILER_PROVIDER,
+      correlationId: runId,
     };
     warnIfWorkspaceSnapshotInvalid(workspacePayload.snapshot, 'useHypothesisGeneration');
 
@@ -109,7 +116,7 @@ export function useHypothesisGeneration({
       total: genCtx.modelCredentials.length,
     });
 
-    const runId = crypto.randomUUID();
+    const lanePlaceholderIds: string[] = [];
 
     try {
       const bundle = await fetchHypothesisPromptBundle(workspacePayload);
@@ -146,15 +153,17 @@ export function useHypothesisGeneration({
         };
         addResult(result);
         placeholderResults.push(result);
+        lanePlaceholderIds.push(placeholderId);
 
         const { callbacks, finalizeAfterStream } = createPlaceholderGenerationSession({
           placeholderId,
           prompt,
           providerId: cred.providerId,
           model: cred.modelId,
-          mode: bundle.generationContext.agentMode,
+          mode: genCtx.agentMode,
           provenanceCtx,
           updateResult,
+          correlationId: runId,
           onResultComplete: (id) => {
             setGenerationProgress((prev) =>
               prev ? { ...prev, completed: prev.completed + 1 } : null,
@@ -179,14 +188,23 @@ export function useHypothesisGeneration({
       }
 
       syncAfterGenerate(placeholderResults, nodeId);
+      if (bundle.generationContext.agentMode === 'agentic') {
+        const variantNodeId = useCanvasStore
+          .getState()
+          .variantNodeIdMap.get(prompt.variantStrategyId);
+        if (variantNodeId) {
+          useCanvasStore.getState().setRunInspectorVariant(variantNodeId);
+        }
+      }
       setTimeout(() => fitView({ duration: FIT_VIEW_DURATION_MS, padding: 0.15 }), FIT_VIEW_DELAY_MS);
 
       await generateHypothesisStream(workspacePayload, laneSessions);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      for (const r of useGenerationStore.getState().results) {
-        if (r.runId === runId && r.status === GENERATION_STATUS.GENERATING) {
-          updateResult(r.id, { status: GENERATION_STATUS.ERROR, error: msg });
+      for (const id of lanePlaceholderIds) {
+        const r = useGenerationStore.getState().results.find((x) => x.id === id);
+        if (r?.status === GENERATION_STATUS.GENERATING) {
+          updateResult(id, { status: GENERATION_STATUS.ERROR, error: msg });
         }
       }
       setGenerationError(msg);
@@ -200,12 +218,13 @@ export function useHypothesisGeneration({
       if (!stillGenerating) setGenerating(false);
 
       const n = genCtx.modelCredentials.length;
+      const idSet = new Set(lanePlaceholderIds);
       const errorCount = useGenerationStore
         .getState()
         .results.filter(
           (r) =>
+            idSet.has(r.id) &&
             r.variantStrategyId === strategyId &&
-            r.runId === runId &&
             r.status === GENERATION_STATUS.ERROR,
         ).length;
       if (errorCount > 0) {

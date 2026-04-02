@@ -1,6 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { TodoItem } from '../../../types/provider';
-import type { AggregatedEvaluationReport, AgenticPhase, EvaluationRoundSnapshot } from '../../../types/evaluation';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { useGenerationStore } from '../../../stores/generation-store';
@@ -22,362 +20,9 @@ import NodeShell from './NodeShell';
 import VariantToolbar from './VariantToolbar';
 import VariantFooter from './VariantFooter';
 import FileExplorer from './FileExplorer';
+import { EvaluationScorecard, GeneratingFooter, AgenticHarnessStripe } from '../variant-run';
 
 type VariantNodeType = Node<VariantNodeData, 'variant'>;
-
-function BrowserQASection({ snapshot }: { snapshot?: EvaluationRoundSnapshot }) {
-  const browserReport = snapshot?.browser;
-  if (!browserReport) return null;
-
-  const runtimeErr = browserReport.findings.filter((f) => f.summary === 'JS runtime error');
-  const otherFindings = browserReport.findings.filter((f) => f.summary !== 'JS runtime error');
-  const jsScore = browserReport.scores['js_runtime']?.score;
-  const interactiveScore = browserReport.scores['interactive_elems']?.score;
-  const hasHardFails = browserReport.hardFails.length > 0;
-
-  const statusColor = hasHardFails || (jsScore !== undefined && jsScore <= 2)
-    ? 'text-error'
-    : runtimeErr.length > 0
-      ? 'text-warning'
-      : 'text-fg-faint';
-
-  return (
-    <div className="border-t border-border-subtle px-3 pt-1.5 pb-2 shrink-0">
-      <div className="flex items-center gap-1.5 mb-1">
-        <span className={`text-[9px] font-medium uppercase tracking-wider ${statusColor}`}>
-          Runtime QA
-        </span>
-        {jsScore !== undefined && (
-          <span className="tabular-nums font-mono text-[10px] text-fg-faint ml-auto">
-            JS {jsScore}/5 · CTA {interactiveScore ?? '?'}/5
-          </span>
-        )}
-      </div>
-      {browserReport.hardFails.length > 0 && (
-        <div className="text-[10px] text-error mb-1">
-          {browserReport.hardFails.map((hf) => hf.message.slice(0, 80)).join(' · ')}
-        </div>
-      )}
-      {runtimeErr.length > 0 && (
-        <ul className="list-disc pl-3 text-[10px] text-warning space-y-0.5 leading-snug mb-1">
-          {runtimeErr.slice(0, 2).map((f, i) => (
-            <li key={i} className="truncate" title={f.detail}>{f.detail.slice(0, 90)}</li>
-          ))}
-        </ul>
-      )}
-      {otherFindings.length > 0 && (
-        <ul className="list-disc pl-3 text-[10px] text-fg-muted space-y-0.5 leading-snug">
-          {otherFindings.slice(0, 2).map((f, i) => (
-            <li key={i}>{f.summary}</li>
-          ))}
-        </ul>
-      )}
-      {browserReport.artifacts?.browserScreenshot?.base64 && (
-        <img
-          className="mt-1.5 w-full max-h-24 object-cover object-top rounded border border-border-subtle"
-          alt="Headless browser capture"
-          src={`data:${browserReport.artifacts.browserScreenshot.mediaType};base64,${browserReport.artifacts.browserScreenshot.base64}`}
-        />
-      )}
-    </div>
-  );
-}
-
-function EvaluationScorecard({
-  summary,
-  latestSnapshot,
-}: {
-  summary: AggregatedEvaluationReport;
-  latestSnapshot?: EvaluationRoundSnapshot;
-}) {
-  return (
-    <div className="nodrag nowheel border-t border-border-subtle px-3 py-2 shrink-0 max-h-[180px] overflow-y-auto bg-surface-secondary/50">
-      <div className="flex justify-between items-center mb-1 gap-2">
-        <span className="text-[9px] font-medium uppercase tracking-wider text-fg-faint">
-          Eval · {summary.shouldRevise ? 'revise suggested' : 'pass'}
-        </span>
-        <span className="tabular-nums font-mono text-[11px] text-accent">
-          {summary.overallScore.toFixed(1)}
-        </span>
-      </div>
-      {summary.hardFails.length > 0 && (
-        <div className="text-[10px] text-error mb-1">
-          {summary.hardFails.filter((hf) => hf.source !== 'browser').length > 0 && (
-            <span>{summary.hardFails.filter((hf) => hf.source !== 'browser').length} design/strategy fail(s) · </span>
-          )}
-        </div>
-      )}
-      <ul className="list-disc pl-3 text-[10px] text-fg-muted space-y-0.5 leading-snug">
-        {summary.prioritizedFixes
-          .filter((f) => !f.startsWith('[hard_fail:missing_assets') && !f.startsWith('[hard_fail:js_') && !f.startsWith('[hard_fail:empty_'))
-          .slice(0, 4)
-          .map((f, i) => (
-            <li key={i}>{f}</li>
-          ))}
-      </ul>
-      {latestSnapshot?.browser && <BrowserQASection snapshot={latestSnapshot} />}
-    </div>
-  );
-}
-
-function AgenticHarnessStripe({
-  phase,
-  evaluationStatus,
-}: {
-  phase?: string;
-  evaluationStatus?: string;
-}) {
-  if (!phase && !evaluationStatus) return null;
-  return (
-    <div className="border-b border-border-subtle px-3 py-1.5 shrink-0 bg-surface-secondary/80">
-      {phase ? (
-        <div className="text-[9px] font-medium uppercase tracking-wider text-fg-faint">{phase}</div>
-      ) : null}
-      {evaluationStatus ? (
-        <div className="text-[10px] text-fg-muted truncate nodrag nowheel" title={evaluationStatus}>
-          {evaluationStatus}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/** Live task checklist shown during agentic generation */
-function TodoTracker({ todos }: { todos: TodoItem[] }) {
-  if (todos.length === 0) return null;
-  return (
-    <div className="border-b border-border-subtle px-3 py-2 shrink-0">
-      <div className="text-[9px] font-medium uppercase tracking-wider text-fg-faint mb-1.5">Tasks</div>
-      <div className="flex flex-col gap-0.5">
-        {todos.map((todo) => (
-          <div key={todo.id} className="flex items-start gap-1.5">
-            <span className={`mt-px shrink-0 font-mono text-[10px] leading-tight ${
-              todo.status === 'completed' ? 'text-accent' :
-              todo.status === 'in_progress' ? 'text-fg-secondary' : 'text-fg-faint'
-            }`}>
-              {todo.status === 'completed' ? '✓' : todo.status === 'in_progress' ? '●' : '○'}
-            </span>
-            <span className={`text-[10px] leading-tight ${
-              todo.status === 'completed' ? 'text-fg-muted line-through' :
-              todo.status === 'in_progress' ? 'text-fg-secondary' : 'text-fg-faint'
-            }`}>
-              {todo.task}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/** Scrolling terminal-like activity log during generation */
-function ActivityLog({ entries }: { entries?: string[] }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  // Streaming token deltas arrive as a single growing string in entries[0]
-  const text = entries && entries.length > 0 ? entries.join('') : '';
-
-  useEffect(() => {
-    if (!text) return;
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [text]);
-
-  if (!entries || entries.length === 0) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col justify-between p-4">
-        <div className="flex flex-col gap-2.5">
-          <div className="h-4 w-4/5 animate-pulse rounded bg-border/50" />
-          <div className="h-3 w-full animate-pulse rounded bg-border/40" style={{ animationDelay: '75ms' }} />
-          <div className="h-3 w-[90%] animate-pulse rounded bg-border/40" style={{ animationDelay: '150ms' }} />
-          <div className="h-3 w-3/4 animate-pulse rounded bg-border/40" style={{ animationDelay: '225ms' }} />
-        </div>
-        <div className="flex flex-col gap-2.5">
-          <div className="h-3 w-[85%] animate-pulse rounded bg-border/30" style={{ animationDelay: '300ms' }} />
-          <div className="h-3 w-full animate-pulse rounded bg-border/30" style={{ animationDelay: '375ms' }} />
-          <div className="h-3 w-2/3 animate-pulse rounded bg-border/30" style={{ animationDelay: '450ms' }} />
-        </div>
-        <div className="flex flex-col gap-2.5">
-          <div className="h-3 w-[70%] animate-pulse rounded bg-border/20" style={{ animationDelay: '525ms' }} />
-          <div className="h-3 w-[90%] animate-pulse rounded bg-border/20" style={{ animationDelay: '600ms' }} />
-          <div className="h-3 w-4/5 animate-pulse rounded bg-border/20" style={{ animationDelay: '675ms' }} />
-          <div className="h-3 w-3/5 animate-pulse rounded bg-border/20" style={{ animationDelay: '750ms' }} />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      ref={scrollRef}
-      className="nodrag nowheel min-h-0 flex-1 overflow-y-auto px-3 py-2 font-mono text-[10px] leading-snug text-fg-muted"
-    >
-      <span className="whitespace-pre-wrap italic">{text}</span>
-    </div>
-  );
-}
-
-function GeneratingFooter({
-  plan,
-  written,
-  progressMessage,
-  elapsed,
-  lastAgentFileAt,
-  lastActivityAt,
-  lastTraceAt,
-  activeToolName,
-  activeToolPath,
-  liveTodos,
-  agenticPhase,
-  evaluationStatus,
-}: {
-  plan: string[] | undefined;
-  written: number;
-  progressMessage: string | undefined;
-  elapsed: number;
-  lastAgentFileAt?: number;
-  lastActivityAt?: number;
-  lastTraceAt?: number;
-  activeToolName?: string;
-  activeToolPath?: string;
-  liveTodos?: TodoItem[];
-  agenticPhase?: AgenticPhase;
-  evaluationStatus?: string;
-}) {
-  const total = plan?.length ?? 0;
-  const hasPlan = total > 0;
-  const progress = hasPlan ? written / total : 0;
-  const isBuilding = !agenticPhase || agenticPhase === 'building';
-  const isEvaluating = agenticPhase === 'evaluating';
-  const isRevising = agenticPhase === 'revising';
-
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 2000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  const todoHint = useMemo(() => {
-    if (!liveTodos?.length) return undefined;
-    const cur = liveTodos.find((t) => t.status === 'in_progress')?.task;
-    if (cur) return { label: 'Current' as const, task: cur };
-    const next = liveTodos.find((t) => t.status === 'pending')?.task;
-    if (next) return { label: 'Next' as const, task: next };
-    return undefined;
-  }, [liveTodos]);
-
-  const activeToolLabel = useMemo(() => {
-    if (!activeToolName) return undefined;
-    return activeToolPath ? `${activeToolName} → ${activeToolPath}` : activeToolName;
-  }, [activeToolName, activeToolPath]);
-
-  const noPlanBuildingLine = useMemo(() => {
-    if (!isBuilding) return progressMessage || 'Generating…';
-    if (progressMessage && progressMessage !== 'Generating…') return progressMessage;
-    if (activeToolLabel) {
-      return written > 0 ? `${written} file(s) · ${activeToolLabel}` : activeToolLabel;
-    }
-    if (written > 0) return `${written} design file(s) saved`;
-    return 'Exploring & generating…';
-  }, [isBuilding, progressMessage, activeToolLabel, written]);
-
-  const primaryLine = isEvaluating
-    ? (evaluationStatus || progressMessage || 'Running evaluators…')
-    : isRevising
-      ? (evaluationStatus || progressMessage || 'Revising…')
-      : hasPlan
-        ? `${written} / ${total} files`
-        : noPlanBuildingLine;
-
-  /** Avoid duplicating tool details when the primary line already names the tool or path (milestone-first builds). */
-  const toolLineRedundant = useMemo(() => {
-    if (!isBuilding || hasPlan || !activeToolName) return false;
-    if (activeToolPath && primaryLine.includes(activeToolPath)) return true;
-    return primaryLine.includes(activeToolName);
-  }, [isBuilding, hasPlan, activeToolName, activeToolPath, primaryLine]);
-
-  const fileStallSec =
-    isBuilding && lastAgentFileAt != null && (!hasPlan || written < total)
-      ? Math.max(0, Math.floor((now - lastAgentFileAt) / 1000))
-      : 0;
-  const lastModelTokenSec =
-    lastActivityAt != null ? Math.max(0, Math.floor((now - lastActivityAt) / 1000)) : undefined;
-  const lastTraceSec =
-    lastTraceAt != null ? Math.max(0, Math.floor((now - lastTraceAt) / 1000)) : undefined;
-  const showFileStall = fileStallSec >= 40;
-  const firstFileWait =
-    isBuilding && written === 0 && lastAgentFileAt == null && elapsed >= 50;
-
-  return (
-    <div className="flex flex-col gap-2 border-t border-border-subtle px-4 py-3">
-      {hasPlan && isBuilding ? (
-        <div className="h-1 w-full overflow-hidden rounded-full bg-border">
-          <div
-            className="h-full rounded-full bg-accent/70 transition-all duration-500"
-            style={{ width: `${Math.min(progress * 100, 100)}%` }}
-          />
-        </div>
-      ) : (
-        <div className="h-1 w-full overflow-hidden rounded-full bg-border">
-          <div className="h-full w-full animate-pulse rounded-full bg-accent/60" />
-        </div>
-      )}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="flex items-center gap-1.5 text-[10px] leading-tight text-fg-secondary">
-            <Loader2 size={10} className="shrink-0 animate-spin text-accent" />
-            <span className="truncate">{primaryLine}</span>
-          </span>
-          {(isEvaluating || isRevising) && hasPlan && (
-            <span className="pl-[18px] text-[10px] leading-snug text-fg-muted">
-              Build: {written} / {total} files
-            </span>
-          )}
-          {(isEvaluating || isRevising) && !hasPlan && written > 0 && (
-            <span className="pl-[18px] text-[10px] leading-snug text-fg-muted">
-              Saved {written} design file{written === 1 ? '' : 's'}
-            </span>
-          )}
-          {hasPlan && progressMessage && progressMessage !== primaryLine && !isEvaluating && !isRevising && (
-            <span
-              className="pl-[18px] text-[10px] leading-snug text-fg-muted"
-              title={progressMessage}
-            >
-              {progressMessage}
-            </span>
-          )}
-          {todoHint && (
-            <span className="pl-[18px] text-[10px] leading-snug text-fg-muted">
-              {todoHint.label}: <span className="text-fg-secondary">{todoHint.task}</span>
-            </span>
-          )}
-          {(activeToolName || activeToolPath) && !toolLineRedundant && (
-            <span className="pl-[18px] text-[10px] leading-snug text-fg-muted">
-              Tool:{' '}
-              <span className="text-fg-secondary">
-                {activeToolName ?? 'running'}
-                {activeToolPath ? ` · ${activeToolPath}` : ''}
-              </span>
-            </span>
-          )}
-          {(lastModelTokenSec != null || lastTraceSec != null) && (
-            <span className="pl-[18px] text-[10px] leading-snug text-fg-muted">
-              {lastModelTokenSec != null ? `Last model token ${lastModelTokenSec}s ago` : 'No model tokens yet'}
-              {lastTraceSec != null ? ` · last trace ${lastTraceSec}s ago` : ''}
-            </span>
-          )}
-          {(showFileStall || firstFileWait) && (
-            <span className="pl-[18px] text-[10px] leading-snug text-amber-700/90 dark:text-amber-400/85">
-              {firstFileWait
-                ? `No files saved yet after ${elapsed}s — planning or drafting first write may be slow on this model.`
-                : `No new file saved for ${fileStallSec}s — the model may still be streaming a large write_file argument (typical for big CSS/HTML). Check the activity log; cancel and retry if it is clearly stuck.`}
-            </span>
-          )}
-        </div>
-        <span className="shrink-0 tabular-nums text-[10px] leading-tight text-fg-muted">{elapsed}s</span>
-      </div>
-    </div>
-  );
-}
 
 function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
   const variantStrategyId = data.variantStrategyId;
@@ -424,6 +69,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
 
   const onRemove = useNodeRemoval(id);
   const setExpandedVariant = useCanvasStore((s) => s.setExpandedVariant);
+  const setRunInspectorVariant = useCanvasStore((s) => s.setRunInspectorVariant);
 
   const variantName = strategy?.name ?? 'Variant';
 
@@ -457,8 +103,9 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
   const handleDeleteVersion = useCallback(async () => {
     if (!result || !versionKey) return;
     const resultId = result.id;
-    // Select next version before deleting
-    if (stackTotal > 1) {
+    // Select a survivor before deleting (use full stack — not only completed —
+    // so multi-lane / error / in-flight rows keep a stable selection).
+    if (stack.length > 1) {
       const nextResult =
         completedStack.find((r) => r.id !== resultId) ?? stack.find((r) => r.id !== resultId);
       if (nextResult) {
@@ -466,15 +113,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
       }
     }
     deleteResult(resultId);
-  }, [
-    result,
-    versionKey,
-    stackTotal,
-    completedStack,
-    stack,
-    setSelectedVersion,
-    deleteResult,
-  ]);
+  }, [result, versionKey, completedStack, stack, setSelectedVersion, deleteResult]);
 
   const slug = variantName
     .toLowerCase()
@@ -540,6 +179,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
         isBestCurrent={isActiveBest && result?.status !== GENERATION_STATUS.GENERATING}
         hasCode={hasCode}
         nodeId={id}
+        versionStackLength={stack.length}
         stackTotal={stackTotal}
         stackIndex={stackIndex}
         goNewer={goNewer}
@@ -551,6 +191,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
         onDownload={handleDownload}
         onDeleteVersion={handleDeleteVersion}
         onExpand={() => setExpandedVariant(id)}
+        onOpenWorkspace={() => setRunInspectorVariant(id)}
         onRemove={onRemove}
       />
 
@@ -560,25 +201,26 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
         {/* States 1 & 2: GENERATING */}
         {result?.status === GENERATION_STATUS.GENERATING && (
           <div className="absolute inset-0 flex flex-col bg-surface">
-            <div className="flex flex-1 min-h-0 overflow-hidden flex-col">
-              {result.liveTodos && result.liveTodos.length > 0 && (
-                <TodoTracker todos={result.liveTodos} />
-              )}
+            <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-3 px-4 py-3">
               <AgenticHarnessStripe
                 phase={result.agenticPhase}
                 evaluationStatus={result.evaluationStatus}
               />
-              {result.evaluationSummary && (
-                <EvaluationScorecard
-                  summary={result.evaluationSummary}
-                  latestSnapshot={result.evaluationRounds?.[result.evaluationRounds.length - 1]}
-                />
-              )}
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                <ActivityLog entries={result.activityLog} />
-              </div>
+              <p className="text-center text-[11px] text-fg-secondary">
+                Generating in workspace — open the side panel for tasks, activity, and preview.
+              </p>
+              <button
+                type="button"
+                className="nodrag nowheel rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-[11px] font-medium text-accent transition-colors hover:bg-accent/20"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setRunInspectorVariant(id);
+                }}
+              >
+                Open workspace
+              </button>
             </div>
-            {/* Progress footer */}
             <GeneratingFooter
               plan={result.liveFilesPlan}
               written={Object.keys(result.liveFiles ?? {}).length}

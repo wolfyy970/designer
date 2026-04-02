@@ -6,6 +6,7 @@ import type {
   ChatMessage,
 } from '../../../src/types/provider.ts';
 import { env } from '../../env.ts';
+import { completionMaxTokensForChat } from '../../lib/completion-budget.ts';
 import { buildChatRequestFromMessages, fetchChatCompletion, fetchModelList, parseChatResponse } from '../../lib/provider-helpers.ts';
 import { supportsReasoningModel } from '../../../src/lib/model-capabilities.ts';
 
@@ -42,7 +43,9 @@ export class OpenRouterGenerationProvider implements GenerationProvider {
     options: ProviderOptions
   ): Promise<ChatResponse> {
     const model = options.model || 'anthropic/claude-sonnet-4.5';
-    const requestBody = buildChatRequestFromMessages(model, messages);
+    const purpose = options.completionPurpose ?? 'default';
+    const maxTok = await completionMaxTokensForChat('openrouter', model, messages, purpose);
+    const requestBody = buildChatRequestFromMessages(model, messages, undefined, maxTok);
 
     const data = await fetchChatCompletion(
       `${env.OPENROUTER_BASE_URL}/api/v1/chat/completions`,
@@ -53,6 +56,7 @@ export class OpenRouterGenerationProvider implements GenerationProvider {
       },
       'OpenRouter',
       authHeaders(),
+      options.signal,
     );
     return parseChatResponse(data);
   }

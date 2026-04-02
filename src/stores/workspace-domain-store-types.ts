@@ -6,7 +6,6 @@ import type {
   DomainIncubatorWiring,
   DomainModelProfile,
   DomainVariantSlot,
-  ThinkingLevel,
 } from '../types/workspace-domain';
 import type { CanvasNodeType } from '../types/workspace-graph';
 
@@ -45,7 +44,7 @@ export interface WorkspaceDomainStore {
   ) => void;
   setHypothesisGenerationSettings: (
     hypothesisId: string,
-    partial: { agentMode?: AgentMode; thinkingLevel?: ThinkingLevel | undefined },
+    partial: { agentMode?: AgentMode | undefined },
   ) => void;
   setHypothesisPlaceholder: (hypothesisId: string, placeholder: boolean) => void;
   removeHypothesis: (hypothesisId: string) => void;

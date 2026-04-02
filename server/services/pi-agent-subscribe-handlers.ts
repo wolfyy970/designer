@@ -1,5 +1,6 @@
 import type { AgentEvent } from '@mariozechner/pi-agent-core';
 import type { RunTraceEvent } from '../../src/types/provider.ts';
+import { appendLlmCallResponse } from '../log-store.ts';
 import { parsePiToolExecutionArgs } from '../lib/pi-tool-args.ts';
 import { stripProviderControlTokens } from '../lib/stream-sanitize.ts';
 import type { AgentRunEvent } from './pi-agent-service.ts';
@@ -14,6 +15,8 @@ export interface PiAgentSubscribeContext {
   toolPathByCallId: Map<string, string | undefined>;
   /** Mutable: first token tracking for `message_update`. */
   waitingForFirstToken: { current: boolean };
+  /** Same ref as `makeLoggedPiStreamFn` — live LLM log row for the active model turn. */
+  turnLogRef: { current?: string };
 }
 
 function emitFirstTokenIfNeeded(ctx: PiAgentSubscribeContext): void {
@@ -77,11 +80,19 @@ export function handlePiAgentSubscribeEvent(ctx: PiAgentSubscribeContext, event:
     if (e.type === 'text_delta' && e.delta) {
       emitFirstTokenIfNeeded(ctx);
       const delta = stripProviderControlTokens(e.delta);
-      if (delta) void ctx.onEvent({ type: 'activity', payload: delta });
+      if (delta) {
+        const logId = ctx.turnLogRef.current;
+        if (logId) appendLlmCallResponse(logId, delta);
+        void ctx.onEvent({ type: 'activity', payload: delta });
+      }
     } else if (e.type === 'thinking_delta' && e.delta) {
       emitFirstTokenIfNeeded(ctx);
       const delta = stripProviderControlTokens(e.delta);
-      if (delta) void ctx.onEvent({ type: 'activity', payload: delta });
+      if (delta) {
+        const logId = ctx.turnLogRef.current;
+        if (logId) appendLlmCallResponse(logId, delta);
+        void ctx.onEvent({ type: 'activity', payload: delta });
+      }
     }
     return;
   }

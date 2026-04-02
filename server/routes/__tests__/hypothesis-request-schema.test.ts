@@ -10,8 +10,7 @@ const DomainHypothesisSchema = z.object({
   variantStrategyId: z.string(),
   modelNodeIds: z.array(z.string()),
   designSystemNodeIds: z.array(z.string()),
-  agentMode: z.enum(['single', 'agentic']),
-  thinkingLevel: z.enum(['off', 'minimal', 'low', 'medium', 'high']).optional(),
+  agentMode: z.enum(['single', 'agentic']).optional(),
   placeholder: z.boolean(),
 });
 
@@ -20,6 +19,7 @@ const DomainModelProfileSchema = z.object({
   providerId: z.string(),
   modelId: z.string(),
   title: z.string().optional(),
+  thinkingLevel: z.enum(['off', 'minimal', 'low', 'medium', 'high']).optional(),
 });
 
 const VariantStrategySchema = z.object({

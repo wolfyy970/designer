@@ -79,6 +79,17 @@ describe('getActiveResult', () => {
     expect(getActiveResult(state, 'vs-1')?.id).toBe('r1');
   });
 
+  it('prefers generating over stale selection so the new run is visible', () => {
+    const state = mockState(
+      [
+        makeResult({ id: 'r1', runNumber: 1 }),
+        makeResult({ id: 'r2', runNumber: 2, status: 'generating' }),
+      ],
+      { 'vs-1': 'r1' },
+    );
+    expect(getActiveResult(state, 'vs-1')?.id).toBe('r2');
+  });
+
   it('prioritizes generating over complete when no selection', () => {
     const state = mockState([
       makeResult({ id: 'r1', runNumber: 1 }),
@@ -220,6 +231,17 @@ describe('getScopedActiveResult', () => {
       { 'vs-1:run-1': 'r1' },
     );
     expect(getScopedActiveResult(state, 'vs-1', 'run-1')?.id).toBe('r1');
+  });
+
+  it('prefers generating in scope over stale scoped selection', () => {
+    const state = mockState(
+      [
+        makeResult({ id: 'r1', runId: 'run-1', runNumber: 1 }),
+        makeResult({ id: 'r2', runId: 'run-1', runNumber: 2, status: 'generating' }),
+      ],
+      { 'vs-1:run-1': 'r1' },
+    );
+    expect(getScopedActiveResult(state, 'vs-1', 'run-1')?.id).toBe('r2');
   });
 
   it('falls back to best evaluated complete in run', () => {

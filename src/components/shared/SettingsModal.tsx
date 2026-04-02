@@ -1,11 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { STORAGE_KEYS } from '../../lib/storage-keys';
 import Modal from './Modal';
 import PromptEditor from './PromptEditor';
+import type { PromptKey } from '../../stores/prompt-store';
 
 interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
+  /** When the modal opens, switch to this tab once per open cycle */
+  initialTab?: 'general' | 'prompts';
+  /** Prompt Studio key (used with prompts tab) */
+  initialPromptKey?: PromptKey;
 }
 
 type Tab = 'general' | 'prompts';
@@ -29,16 +34,26 @@ function saveKeys(keys: { openrouter: string }) {
   localStorage.setItem(KEYS_STORAGE, JSON.stringify(keys));
 }
 
-export default function SettingsModal({ open, onClose }: SettingsModalProps) {
+export default function SettingsModal({
+  open,
+  onClose,
+  initialTab,
+  initialPromptKey,
+}: SettingsModalProps) {
   const [tab, setTab] = useState<Tab>('general');
   const [openrouterKey, setOpenrouterKey] = useState(() => loadKeys().openrouter);
+  const wasOpenRef = useRef(false);
 
-  // Reload keys from storage when modal opens
+  useEffect(() => {
+    if (open && !wasOpenRef.current && initialTab) setTab(initialTab);
+    wasOpenRef.current = open;
+  }, [open, initialTab]);
+
   useEffect(() => {
     if (!open) return;
 
     const keys = loadKeys();
-    setOpenrouterKey(prev => {
+    setOpenrouterKey((prev) => {
       const newValue = keys.openrouter;
       return prev !== newValue ? newValue : prev;
     });
@@ -56,9 +71,9 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       title="Settings"
       size={tab === 'prompts' ? 'xl' : 'md'}
     >
-      {/* Tabs */}
       <div className="-mx-5 -mt-4 mb-4 flex border-b border-border px-5">
         <button
+          type="button"
           onClick={() => setTab('general')}
           className={`border-b-2 px-3 py-2 text-xs font-medium transition-colors ${
             tab === 'general'
@@ -69,6 +84,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
           General
         </button>
         <button
+          type="button"
           onClick={() => setTab('prompts')}
           className={`border-b-2 px-3 py-2 text-xs font-medium transition-colors ${
             tab === 'prompts'
@@ -80,7 +96,6 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
         </button>
       </div>
 
-      {/* General tab */}
       {tab === 'general' && (
         <div className="space-y-4">
           <p className="text-xs text-fg-secondary">
@@ -108,16 +123,16 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
           </div>
 
           <button
+            type="button"
             onClick={handleSave}
-            className="w-full rounded-md bg-fg px-4 py-2 text-sm font-medium text-bg hover:bg-fg/90"
+            className="w-full rounded-md bg-fg px-4 py-2 text-sm font-medium text-bg hover:bg-fg/90 pointer"
           >
             Save
           </button>
         </div>
       )}
 
-      {/* Prompts tab */}
-      {tab === 'prompts' && <PromptEditor />}
+      {tab === 'prompts' && <PromptEditor initialPromptKey={initialPromptKey} />}
     </Modal>
   );
 }

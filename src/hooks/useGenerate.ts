@@ -90,6 +90,7 @@ export function useGenerate() {
               provenanceCtx,
               updateResult,
               onResultComplete: callbacks?.onResultComplete,
+              correlationId: runId,
             });
 
           await apiGenerate(
@@ -97,6 +98,7 @@ export function useGenerate() {
               prompt: prompt.prompt,
               providerId,
               modelId: options.model,
+              correlationId: runId,
               supportsVision: options.supportsVision,
               mode: options.mode,
               thinkingLevel: options.thinkingLevel,

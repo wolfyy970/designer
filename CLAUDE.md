@@ -30,6 +30,8 @@ The frontend (Vite, port 5173) proxies `/api/*` to the API server (Hono/Node.js,
 ### Server (`server/`)
 Hono app under `/api`: compile, generate (SSE), models, design-system extract, prompts and skills (Prisma-backed GET), logs (dev). See [ARCHITECTURE.md](ARCHITECTURE.md) for the route table.
 
+**Dev observability (LLM + run trace).** One serialization path (`server/lib/observability-sink.ts`): each ingested event is appended as one NDJSON line (`v`, `ts`, `type`: `llm` | `trace`, `payload`) and stored in matching in-memory rings served by `GET /api/logs` as `{ llm, trace }`. The **Observability** modal (`LogViewer`) polls that endpoint only — it does not build the Run Trace list from client Zustand `liveTrace` (that path remains for inline Variant Inspector). **Session rings vs file:** `DELETE /api/logs` clears the rings so the next GET is empty; the NDJSON file is append-only for the calendar day (audit). **Default directory** (non-production): `logs/observability` under `process.cwd()` — override with `OBSERVABILITY_LOG_DIR` or legacy `LLM_LOG_DIR`. No default file path in production unless explicitly set; Vitest skips disk writes. Optional: `LLM_LOG_MAX_BODY_CHARS`, `LLM_LOG_FILE_MODE=single` → `observability.ndjson` vs daily `observability-YYYY-MM-DD.ndjson`. **jq:** `jq -c 'select(.type=="trace")' logs/observability/observability-$(date -u +%F).ndjson`. Prompts may contain sensitive text — treat files as sensitive.
+
 Provider implementations are in `server/services/providers/` (OpenRouter + LM Studio). Both implement `generateChat()` and `listModels()`. **LM Studio runs on a remote machine at `192.168.252.213:1234`, not localhost.**
 
 ### Frontend (`src/`)

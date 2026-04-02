@@ -29,16 +29,18 @@ const DomainHypothesisSchema = z.object({
   variantStrategyId: z.string(),
   modelNodeIds: z.array(z.string()),
   designSystemNodeIds: z.array(z.string()),
-  agentMode: z.enum(['single', 'agentic']),
-  thinkingLevel: z.enum(['off', 'minimal', 'low', 'medium', 'high']).optional(),
+  agentMode: z.enum(['single', 'agentic']).optional(),
   placeholder: z.boolean(),
 });
+
+const ThinkingLevelSchema = z.enum(['off', 'minimal', 'low', 'medium', 'high']);
 
 const DomainModelProfileSchema = z.object({
   nodeId: z.string(),
   providerId: z.string(),
   modelId: z.string(),
   title: z.string().optional(),
+  thinkingLevel: ThinkingLevelSchema.optional(),
 });
 
 const VariantStrategySchema = z.object({
@@ -69,14 +71,18 @@ const HypothesisGenerateRequestSchema = HypothesisWorkspaceCoreSchema.extend({
   evaluatorModelId: z.string().optional(),
   agenticMaxRevisionRounds: z.number().int().min(0).max(20).optional(),
   agenticMinOverallScore: z.number().min(0).max(5).optional(),
-  thinkingLevel: z.enum(['off', 'minimal', 'low', 'medium', 'high']).optional(),
+  correlationId: z.string().min(1).max(200).optional(),
 });
 
 hypothesis.post('/prompt-bundle', async (c) => {
   const raw = await c.req.json();
   const parsed = PromptBundleRequestSchema.safeParse(raw);
   if (!parsed.success) {
-    return c.json({ error: 'Invalid request', details: parsed.error.flatten() }, 400);
+    const details = parsed.error.flatten();
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[hypothesis] POST /prompt-bundle validation failed', details);
+    }
+    return c.json({ error: 'Invalid request', details }, 400);
   }
   const body = parsed.data;
 
@@ -121,8 +127,11 @@ hypothesis.post('/prompt-bundle', async (c) => {
     provenance,
     generationContext: {
       agentMode: ctx.agentMode,
-      thinkingLevel: ctx.thinkingLevel,
-      modelCredentials: [...ctx.modelCredentials],
+      modelCredentials: ctx.modelCredentials.map((c) => ({
+        providerId: c.providerId,
+        modelId: c.modelId,
+        thinkingLevel: c.thinkingLevel,
+      })),
     },
   });
 });
@@ -131,7 +140,11 @@ hypothesis.post('/generate', async (c) => {
   const raw = await c.req.json();
   const parsed = HypothesisGenerateRequestSchema.safeParse(raw);
   if (!parsed.success) {
-    return c.json({ error: 'Invalid request', details: parsed.error.flatten() }, 400);
+    const details = parsed.error.flatten();
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[hypothesis] POST /generate validation failed', details);
+    }
+    return c.json({ error: 'Invalid request', details }, 400);
   }
   const body = parsed.data;
 
@@ -171,9 +184,6 @@ hypothesis.post('/generate', async (c) => {
   const prompt = prompts[0]!;
   const evaluationContext = evaluationPayloadFromHypothesisContext(ctx);
 
-  const mode = ctx.agentMode;
-  const thinkingLevel = body.thinkingLevel ?? ctx.thinkingLevel;
-
   const modelCredentials = [...ctx.modelCredentials];
   const parallel = modelCredentials.every((cred) => getProvider(cred.providerId)?.supportsParallel ?? false);
 
@@ -183,41 +193,49 @@ hypothesis.post('/generate', async (c) => {
     const allocId = () => String(id++);
     const gate = createWriteGate();
 
+    const baseCorrelation =
+      body.correlationId?.trim() || crypto.randomUUID();
+
     const base = {
       prompt: prompt.prompt,
       supportsVision: body.supportsVision,
-      mode,
-      thinkingLevel,
-      evaluationContext,
       evaluatorProviderId: body.evaluatorProviderId,
       evaluatorModelId: body.evaluatorModelId,
       agenticMaxRevisionRounds: body.agenticMaxRevisionRounds,
       agenticMinOverallScore: body.agenticMinOverallScore,
     };
 
-    const runLane = async (laneIndex: number, providerId: string, modelId: string) => {
+    const runLane = async (
+      laneIndex: number,
+      cred: { providerId: string; modelId: string; thinkingLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' },
+    ) => {
       const streamBody = GenerateStreamBodySchema.parse({
         ...base,
-        providerId,
-        modelId,
+        thinkingLevel: cred.thinkingLevel,
+        mode: ctx.agentMode,
+        evaluationContext: ctx.agentMode === 'agentic' ? evaluationContext : undefined,
+        providerId: cred.providerId,
+        modelId: cred.modelId,
+        correlationId: `${baseCorrelation}:lane-${laneIndex}`,
       });
       await executeGenerateStreamSafe(stream, streamBody, abortSignal, {
         allocId,
         laneIndex,
         laneEndMode: 'lane_done',
         writeGate: gate,
+        correlationId: `${baseCorrelation}:lane-${laneIndex}`,
       });
     };
 
     try {
       if (parallel) {
         await Promise.all(
-          modelCredentials.map((cred, i) => runLane(i, cred.providerId, cred.modelId)),
+          modelCredentials.map((cred, i) => runLane(i, cred)),
         );
       } else {
         for (let i = 0; i < modelCredentials.length; i++) {
           const cred = modelCredentials[i]!;
-          await runLane(i, cred.providerId, cred.modelId);
+          await runLane(i, cred);
         }
       }
       await gate.enqueue(async () => {

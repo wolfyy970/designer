@@ -18,6 +18,8 @@ export const GenerateStreamBodySchema = z.object({
   prompt: z.string().min(1),
   providerId: z.string().min(1),
   modelId: z.string().min(1),
+  /** Client-issued id to correlate LLM log rows with a UI run (optional). */
+  correlationId: z.string().min(1).max(200).optional(),
   supportsVision: z.boolean().optional(),
   mode: z.enum(['single', 'agentic']).optional().default('single'),
   thinkingLevel: z.enum(['off', 'minimal', 'low', 'medium', 'high']).optional(),

@@ -21,7 +21,6 @@ export type HypothesisNodeData = NodeData<{
   providerId?: string;  // vestigial post-v13, kept for migration safety
   modelId?: string;     // vestigial post-v13
   agentMode?: 'single' | 'agentic';
-  thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high';
 }>;
 
 export type VariantNodeData = NodeData<{
@@ -49,4 +48,5 @@ export type ModelNodeData = NodeData<{
   title?: string;
   providerId?: string;
   modelId?: string;
+  thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high';
 }>;

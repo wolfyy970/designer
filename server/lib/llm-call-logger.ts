@@ -12,11 +12,14 @@ import type {
 } from '../../src/types/provider.ts';
 import type { ReferenceImage } from '../../src/types/spec.ts';
 import type { LlmLogEntry } from '../log-store.ts';
-import { logLlmCall } from '../log-store.ts';
+import { beginLlmCall, failLlmCall, finalizeLlmCall } from '../log-store.ts';
+import type { CompletionPurpose } from './completion-budget.ts';
 import { callLLM } from '../services/compiler.ts';
 import { providerLogFields } from './llm-log-metadata.ts';
 
-export type LlmLogContext = Pick<LlmLogEntry, 'source' | 'phase'>;
+export type LlmLogContext = Pick<LlmLogEntry, 'source' | 'phase' | 'correlationId'> & {
+  signal?: AbortSignal;
+};
 
 function usageLogFields(meta?: ChatResponseMetadata): Partial<LlmLogEntry> {
   if (!meta) return {};
@@ -63,37 +66,61 @@ export async function loggedGenerateChat(
   const { systemPrompt, userPrompt } = chatMessagesToLogFields(messages);
   const t0 = performance.now();
   const pv = providerLogFields(providerId);
+  const sig = ctx.signal ?? options.signal;
+  const logId = beginLlmCall({
+    source: ctx.source,
+    phase: ctx.phase,
+    model,
+    ...pv,
+    systemPrompt,
+    userPrompt,
+    response: 'Waiting for provider…',
+    ...(ctx.correlationId ? { correlationId: ctx.correlationId } : {}),
+  });
+
+  let settled = false;
+  const onAbort = () => {
+    if (settled) return;
+    settled = true;
+    failLlmCall(logId, 'Aborted', Math.round(performance.now() - t0));
+  };
+
+  if (sig?.aborted) {
+    onAbort();
+    throw new DOMException('Aborted', 'AbortError');
+  }
+  if (sig) sig.addEventListener('abort', onAbort);
+
+  const mergedOptions: ProviderOptions = { ...options, signal: sig };
+
   try {
-    const response = await provider.generateChat(messages, options);
-    logLlmCall({
-      source: ctx.source,
-      phase: ctx.phase,
-      model,
-      ...pv,
-      systemPrompt,
-      userPrompt,
+    const response = await provider.generateChat(messages, mergedOptions);
+    if (sig) sig.removeEventListener('abort', onAbort);
+    if (settled) throw new DOMException('Aborted', 'AbortError');
+    settled = true;
+    finalizeLlmCall(logId, {
       response: response.raw,
       durationMs: Math.round(performance.now() - t0),
       ...usageLogFields(response.metadata),
     });
     return response;
   } catch (err) {
-    logLlmCall({
-      source: ctx.source,
-      phase: ctx.phase,
-      model,
-      ...pv,
-      systemPrompt,
-      userPrompt,
-      response: '',
-      durationMs: Math.round(performance.now() - t0),
-      error: String(err),
-    });
+    if (sig) sig.removeEventListener('abort', onAbort);
+    if (!settled) {
+      settled = true;
+      failLlmCall(logId, String(err), Math.round(performance.now() - t0));
+    }
     throw err;
   }
 }
 
-type CallLLMOptions = { temperature?: number; max_tokens?: number; images?: ReferenceImage[] };
+type CallLLMOptions = {
+  temperature?: number;
+  max_tokens?: number;
+  images?: ReferenceImage[];
+  signal?: AbortSignal;
+  completionPurpose?: CompletionPurpose;
+};
 
 /** Same as callLLM with automatic logLlmCall (success or transport error). */
 export async function loggedCallLLM(
@@ -106,32 +133,55 @@ export async function loggedCallLLM(
   const { systemPrompt, userPrompt } = chatMessagesToLogFields(messages);
   const t0 = performance.now();
   const pv = providerLogFields(providerId);
+  const sig = options.signal ?? ctx.signal;
+
+  const logId = beginLlmCall({
+    source: ctx.source,
+    phase: ctx.phase,
+    model,
+    ...pv,
+    systemPrompt,
+    userPrompt,
+    response: 'Waiting for provider…',
+    ...(ctx.correlationId ? { correlationId: ctx.correlationId } : {}),
+  });
+
+  let settled = false;
+  const onAbort = () => {
+    if (settled) return;
+    settled = true;
+    failLlmCall(logId, 'Aborted', Math.round(performance.now() - t0));
+  };
+
+  if (sig?.aborted) {
+    onAbort();
+    throw new DOMException('Aborted', 'AbortError');
+  }
+  if (sig) sig.addEventListener('abort', onAbort);
+
   try {
-    const response = await callLLM(messages, model, providerId, options);
-    logLlmCall({
-      source: ctx.source,
-      phase: ctx.phase,
-      model,
-      ...pv,
-      systemPrompt,
-      userPrompt,
+    const response = await callLLM(messages, model, providerId, {
+      temperature: options.temperature,
+      max_tokens: options.max_tokens,
+      images: options.images,
+      signal: sig,
+      completionPurpose: options.completionPurpose,
+    });
+    if (sig) sig.removeEventListener('abort', onAbort);
+    if (settled) throw new DOMException('Aborted', 'AbortError');
+    settled = true;
+    finalizeLlmCall(logId, {
       response: response.raw,
       durationMs: Math.round(performance.now() - t0),
       ...usageLogFields(response.metadata),
     });
     return response.raw;
   } catch (err) {
-    logLlmCall({
-      source: ctx.source,
-      phase: ctx.phase,
-      model,
-      ...pv,
-      systemPrompt,
-      userPrompt,
-      response: '',
-      durationMs: Math.round(performance.now() - t0),
-      error: String(err),
-    });
+    if (sig) sig.removeEventListener('abort', onAbort);
+    if (!settled) {
+      settled = true;
+      failLlmCall(logId, String(err), Math.round(performance.now() - t0));
+    }
     throw err;
   }
 }

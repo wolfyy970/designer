@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeError, parseApiErrorBody } from '../error-utils';
+import {
+  formatZodFlattenDetails,
+  normalizeError,
+  parseApiErrorBody,
+} from '../error-utils';
 
 describe('normalizeError', () => {
   it('returns the message from an Error instance', () => {
@@ -40,5 +44,28 @@ describe('parseApiErrorBody', () => {
 
   it('stringifies numeric error', () => {
     expect(parseApiErrorBody('{"error":429}')).toBe('429');
+  });
+
+  it('appends Zod-style flatten details under the error line', () => {
+    const body = JSON.stringify({
+      error: 'Invalid request',
+      details: {
+        formErrors: ['missing id'],
+        fieldErrors: {
+          foo: ['bad'],
+          bar: undefined,
+        },
+      },
+    });
+    expect(parseApiErrorBody(body)).toBe(
+      'Invalid request\nmissing id\nfoo: bad',
+    );
+  });
+});
+
+describe('formatZodFlattenDetails', () => {
+  it('returns empty string for non-objects', () => {
+    expect(formatZodFlattenDetails(null)).toBe('');
+    expect(formatZodFlattenDetails('x')).toBe('');
   });
 });

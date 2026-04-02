@@ -70,8 +70,6 @@ describe('domain-commands', () => {
           variantStrategyId: 'vs1',
           modelNodeIds: [],
           designSystemNodeIds: [],
-          agentMode: 'single',
-          thinkingLevel: undefined,
           placeholder: false,
         },
       },

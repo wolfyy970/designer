@@ -4,6 +4,9 @@
 import type { AgentMessage } from '@mariozechner/pi-agent-core';
 import type { Model } from '@mariozechner/pi-ai';
 import { env } from '../env.ts';
+import {
+  completionBudgetFromPromptTokens,
+} from '../lib/completion-budget.ts';
 import { getProvider } from './providers/registry.ts';
 import { loggedGenerateChat } from '../lib/llm-call-logger.ts';
 import type { TodoItem } from '../../src/types/provider.ts';
@@ -13,15 +16,47 @@ export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high';
 
 const ZEROED_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
+const SESSION_CEILING_FALLBACK_MARGIN = 8192;
+
+/**
+ * Session ceiling for Pi `Model.maxTokens` before per-turn prompt estimation (see `piStreamCompletionMaxTokens`).
+ */
+export function maxCompletionBudgetForContextWindow(totalContext: number): number {
+  const capped = completionBudgetFromPromptTokens(
+    totalContext,
+    0,
+    'default',
+    env.MAX_OUTPUT_TOKENS,
+  );
+  if (capped != null) return capped;
+  return Math.max(
+    4096,
+    Math.max(4096, totalContext) - SESSION_CEILING_FALLBACK_MARGIN,
+  );
+}
+
 /**
  * Construct a PI Model object for the given provider/model pair.
+ *
+ * @param contextWindowFromRegistry — e.g. OpenRouter `context_length` for this `modelId`.
+ *   When omitted, LM Studio uses `env.LM_STUDIO_CONTEXT_WINDOW`; OpenRouter uses 131072 fallback
+ *   until `runDesignAgentSession` replaces with registry data.
  */
 export function buildModel(
   providerId: string,
   modelId: string,
   thinkingLevel?: ThinkingLevel,
+  contextWindowFromRegistry?: number,
 ): Model<'openai-completions'> {
   const reasoning = !!thinkingLevel && thinkingLevel !== 'off';
+
+  const defaultCw =
+    providerId === 'lmstudio' ? env.LM_STUDIO_CONTEXT_WINDOW : 131_072;
+  const contextWindow = Math.max(
+    4096,
+    contextWindowFromRegistry ?? defaultCw,
+  );
+  const maxTokens = maxCompletionBudgetForContextWindow(contextWindow);
 
   if (providerId === 'lmstudio') {
     return {
@@ -33,8 +68,8 @@ export function buildModel(
       reasoning,
       input: ['text'],
       cost: ZEROED_COST,
-      contextWindow: 131072,
-      maxTokens: 16384,
+      contextWindow,
+      maxTokens,
     };
   }
 
@@ -47,8 +82,8 @@ export function buildModel(
     reasoning,
     input: ['text'],
     cost: ZEROED_COST,
-    contextWindow: 131072,
-    maxTokens: 16384,
+    contextWindow,
+    maxTokens,
   };
 }
 
@@ -133,6 +168,8 @@ export function buildFallbackSummary(
 export interface CompactWithLLMOptions {
   extraContext?: string;
   snapshot?: WorkspaceFileSnapshot;
+  signal?: AbortSignal;
+  correlationId?: string;
 }
 
 /**
@@ -183,8 +220,13 @@ export async function compactWithLLM(
           content: userBody,
         },
       ],
-      { model: modelId },
-      { source: 'agentCompaction', phase: 'Context window compaction' },
+      { model: modelId, completionPurpose: 'compaction' },
+      {
+        source: 'agentCompaction',
+        phase: 'Context window compaction',
+        ...(options?.correlationId ? { correlationId: options.correlationId } : {}),
+        signal: options?.signal,
+      },
     );
     return response.raw;
   } catch {

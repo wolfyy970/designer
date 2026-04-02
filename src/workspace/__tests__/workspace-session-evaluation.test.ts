@@ -41,8 +41,9 @@ function ctx(overrides: Partial<HypothesisGenerationContext>): HypothesisGenerat
     variantStrategy: baseStrategy({}),
     spec: baseSpec,
     agentMode: 'agentic',
-    thinkingLevel: 'off',
-    modelCredentials: [],
+    modelCredentials: [
+      { providerId: 'openrouter', modelId: 'm', thinkingLevel: 'off' },
+    ],
     designSystemContent: undefined,
     designSystemImages: [],
     ...overrides,
@@ -53,7 +54,10 @@ describe('evaluationPayloadFromHypothesisContext', () => {
   it('returns undefined when not agentic', () => {
     expect(
       evaluationPayloadFromHypothesisContext(
-        ctx({ agentMode: 'single', variantStrategy: baseStrategy({ format: 'html' }) }),
+        ctx({
+          variantStrategy: baseStrategy({ format: 'html' }),
+          agentMode: 'single',
+        }),
       ),
     ).toBeUndefined();
   });

@@ -3,7 +3,6 @@
  * Uses GenerationProvider generateChat — not PI — so harness stays lightweight.
  */
 import { z } from 'zod';
-import { jsonrepair } from 'jsonrepair';
 import { bundleVirtualFS } from '../../src/lib/bundle-virtual-fs.ts';
 import type {
   AggregatedEvaluationReport,
@@ -16,9 +15,10 @@ import type {
 import type { PromptKey } from '../lib/prompts/defaults.ts';
 import { env } from '../env.ts';
 import { getProvider } from './providers/registry.ts';
-import { loggedGenerateChat } from '../lib/llm-call-logger.ts';
+import { loggedGenerateChat, type LlmLogContext } from '../lib/llm-call-logger.ts';
 import { runBrowserQA } from './browser-qa-evaluator.ts';
 import { mergePreflightWithPlaywright, runBrowserPlaywrightEval } from './browser-playwright-evaluator.ts';
+import { parseJsonLenient } from '../lib/parse-json-lenient.ts';
 
 const criterionSchema = z.object({
   score: z.number(),
@@ -70,12 +70,7 @@ export function parseModelJsonObject<T>(raw: string, schema: z.ZodType<T>): T {
     throw new Error('Evaluator model returned no JSON object');
   }
   const jsonStr = s.slice(start, end + 1);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(jsonStr);
-  } catch {
-    parsed = JSON.parse(jsonrepair(jsonStr));
-  }
+  const parsed = parseJsonLenient(jsonStr);
   return schema.parse(parsed);
 }
 
@@ -173,6 +168,7 @@ async function runOneEvaluator(
   userContent: string,
   providerId: string,
   modelId: string,
+  logCtx: Pick<LlmLogContext, 'correlationId' | 'signal'>,
 ): Promise<EvaluatorWorkerReport> {
   const provider = getProvider(providerId);
   if (!provider) throw new Error(`Unknown provider: ${providerId}`);
@@ -183,8 +179,12 @@ async function runOneEvaluator(
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent },
     ],
-    { model: modelId },
-    { source: 'evaluator', phase: `Rubric: ${rubric}` },
+    { model: modelId, signal: logCtx.signal },
+    {
+      source: 'evaluator',
+      phase: `Rubric: ${rubric}`,
+      ...(logCtx.correlationId ? { correlationId: `${logCtx.correlationId}:eval:${rubric}` } : {}),
+    },
   );
   return parseModelJsonObject(response.raw, workerReportSchema);
 }
@@ -195,9 +195,17 @@ async function runEvaluatorWorker(
   userContent: string,
   providerId: string,
   modelId: string,
+  logCtx: Pick<LlmLogContext, 'correlationId' | 'signal'>,
 ): Promise<EvaluatorWorkerReport> {
   try {
-    const report = await runOneEvaluator(rubric, systemPrompt, userContent, providerId, modelId);
+    const report = await runOneEvaluator(
+      rubric,
+      systemPrompt,
+      userContent,
+      providerId,
+      modelId,
+      logCtx,
+    );
     if (report.rubric !== rubric) {
       return buildDegradedReport(
         rubric,
@@ -221,6 +229,9 @@ export interface EvaluationRoundInput {
   evaluatorModelId?: string;
   parallel: boolean;
   getPromptBody: (key: PromptKey) => Promise<string>;
+  /** Propagates to LLM log rows for this evaluation round */
+  correlationId?: string;
+  signal?: AbortSignal;
 }
 
 export async function runEvaluationWorkers(
@@ -246,12 +257,24 @@ export async function runEvaluationWorkers(
     input.getPromptBody('evalImplementationSystem'),
   ]);
 
+  const evalLogCtx: Pick<LlmLogContext, 'correlationId' | 'signal'> = {
+    correlationId: input.correlationId,
+    signal: input.signal,
+  };
+
   const runDesign = () =>
-    runEvaluatorWorker('design', sysDesign, userContent, evalProviderId, evalModelId);
+    runEvaluatorWorker('design', sysDesign, userContent, evalProviderId, evalModelId, evalLogCtx);
   const runStrategy = () =>
-    runEvaluatorWorker('strategy', sysStrategy, userContent, evalProviderId, evalModelId);
+    runEvaluatorWorker('strategy', sysStrategy, userContent, evalProviderId, evalModelId, evalLogCtx);
   const runImpl = () =>
-    runEvaluatorWorker('implementation', sysImpl, userContent, evalProviderId, evalModelId);
+    runEvaluatorWorker(
+      'implementation',
+      sysImpl,
+      userContent,
+      evalProviderId,
+      evalModelId,
+      evalLogCtx,
+    );
   const runBrowser = async () => {
     try {
       const preflight = runBrowserQA({ files: input.files });

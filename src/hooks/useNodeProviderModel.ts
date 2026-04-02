@@ -60,11 +60,17 @@ export function useNodeProviderModel(
     [models, modelId],
   );
 
+  const supportsReasoning = useMemo(
+    () => models?.find((m) => m.id === modelId)?.supportsReasoning ?? false,
+    [models, modelId],
+  );
+
   return {
     providerId,
     modelId,
     models,
     supportsVision,
+    supportsReasoning,
     handleProviderChange,
     handleModelChange,
   };

@@ -43,6 +43,8 @@ export interface GenerateRequest {
   images?: ReferenceImage[];
   providerId: string;
   modelId: string;
+  /** Passed through to LLM log rows; defaults to a server UUID when omitted */
+  correlationId?: string;
   supportsVision?: boolean;
   mode?: 'single' | 'agentic';
   thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high';
@@ -73,19 +75,23 @@ export interface HypothesisPromptBundleResponse {
   evaluationContext: EvaluationContextPayload | null;
   provenance: ProvenanceContext;
   generationContext: {
+    /** Hypothesis-level direct vs agentic (all lanes share this mode). */
     agentMode: 'single' | 'agentic';
-    thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high';
-    modelCredentials: { providerId: string; modelId: string }[];
+    modelCredentials: {
+      providerId: string;
+      modelId: string;
+      thinkingLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high';
+    }[];
   };
 }
 
 export interface HypothesisGenerateApiPayload extends HypothesisWorkspaceApiPayload {
+  correlationId?: string;
   supportsVision?: boolean;
   evaluatorProviderId?: string;
   evaluatorModelId?: string;
   agenticMaxRevisionRounds?: number;
   agenticMinOverallScore?: number;
-  thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high';
 }
 
 export type GenerateSSEEvent =
@@ -117,9 +123,13 @@ export interface ProviderInfo {
 
 // ── Logs ────────────────────────────────────────────────────────────
 
+export type LlmLogStatus = 'in_progress' | 'complete' | 'error';
+
 export interface LlmLogEntry {
   id: string;
   timestamp: string;
+  status?: LlmLogStatus;
+  correlationId?: string;
   source:
     | 'compiler'
     | 'planner'
@@ -146,6 +156,23 @@ export interface LlmLogEntry {
   truncated?: boolean;
   toolCalls?: { name: string; path?: string }[];
   error?: string;
+}
+
+/** One trace row from GET /api/logs (matches server NDJSON `type: "trace"`). */
+export interface ObservabilityTraceRow {
+  v: 1;
+  ts: string;
+  type: 'trace';
+  payload: {
+    event: Record<string, unknown>;
+    correlationId?: string;
+    resultId?: string;
+  };
+}
+
+export interface ObservabilityLogsResponse {
+  llm: LlmLogEntry[];
+  trace: ObservabilityTraceRow[];
 }
 
 // ── Design System ───────────────────────────────────────────────────

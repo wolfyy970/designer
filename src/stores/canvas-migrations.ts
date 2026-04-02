@@ -275,6 +275,115 @@ function migrateV12ToV13(s: Record<string, unknown>): Record<string, unknown> {
   return { ...s, nodes: [...updatedNodes, ...newModelNodes], edges: [...edges, ...newEdges] };
 }
 
+/** v13 → v14: move hypothesis `agentMode` onto incoming Model nodes */
+function migrateV13ToV14(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
+  const edges = (s.edges as Array<Record<string, unknown>>) ?? [];
+
+  const hypMode = new Map<string, 'single' | 'agentic'>();
+  for (const n of nodes) {
+    if (n.type !== 'hypothesis') continue;
+    const data = (n.data as Record<string, unknown>) || {};
+    const am = data.agentMode as 'single' | 'agentic' | undefined;
+    if (am) hypMode.set(n.id as string, am);
+  }
+
+  const modelAgentMode = new Map<string, 'single' | 'agentic'>();
+  for (const e of edges) {
+    const mode = hypMode.get(e.target as string);
+    if (!mode) continue;
+    const src = nodes.find((m) => m.id === e.source && m.type === 'model');
+    if (!src) continue;
+    const mid = src.id as string;
+    if (!modelAgentMode.has(mid)) modelAgentMode.set(mid, mode);
+  }
+
+  return {
+    ...s,
+    nodes: nodes.map((n) => {
+      if (n.type === 'hypothesis') {
+        const data = { ...((n.data as Record<string, unknown>) || {}) };
+        delete data.agentMode;
+        return { ...n, data };
+      }
+      if (n.type === 'model') {
+        const mode = modelAgentMode.get(n.id as string);
+        if (!mode) return n;
+        const data = { ...((n.data as Record<string, unknown>) || {}) };
+        if (data.agentMode == null) data.agentMode = mode;
+        return { ...n, data };
+      }
+      return n;
+    }),
+  };
+}
+
+/** v14 → v15: hypothesis owns `agentMode`; each model owns `thinkingLevel` */
+function migrateV14ToV15(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
+  const edges = (s.edges as Array<Record<string, unknown>>) ?? [];
+
+  const hypIncomingModels = new Map<string, string[]>();
+  for (const e of edges) {
+    const srcId = e.source as string;
+    const tgtId = e.target as string;
+    const src = nodes.find((n) => n.id === srcId);
+    if (!src || src.type !== 'model') continue;
+    const tgt = nodes.find((n) => n.id === tgtId);
+    if (!tgt || tgt.type !== 'hypothesis') continue;
+    const list = hypIncomingModels.get(tgtId) ?? [];
+    list.push(srcId);
+    hypIncomingModels.set(tgtId, list);
+  }
+
+  const hypAgentMode = new Map<string, 'single' | 'agentic'>();
+  const modelThinkingFromHyp = new Map<string, string>();
+
+  for (const n of nodes) {
+    if (n.type !== 'hypothesis') continue;
+    const hid = n.id as string;
+    const data = (n.data as Record<string, unknown>) || {};
+    const tl = (data.thinkingLevel as string | undefined) ?? 'minimal';
+
+    const mids = hypIncomingModels.get(hid) ?? [];
+    const modes: ('single' | 'agentic')[] = [];
+    for (const mid of mids) {
+      const mnode = nodes.find((x) => x.id === mid && x.type === 'model');
+      if (!mnode) continue;
+      const md = (mnode.data as Record<string, unknown>) || {};
+      const am = md.agentMode as 'single' | 'agentic' | undefined;
+      if (am) modes.push(am);
+    }
+    const aggregated =
+      modes.some((m) => m === 'agentic') ? 'agentic' : 'single';
+    hypAgentMode.set(hid, aggregated);
+
+    for (const mid of mids) {
+      modelThinkingFromHyp.set(mid, tl);
+    }
+  }
+
+  return {
+    ...s,
+    nodes: nodes.map((n) => {
+      if (n.type === 'hypothesis') {
+        const data = { ...((n.data as Record<string, unknown>) || {}) };
+        delete data.thinkingLevel;
+        data.agentMode = hypAgentMode.get(n.id as string) ?? 'single';
+        return { ...n, data };
+      }
+      if (n.type === 'model') {
+        const data = { ...((n.data as Record<string, unknown>) || {}) };
+        delete data.agentMode;
+        const tl = modelThinkingFromHyp.get(n.id as string) ?? 'minimal';
+        data.thinkingLevel = tl;
+        return { ...n, data };
+      }
+      return n;
+    }),
+  };
+}
+
 // ── Top-level migration runner ────────────────────────────────────────
 
 /**
@@ -302,6 +411,8 @@ export function migrateCanvasState(
   if (fromVersion < 11) s = migrateV10ToV11(s);
   if (fromVersion < 12) s = migrateV11ToV12(s);
   if (fromVersion < 13) s = migrateV12ToV13(s);
+  if (fromVersion < 14) s = migrateV13ToV14(s);
+  if (fromVersion < 15) s = migrateV14ToV15(s);
 
   return s;
 }

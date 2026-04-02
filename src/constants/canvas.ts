@@ -48,3 +48,6 @@ export type NodeStatus = (typeof NODE_STATUS)[keyof typeof NODE_STATUS];
 export function buildEdgeId(source: string, target: string): string {
   return `edge-${source}-to-${target}`;
 }
+
+/** React Flow layer: variant actively generating stays above overlapping nodes */
+export const VARIANT_NODE_GENERATING_Z_INDEX = 1000;

@@ -21,9 +21,8 @@ export interface DomainHypothesis {
   variantStrategyId: string;
   modelNodeIds: string[];
   designSystemNodeIds: string[];
-  agentMode: AgentMode;
-  /** Omitted on wire when unset (same meaning as `undefined`). */
-  thinkingLevel?: ThinkingLevel;
+  /** Direct vs agentic — one setting for all lanes on this hypothesis. */
+  agentMode?: AgentMode;
   placeholder: boolean;
 }
 
@@ -32,6 +31,8 @@ export interface DomainModelProfile {
   providerId: string;
   modelId: string;
   title?: string;
+  /** Reasoning depth for this model when generating. */
+  thinkingLevel?: ThinkingLevel;
 }
 
 export interface DomainDesignSystemContent {

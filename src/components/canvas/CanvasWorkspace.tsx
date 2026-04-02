@@ -12,6 +12,9 @@ import {
 import '@xyflow/react/dist/base.css';
 
 import { useCanvasStore, SECTION_NODE_TYPES, GRID_SIZE, type CanvasNodeType } from '../../stores/canvas-store';
+import { useGenerationStore } from '../../stores/generation-store';
+import { GENERATION_STATUS } from '../../constants/generation';
+import { VARIANT_NODE_GENERATING_Z_INDEX } from '../../constants/canvas';
 import { toReactFlowEdges, toReactFlowNodes } from '../../workspace/reactflow-adapter';
 import { nodeTypes } from './nodes/node-types';
 import { edgeTypes } from './edges/edge-types';
@@ -19,6 +22,7 @@ import CanvasHeader from './CanvasHeader';
 import CanvasToolbar from './CanvasToolbar';
 import CanvasContextMenu from './CanvasContextMenu';
 import VariantPreviewOverlay from './VariantPreviewOverlay';
+import VariantRunInspector from './VariantRunInspector';
 import { useCanvasOrchestrator } from './hooks/useCanvasOrchestrator';
 import { useNodeDeletion } from './hooks/useNodeDeletion';
 import { useFeedbackLoopConnection } from './hooks/useFeedbackLoopConnection';
@@ -32,7 +36,31 @@ function CanvasInner() {
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
   const viewport = useCanvasStore((s) => s.viewport);
-  const rfNodes = useMemo(() => toReactFlowNodes(nodes), [nodes]);
+  const genResults = useGenerationStore((s) => s.results);
+  const rfNodes = useMemo(() => {
+    const generatingByStrategy = new Set(
+      genResults
+        .filter((r) => r.status === GENERATION_STATUS.GENERATING)
+        .map((r) => r.variantStrategyId),
+    );
+    const generatingIds = new Set(
+      genResults
+        .filter((r) => r.status === GENERATION_STATUS.GENERATING)
+        .map((r) => r.id),
+    );
+    return toReactFlowNodes(nodes).map((n) => {
+      if (n.type !== 'variant') return n;
+      const data = n.data as { refId?: string; variantStrategyId?: string };
+      const vsId = data.variantStrategyId;
+      const bumpZ =
+        (vsId != null && generatingByStrategy.has(vsId)) ||
+        (!!data.refId && generatingIds.has(data.refId));
+      if (bumpZ) {
+        return { ...n, zIndex: VARIANT_NODE_GENERATING_Z_INDEX };
+      }
+      return n;
+    });
+  }, [nodes, genResults]);
   const rfEdges = useMemo(() => toReactFlowEdges(edges), [edges]);
   const onNodesChange = useCanvasStore((s) => s.onNodesChange);
   const onEdgesChange = useCanvasStore((s) => s.onEdgesChange);
@@ -133,61 +161,67 @@ function CanvasInner() {
   }, []);
 
   return (
-    <div className="relative h-screen w-screen">
+    <div className="flex h-screen w-screen flex-col">
       <CanvasHeader />
-      <ReactFlow
-        colorMode="dark"
-        nodes={rfNodes}
-        edges={rfEdges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={handleConnect}
-        onConnectStart={handleConnectStart}
-        onConnectEnd={handleConnectEnd}
-        isValidConnection={isValidConnection}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        defaultViewport={viewport}
-        onViewportChange={handleViewportChange}
-        onPaneContextMenu={handlePaneContextMenu}
-        onNodeClick={handleNodeClick}
-        onPaneClick={handlePaneClick}
-        onSelectionChange={handleSelectionChange}
-        nodesDraggable={!autoLayout}
-        snapToGrid={true}
-        snapGrid={[GRID_SIZE, GRID_SIZE]}
-        fitViewOptions={{ padding: 0.15 }}
-        connectionRadius={40}
-        minZoom={0.15}
-        maxZoom={2}
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background
-          variant={BackgroundVariant.Dots}
-          gap={GRID_SIZE}
-          size={1.5}
-          offset={0.75}
-          color="var(--color-border)"
-          bgColor="var(--color-surface)"
-        />
-        {showMiniMap && (
-          <MiniMap
-            nodeColor={miniMapNodeColor}
-            maskColor="var(--color-overlay)"
-            className="!bottom-4 !right-4 !border-border !shadow-sm"
-            style={{ width: 133, height: 100 }}
-          />
-        )}
-        <CanvasToolbar />
-      </ReactFlow>
-      {contextMenu && (
-        <CanvasContextMenu
-          screenX={contextMenu.x}
-          screenY={contextMenu.y}
-          onClose={() => setContextMenu(null)}
-        />
-      )}
-      <VariantPreviewOverlay />
+      <div className="flex min-h-0 min-w-0 flex-1">
+        <div className="relative min-h-0 min-w-0 flex-1">
+          <ReactFlow
+            className="h-full w-full"
+            colorMode="dark"
+            nodes={rfNodes}
+            edges={rfEdges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={handleConnect}
+            onConnectStart={handleConnectStart}
+            onConnectEnd={handleConnectEnd}
+            isValidConnection={isValidConnection}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            defaultViewport={viewport}
+            onViewportChange={handleViewportChange}
+            onPaneContextMenu={handlePaneContextMenu}
+            onNodeClick={handleNodeClick}
+            onPaneClick={handlePaneClick}
+            onSelectionChange={handleSelectionChange}
+            nodesDraggable={!autoLayout}
+            snapToGrid={true}
+            snapGrid={[GRID_SIZE, GRID_SIZE]}
+            fitViewOptions={{ padding: 0.15 }}
+            connectionRadius={40}
+            minZoom={0.15}
+            maxZoom={2}
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background
+              variant={BackgroundVariant.Dots}
+              gap={GRID_SIZE}
+              size={1.5}
+              offset={0.75}
+              color="var(--color-border)"
+              bgColor="var(--color-surface)"
+            />
+            {showMiniMap && (
+              <MiniMap
+                nodeColor={miniMapNodeColor}
+                maskColor="var(--color-overlay)"
+                className="!bottom-4 !right-4 !border-border !shadow-sm"
+                style={{ width: 133, height: 100 }}
+              />
+            )}
+            <CanvasToolbar />
+          </ReactFlow>
+          {contextMenu && (
+            <CanvasContextMenu
+              screenX={contextMenu.x}
+              screenY={contextMenu.y}
+              onClose={() => setContextMenu(null)}
+            />
+          )}
+          <VariantPreviewOverlay />
+        </div>
+        <VariantRunInspector />
+      </div>
     </div>
   );
 }

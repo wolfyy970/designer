@@ -28,12 +28,11 @@ describe('buildHypothesisGenerationContext (domain)', () => {
           modelNodeIds: ['mod1'],
           designSystemNodeIds: ['ds1'],
           agentMode: 'agentic',
-          thinkingLevel: 'low',
           placeholder: false,
         },
       },
       modelProfiles: {
-        mod1: { nodeId: 'mod1', providerId: 'openrouter', modelId: 'gpt-4' },
+        mod1: { nodeId: 'mod1', providerId: 'openrouter', modelId: 'gpt-4', thinkingLevel: 'low' },
       },
       designSystems: {
         ds1: {
@@ -62,9 +61,10 @@ describe('buildHypothesisGenerationContext (domain)', () => {
     });
 
     expect(ctx).not.toBeNull();
-    expect(ctx!.modelCredentials).toEqual([{ providerId: 'openrouter', modelId: 'gpt-4' }]);
-    expect(ctx!.designSystemContent).toContain('Hello');
     expect(ctx!.agentMode).toBe('agentic');
-    expect(ctx!.thinkingLevel).toBe('low');
+    expect(ctx!.modelCredentials).toEqual([
+      { providerId: 'openrouter', modelId: 'gpt-4', thinkingLevel: 'low' },
+    ]);
+    expect(ctx!.designSystemContent).toContain('Hello');
   });
 });

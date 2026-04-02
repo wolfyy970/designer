@@ -30,6 +30,13 @@ export interface ProviderModel {
 export interface ProviderOptions {
   model?: string;
   supportsVision?: boolean;
+  /** When set, provider fetch is aborted; in-flight LLM log row is failed as Aborted. */
+  signal?: AbortSignal;
+  /**
+   * Server: selects completion margin when deriving `max_tokens` from context − prompt.
+   * @see server/lib/completion-budget.ts
+   */
+  completionPurpose?: 'compile' | 'compaction' | 'agent_turn' | 'default';
 }
 
 export interface Provenance {

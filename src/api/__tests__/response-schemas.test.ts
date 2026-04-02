@@ -3,6 +3,7 @@ import {
   CompileResponseSchema,
   HypothesisPromptBundleResponseSchema,
   DesignSystemExtractResponseSchema,
+  ObservabilityLogsResponseSchema,
 } from '../response-schemas';
 
 describe('CompileResponseSchema', () => {
@@ -36,7 +37,7 @@ describe('HypothesisPromptBundleResponseSchema', () => {
       provenance: { strategies: {} },
       generationContext: {
         agentMode: 'single',
-        modelCredentials: [{ providerId: 'p', modelId: 'm' }],
+        modelCredentials: [{ providerId: 'p', modelId: 'm', thinkingLevel: 'minimal' as const }],
       },
     });
     expect(r.success).toBe(true);
@@ -47,5 +48,43 @@ describe('DesignSystemExtractResponseSchema', () => {
   it('requires result string', () => {
     expect(DesignSystemExtractResponseSchema.safeParse({ result: 'x' }).success).toBe(true);
     expect(DesignSystemExtractResponseSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('ObservabilityLogsResponseSchema', () => {
+  it('accepts llm + trace snapshot from GET /api/logs', () => {
+    const r = ObservabilityLogsResponseSchema.safeParse({
+      llm: [
+        {
+          id: '1',
+          timestamp: new Date().toISOString(),
+          source: 'compiler',
+          model: 'm',
+          provider: 'openrouter',
+          systemPrompt: 's',
+          userPrompt: 'u',
+          response: 'r',
+          durationMs: 0,
+        },
+      ],
+      trace: [
+        {
+          v: 1,
+          ts: new Date().toISOString(),
+          type: 'trace',
+          payload: {
+            event: {
+              id: 't1',
+              at: new Date().toISOString(),
+              kind: 'phase',
+              label: 'x',
+            },
+            correlationId: 'run-1',
+            resultId: 'res-1',
+          },
+        },
+      ],
+    });
+    expect(r.success).toBe(true);
   });
 });

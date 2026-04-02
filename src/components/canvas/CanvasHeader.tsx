@@ -1,10 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Settings, FolderOpen, Pencil, ScrollText, RotateCcw } from 'lucide-react';
 import { useSpecStore } from '../../stores/spec-store';
 import { useCanvasStore } from '../../stores/canvas-store';
 import SpecManager from '../shared/SpecManager';
 import SettingsModal from '../shared/SettingsModal';
 import LogViewer from './LogViewer';
+import { parsePromptKey } from '../../lib/prompt-log-mapping';
+import type { PromptKey } from '../../stores/prompt-store';
 
 export default function CanvasHeader() {
   const title = useSpecStore((s) => s.spec.title);
@@ -18,6 +21,26 @@ export default function CanvasHeader() {
   const [showCanvases, setShowCanvases] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'prompts' | undefined>();
+  const [settingsPromptKey, setSettingsPromptKey] = useState<PromptKey | undefined>();
+
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    const settings = searchParams.get('settings');
+    const promptKeyRaw = searchParams.get('promptKey');
+    if (settings !== 'prompts') return;
+
+    const key = promptKeyRaw ? parsePromptKey(promptKeyRaw) : null;
+    setSettingsInitialTab('prompts');
+    setSettingsPromptKey(key ?? undefined);
+    setShowSettings(true);
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('settings');
+    next.delete('promptKey');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -114,7 +137,11 @@ export default function CanvasHeader() {
             Logs
           </button>
           <button
-            onClick={() => setShowSettings(true)}
+            onClick={() => {
+              setSettingsInitialTab(undefined);
+              setSettingsPromptKey(undefined);
+              setShowSettings(true);
+            }}
             className="rounded-md p-1.5 text-fg-secondary hover:bg-surface-raised"
           >
             <Settings size={16} />
@@ -123,8 +150,22 @@ export default function CanvasHeader() {
       </div>
 
       <SpecManager open={showCanvases} onClose={() => setShowCanvases(false)} />
-      <SettingsModal open={showSettings} onClose={() => setShowSettings(false)} />
-      <LogViewer open={showLogs} onClose={() => setShowLogs(false)} />
+      <SettingsModal
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        initialTab={settingsInitialTab}
+        initialPromptKey={settingsPromptKey}
+      />
+      <LogViewer
+        open={showLogs}
+        onClose={() => setShowLogs(false)}
+        onOpenPromptStudio={(key) => {
+          setShowLogs(false);
+          setSettingsInitialTab('prompts');
+          setSettingsPromptKey(key);
+          setShowSettings(true);
+        }}
+      />
     </>
   );
 }

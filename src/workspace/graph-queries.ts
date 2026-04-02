@@ -59,6 +59,20 @@ export function findFirstUpstreamModelNodeId(
   return null;
 }
 
+/** All model nodes with an edge into `targetNodeId` (order = edge iteration). */
+export function listIncomingModelNodeIds(
+  targetNodeId: string,
+  snapshot: WorkspaceGraphSnapshot,
+): string[] {
+  const ids: string[] = [];
+  for (const e of snapshot.edges) {
+    if (e.target !== targetNodeId) continue;
+    const source = nodeById(snapshot, e.source);
+    if (source?.type === NODE_TYPES.MODEL) ids.push(source.id);
+  }
+  return ids;
+}
+
 export interface ModelCredential {
   readonly providerId: string;
   readonly modelId: string;

@@ -22,6 +22,29 @@ prompts.get('/', async (c) => {
   }
 });
 
+// GET /api/prompts/:key/versions/:versionNum — historical body (Prompt Studio compare)
+prompts.get('/:key/versions/:versionNum', async (c) => {
+  const key = c.req.param('key') as PromptKey;
+  const raw = c.req.param('versionNum');
+  const version = Number.parseInt(raw, 10);
+  if (!PROMPT_KEYS.includes(key)) return c.json({ error: 'Unknown prompt key' }, 404);
+  if (!Number.isInteger(version) || version < 1) {
+    return c.json({ error: 'Invalid version' }, 400);
+  }
+  const row = await prisma.promptVersion.findUnique({
+    where: { promptKey_version: { promptKey: key, version } },
+  });
+  if (!row) {
+    return c.json({ error: 'Version not found' }, 404);
+  }
+  return c.json({
+    key,
+    version: row.version,
+    body: row.body,
+    createdAt: row.createdAt.toISOString(),
+  });
+});
+
 // GET /api/prompts/:key — single prompt
 prompts.get('/:key', async (c) => {
   const key = c.req.param('key') as PromptKey;

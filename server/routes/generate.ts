@@ -12,13 +12,18 @@ generate.post('/', async (c) => {
     return c.json({ error: 'Invalid request', details: parsed.error.flatten() }, 400);
   }
   const body = parsed.data;
+  const correlationId =
+    body.correlationId?.trim() || crypto.randomUUID();
 
   return streamSSE(c, async (stream) => {
     const abortSignal = c.req.raw.signal;
     let id = 0;
     const allocId = () => String(id++);
 
-    await executeGenerateStreamSafe(stream, body, abortSignal, { allocId });
+    await executeGenerateStreamSafe(stream, body, abortSignal, {
+      allocId,
+      correlationId,
+    });
   });
 });
 

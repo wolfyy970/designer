@@ -1,4 +1,5 @@
 import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
+import type { DomainModelProfile } from '../types/workspace-domain';
 import { removeId } from './workspace-domain-helpers';
 import type { WorkspaceDomainStore } from './workspace-domain-store-types';
 
@@ -26,10 +27,16 @@ export function createWorkspaceDomainEntitiesSlice(set: DomainSet): Pick<
           providerId: DEFAULT_COMPILER_PROVIDER,
           modelId: '',
         };
+        type ProfilePatch = Omit<Partial<DomainModelProfile>, 'nodeId'>;
+        const cleaned: ProfilePatch = {};
+        if (partial.providerId !== undefined) cleaned.providerId = partial.providerId;
+        if (partial.modelId !== undefined) cleaned.modelId = partial.modelId;
+        if (partial.title !== undefined) cleaned.title = partial.title;
+        if (partial.thinkingLevel !== undefined) cleaned.thinkingLevel = partial.thinkingLevel;
         return {
           modelProfiles: {
             ...s.modelProfiles,
-            [nodeId]: { ...cur, ...partial, nodeId },
+            [nodeId]: { ...cur, ...cleaned, nodeId },
           },
         };
       }),

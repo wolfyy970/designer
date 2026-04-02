@@ -6,10 +6,12 @@ import type { CompiledPrompt } from '../types/compiler';
 import type { AgenticCheckpoint, EvaluationRoundSnapshot } from '../types/evaluation';
 import type { GenerationResult, Provenance, RunTraceEvent } from '../types/provider';
 import type { ProvenanceContext } from '../types/provenance-context';
-import type { GenerateStreamCallbacks } from '../api/client';
+import { postTraceEvents, type GenerateStreamCallbacks } from '../api/client';
 import { useGenerationStore } from '../stores/generation-store';
 
 const DEFAULT_TRACE_LIMIT = 120;
+const TRACE_SERVER_FLUSH_MS = 280;
+const TRACE_SERVER_BUFFER_MAX = 200;
 
 export interface PlaceholderSessionOptions {
   placeholderId: string;
@@ -21,6 +23,8 @@ export interface PlaceholderSessionOptions {
   updateResult: (id: string, patch: Partial<GenerationResult>) => void;
   traceLimit?: number;
   onResultComplete?: (placeholderId: string) => void;
+  /** Ties forwarded run-trace rows to the generate / hypothesis stream */
+  correlationId?: string;
 }
 
 /**
@@ -42,7 +46,47 @@ export function createPlaceholderGenerationSession(
     updateResult,
     traceLimit = DEFAULT_TRACE_LIMIT,
     onResultComplete,
+    correlationId: sessionCorrelationId,
   } = options;
+
+  let pendingServerTraces: RunTraceEvent[] = [];
+  let traceFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  let traceForwardWarned = false;
+
+  async function flushTraceToServer(): Promise<void> {
+    if (traceFlushTimer != null) {
+      clearTimeout(traceFlushTimer);
+      traceFlushTimer = null;
+    }
+    if (pendingServerTraces.length === 0) return;
+    const batch = pendingServerTraces.splice(0, pendingServerTraces.length);
+    const ok = await postTraceEvents({
+      events: batch,
+      resultId: placeholderId,
+      correlationId: sessionCorrelationId,
+    });
+    if (!ok && batch.length > 0) {
+      pendingServerTraces = [...batch, ...pendingServerTraces].slice(-TRACE_SERVER_BUFFER_MAX);
+      if (!traceForwardWarned && import.meta.env.DEV) {
+        traceForwardWarned = true;
+        console.warn(
+          '[observability] Trace ingest failed (is the API running?). Events are buffered briefly.',
+        );
+      }
+    }
+  }
+
+  function scheduleTraceServerForward(trace: RunTraceEvent) {
+    pendingServerTraces.push(trace);
+    if (pendingServerTraces.length > TRACE_SERVER_BUFFER_MAX) {
+      pendingServerTraces = pendingServerTraces.slice(-TRACE_SERVER_BUFFER_MAX);
+    }
+    if (traceFlushTimer != null) clearTimeout(traceFlushTimer);
+    traceFlushTimer = setTimeout(() => {
+      traceFlushTimer = null;
+      void flushTraceToServer();
+    }, TRACE_SERVER_FLUSH_MS);
+  }
 
   let activityText = '';
   let rafId: ReturnType<typeof requestAnimationFrame> | null = null;
@@ -66,6 +110,7 @@ export function createPlaceholderGenerationSession(
       next.activeToolPath = undefined;
     }
     updateResult(placeholderId, next);
+    scheduleTraceServerForward(trace);
   };
 
   const callbacks: GenerateStreamCallbacks = {
@@ -205,6 +250,9 @@ export function createPlaceholderGenerationSession(
   };
 
   const finalizeAfterStream = async () => {
+    for (let attempt = 0; attempt < 5 && pendingServerTraces.length > 0; attempt++) {
+      await flushTraceToServer();
+    }
     const current = useGenerationStore.getState().results.find((r) => r.id === placeholderId);
     if (current?.status === GENERATION_STATUS.ERROR) return;
 

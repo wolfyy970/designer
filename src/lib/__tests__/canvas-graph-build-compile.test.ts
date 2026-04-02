@@ -56,11 +56,16 @@ describe('buildCompileInputs', () => {
     const out = await buildCompileInputs(nodes, edges, spec, 'compiler-orphan', [], wiring);
 
     expect(out.partialSpec.sections['design-brief'].content).toBe('CONNECTED_BRIEF');
-    expect(out.partialSpec.sections['objectives-metrics'].content).toBe('');
+    // Objectives has text in the shared spec even though this wiring lists only the brief node;
+    // incubator prompts should still see it.
+    expect(out.partialSpec.sections['objectives-metrics'].content).toBe('OBJ');
   });
 
   it('falls back to incoming edges when wiring is empty or omitted', async () => {
     const spec = makeSpec();
+    // Unwired sections with no text stay excluded; if the brief had text here it would still
+    // appear because the spec store is shared across section nodes.
+    spec.sections['design-brief'].content = '';
     const nodes: WorkspaceNode[] = [
       node('brief1', NODE_TYPES.DESIGN_BRIEF),
       node('obj1', NODE_TYPES.OBJECTIVES_METRICS),
@@ -87,5 +92,6 @@ describe('buildCompileInputs', () => {
 
     const noWiringArg = await buildCompileInputs(nodes, edges, spec, 'comp1', []);
     expect(noWiringArg.partialSpec.sections['objectives-metrics'].content).toBe('OBJ');
+    expect(noWiringArg.partialSpec.sections['design-brief'].content).toBe('');
   });
 });

@@ -80,11 +80,17 @@ export function hydrateDomainFromCanvasGraph(input: {
 
   for (const n of input.nodes) {
     if (n.type === NODE_TYPES.MODEL) {
-      const d = n.data as { providerId?: string; modelId?: string; title?: string };
+      const d = n.data as {
+        providerId?: string;
+        modelId?: string;
+        title?: string;
+        thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high';
+      };
       store.upsertModelProfile(n.id, {
         providerId: d.providerId || DEFAULT_COMPILER_PROVIDER,
         modelId: d.modelId || '',
         title: d.title,
+        thinkingLevel: d.thinkingLevel ?? 'minimal',
       });
     }
     if (n.type === NODE_TYPES.DESIGN_SYSTEM) {

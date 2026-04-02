@@ -1,5 +1,8 @@
+import { z } from 'zod';
 import { prisma } from './client.ts';
 import type { SkillRow } from '../lib/skills/select-skills.ts';
+
+const skillFilesJsonSchema = z.record(z.string(), z.string());
 
 export type { SkillRow };
 
@@ -46,10 +49,15 @@ export function buildVirtualSkillFiles(resolved: SkillVersionResolved): Record<s
 
   if (resolved.filesJson?.trim()) {
     try {
-      const parsed = JSON.parse(resolved.filesJson) as Record<string, string>;
-      for (const [rel, text] of Object.entries(parsed)) {
-        const norm = rel.replace(/^\/+/, '');
-        map[`${root}/${norm}`] = text;
+      const parsedJson: unknown = JSON.parse(resolved.filesJson);
+      const parsed = skillFilesJsonSchema.safeParse(parsedJson);
+      if (parsed.success) {
+        for (const [rel, text] of Object.entries(parsed.data)) {
+          const norm = rel.replace(/^\/+/, '');
+          map[`${root}/${norm}`] = text;
+        }
+      } else {
+        map[`${root}/SKILL.md`] = resolved.body;
       }
     } catch {
       map[`${root}/SKILL.md`] = resolved.body;

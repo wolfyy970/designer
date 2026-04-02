@@ -49,9 +49,11 @@ export async function executeGenerateStream(
     laneIndex?: number;
     laneEndMode?: LaneEndMode;
     writeGate?: WriteGate;
+    /** Server- or client-issued; ties LLM log rows to this stream */
+    correlationId?: string;
   },
 ): Promise<void> {
-  const { allocId, laneIndex, laneEndMode = 'done', writeGate } = options;
+  const { allocId, laneIndex, laneEndMode = 'done', writeGate, correlationId } = options;
   const gate = writeGate ?? { enqueue: (fn) => fn() };
 
   const wrap = (data: Record<string, unknown>): Record<string, unknown> =>
@@ -141,6 +143,7 @@ export async function executeGenerateStream(
         modelId: body.modelId,
         thinkingLevel: body.thinkingLevel,
         signal: abortSignal,
+        ...(correlationId ? { correlationId } : {}),
         virtualSkillFiles:
           Object.keys(virtualSkillFiles).length > 0 ? virtualSkillFiles : undefined,
       },
@@ -185,8 +188,14 @@ export async function executeGenerateStream(
     {
       model: body.modelId,
       supportsVision: body.supportsVision,
+      signal: abortSignal,
     },
-    { source: 'builder', phase: 'Single-shot generate' },
+    {
+      source: 'builder',
+      phase: 'Single-shot generate',
+      ...(correlationId ? { correlationId } : {}),
+      signal: abortSignal,
+    },
   );
 
   if (abortSignal.aborted) return;
@@ -210,6 +219,7 @@ export async function executeGenerateStreamSafe(
     laneIndex?: number;
     laneEndMode?: LaneEndMode;
     writeGate?: WriteGate;
+    correlationId?: string;
   },
 ): Promise<void> {
   try {

@@ -28,6 +28,14 @@ pnpm dev:all      # recommended: API then Vite (avoids early proxy errors)
 
 Both processes are needed for local development.
 
+## Observability (development)
+
+Open **Observability** from the canvas header to inspect **LLM** calls and **trace** events for the current session. Entries load from the API ([ARCHITECTURE.md](ARCHITECTURE.md) has route and storage details). **Clear** empties the in-memory rings only; optional NDJSON retention is server-configured.
+
+## System prompts (Settings → Prompts)
+
+**Settings** (gear) → **Prompts** opens **Prompt Studio** for versioned system prompts. Changes are **not** auto-saved — click **Save** or use ⌘S / Ctrl+S. A confirmation shows the stored **version**.
+
 ## Canvas Workflow
 
 The canvas (`/canvas`) is the default interface. Nodes connect left-to-right.

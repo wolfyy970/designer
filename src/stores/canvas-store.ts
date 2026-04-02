@@ -1,3 +1,8 @@
+/**
+ * Zustand canvas projection: React Flow nodes/edges, layout, persistence.
+ * Debounced dimension→layout timing lives in `./canvas/dimension-layout-debounce.ts`;
+ * hypothesis vertical stack constants in `./canvas/hypothesis-layout-constants.ts`.
+ */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { VariantStrategy } from '../types/compiler';
@@ -40,7 +45,7 @@ import { isValidConnection as checkValidConnection, buildAutoConnectEdges, build
 import { buildEdgeId, EDGE_TYPES, EDGE_STATUS, type EdgeStatus } from '../constants/canvas';
 import { computeLineage } from '../lib/canvas-graph';
 import { STORAGE_KEYS } from '../lib/storage-keys';
-import { PREREQUISITE_DEFAULTS, AUTO_LAYOUT_DEBOUNCE_MS } from '../lib/constants';
+import { PREREQUISITE_DEFAULTS } from '../lib/constants';
 import { migrateCanvasState } from './canvas-migrations';
 import { hydrateDomainFromCanvasGraph, useWorkspaceDomainStore } from './workspace-domain-store';
 import {
@@ -49,14 +54,15 @@ import {
   syncDomainForRemovedEdge,
   syncDomainForRemovedNode,
 } from '../workspace/domain-commands';
-
-// Debounced auto-layout on dimension changes (avoids infinite loop)
-let dimensionLayoutTimer: ReturnType<typeof setTimeout> | null = null;
-
-// Layout spacing for hypothesis/variant stacking
-const HYPOTHESIS_STACK_GAP = 40;
-const HYPOTHESIS_STACK_NODE_H = 340;
-const HYPOTHESIS_STACK_SPACING = 60;
+import {
+  scheduleDebouncedAutoLayout,
+  shouldScheduleAutoLayoutOnDimensionChange,
+} from './canvas/dimension-layout-debounce';
+import {
+  HYPOTHESIS_STACK_GAP,
+  HYPOTHESIS_STACK_NODE_H,
+  HYPOTHESIS_STACK_SPACING,
+} from './canvas/hypothesis-layout-constants';
 
 // Re-export for consumers
 export { GRID_SIZE, SECTION_NODE_TYPES } from '../lib/canvas-layout';
@@ -77,6 +83,8 @@ interface CanvasStore {
   autoLayout: boolean;
   // Non-persisted UI state
   expandedVariantId: string | null;
+  /** Right drawer: variant canvas node id whose run workspace is open */
+  runInspectorVariantNodeId: string | null;
   lineageNodeIds: Set<string>;
   lineageEdgeIds: Set<string>;
   /** Transient map: variantStrategyId → canvas nodeId (for edge status callbacks during generation) */
@@ -102,6 +110,8 @@ interface CanvasStore {
   isValidConnection: (connection: Connection | Pick<WorkspaceEdge, 'source' | 'target'>) => boolean;
 
   setExpandedVariant: (id: string | null) => void;
+  setRunInspectorVariant: (variantNodeId: string | null) => void;
+  closeRunInspector: () => void;
   computeLineage: (selectedNodeId: string | null) => void;
 
   addPlaceholderHypotheses: (compilerNodeId: string, count: number) => string[];
@@ -135,6 +145,7 @@ export const useCanvasStore = create<CanvasStore>()(
       autoLayout: true,
       // Non-persisted UI state
       expandedVariantId: null,
+      runInspectorVariantNodeId: null,
       lineageNodeIds: new Set<string>(),
       lineageEdgeIds: new Set<string>(),
       variantNodeIdMap: new Map<string, string>(),
@@ -142,16 +153,8 @@ export const useCanvasStore = create<CanvasStore>()(
 
       onNodesChange: (changes) => {
         set({ nodes: applyWorkspaceNodeChanges(changes, get().nodes) });
-        // Debounced re-layout on dimension changes (e.g. image added makes node taller)
-        if (
-          get().autoLayout &&
-          changes.some((c) => (c as { type?: string }).type === 'dimensions')
-        ) {
-          if (dimensionLayoutTimer) clearTimeout(dimensionLayoutTimer);
-          dimensionLayoutTimer = setTimeout(() => {
-            dimensionLayoutTimer = null;
-            if (get().autoLayout) get().applyAutoLayout();
-          }, AUTO_LAYOUT_DEBOUNCE_MS);
+        if (shouldScheduleAutoLayoutOnDimensionChange(get().autoLayout, changes)) {
+          scheduleDebouncedAutoLayout(get);
         }
       },
 
@@ -263,7 +266,7 @@ export const useCanvasStore = create<CanvasStore>()(
           const map = compilerStore.dimensionMaps[targetCompilerId];
           const lastVariant = map?.variants[map.variants.length - 1];
           if (lastVariant) {
-            newNode.data = { refId: lastVariant.id };
+            newNode.data = { ...newNode.data, refId: lastVariant.id };
             useWorkspaceDomainStore
               .getState()
               .linkHypothesisToIncubator(id, targetCompilerId, lastVariant.id);
@@ -304,11 +307,15 @@ export const useCanvasStore = create<CanvasStore>()(
           }
         }
 
+        const inspectorId = get().runInspectorVariantNodeId;
+        const clearInspector =
+          inspectorId != null && [...removeIds].some((rid) => rid === inspectorId);
         set({
           nodes: state.nodes.filter((n) => !removeIds.has(n.id)),
           edges: state.edges.filter(
             (e) => !removeIds.has(e.source) && !removeIds.has(e.target)
           ),
+          ...(clearInspector ? { runInspectorVariantNodeId: null as string | null } : {}),
         });
         if (get().autoLayout) get().applyAutoLayout();
       },
@@ -332,10 +339,9 @@ export const useCanvasStore = create<CanvasStore>()(
         const dom = useWorkspaceDomainStore.getState();
         const merged = { ...n.data, ...data };
         if (n.type === 'hypothesis') {
-          if ('agentMode' in data || 'thinkingLevel' in data) {
+          if ('agentMode' in data) {
             dom.setHypothesisGenerationSettings(nodeId, {
-              agentMode: merged.agentMode as HypothesisNodeData['agentMode'] | undefined,
-              thinkingLevel: merged.thinkingLevel as HypothesisNodeData['thinkingLevel'],
+              agentMode: merged.agentMode as HypothesisNodeData['agentMode'],
             });
           }
         }
@@ -345,6 +351,7 @@ export const useCanvasStore = create<CanvasStore>()(
             providerId: m.providerId,
             modelId: m.modelId,
             title: m.title,
+            thinkingLevel: m.thinkingLevel ?? 'minimal',
           });
         }
         if (n.type === 'designSystem') {
@@ -379,6 +386,11 @@ export const useCanvasStore = create<CanvasStore>()(
       // ── Full-screen variant preview ────────────────────────────
 
       setExpandedVariant: (id) => set({ expandedVariantId: id }),
+
+      setRunInspectorVariant: (variantNodeId: string | null) =>
+        set({ runInspectorVariantNodeId: variantNodeId }),
+
+      closeRunInspector: () => set({ runInspectorVariantNodeId: null }),
 
       // ── Lineage highlighting ───────────────────────────────────
 
@@ -596,12 +608,21 @@ export const useCanvasStore = create<CanvasStore>()(
       },
 
       // ── Sync after generation (scoped to a specific hypothesis) ──
-      // Version-stacking: reuse existing variant node, update refId to latest result.
+      // Version-stacking: reuse existing variant node. refId uses the first lane
+      // for a strategy (multi-model) so it stays tied to an in-flight placeholder
+      // until the first lane finishes — avoids stale refId when the last lane completes first.
 
       syncAfterGenerate: (results, hypothesisNodeId) => {
         const state = get();
         const col = columnX(state.colGap);
         const hypothesisNode = state.nodes.find((n) => n.id === hypothesisNodeId);
+
+        const firstRefByStrategy = new Map<string, string>();
+        for (const r of results) {
+          if (!firstRefByStrategy.has(r.variantStrategyId)) {
+            firstRefByStrategy.set(r.variantStrategyId, r.id);
+          }
+        }
 
         // Find existing variant node connected to this hypothesis (for stacking)
         const existingVariantByStrategy = new Map<string, string>(); // vsId → nodeId
@@ -629,14 +650,16 @@ export const useCanvasStore = create<CanvasStore>()(
           );
 
           if (existingNodeId) {
-            // UPDATE existing variant node — point refId to the new result
+            // UPDATE existing variant node — stable refId across multi-lane sync
             const idx = newNodes.findIndex((n) => n.id === existingNodeId);
             if (idx !== -1) {
+              const preferredRef =
+                firstRefByStrategy.get(result.variantStrategyId) ?? result.id;
               newNodes[idx] = {
                 ...newNodes[idx],
                 data: {
                   ...newNodes[idx].data,
-                  refId: result.id,
+                  refId: preferredRef,
                   variantStrategyId: result.variantStrategyId,
                 },
               };
@@ -663,7 +686,7 @@ export const useCanvasStore = create<CanvasStore>()(
                 y: hypothesisNode?.position.y ?? 300,
               }),
               data: {
-                refId: result.id,
+                refId: firstRefByStrategy.get(result.variantStrategyId) ?? result.id,
                 variantStrategyId: result.variantStrategyId,
               },
             });
@@ -792,6 +815,7 @@ export const useCanvasStore = create<CanvasStore>()(
           edges: [],
           viewport: { x: 0, y: 0, zoom: 0.85 },
           expandedVariantId: null,
+          runInspectorVariantNodeId: null,
           lineageNodeIds: new Set(),
           lineageEdgeIds: new Set(),
         });
@@ -804,13 +828,14 @@ export const useCanvasStore = create<CanvasStore>()(
           edges: [],
           viewport: { x: 0, y: 0, zoom: 0.85 },
           expandedVariantId: null,
+          runInspectorVariantNodeId: null,
           lineageNodeIds: new Set(),
           lineageEdgeIds: new Set(),
         }),
     }),
     {
       name: STORAGE_KEYS.CANVAS,
-      version: 13,
+      version: 15,
       migrate: (persistedState: unknown, version: number) => {
         // Try to parse the raw state safely to avoid runtime crashes
         // before passing it to the complex migration logic

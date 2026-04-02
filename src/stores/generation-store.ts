@@ -35,11 +35,32 @@ export const useGenerationStore = create<GenerationStore>()(
         set((state) => ({ results: [...state.results, result] })),
 
       updateResult: (id, updates) =>
-        set((state) => ({
-          results: state.results.map((r) =>
+        set((state) => {
+          const prev = state.results.find((r) => r.id === id);
+          const nextResults = state.results.map((r) =>
             r.id === id ? { ...r, ...updates } : r,
-          ),
-        })),
+          );
+          if (!prev) {
+            return { results: nextResults };
+          }
+          const merged = nextResults.find((r) => r.id === id)!;
+          let selectedVersions = state.selectedVersions;
+          if (
+            prev.status === GENERATION_STATUS.GENERATING &&
+            (updates.status === GENERATION_STATUS.COMPLETE ||
+              updates.status === GENERATION_STATUS.ERROR) &&
+            updates.status !== undefined
+          ) {
+            const vsId = merged.variantStrategyId;
+            const runId = merged.runId;
+            selectedVersions = {
+              ...state.selectedVersions,
+              [vsId]: id,
+              [`${vsId}:${runId}`]: id,
+            };
+          }
+          return { results: nextResults, selectedVersions };
+        }),
 
       setGenerating: (isGenerating) => set({ isGenerating }),
 
@@ -192,18 +213,17 @@ export function getActiveResult(
   state: GenerationState,
   variantStrategyId: string,
 ): GenerationResult | undefined {
+  const stack = getStack(state, variantStrategyId);
+  // In-flight generation must win over a stale selection so the new run is visible.
+  const generating = stack.find((r) => r.status === GENERATION_STATUS.GENERATING);
+  if (generating) return generating;
+
   const selectedId = state.selectedVersions[variantStrategyId];
   if (selectedId) {
     const selected = state.results.find((r) => r.id === selectedId);
     if (selected) return selected;
   }
-  // Fall back to latest generating or complete result
-  const stack = getStack(state, variantStrategyId);
-  return (
-    stack.find((r) => r.status === GENERATION_STATUS.GENERATING) ??
-    getBestCompleteResult(stack) ??
-    stack[0]
-  );
+  return getBestCompleteResult(stack) ?? stack[0];
 }
 
 /** Get all results for a hypothesis scoped to a specific run, newest first */
@@ -223,6 +243,10 @@ export function getScopedActiveResult(
   variantStrategyId: string,
   runId: string,
 ): GenerationResult | undefined {
+  const stack = getScopedStack(state, variantStrategyId, runId);
+  const generating = stack.find((r) => r.status === GENERATION_STATUS.GENERATING);
+  if (generating) return generating;
+
   // Scoped key: "vsId:runId" to avoid collision with live variants
   const scopedKey = `${variantStrategyId}:${runId}`;
   const selectedId = state.selectedVersions[scopedKey];
@@ -230,12 +254,7 @@ export function getScopedActiveResult(
     const selected = state.results.find((r) => r.id === selectedId);
     if (selected) return selected;
   }
-  const stack = getScopedStack(state, variantStrategyId, runId);
-  return (
-    stack.find((r) => r.status === GENERATION_STATUS.GENERATING) ??
-    getBestCompleteResult(stack) ??
-    stack[0]
-  );
+  return getBestCompleteResult(stack) ?? stack[0];
 }
 
 /** Next run number for a hypothesis */

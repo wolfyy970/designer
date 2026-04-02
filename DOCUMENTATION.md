@@ -63,6 +63,7 @@ README.md (Hub)
 1. Check which docs are affected (agentic server behavior → **ARCHITECTURE.md** + **PRODUCT.md** + **SYSTEM_OVERVIEW.md** if the narrative changes; UX/setup → **USER_GUIDE.md** or **README.md**)
 2. Update or remove outdated content
 3. Verify cross-references still work
+4. When a **GET** response shape used by the client changes (e.g. `/api/logs`), update `src/api/response-schemas.ts` and `src/api/__tests__/response-schemas.test.ts`
 
 **Where architecture lives:** Client domain model vs canvas projection, API routes, stores, and data flow are described only in [ARCHITECTURE.md](ARCHITECTURE.md) — avoid duplicating that narrative in other files.
 

@@ -1,12 +1,14 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { ChevronDown, ChevronRight, Trash2, Copy, Check } from 'lucide-react';
-import type { LlmLogEntry } from '../../api/types';
+import type { LlmLogEntry, ObservabilityLogsResponse } from '../../api/types';
 import { getLogs as apiGetLogs, clearLogs as apiClearLogs } from '../../api/client';
 import Modal from '../shared/Modal';
 import { FEEDBACK_DISMISS_MS } from '../../lib/constants';
 import { useGenerationStore } from '../../stores/generation-store';
 import { useCompilerStore, findVariantStrategy } from '../../stores/compiler-store';
 import type { RunTraceEvent } from '../../types/provider';
+import { promptKeyFromLlmLogEntry } from '../../lib/prompt-log-mapping';
+import type { PromptKey } from '../../stores/prompt-store';
 
 const SOURCE_LABEL: Record<string, string> = {
   compiler: 'Incubator',
@@ -27,6 +29,18 @@ const SOURCE_COLOR: Record<string, string> = {
   agentCompaction: 'text-[#38bdf8]',
   other: 'text-fg-muted',
 };
+
+function coerceRunTraceEvent(ev: Record<string, unknown>): RunTraceEvent | null {
+  if (
+    typeof ev.id !== 'string' ||
+    typeof ev.at !== 'string' ||
+    typeof ev.kind !== 'string' ||
+    typeof ev.label !== 'string'
+  ) {
+    return null;
+  }
+  return ev as unknown as RunTraceEvent;
+}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -94,16 +108,36 @@ function tokenSummary(entry: LlmLogEntry): string | null {
 
 function tokensPerSecond(entry: LlmLogEntry): string | null {
   const total = entry.totalTokens;
-  if (total == null || entry.durationMs <= 0) return null;
+  if (total == null || entry.durationMs <= 0 || entry.status === 'in_progress') return null;
   const tps = (total / entry.durationMs) * 1000;
   if (!Number.isFinite(tps)) return null;
   return `${tps >= 100 ? Math.round(tps) : tps.toFixed(1)} tok/s`;
 }
 
-function LogEntry({ entry }: { entry: LlmLogEntry }) {
+function LogEntry({
+  entry,
+  onOpenPromptStudio,
+}: {
+  entry: LlmLogEntry;
+  onOpenPromptStudio?: (key: PromptKey) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const studioKey = useMemo(() => promptKeyFromLlmLogEntry(entry), [entry]);
+  const [elapsedLiveSec, setElapsedLiveSec] = useState(0);
   const time = new Date(entry.timestamp).toLocaleTimeString();
-  const durationSec = (entry.durationMs / 1000).toFixed(1);
+  const inProgress = entry.status === 'in_progress';
+  useEffect(() => {
+    if (!inProgress) return;
+    const started = Date.parse(entry.timestamp);
+    const tick = () =>
+      setElapsedLiveSec(Math.max(0, Math.floor((Date.now() - started) / 1000)));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [inProgress, entry.timestamp]);
+  const durationSec = inProgress
+    ? `${elapsedLiveSec}s`
+    : (entry.durationMs / 1000).toFixed(1);
   const tok = tokenSummary(entry);
   const tps = tokensPerSecond(entry);
 
@@ -131,6 +165,11 @@ function LogEntry({ entry }: { entry: LlmLogEntry }) {
         </span>
 
         <span className="ml-auto flex items-center gap-3">
+          {inProgress && (
+            <span className="rounded bg-accent-subtle px-1.5 py-0.5 text-nano text-accent" title="Request started; row updates until the provider responds">
+              Live
+            </span>
+          )}
           {entry.error && (
             <span className="rounded bg-error-subtle px-1.5 py-0.5 text-nano text-error">Error</span>
           )}
@@ -150,7 +189,17 @@ function LogEntry({ entry }: { entry: LlmLogEntry }) {
               {tps ? ` · ${tps}` : ''}
             </span>
           )}
-          <span className="tabular-nums text-nano text-fg-muted">{durationSec}s</span>
+          <span
+            className="tabular-nums text-nano text-fg-muted"
+            title={
+              inProgress
+                ? 'Elapsed since this call started (server session log; poll ~1s)'
+                : 'Total duration for this call'
+            }
+          >
+            {durationSec}
+            {!inProgress ? 's' : ''}
+          </span>
           <span className="text-nano text-fg-faint">{time}</span>
         </span>
       </button>
@@ -170,6 +219,11 @@ function LogEntry({ entry }: { entry: LlmLogEntry }) {
                 <span className="text-fg-faint"> ({entry.provider})</span>
               ) : null}
             </span>
+            {entry.correlationId && (
+              <span className="w-full font-mono text-fg-faint" title="Correlation id for this generate / hypothesis run">
+                Run: {entry.correlationId}
+              </span>
+            )}
             {(entry.promptTokens != null ||
               entry.completionTokens != null ||
               entry.totalTokens != null ||
@@ -197,6 +251,18 @@ function LogEntry({ entry }: { entry: LlmLogEntry }) {
             </div>
           )}
 
+          {studioKey && onOpenPromptStudio && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => onOpenPromptStudio(studioKey)}
+                className="rounded border border-border-subtle bg-surface px-2 py-1 text-nano text-fg-secondary hover:bg-surface-raised"
+              >
+                Edit prompt in Studio
+              </button>
+            </div>
+          )}
+
           {entry.toolCalls && entry.toolCalls.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {entry.toolCalls.map((tc, i) => (
@@ -219,9 +285,10 @@ function LogEntry({ entry }: { entry: LlmLogEntry }) {
 interface LogViewerProps {
   open: boolean;
   onClose: () => void;
+  onOpenPromptStudio?: (key: PromptKey) => void;
 }
 
-const LOG_POLL_MS = 2000;
+const LOG_POLL_MS = 1000;
 
 function TraceEntry({
   trace,
@@ -262,8 +329,8 @@ function TraceEntry({
   );
 }
 
-export default function LogViewer({ open, onClose }: LogViewerProps) {
-  const [entries, setEntries] = useState<LlmLogEntry[]>([]);
+export default function LogViewer({ open, onClose, onOpenPromptStudio }: LogViewerProps) {
+  const [snapshot, setSnapshot] = useState<ObservabilityLogsResponse>({ llm: [], trace: [] });
   const [tab, setTab] = useState<'calls' | 'trace'>('calls');
   const results = useGenerationStore((s) => s.results);
   const dimensionMaps = useCompilerStore((s) => s.dimensionMaps);
@@ -271,7 +338,7 @@ export default function LogViewer({ open, onClose }: LogViewerProps) {
   useEffect(() => {
     if (!open) return;
     const load = () => {
-      void apiGetLogs().then(setEntries);
+      void apiGetLogs().then(setSnapshot);
     };
     load();
     const id = window.setInterval(load, LOG_POLL_MS);
@@ -279,24 +346,32 @@ export default function LogViewer({ open, onClose }: LogViewerProps) {
   }, [open]);
 
   const handleClear = useCallback(() => {
-    apiClearLogs().then(() => setEntries([]));
+    void apiClearLogs().then(() => setSnapshot({ llm: [], trace: [] }));
   }, []);
 
+  const entries = snapshot.llm;
   const reversed = [...entries].reverse();
   const traceEntries = useMemo(() => {
-    return results
-      .flatMap((result) =>
-        (result.liveTrace ?? []).map((trace) => {
-          const strategy = findVariantStrategy(dimensionMaps, result.variantStrategyId);
-          return {
-            trace,
-            title: strategy?.name ?? 'Variant',
-            runNumber: result.runNumber,
-          };
-        }),
-      )
-      .sort((a, b) => Date.parse(b.trace.at) - Date.parse(a.trace.at));
-  }, [results, dimensionMaps]);
+    const rows: Array<{ trace: RunTraceEvent; title: string; runNumber?: number; rowKey: string }> =
+      [];
+    for (const row of snapshot.trace) {
+      const trace = coerceRunTraceEvent(row.payload.event);
+      if (!trace) continue;
+      const result = row.payload.resultId
+        ? results.find((r) => r.id === row.payload.resultId)
+        : undefined;
+      const strategy = result
+        ? findVariantStrategy(dimensionMaps, result.variantStrategyId)
+        : undefined;
+      rows.push({
+        trace,
+        title: strategy?.name ?? 'Run trace',
+        runNumber: result?.runNumber,
+        rowKey: `${row.ts}:${trace.id}`,
+      });
+    }
+    return rows.sort((a, b) => Date.parse(b.trace.at) - Date.parse(a.trace.at));
+  }, [snapshot.trace, results, dimensionMaps]);
 
   return (
     <Modal open={open} onClose={onClose} title="Observability" size="xl">
@@ -316,26 +391,28 @@ export default function LogViewer({ open, onClose }: LogViewerProps) {
               Run Trace
             </button>
           </div>
-          {tab === 'calls' ? (
-            <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3">
+            {tab === 'calls' ? (
               <p className="text-xs text-fg-muted">
-                {entries.length} call{entries.length !== 1 ? 's' : ''} this session
+                {entries.length} call{entries.length !== 1 ? 's' : ''} this session (API ring)
               </p>
-              {entries.length > 0 && (
-                <button
-                  onClick={handleClear}
-                  className="flex items-center gap-1.5 rounded px-2 py-1 text-xs text-fg-muted hover:bg-error-subtle hover:text-error"
-                >
-                  <Trash2 size={12} />
-                  Clear
-                </button>
-              )}
-            </div>
-          ) : (
-            <p className="text-xs text-fg-muted">
-              {traceEntries.length} trace event{traceEntries.length !== 1 ? 's' : ''} across active runs
-            </p>
-          )}
+            ) : (
+              <p className="text-xs text-fg-muted">
+                {traceEntries.length} trace event{traceEntries.length !== 1 ? 's' : ''} this session
+                (API ring)
+              </p>
+            )}
+            {(entries.length > 0 || snapshot.trace.length > 0) && (
+              <button
+                onClick={handleClear}
+                className="flex items-center gap-1.5 rounded px-2 py-1 text-xs text-fg-muted hover:bg-error-subtle hover:text-error"
+                type="button"
+              >
+                <Trash2 size={12} />
+                Clear
+              </button>
+            )}
+          </div>
         </div>
 
         {tab === 'calls' ? (
@@ -346,22 +423,39 @@ export default function LogViewer({ open, onClose }: LogViewerProps) {
           ) : (
             <div className="space-y-2">
               {reversed.map((entry) => (
-                <LogEntry key={entry.id} entry={entry} />
+                <LogEntry
+                  key={entry.id}
+                  entry={entry}
+                  onOpenPromptStudio={onOpenPromptStudio}
+                />
               ))}
             </div>
           )
         ) : (
-          traceEntries.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border py-12 text-center text-xs text-fg-muted">
-              No run trace yet. Start an agentic run to inspect tool flow, file writes, and hand-offs.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {traceEntries.map(({ trace, title, runNumber }) => (
-                <TraceEntry key={trace.id} trace={trace} title={title} runNumber={runNumber} />
-              ))}
-            </div>
-          )
+          <>
+            <p className="rounded-md border border-border-subtle bg-surface px-3 py-2 text-nano leading-relaxed text-fg-muted">
+              Run trace rows come from <strong className="text-fg-secondary">GET /api/logs</strong> (server ring +
+              NDJSON in dev). The Clear button empties the in-memory rings only; today&apos;s file under{' '}
+              <code className="text-fg-secondary">logs/observability</code> stays append-only. Inline
+              Variant Inspector still uses live client traces; this tab is the audit view.
+            </p>
+            {traceEntries.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border py-12 text-center text-xs text-fg-muted">
+                No run trace yet. Start an agentic run to inspect tool flow, file writes, and hand-offs.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {traceEntries.map(({ trace, title, runNumber, rowKey }) => (
+                  <TraceEntry
+                    key={rowKey}
+                    trace={trace}
+                    title={title}
+                    runNumber={runNumber}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </Modal>

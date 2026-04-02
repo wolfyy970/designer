@@ -6,6 +6,7 @@ import type {
   ChatMessage,
 } from '../../../src/types/provider.ts';
 import { env } from '../../env.ts';
+import { completionMaxTokensForChat } from '../../lib/completion-budget.ts';
 import { buildChatRequestFromMessages, fetchChatCompletion, fetchModelList, parseChatResponse } from '../../lib/provider-helpers.ts';
 import { supportsReasoningModel } from '../../../src/lib/model-capabilities.ts';
 
@@ -32,13 +33,17 @@ export class LMStudioProvider implements GenerationProvider {
     options: ProviderOptions
   ): Promise<ChatResponse> {
     const model = options.model || DEFAULT_MODEL;
-    const requestBody = buildChatRequestFromMessages(model, messages, { stream: false });
+    const purpose = options.completionPurpose ?? 'default';
+    const maxTok = await completionMaxTokensForChat('lmstudio', model, messages, purpose);
+    const requestBody = buildChatRequestFromMessages(model, messages, { stream: false }, maxTok);
 
     const data = await fetchChatCompletion(
       `${env.LMSTUDIO_URL}/v1/chat/completions`,
       requestBody,
       { 404: 'LM Studio not available. Make sure LM Studio is running and the server is enabled.' },
       'LM Studio',
+      undefined,
+      options.signal,
     );
     return parseChatResponse(data);
   }

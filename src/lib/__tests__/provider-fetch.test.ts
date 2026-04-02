@@ -28,6 +28,35 @@ describe('extractMessageText', () => {
     const data = { choices: [{}] };
     expect(extractMessageText(data)).toBe('');
   });
+
+  it('concatenates OpenAI-style array content parts', () => {
+    const data = {
+      choices: [
+        {
+          message: {
+            content: [
+              { type: 'text', text: '{"dimensions":' },
+              { type: 'text', text: '[]}' },
+            ],
+          },
+        },
+      ],
+    };
+    expect(extractMessageText(data)).toBe('{"dimensions":[]}');
+  });
+
+  it('includes reasoning-type parts when they carry text', () => {
+    const data = {
+      choices: [
+        {
+          message: {
+            content: [{ type: 'reasoning', summary: 'Think…' }, { type: 'text', text: 'Hi' }],
+          },
+        },
+      ],
+    };
+    expect(extractMessageText(data)).toBe('Think…Hi');
+  });
 });
 
 // ── parseChatResponse ────────────────────────────────────────────────

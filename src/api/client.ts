@@ -7,7 +7,7 @@ import type {
   HypothesisPromptBundleResponse,
   ModelsResponse,
   ProviderInfo,
-  LlmLogEntry,
+  ObservabilityLogsResponse,
   DesignSystemExtractRequest,
   DesignSystemExtractResponse,
   HypothesisWorkspaceApiPayload,
@@ -22,8 +22,10 @@ import {
   CompileResponseSchema,
   DesignSystemExtractResponseSchema,
   HypothesisPromptBundleResponseSchema,
-  LlmLogListResponseSchema,
+  ObservabilityLogsResponseSchema,
   ModelsResponseSchema,
+  PromptHistoryListSchema,
+  PromptVersionBodySchema,
   ProvidersListResponseSchema,
 } from './response-schemas';
 
@@ -297,12 +299,55 @@ export async function listProviders(): Promise<ProviderInfo[]> {
 
 // ── Logs ────────────────────────────────────────────────────────────
 
-export async function getLogs(): Promise<LlmLogEntry[]> {
-  return getParsedList('/logs', LlmLogListResponseSchema, []);
+export async function getLogs(): Promise<ObservabilityLogsResponse> {
+  return getParsedList('/logs', ObservabilityLogsResponseSchema, { llm: [], trace: [] });
 }
 
 export async function clearLogs(): Promise<void> {
   await fetch(`${API_BASE}/logs`, { method: 'DELETE' });
+}
+
+/** Forward run-trace events to the server observability ring (best-effort). */
+export async function postTraceEvents(body: {
+  correlationId?: string;
+  resultId?: string;
+  events: RunTraceEvent[];
+}): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE}/logs/trace`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** GET /api/prompts/:key/history — version metadata only */
+export async function fetchPromptHistory(key: string): Promise<{ version: number; createdAt: string }[]> {
+  return getParsedList(
+    `/prompts/${encodeURIComponent(key)}/history`,
+    PromptHistoryListSchema,
+    [],
+  );
+}
+
+/** GET /api/prompts/:key/versions/:version — body for Prompt Studio compare */
+export async function fetchPromptVersionBody(
+  key: string,
+  version: number,
+): Promise<{ key: string; version: number; body: string; createdAt: string }> {
+  const response = await fetch(
+    `${API_BASE}/prompts/${encodeURIComponent(key)}/versions/${version}`,
+  );
+  const json: unknown = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = json as { error?: string };
+    throw new Error(err.error ?? `Failed to load prompt version ${version}`);
+  }
+  return PromptVersionBodySchema.parse(json);
 }
 
 // ── Design System ───────────────────────────────────────────────────

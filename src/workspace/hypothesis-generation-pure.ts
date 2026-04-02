@@ -12,6 +12,7 @@ import type {
   DomainDesignSystemContent,
   DomainHypothesis,
   DomainModelProfile,
+  ThinkingLevel,
 } from '../types/workspace-domain';
 import type { WorkspaceSnapshotWire } from '../lib/workspace-snapshot-schema';
 import type { WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
@@ -19,6 +20,41 @@ import type { WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 export interface WorkspaceGraphSnapshot {
   readonly nodes: readonly WorkspaceNode[];
   readonly edges: readonly WorkspaceEdge[];
+}
+
+const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high'] as const satisfies readonly ThinkingLevel[];
+
+function isThinkingLevel(x: unknown): x is ThinkingLevel {
+  return typeof x === 'string' && (THINKING_LEVELS as readonly string[]).includes(x);
+}
+
+/**
+ * Ensures every model profile value matches the hypothesis API Zod schema.
+ * Stale persisted rows or partial merges can leave `providerId` / `modelId` as undefined; the server
+ * validates the full `modelProfiles` record, not only lanes used by the hypothesis.
+ */
+export function normalizeModelProfilesForApi(
+  profiles: Record<string, DomainModelProfile>,
+  defaultCompilerProvider: string,
+): Record<string, DomainModelProfile> {
+  const out: Record<string, DomainModelProfile> = {};
+  for (const [nodeId, raw] of Object.entries(profiles)) {
+    if (!raw || typeof raw !== 'object') continue;
+    const providerId =
+      typeof raw.providerId === 'string' && raw.providerId.trim() !== ''
+        ? raw.providerId
+        : defaultCompilerProvider;
+    const modelId = typeof raw.modelId === 'string' ? raw.modelId : '';
+    const entry: DomainModelProfile = {
+      nodeId: typeof raw.nodeId === 'string' && raw.nodeId ? raw.nodeId : nodeId,
+      providerId,
+      modelId,
+    };
+    if (typeof raw.title === 'string' && raw.title) entry.title = raw.title;
+    if (isThinkingLevel(raw.thinkingLevel)) entry.thinkingLevel = raw.thinkingLevel;
+    out[nodeId] = entry;
+  }
+  return out;
 }
 
 /**
@@ -35,6 +71,7 @@ export function workspaceSnapshotWireToGraph(snapshot: WorkspaceSnapshotWire): W
 export interface ModelCredential {
   readonly providerId: string;
   readonly modelId: string;
+  readonly thinkingLevel: ThinkingLevel;
 }
 
 export interface HypothesisGenerationContext {
@@ -42,7 +79,6 @@ export interface HypothesisGenerationContext {
   readonly variantStrategy: VariantStrategy;
   readonly spec: DesignSpec;
   readonly agentMode: 'single' | 'agentic';
-  readonly thinkingLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | undefined;
   readonly modelCredentials: readonly ModelCredential[];
   readonly designSystemContent: string | undefined;
   readonly designSystemImages: readonly ReferenceImage[];
@@ -71,7 +107,9 @@ export function listIncomingModelCredentialsFromGraph(
     const modelId = src.data.modelId as string | undefined;
     if (!modelId) continue;
     const providerId = (src.data.providerId as string) || defaultCompilerProvider;
-    out.push({ providerId, modelId });
+    const thinkingLevel =
+      (src.data.thinkingLevel as ThinkingLevel | undefined) ?? 'minimal';
+    out.push({ providerId, modelId, thinkingLevel });
   }
   return out;
 }
@@ -136,6 +174,7 @@ function listModelCredentialsFromDomain(
     out.push({
       providerId: p.providerId || defaultCompilerProvider,
       modelId: p.modelId,
+      thinkingLevel: p.thinkingLevel ?? 'minimal',
     });
   }
   return out;
@@ -171,15 +210,6 @@ export function buildHypothesisGenerationContextFromInputs(input: {
   const agentMode =
     domainHypothesis?.agentMode ??
     ((node?.data?.agentMode as 'single' | 'agentic' | undefined) ?? 'single');
-  const thinkingLevel =
-    domainHypothesis?.thinkingLevel ??
-    (node?.data?.thinkingLevel as
-      | 'off'
-      | 'minimal'
-      | 'low'
-      | 'medium'
-      | 'high'
-      | undefined);
 
   let designSystemContent: string | undefined;
   let designSystemImages: readonly ReferenceImage[] = [];
@@ -198,7 +228,6 @@ export function buildHypothesisGenerationContextFromInputs(input: {
     variantStrategy,
     spec,
     agentMode,
-    thinkingLevel,
     modelCredentials,
     designSystemContent,
     designSystemImages,

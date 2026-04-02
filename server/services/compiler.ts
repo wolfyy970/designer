@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { jsonrepair } from 'jsonrepair';
 import type { DesignSpec, ReferenceImage } from '../../src/types/spec.ts';
 import type { CompiledPrompt, DimensionMap, VariantStrategy } from '../../src/types/compiler.ts';
 import type { ChatResponse, ContentPart, ChatMessage } from '../../src/types/provider.ts';
@@ -11,6 +10,9 @@ import { fetchChatCompletion, parseChatResponse } from '../lib/provider-helpers.
 import { logLlmCall } from '../log-store.ts';
 import { loggedCallLLM } from '../lib/llm-call-logger.ts';
 import { getProvider } from './providers/registry.ts';
+import { parseJsonLenient } from '../lib/parse-json-lenient.ts';
+import type { CompletionPurpose } from '../lib/completion-budget.ts';
+import { completionMaxTokensForChat } from '../lib/completion-budget.ts';
 
 export type { ChatMessage };
 
@@ -56,10 +58,16 @@ export async function callLLM(
   messages: ChatMessage[],
   model: string,
   providerId: string,
-  options: { temperature?: number; max_tokens?: number; images?: ReferenceImage[] } = {}
+  options: {
+    temperature?: number;
+    max_tokens?: number;
+    images?: ReferenceImage[];
+    signal?: AbortSignal;
+    completionPurpose?: CompletionPurpose;
+  } = {},
 ): Promise<ChatResponse> {
   const config = getProviderConfig(providerId);
-  const { images, ...requestOptions } = options;
+  const { images, signal, completionPurpose, max_tokens: maxTokExplicit, temperature } = options;
 
   const finalMessages = images && images.length > 0
     ? messages.map((msg) => {
@@ -70,12 +78,29 @@ export async function callLLM(
       })
     : messages;
 
+  let max_tokens = maxTokExplicit;
+  if (max_tokens === undefined) {
+    max_tokens = await completionMaxTokensForChat(
+      providerId,
+      model,
+      finalMessages,
+      completionPurpose ?? 'default',
+    );
+  }
+
   const data = await fetchChatCompletion(
     config.url,
-    { model, messages: finalMessages, ...config.extraFields, ...requestOptions },
+    {
+      model,
+      messages: finalMessages,
+      ...config.extraFields,
+      ...(temperature !== undefined ? { temperature } : {}),
+      ...(max_tokens != null ? { max_tokens } : {}),
+    },
     config.errorMap,
     config.label,
     config.extraHeaders,
+    signal,
   );
   return parseChatResponse(data);
 }
@@ -170,38 +195,57 @@ export async function compileSpec(
     ],
     model,
     providerId,
-    { temperature: 0.7, max_tokens: 4096, images },
+    { temperature: 0.7, images, completionPurpose: 'compile' },
     { source: 'compiler', phase: 'Compile spec → dimension map' },
   );
 
   const jsonStr = extractJSON(chat);
   let raw: unknown;
   try {
-    raw = JSON.parse(jsonStr);
+    raw = parseJsonLenient(jsonStr);
   } catch {
-    try {
-      raw = JSON.parse(jsonrepair(jsonStr));
-    } catch {
-      const reg = getProvider(providerId);
-      logLlmCall({
-        source: 'compiler',
-        phase: 'Compile spec → dimension map',
-        model,
-        provider: providerId,
-        ...(reg?.name && reg.name !== providerId ? { providerName: reg.name } : {}),
-        systemPrompt,
-        userPrompt,
-        response: chat,
-        durationMs: 0,
-        error: 'Invalid JSON response',
-      });
-      throw new Error(
-        `Compiler returned invalid JSON. Try re-compiling or switching models.\n\nRaw response:\n${chat.slice(0, 500)}`
-      );
-    }
+    const reg = getProvider(providerId);
+    logLlmCall({
+      source: 'compiler',
+      phase: 'Compile spec → dimension map',
+      model,
+      provider: providerId,
+      ...(reg?.name && reg.name !== providerId ? { providerName: reg.name } : {}),
+      systemPrompt,
+      userPrompt,
+      response: chat,
+      durationMs: 0,
+      error: 'Invalid JSON response',
+    });
+    const rawPreview =
+      chat.trim() === ''
+        ? '(empty — provider may use array message.content; see extractMessageText / LLM log)'
+        : chat.slice(0, 4000);
+    const jsonProbe =
+      jsonStr.trim() === ''
+        ? '(extractJSON found no fenced or braced JSON)'
+        : jsonStr.length > 800
+          ? `${jsonStr.slice(0, 800)}…`
+          : jsonStr;
+    throw new Error(
+      `Compiler returned invalid JSON. Try re-compiling or switching models.\n\nRaw response:\n${rawPreview}\n\nJSON segment attempted:\n${jsonProbe}`,
+    );
   }
 
-  return parseDimensionMap(raw, spec.id, model);
+  const map = parseDimensionMap(raw, spec.id, model);
+  const asked = options.promptOptions?.count;
+  if (
+    asked != null &&
+    map.variants.length < asked &&
+    process.env.NODE_ENV !== 'production'
+  ) {
+    console.warn(
+      `[compile] Received ${map.variants.length} variant(s) but ${asked} were requested — often output truncation or the model stopping early. max_tokens=${
+        env.MAX_OUTPUT_TOKENS ?? 'omitted (provider / model default)'
+      }`,
+    );
+  }
+  return map;
 }
 
 export function compileVariantPrompts(

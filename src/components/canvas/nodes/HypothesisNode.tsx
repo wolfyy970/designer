@@ -1,12 +1,20 @@
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { type NodeProps, type Node, Handle, Position } from '@xyflow/react';
-import { ChevronDown, ChevronRight, X, Sparkles, Loader2, Pencil, Zap } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  ClipboardCopy,
+  Loader2,
+  Pencil,
+  Sparkles,
+  X,
+  Zap,
+} from 'lucide-react';
 import { useCompilerStore, findVariantStrategy } from '../../../stores/compiler-store';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { useGenerationStore } from '../../../stores/generation-store';
 import type { HypothesisNodeData } from '../../../types/canvas-data';
 import { useHypothesisGeneration } from '../../../hooks/useHypothesisGeneration';
-import { useConnectedModel } from '../../../hooks/useConnectedModel';
 import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
 import { processingOrFilled } from '../../../lib/node-status';
@@ -30,31 +38,18 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
     (s) => findVariantStrategy(s.dimensionMaps, strategyId),
   );
   const updateVariant = useCompilerStore((s) => s.updateVariant);
-  // Read via Zustand store selectors (same pattern as useNodeProviderModel) so updates
-  // from updateNodeData are immediately reactive — not delayed by React Flow reconciliation.
+
   const agentMode = useCanvasStore(
-    (s) => ((s.nodes.find((n) => n.id === nodeId)?.data.agentMode as 'single' | 'agentic' | undefined) ?? 'single'),
-  );
-  const thinkingLevel = useCanvasStore(
-    (s) => ((s.nodes.find((n) => n.id === nodeId)?.data.thinkingLevel as 'off' | 'minimal' | 'low' | 'medium' | 'high' | undefined) ?? 'minimal'),
+    (s) =>
+      ((s.nodes.find((n) => n.id === nodeId)?.data.agentMode as 'single' | 'agentic' | undefined) ??
+        'single'),
   );
 
   const setAgentMode = useCallback(
-    (mode: 'single' | 'agentic') => useCanvasStore.getState().updateNodeData(nodeId, { agentMode: mode }),
+    (mode: 'single' | 'agentic') =>
+      useCanvasStore.getState().updateNodeData(nodeId, { agentMode: mode }),
     [nodeId],
   );
-  const setThinkingLevel = useCallback(
-    (level: 'off' | 'minimal' | 'medium') => useCanvasStore.getState().updateNodeData(nodeId, { thinkingLevel: level }),
-    [nodeId],
-  );
-
-  const { supportsReasoning } = useConnectedModel(nodeId);
-
-  useEffect(() => {
-    if (!supportsReasoning && thinkingLevel !== 'off') {
-      setThinkingLevel('off');
-    }
-  }, [supportsReasoning, thinkingLevel, setThinkingLevel]);
 
   const handleRemove = useNodeRemoval(nodeId);
 
@@ -240,21 +235,33 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
       {/* ── Generation Controls ──────────────────────────────── */}
       <div className="border-t border-border-subtle px-3 py-2.5">
         {generationError && (
-          <div className="mb-2 rounded bg-error-subtle px-2 py-1.5 text-nano text-error">
-            {generationError}
+          <div className="mb-2 rounded bg-error-subtle px-2 py-1.5 text-nano text-error select-text">
+            <pre className="max-h-36 overflow-y-auto whitespace-pre-wrap break-words font-sans leading-snug text-inherit [font-size:inherit]">
+              {generationError}
+            </pre>
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => void navigator.clipboard?.writeText(generationError)}
+              className="nodrag nowheel mt-1 flex items-center gap-1 rounded px-0.5 py-0.5 text-[10px] font-medium text-error/90 hover:bg-error/10 hover:text-error"
+            >
+              <ClipboardCopy size={10} className="shrink-0 opacity-90" aria-hidden />
+              Copy message
+            </button>
           </div>
         )}
 
-        {/* Mode: same segmented pattern as Thinking (neutral rail + fg pill) — avoids full-track accent */}
         <div className="nodrag nowheel mb-2 space-y-1.5">
-          <div className="flex items-center justify-between gap-2">
-            <span className="shrink-0 text-nano text-fg-muted">Mode</span>
-            <div className="flex min-w-0 flex-1 gap-0.5 rounded border border-border bg-surface p-0.5">
+          <div className="space-y-1">
+            <span className="text-nano text-fg-muted">Run mode</span>
+            <div className="flex gap-0.5 rounded border border-border bg-surface p-0.5">
               <button
                 type="button"
                 onPointerDown={() => setAgentMode('single')}
-                title="Direct: one forward generation — fastest"
-                className={`nodrag nowheel flex min-w-0 flex-1 items-center justify-center gap-1 rounded px-1.5 py-0.5 text-nano transition-colors ${agentMode === 'single' ? 'bg-fg text-bg' : 'text-fg-muted hover:text-fg-secondary'}`}
+                title="Direct: one shot"
+                className={`nodrag nowheel flex min-w-0 flex-1 items-center justify-center gap-1 rounded px-1.5 py-0.5 text-nano transition-colors ${
+                  agentMode === 'single' ? 'bg-fg text-bg' : 'text-fg-muted hover:text-fg-secondary'
+                }`}
               >
                 <Sparkles size={9} className="shrink-0 opacity-90" />
                 Direct
@@ -262,34 +269,20 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               <button
                 type="button"
                 onPointerDown={() => setAgentMode('agentic')}
-                title="Agentic: tools, files, and scored revision passes — slower, richer"
-                className={`nodrag nowheel flex min-w-0 flex-1 items-center justify-center gap-1 rounded px-1.5 py-0.5 text-nano transition-colors ${agentMode === 'agentic' ? 'bg-fg text-bg' : 'text-fg-muted hover:text-fg-secondary'}`}
+                title="Agentic: tools, eval, revise"
+                className={`nodrag nowheel flex min-w-0 flex-1 items-center justify-center gap-1 rounded px-1.5 py-0.5 text-nano transition-colors ${
+                  agentMode === 'agentic' ? 'bg-fg text-bg' : 'text-fg-muted hover:text-fg-secondary'
+                }`}
               >
                 <Zap size={9} className="shrink-0 opacity-90" />
                 Agentic
               </button>
             </div>
           </div>
-
-          {agentMode === 'agentic' && supportsReasoning && (
-            <div className="flex items-center justify-between">
-              <span className="text-nano text-fg-muted">Thinking</span>
-              <div className="flex gap-0.5 rounded border border-border bg-surface p-0.5">
-                {(['off', 'minimal', 'medium'] as const).map((level) => {
-                  const label = level === 'off' ? 'None' : level === 'minimal' ? 'Light' : 'Deep';
-                  return (
-                    <button
-                      key={level}
-                      onPointerDown={() => setThinkingLevel(level)}
-                      className={`rounded px-1.5 py-0.5 text-nano transition-colors ${thinkingLevel === level ? 'bg-fg text-bg' : 'text-fg-muted hover:text-fg-secondary'}`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          <p className="text-[10px] leading-snug text-fg-muted">
+            <span className="font-medium text-fg-secondary">Thinking</span> is set on each{' '}
+            <span className="text-fg-secondary">Model</span> node.
+          </p>
         </div>
 
         <div className="nodrag nowheel">
