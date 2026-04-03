@@ -207,6 +207,7 @@ export const useGenerationStore = create<GenerationStore>()(
           delete persisted.liveFilesPlan;
           delete persisted.liveTodos;
           delete persisted.liveTrace;
+          delete persisted.liveSkills;
           delete persisted.agenticPhase;
           delete persisted.evaluationStatus;
           delete persisted.lastAgentFileAt;

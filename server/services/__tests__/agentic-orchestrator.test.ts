@@ -15,12 +15,17 @@ vi.mock('../pi-agent-service.ts', () => ({
   runDesignAgentSession: mocks.runDesignAgentSession,
 }));
 
-vi.mock('../../lib/build-agentic-system-context.ts', () => ({
-  buildAgenticSystemContext: vi.fn().mockResolvedValue({
-    systemPrompt: 'sys',
-    sandboxSeedFiles: {},
-  }),
-}));
+vi.mock('../../lib/build-agentic-system-context.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/build-agentic-system-context.ts')>();
+  return {
+    ...actual,
+    buildAgenticSystemContext: vi.fn().mockResolvedValue({
+      systemPrompt: 'sys',
+      sandboxSeedFiles: {},
+      loadedSkills: [],
+    }),
+  };
+});
 
 vi.mock('../design-evaluation-service.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../design-evaluation-service.ts')>();

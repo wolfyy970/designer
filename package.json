@@ -49,6 +49,7 @@
     "react-router-dom": "^7.13.0",
     "streamdown": "^2.5.0",
     "uuid": "^13.0.0",
+    "yaml": "^2.8.3",
     "zod": "^4.3.6",
     "zustand": "^5.0.11"
   },

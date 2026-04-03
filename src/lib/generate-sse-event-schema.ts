@@ -69,6 +69,16 @@ export const generateSSEEventSchema = z.union([
     snapshot: evaluationReportSnapshotSchema,
   }),
   z.object({ type: z.literal('revision_round'), round: z.number(), brief: z.string() }),
+  z.object({
+    type: z.literal('skills_loaded'),
+    skills: z.array(
+      z.object({
+        key: z.string(),
+        name: z.string(),
+        description: z.string(),
+      }),
+    ),
+  }),
   z.object({ type: z.literal('checkpoint'), checkpoint: agenticCheckpointSchema }),
   z.object({ type: z.literal('lane_done'), laneIndex: z.number() }),
   z.object({ type: z.literal('done') }),

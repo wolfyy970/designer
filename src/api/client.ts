@@ -107,6 +107,8 @@ export interface GenerateStreamCallbacks {
   onEvaluationProgress?: (round: number, phase: string, message?: string) => void;
   onEvaluationReport?: (round: number, snapshot: EvaluationRoundSnapshot) => void;
   onRevisionRound?: (round: number, brief: string) => void;
+  /** Non-manual skills pre-seeded for this Pi session (may update on revision rounds). */
+  onSkillsLoaded?: (skills: { key: string; name: string; description: string }[]) => void;
   onCheckpoint?: (checkpoint: AgenticCheckpoint) => void;
   onDone?: () => void;
   /** Fired when SSE JSON fails schema validation (wire `event:` name + body). */
@@ -184,6 +186,9 @@ function dispatchParsedGenerateStreamEvent(
       break;
     case 'revision_round':
       callbacks.onRevisionRound?.(event.round, event.brief);
+      break;
+    case 'skills_loaded':
+      callbacks.onSkillsLoaded?.(event.skills);
       break;
     case 'checkpoint':
       callbacks.onCheckpoint?.(event.checkpoint);

@@ -366,6 +366,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
               activeToolName={result.activeToolName}
               activeToolPath={result.activeToolPath}
               liveTodos={result.liveTodos}
+              liveSkills={result.liveSkills}
               agenticPhase={result.agenticPhase}
               evaluationStatus={result.evaluationStatus}
             />

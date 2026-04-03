@@ -142,6 +142,9 @@ export function createPlaceholderStreamCallbacks(options: {
         progressMessage: brief.length > 180 ? `${brief.slice(0, 180)}…` : brief,
       });
     },
+    onSkillsLoaded: (skills) => {
+      updateResult(placeholderId, { liveSkills: skills });
+    },
     onCheckpoint: (checkpoint) => {
       state.agenticCheckpoint = checkpoint;
       pushTrace(traceRowCheckpoint(checkpoint));

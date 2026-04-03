@@ -1,6 +1,6 @@
 # Product — What Exists Today
 
-**Status:** Canvas interface complete. Single-shot and agentic generation operational with post-build evaluation, bounded revision rounds, and optional headless browser QA. Vision support implemented. Versioned skills in DB feed the agentic builder when selected by context.
+**Status:** Canvas interface complete. Single-shot and agentic generation operational with post-build evaluation, bounded revision rounds, and optional headless browser QA. Vision support implemented. Repo **Agent Skills** under **`skills/`** are discovered per Pi session, pre-seeded into the virtual workspace (all non-`manual`), and surfaced in the variant run UI; the model reads relevant skills on demand.
 
 ## Canvas Interface (`/canvas` — default route)
 
@@ -71,7 +71,7 @@ Enabled by choosing **Agentic** in Mode on a Hypothesis node; use **Run agent** 
 
 **Typical flow:** plan milestones → create or edit files with `write` / `edit` → validate → optional bash for edge cases. Live **`file`** events update the variant preview as design artifacts change.
 
-**Skills.** Agent Skills–style packages live as plain files under repo-root **`skills/`** (for a future Pi mount). They are **not** injected into the agentic sandbox or system prompt yet.
+**Skills.** Agent Skills live under **`skills/<key>/SKILL.md`** (YAML frontmatter: `name`, `description`, `tags`, `when`: `auto` | `always` | `manual`). On each agentic **build** and **revision** round, the server walks the directory, injects **`<available_skills>`** (paths + descriptions for non-**`manual`** entries), and **pre-seeds** those packages into **`skills/<key>/…`** in the virtual workspace. The agent should **`read`** a skill file when relevant rather than loading every body into context. Streamed **`skills_loaded`** (+ trace) lists the pre-seeded catalog. Optional reference files in the package copy with the skill (see server limits).
 
 **Files are bundled for preview.** `bundleVirtualFS()` inlines linked CSS and JS into a single HTML document for sandboxed iframe rendering. The original files remain separately accessible in the code tab.
 
@@ -116,5 +116,5 @@ Do not duplicate the prompt catalog here — use **[LANGFUSE_PROMPTS.md](LANGFUS
 - Experimentation/deployment integration
 - Spec version history
 - Role-based collaboration
-- Admin/canvas UI for skill upload and versioning (zip ingest, validation); skills are DB-backed but maintained out-of-band today
+- Admin/canvas UI for authoring **manual** skills or attaching packages without editing the repo
 - End-user controls for agentic **max revision rounds** and optional **early-stop score** thresholds (server env and API already support overrides)

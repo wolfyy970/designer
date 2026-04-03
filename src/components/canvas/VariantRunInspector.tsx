@@ -321,6 +321,7 @@ export default function VariantRunInspector() {
                   activeToolName={result.activeToolName}
                   activeToolPath={result.activeToolPath}
                   liveTodos={result.liveTodos}
+                  liveSkills={result.liveSkills}
                   agenticPhase={result.agenticPhase}
                   evaluationStatus={result.evaluationStatus}
                 />

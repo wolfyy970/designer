@@ -103,7 +103,7 @@ flowchart TB
 - **`agentic-orchestrator`** calls **`runDesignAgentSession`** only — it does not import `@mariozechner/*` directly. To replace Pi, rework **`server/services/pi-sdk/`**, **`pi-agent-service.ts`**, and the event bridge; keep the orchestrator’s build/eval/revision contract stable.
 - **`createAgentSession`** uses **`tools: []`** so default Pi tools never touch the host filesystem; **`virtual-tools`** maps native Pi file tool schemas to **`just-bash`**, and **`pi-bash-tool`** runs shell commands in the same instance. **`cwd`** is the sandbox project root; **`createSandboxResourceLoader()`** is a no-op loader so Pi does not merge host-repo AGENTS/system prompts — sandbox **`AGENTS.md`** (if any) comes only from Langfuse **`sandboxAgentsContext`** via **`buildAgenticSystemContext`** → orchestrator seed merge.
 - **`pi-session-event-bridge`** turns Pi session callbacks into **`AgentRunEvent`**, which **`executeGenerateStream`** serializes to SSE for the client.
-- **`agent-bash-sandbox`** seeds design files (and optional **`AGENTS.md`** from Langfuse), then **`extractDesignFiles`** collects artifacts after the run; evaluation runs in **`design-evaluation-service`** (parallel workers), not inside Pi tool definitions. Repo-root **`skills/`** is reserved for future Agent Skills packages and is **not** mounted into the sandbox yet.
+- **`agent-bash-sandbox`** seeds design files (and optional **`AGENTS.md`** from Langfuse), then **`extractDesignFiles`** collects artifacts after the run; evaluation runs in **`design-evaluation-service`** (parallel workers), not inside Pi tool definitions. Repo-root **`skills/`** packages (see **`server/lib/skill-discovery.ts`**) are walked at each Pi session boundary; every non-**`manual`** skill appears in the agentic system prompt (`<available_skills>` with workspace paths) and is **pre-seeded** under **`skills/<key>/…`**. The model should **`read`** relevant **`SKILL.md`** files when needed (not all at once). **`skills_loaded`** SSE (+ trace) advertises the catalog.
 
 ## Four Abstraction Layers
 
@@ -187,7 +187,7 @@ flowchart TB
 
 **`/api/generate` request fields:** `prompt`, `providerId`, `modelId`, `promptOverrides` (`genSystemHtml`, `genSystemHtmlAgentic`, `variant`), `supportsVision`, `mode` (`single` | `agentic`), `thinkingLevel` (`off` | `minimal` | `low` | `medium` | `high`).
 
-**SSE events:** `progress` (status label), `activity` (streaming agent text), `code` (final HTML in single-shot), `file` (path + content in agentic), `plan` (declared file list in agentic), `error`, `done`.
+**SSE events:** `progress` (status label), `activity` (streaming agent text), `code` (final HTML in single-shot), `file` (path + content in agentic), `plan` (declared file list in agentic), `skills_loaded` (pre-seeded non-manual skills for this Pi session; may repeat on revision rounds), `error`, `done`.
 
 **Hypothesis flow:** The canvas still owns graph/domain state (Zustand + React Flow), but **prompt assembly and multi-model orchestration** for a hypothesis go through `/api/hypothesis/*`. Pure workspace helpers live in `src/workspace/hypothesis-generation-pure.ts` (importable by the server). `/api/hypothesis/generate` adds `laneIndex` to each event payload and emits `lane_done` per model lane before a final `done`; the client demuxes into one `GenerationResult` per lane.
 
@@ -234,6 +234,9 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 | `lib/provider-helpers.ts` | Re-exports from `src/lib/provider-fetch.ts` + server-specific `buildChatRequestFromMessages` |
 | `lib/prompts/*` | Re-exports from `src/lib/prompts/` — no server-side duplication |
 | `lib/extract-code.ts` | Re-exports `src/lib/extract-code.ts` |
+| `lib/build-agentic-system-context.ts` | Langfuse agentic system prompt + **`AGENTS.md`** seed + skills catalog XML + skill file seeds |
+| `lib/skill-discovery.ts` | Walk **`skills/*/SKILL.md`**, filter by `when` mode, build catalog XML + sandbox seed map |
+| `lib/skill-schema.ts` | Zod: skill YAML frontmatter |
 | `lib/error-utils.ts` | Error normalization (`normalizeError`) |
 | `lib/utils.ts` | ID generation, interpolation |
 
@@ -250,19 +253,19 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 
 ### Agentic
 
-`server/routes/generate.ts` (when `mode === 'agentic'`) delegates to `server/services/agentic-orchestrator.ts` → `runAgenticWithEvaluation`. Agentic system text comes from Langfuse **`genSystemHtmlAgentic`** (and optional sandbox **`AGENTS.md`** from **`sandboxAgentsContext`** via `buildAgenticSystemContext`). Repo **`skills/`** is not injected into the Pi workspace yet.
+`server/routes/generate.ts` (when `mode === 'agentic'`) delegates to `server/services/agentic-orchestrator.ts` → `runAgenticWithEvaluation`. Agentic system text comes from Langfuse **`genSystemHtmlAgentic`** (and optional sandbox **`AGENTS.md`** from **`sandboxAgentsContext`** via `buildAgenticSystemContext`), plus an **`<available_skills>`** catalog. All non-**`manual`** skill bodies (+ small extras) are pre-seeded under **`skills/<key>/…`** in **`just-bash`** before the run.
 
 **Orchestrator (`runAgenticWithEvaluation`):**
-1. **Build:** `runDesignAgentSession` in `pi-agent-service.ts` — virtual FS is seeded with optional **`AGENTS.md`** + any caller `seedFiles`, then the agent writes design artifacts.
+1. **Build:** `runDesignAgentSession` in `pi-agent-service.ts` — virtual FS is seeded with optional **`AGENTS.md`**, all catalog **skills** (`skills/<key>/…`), and any caller `seedFiles`, then the agent writes design artifacts. Each Pi session boundary re-runs **`discoverSkills`** (revision rounds use a fresh Pi session and re-seed skills).
 2. **Evaluate:** `runEvaluationWorkers` in `design-evaluation-service.ts` runs design / strategy / implementation LLM rubrics plus **browser** checks:
    - **Preflight:** `browser-qa-evaluator.ts` — HTML/VM heuristics (fast).
    - **Grounded:** `browser-playwright-evaluator.ts` — headless Chromium via Playwright (`setContent` on bundled HTML), console/page errors, visible text, layout box, broken images. Disabled when `VITEST=true` or `BROWSER_PLAYWRIGHT_EVAL=0`.
-3. **Revision loop:** Until `isEvalSatisfied` (primary: `!shouldRevise` after `enforceRevisionGate`; optional: `agenticMinOverallScore` + zero hard fails) or **`maxRevisionRounds`** is reached, or abort. Each revision re-seeds prior design files merged with fresh **`AGENTS.md`** (when configured).
+3. **Revision loop:** Until `isEvalSatisfied` (primary: `!shouldRevise` after `enforceRevisionGate`; optional: `agenticMinOverallScore` + zero hard fails) or **`maxRevisionRounds`** is reached, or abort. Each revision re-seeds prior design files merged with fresh **`AGENTS.md`** (when configured) and the full non-**`manual`** skill packages again.
 4. **Checkpoint:** `AgenticCheckpoint` includes `stopReason` (`satisfied` | `max_revisions` | `aborted` | `revision_failed`) and `revisionAttempts`.
 
 **Env defaults** (`server/env.ts`): `AGENTIC_MAX_REVISION_ROUNDS` (default `5`, clamped 0–20), optional `AGENTIC_MIN_OVERALL_SCORE`. Request body may pass `agenticMaxRevisionRounds` / `agenticMinOverallScore`. For Playwright in production: install browsers once (`pnpm exec playwright install chromium`).
 
-`server/services/pi-sdk/` is the **NPM import boundary** for Pi packages (and the right place to replace Pi with another agent later). Other server code uses `./pi-sdk` or `../services/pi-sdk` for types/session helpers only — not deep Pi imports. Session orchestration stays in `pi-agent-service.ts`; app-specific Pi tools in `pi-*-tool(s).ts`; virtual FS mapping in `pi-sdk/virtual-tools.ts`; sandbox in `agent-bash-sandbox.ts`; **`sandbox-resource-loader.ts`** supplies the sealed-session resource loader. Agentic system context (including optional **`AGENTS.md`** seed) is built in `server/lib/build-agentic-system-context.ts`.
+`server/services/pi-sdk/` is the **NPM import boundary** for Pi packages (and the right place to replace Pi with another agent later). Other server code uses `./pi-sdk` or `../services/pi-sdk` for types/session helpers only — not deep Pi imports. Session orchestration stays in `pi-agent-service.ts`; app-specific Pi tools in `pi-*-tool(s).ts`; virtual FS mapping in `pi-sdk/virtual-tools.ts`; sandbox in `agent-bash-sandbox.ts`; **`sandbox-resource-loader.ts`** supplies the sealed-session resource loader. Agentic system context (optional **`AGENTS.md`** seed + repo **skills**) is built in `server/lib/build-agentic-system-context.ts`.
 
 ### Generation Cancellation
 

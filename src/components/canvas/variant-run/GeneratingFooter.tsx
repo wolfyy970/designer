@@ -20,6 +20,7 @@ export function GeneratingFooter({
   activeToolName,
   activeToolPath,
   liveTodos,
+  liveSkills,
   agenticPhase,
   evaluationStatus,
 }: {
@@ -33,6 +34,7 @@ export function GeneratingFooter({
   activeToolName?: string;
   activeToolPath?: string;
   liveTodos?: TodoItem[];
+  liveSkills?: { key: string; name: string; description: string }[];
   agenticPhase?: AgenticPhase;
   evaluationStatus?: string;
 }) {
@@ -101,6 +103,11 @@ export function GeneratingFooter({
     lastAgentFileAt == null &&
     elapsed >= FIRST_FILE_WAIT_ELAPSED_SEC;
 
+  const catalogTitles = useMemo(() => {
+    if (!liveSkills?.length) return '';
+    return liveSkills.map((s) => s.name).join(', ');
+  }, [liveSkills]);
+
   return (
     <div className="flex flex-col gap-2 border-t border-border-subtle px-4 py-3">
       {hasPlan && isBuilding ? (
@@ -142,6 +149,23 @@ export function GeneratingFooter({
           {todoHint && (
             <span className="pl-[18px] text-nano leading-snug text-fg-muted">
               {todoHint.label}: <span className="text-fg-secondary">{todoHint.task}</span>
+            </span>
+          )}
+          {liveSkills != null && liveSkills.length > 0 && (
+            <span className="pl-[18px] text-nano leading-snug text-fg-muted">
+              Skills (pre-seeded, read when relevant):{' '}
+              <span
+                className="text-fg-secondary"
+                title={liveSkills.map((s) => s.description).join(' · ')}
+              >
+                {catalogTitles}
+              </span>
+            </span>
+          )}
+          {liveSkills != null && liveSkills.length === 0 && isBuilding && (
+            <span className="pl-[18px] text-nano leading-snug text-fg-faint">
+              Skills: no catalog entries (configure under <code>skills/</code> or all are{' '}
+              <code>manual</code>)
             </span>
           )}
           {(activeToolName || activeToolPath) && !toolLineRedundant && (

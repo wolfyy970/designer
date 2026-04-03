@@ -80,7 +80,8 @@ export type RunTraceKind =
   | 'evaluation_report'
   | 'revision_round'
   | 'checkpoint'
-  | 'compaction';
+  | 'compaction'
+  | 'skills_loaded';
 
 export interface RunTraceEvent {
   id: string;
@@ -145,6 +146,8 @@ export interface GenerationResult {
   thinkingTurns?: ThinkingTurnSlice[];
   /** Capped structured trace for this in-flight run. Never persisted. */
   liveTrace?: RunTraceEvent[];
+  /** Agent skills pre-seeded for this Pi session (non-manual catalog). Never persisted. */
+  liveSkills?: { key: string; name: string; description: string }[];
   /** Agentic harness: high-level phase for UI */
   agenticPhase?: AgenticPhase;
   /** Live evaluation progress label during SSE */

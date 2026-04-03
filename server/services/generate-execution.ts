@@ -90,6 +90,10 @@ async function executeGenerateStream(
         await write('revision_round', { round: event.round, brief: event.brief });
         return;
       }
+      if (event.type === 'skills_loaded') {
+        await write('skills_loaded', { skills: event.skills });
+        return;
+      }
       if (event.type === 'trace') {
         await write('trace', { trace: event.trace });
         return;

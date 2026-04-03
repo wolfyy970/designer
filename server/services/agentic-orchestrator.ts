@@ -22,6 +22,7 @@ import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
 import { isLangfuseTracingEnabled } from '../lib/langfuse-tracing-enabled.ts';
 import { createTraceId, startActiveObservation } from '@langfuse/tracing';
 import { runDesignAgentSession, type AgentRunEvent, type AgentSessionParams } from './pi-agent-service.ts';
+import type { LoadedSkillSummary } from '../lib/skill-schema.ts';
 
 const AGENTIC_ROOT_SPAN_ID = '0000000000000001';
 
@@ -31,6 +32,7 @@ export type AgenticOrchestratorBuildInput = Omit<AgentSessionParams, 'systemProm
 export type AgenticOrchestratorEvent =
   | AgentRunEvent
   | { type: 'phase'; phase: AgenticPhase }
+  | { type: 'skills_loaded'; skills: LoadedSkillSummary[] }
   | { type: 'evaluation_progress'; round: number; phase: string; message?: string }
   | { type: 'evaluation_report'; round: number; snapshot: EvaluationRoundSnapshot }
   | { type: 'revision_round'; round: number; brief: string };
@@ -65,6 +67,29 @@ async function emit(
 }
 
 const REVISION_COMPILED_PROMPT_MAX = 4000;
+
+async function emitSkillsLoaded(
+  onStream: AgenticOrchestratorOptions['onStream'],
+  skills: LoadedSkillSummary[],
+  tracePhase: AgenticPhase,
+): Promise<void> {
+  const label =
+    skills.length === 0
+      ? 'No agent skills in catalog for this session'
+      : `Skills catalog (${skills.length}): ${skills.map((s) => s.name).join(', ')}`;
+  await emit(onStream, {
+    type: 'trace',
+    trace: {
+      id: crypto.randomUUID(),
+      at: new Date().toISOString(),
+      kind: 'skills_loaded',
+      label,
+      phase: tracePhase,
+      status: skills.length === 0 ? 'info' : 'success',
+    },
+  });
+  await emit(onStream, { type: 'skills_loaded', skills });
+}
 
 /** Original intent for the revision agent (truncated compiled prompt + KPI/hypothesis context). */
 export function buildRevisionUserContext(
@@ -227,6 +252,7 @@ async function runAgenticWithEvaluationImpl(
   const initialCtx = await buildAgenticSystemContext({
     getPromptBody: options.getPromptBody,
   });
+  await emitSkillsLoaded(options.onStream, initialCtx.loadedSkills, 'building');
   const initialSeedFiles = {
     ...initialCtx.sandboxSeedFiles,
     ...(options.build.seedFiles ?? {}),
@@ -310,6 +336,7 @@ async function runAgenticWithEvaluationImpl(
     const revisionCtx = await buildAgenticSystemContext({
       getPromptBody: options.getPromptBody,
     });
+    await emitSkillsLoaded(options.onStream, revisionCtx.loadedSkills, 'revising');
 
     const revised = await runDesignAgentSession(
       {

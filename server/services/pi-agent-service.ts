@@ -127,7 +127,13 @@ export async function runDesignAgentSession(
       CreateAgentSessionOptions['thinkingLevel']
     >,
     tools: [],
-    customTools: [...virtualPiTools, bashTool, todoTool, validateJsTool, validateHtmlTool] as ToolDefinition[],
+    customTools: [
+      ...virtualPiTools,
+      bashTool,
+      todoTool,
+      validateJsTool,
+      validateHtmlTool,
+    ] as ToolDefinition[],
     sessionManager: SessionManager.inMemory(),
     cwd: SANDBOX_PROJECT_ROOT,
     resourceLoader: createSandboxResourceLoader(),

@@ -70,7 +70,7 @@ Uses `@xyflow/react` v12. The canvas has 11 node types in a 4-column layout:
 
 **Legacy `/api/generate`:** Still available on the server for non-canvas tools/tests; the canvas UI does **not** import a `useGenerate` hook — all canvas generation goes through the hypothesis routes above.
 
-**Agentic (server):** With `mode: 'agentic'` → `runAgenticWithEvaluation` runs a Pi coding-agent session: **`server/services/pi-agent-service.ts`** uses `createAgentSession` with **`tools: []`** (no host-FS Pi tools) and **`customTools`** from **`server/services/pi-sdk/virtual-tools.ts`** (Pi `read` / `write` / `edit` / `ls` / `find` / `grep` mapped to **`just-bash`**) plus `pi-bash-tool`, `pi-app-tools`, then parallel evaluator workers (`design-evaluation-service.ts`): LLM rubrics + browser preflight (`browser-qa-evaluator.ts`), merged with optional Playwright when configured and Chromium is installed. Bounded revision rounds re-seed the agent with eval feedback. Repo-root **`skills/`** holds Agent Skills packages for a future Pi integration and is **not** mounted into the sandbox yet. **Only `server/services/pi-sdk/`** should import `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent` directly.
+**Agentic (server):** With `mode: 'agentic'` → `runAgenticWithEvaluation` runs a Pi coding-agent session: **`server/services/pi-agent-service.ts`** uses `createAgentSession` with **`tools: []`** (no host-FS Pi tools) and **`customTools`** from **`server/services/pi-sdk/virtual-tools.ts`** (Pi `read` / `write` / `edit` / `ls` / `find` / `grep` mapped to **`just-bash`**) plus `pi-bash-tool`, `pi-app-tools` (`todo_write`, `validate_js`, `validate_html`), then parallel evaluator workers (`design-evaluation-service.ts`): LLM rubrics + browser preflight (`browser-qa-evaluator.ts`), merged with optional Playwright when configured and Chromium is installed. Bounded revision rounds re-seed the agent with eval feedback. Repo-root **`skills/`** holds Agent Skills (`SKILL.md` per package); **`server/lib/skill-discovery.ts`** walks them at each Pi session boundary, **`buildAgenticSystemContext`** adds **`<available_skills>`** (paths + descriptions) and **pre-seeds all non-`manual`** packages into **`skills/<key>/…`** so the agent can **`read`** only what it needs. The orchestrator emits **`skills_loaded`** for the UI catalog. **Only `server/services/pi-sdk/`** should import `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent` directly.
 
 **Multi-file persistence:** Agentic file maps go to IndexedDB via `saveFiles()`; provenance can include evaluation rounds + checkpoint.
 
@@ -78,6 +78,19 @@ Uses `@xyflow/react` v12. The canvas has 11 node types in a 4-column layout:
 
 ### Iframe rendering
 Generated code renders in `sandbox="allow-scripts"` iframes. `wrapReactCode()` in `src/lib/iframe-utils.ts` prepares React components for browser Babel — it **must** strip `export default` and `import` statements because Babel standalone converts them to CommonJS but `exports` doesn't exist in a plain browser iframe.
+
+## Mandatory: prompt edits must sync to Langfuse
+
+**`src/lib/prompts/shared-defaults.ts`** is the repo source of truth for prompt bodies. Langfuse is the **runtime** source of truth — when configured, the server reads prompts from Langfuse, **not** from `shared-defaults.ts`. The defaults are only used when Langfuse is not configured.
+
+**Every time you edit a prompt body in `shared-defaults.ts`, you MUST immediately run `pnpm langfuse:sync-prompts`** to push the change to the labeled Langfuse version. If you skip this step the edit is dead code in any Langfuse-enabled environment. There is no "do it later" — sync is part of the edit, not a follow-up.
+
+```bash
+# REQUIRED after any change to shared-defaults.ts prompt bodies:
+pnpm langfuse:sync-prompts
+```
+
+Do not treat `shared-defaults.ts` as a standalone file you can edit in isolation. Editing a prompt means: change the body in `shared-defaults.ts` → run `langfuse:sync-prompts` → verify the sync output shows the key was updated.
 
 ## Critical gotchas
 

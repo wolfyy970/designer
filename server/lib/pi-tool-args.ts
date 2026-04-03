@@ -20,5 +20,6 @@ export function parsePiToolExecutionArgs(_toolName: string, raw: unknown): PiToo
   const o = parsed.data;
   const path = typeof o.path === 'string' ? o.path : undefined;
   const pattern = typeof o.pattern === 'string' ? o.pattern : undefined;
-  return { path, pattern };
+  const key = typeof o.key === 'string' ? o.key : undefined;
+  return { path: path ?? key, pattern };
 }

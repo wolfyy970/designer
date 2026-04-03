@@ -108,6 +108,10 @@ export type GenerateSSEEvent =
   | { type: 'evaluation_progress'; round: number; phase: string; message?: string }
   | { type: 'evaluation_report'; round: number; snapshot: EvaluationRoundSnapshot }
   | { type: 'revision_round'; round: number; brief: string }
+  | {
+      type: 'skills_loaded';
+      skills: { key: string; name: string; description: string }[];
+    }
   | { type: 'checkpoint'; checkpoint: AgenticCheckpoint }
   | { type: 'lane_done'; laneIndex: number }
   | { type: 'done' };

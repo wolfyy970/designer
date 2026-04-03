@@ -64,6 +64,14 @@ describe('safeParseGenerateSSEEvent', () => {
     expect(r.ok).toBe(false);
   });
 
+  it('accepts skills_loaded', () => {
+    const r = safeParseGenerateSSEEvent('skills_loaded', {
+      skills: [{ key: 'k', name: 'N', description: 'D' }],
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.event.type).toBe('skills_loaded');
+  });
+
   it('accepts checkpoint with required envelope', () => {
     const r = safeParseGenerateSSEEvent('checkpoint', {
       checkpoint: {

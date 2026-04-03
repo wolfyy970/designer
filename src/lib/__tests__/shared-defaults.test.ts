@@ -52,6 +52,8 @@ describe('PROMPT_DEFAULTS', () => {
     expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('write_file');
     expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('read_file');
     expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('milestone');
+    expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('available_skills');
+    expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('agent_skills');
   });
 
   it('genSystemHtmlAgentic documents virtual workspace tools including ls and find', () => {
