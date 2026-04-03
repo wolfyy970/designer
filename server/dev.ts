@@ -1,6 +1,4 @@
-import { config } from 'dotenv';
-config({ path: '.env.local' });
-config({ path: '.env' });
+import { shutdownInstrumentation } from './instrumentation.js';
 
 async function main() {
   const { serve } = await import('@hono/node-server');
@@ -11,6 +9,12 @@ async function main() {
   serve({ fetch: app.fetch, port }, () => {
     console.log(`API server running at http://localhost:${port}`);
   });
+
+  const onShutdown = () => {
+    void shutdownInstrumentation().finally(() => process.exit(0));
+  };
+  process.on('SIGINT', onShutdown);
+  process.on('SIGTERM', onShutdown);
 }
 
 main();

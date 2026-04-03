@@ -1,8 +1,15 @@
 import { useEffect } from 'react';
-import { useCompilerStore, allVariantStrategyIds } from '../../../stores/compiler-store';
+import { useCompilerStore } from '../../../stores/compiler-store';
 import { useGenerationStore } from '../../../stores/generation-store';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { GENERATION_STATUS } from '../../../constants/generation';
+import { syncDomainForRemovedNode } from '../../../workspace/domain-commands';
+import {
+  applyOrphanRemovalToGraph,
+  collectOrphanNodeIds,
+  pruneDimensionMapsToLinkedRefIds,
+  staleGeneratingResultIds,
+} from '../../../workspace/canvas-orchestrator';
 
 /**
  * Lightweight orchestrator: cleans up orphaned canvas nodes
@@ -11,68 +18,50 @@ import { GENERATION_STATUS } from '../../../constants/generation';
  * Node creation/sync is now driven by the nodes themselves:
  * - CompilerNode.handleCompile → syncAfterCompile
  * - HypothesisNode.handleGenerate → syncAfterGenerate
+ *
+ * Effect deps include the graph (`nodes`, `edges`) so orphan cleanup and dimension-map
+ * pruning run when only the canvas graph changes, not only when compiler/generation slices change.
  */
 export function useCanvasOrchestrator() {
   const dimensionMaps = useCompilerStore((s) => s.dimensionMaps);
   const results = useGenerationStore((s) => s.results);
+  const nodes = useCanvasStore((s) => s.nodes);
+  const edges = useCanvasStore((s) => s.edges);
 
   useEffect(() => {
-    const { nodes, edges } = useCanvasStore.getState();
-    const validStrategyIds = allVariantStrategyIds(dimensionMaps);
-    // For variant orphan detection, check if ANY result exists for the
-    // hypothesis (variantStrategyId), not just the specific refId.
-    // With version stacking, refId points to the active result which can
-    // change or be deleted while other versions still exist.
-    const resultVsIds = new Set(results.map((r) => r.variantStrategyId));
-
     const isCompiling = useCompilerStore.getState().isCompiling;
-    const orphanIds = new Set<string>();
-    for (const node of nodes) {
-      // Clean up stale placeholders left over from interrupted compilation
-      if (node.type === 'hypothesis' && node.data.placeholder && !isCompiling) {
-        orphanIds.add(node.id);
-        continue;
+    const orphanIds = collectOrphanNodeIds(nodes, dimensionMaps, results, isCompiling);
+
+    let graphNodes = nodes;
+    let graphEdges = edges;
+    if (orphanIds.size > 0) {
+      for (const oid of orphanIds) {
+        const node = nodes.find((n) => n.id === oid);
+        if (node) syncDomainForRemovedNode(node);
       }
-      if (
-        node.type === 'hypothesis' &&
-        node.data.refId &&
-        !validStrategyIds.has(node.data.refId as string)
-      ) {
-        orphanIds.add(node.id);
-      }
-      // Skip archived (pinned) variants — they should never be auto-deleted
-      if (
-        node.type === 'variant' &&
-        !node.data.pinnedRunId &&
-        node.data.variantStrategyId &&
-        !resultVsIds.has(node.data.variantStrategyId as string)
-      ) {
-        orphanIds.add(node.id);
-      }
+      const applied = applyOrphanRemovalToGraph(nodes, edges, orphanIds);
+      graphNodes = applied.nodes;
+      graphEdges = applied.edges;
+      useCanvasStore.setState({ nodes: graphNodes, edges: graphEdges });
     }
 
-    if (orphanIds.size > 0) {
-      useCanvasStore.setState({
-        nodes: nodes.filter((n) => !orphanIds.has(n.id)),
-        edges: edges.filter(
-          (e) => !orphanIds.has(e.source) && !orphanIds.has(e.target)
-        ),
-      });
+    // Drop dimension-map strategies with no hypothesis card (fixes stale counts after non–removeNode deletes)
+    if (!isCompiling) {
+      const maps = useCompilerStore.getState().dimensionMaps;
+      const { nextMaps, changed } = pruneDimensionMapsToLinkedRefIds(graphNodes, maps);
+      if (changed) useCompilerStore.setState({ dimensionMaps: nextMaps });
     }
 
     // Clean stale "generating" results left over from a previous session.
     // Only when not actively generating — isGenerating is NOT persisted,
     // so it defaults to false on page load (catches stale results) but
     // is true during active generation (prevents false "interrupted" errors).
-    if (!useGenerationStore.getState().isGenerating) {
-      for (const r of results) {
-        if (r.status === GENERATION_STATUS.GENERATING) {
-          useGenerationStore.getState().updateResult(r.id, {
-            status: GENERATION_STATUS.ERROR,
-            error: 'Generation interrupted by page reload',
-          });
-        }
-      }
+    const isGenerating = useGenerationStore.getState().isGenerating;
+    for (const id of staleGeneratingResultIds(results, isGenerating)) {
+      useGenerationStore.getState().updateResult(id, {
+        status: GENERATION_STATUS.ERROR,
+        error: 'Generation interrupted by page reload',
+      });
     }
-  }, [dimensionMaps, results]);
+  }, [dimensionMaps, results, nodes, edges]);
 }

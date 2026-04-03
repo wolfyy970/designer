@@ -1,20 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Download, Upload, Copy, Trash2, Check } from 'lucide-react';
 import { normalizeError } from '../../lib/error-utils';
 import { useSpecStore } from '../../stores/spec-store';
-import { useCompilerStore } from '../../stores/compiler-store';
-import { useGenerationStore } from '../../stores/generation-store';
-import { useCanvasStore } from '../../stores/canvas-store';
 import { FEEDBACK_DISMISS_MS } from '../../lib/constants';
 import {
-  saveCanvas,
-  getCanvasList,
-  loadCanvas,
-  deleteCanvas,
+  saveSpecToLibrary,
+  deleteSpecFromLibrary,
   exportCanvas,
-  importCanvas,
 } from '../../services/persistence';
-import { generateId, now } from '../../lib/utils';
+import {
+  activateSavedSpecById,
+  activateImportedSpecFile,
+  startNewCanvasAfterCheckpoint,
+  duplicateCurrentSpec,
+} from '../../services/canvas-library-session';
+import { useCanvasLibraryList } from '../../hooks/useCanvasLibraryList';
 import Modal from './Modal';
 
 interface SpecManagerProps {
@@ -24,57 +24,41 @@ interface SpecManagerProps {
 
 export default function SpecManager({ open, onClose }: SpecManagerProps) {
   const spec = useSpecStore((s) => s.spec);
-  const loadCanvasAction = useSpecStore((s) => s.loadCanvas);
-  const createNewCanvas = useSpecStore((s) => s.createNewCanvas);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Track the spec list in React state so mutations trigger re-renders
-  const [specs, setSpecs] = useState(() => getCanvasList());
+  const { specs, refresh } = useCanvasLibraryList(open);
   const [savedFeedback, setSavedFeedback] = useState(false);
 
-  const refreshList = useCallback(() => {
-    setSpecs(getCanvasList());
-  }, []);
-
-  // Refresh the list every time the modal opens
-  useEffect(() => {
-    if (open) refreshList();
-  }, [open, refreshList]);
-
-  // Reset dependent stores when switching to a different spec
-  const resetDependentStores = useCallback(() => {
-    useCompilerStore.getState().reset();
-    useGenerationStore.getState().reset();
-    useCanvasStore.getState().resetCanvas();
-  }, []);
-
   const handleSave = useCallback(() => {
-    saveCanvas(spec);
-    refreshList();
+    saveSpecToLibrary(spec);
+    refresh();
     setSavedFeedback(true);
     setTimeout(() => setSavedFeedback(false), FEEDBACK_DISMISS_MS);
-  }, [spec, refreshList]);
+  }, [spec, refresh]);
 
   const handleLoad = useCallback(
     (specId: string) => {
-      // Auto-save current spec before switching
-      saveCanvas(spec);
-      const loaded = loadCanvas(specId);
-      if (loaded) {
-        resetDependentStores();
-        loadCanvasAction(loaded);
+      if (activateSavedSpecById(specId)) {
+        refresh();
         onClose();
       }
     },
-    [spec, loadCanvasAction, resetDependentStores, onClose]
+    [refresh, onClose],
   );
 
   const handleDelete = useCallback(
-    (specId: string) => {
-      deleteCanvas(specId);
-      refreshList();
+    (specId: string, entryTitle: string) => {
+      if (
+        !window.confirm(
+          `Remove “${entryTitle}” from saved canvases? This does not affect your open document unless it is the one you delete.`,
+        )
+      ) {
+        return;
+      }
+      deleteSpecFromLibrary(specId);
+      refresh();
     },
-    [refreshList]
+    [refresh],
   );
 
   const handleExport = useCallback(() => {
@@ -86,45 +70,43 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
       const file = e.target.files?.[0];
       if (!file) return;
       try {
-        // Auto-save current spec before importing
-        saveCanvas(spec);
-        const imported = await importCanvas(file);
-        resetDependentStores();
-        loadCanvasAction(imported);
+        await activateImportedSpecFile(file);
+        refresh();
         onClose();
       } catch (err) {
         alert(normalizeError(err, 'Import failed'));
       }
       if (fileInputRef.current) fileInputRef.current.value = '';
     },
-    [spec, loadCanvasAction, resetDependentStores, onClose]
+    [refresh, onClose],
   );
 
   const handleDuplicate = useCallback(() => {
-    const dup = {
-      ...spec,
-      id: generateId(),
-      title: `${spec.title} (copy)`,
-      createdAt: now(),
-      lastModified: now(),
-    };
-    saveCanvas(dup);
-    loadCanvasAction(dup);
+    duplicateCurrentSpec();
+    refresh();
     onClose();
-  }, [spec, loadCanvasAction, onClose]);
+  }, [refresh, onClose]);
 
   const handleNew = useCallback(() => {
-    // Save current before creating new
-    saveCanvas(spec);
-    resetDependentStores();
-    createNewCanvas();
+    startNewCanvasAfterCheckpoint();
+    refresh();
     onClose();
-  }, [spec, createNewCanvas, resetDependentStores, onClose]);
+  }, [refresh, onClose]);
 
   return (
     <Modal open={open} onClose={onClose} title="Canvas Manager">
       <div className="space-y-4">
-        {/* Current spec info */}
+        <div className="space-y-1.5 text-xs text-fg-muted">
+          <p>
+            Saved entries store <strong>spec sections</strong> (left column) only—not the node graph.
+            Loading a saved entry resets the graph and compile/generate state. Use <strong>Save Current</strong>{' '}
+            to add or update your work in the list below.
+          </p>
+          <p>
+            Renaming in the header updates this document immediately; if it already has a library entry,
+            the list title updates automatically after a short delay.
+          </p>
+        </div>
         <div className="rounded-md border border-border bg-surface px-3 py-2">
           <p className="text-nano font-medium uppercase tracking-wide text-fg-muted">
             Currently editing
@@ -132,7 +114,6 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
           <p className="text-sm font-medium text-fg-secondary">{spec.title}</p>
         </div>
 
-        {/* Actions for current spec */}
         <div className="flex flex-wrap gap-2">
           <button
             onClick={handleSave}
@@ -148,26 +129,35 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
             )}
           </button>
           <button
+            type="button"
             onClick={handleNew}
             className="rounded-md border border-border px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface"
+            title="Saves your current work, then starts a blank spec and resets the graph"
           >
             New Canvas
           </button>
           <button
+            type="button"
             onClick={handleDuplicate}
             className="flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface"
+            title="Saves current work, then opens a copy with new id (graph reset to match the copy)"
           >
             <Copy size={12} />
             Duplicate
           </button>
           <button
+            type="button"
             onClick={handleExport}
             className="flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface"
+            title="Download spec document as JSON (sections + metadata)"
           >
             <Download size={12} />
             Export JSON
           </button>
-          <label className="flex cursor-pointer items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface">
+          <label
+            className="flex cursor-pointer items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface"
+            title="Replace session with a previously exported JSON file (graph resets)"
+          >
             <Upload size={12} />
             Import JSON
             <input
@@ -180,7 +170,6 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
           </label>
         </div>
 
-        {/* Saved specs list */}
         {specs.length > 0 ? (
           <div>
             <h3 className="mb-2 text-xs font-medium text-fg-secondary">
@@ -199,9 +188,10 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
                     }`}
                   >
                     <button
+                      type="button"
                       onClick={() => !isActive && handleLoad(s.id)}
                       disabled={isActive}
-                      className="flex-1 text-left"
+                      className="flex-1 min-w-0 text-left"
                     >
                       <span
                         className={`text-sm font-medium ${isActive ? 'text-info' : 'text-fg-secondary'}`}
@@ -218,7 +208,8 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
                       </span>
                     </button>
                     <button
-                      onClick={() => handleDelete(s.id)}
+                      type="button"
+                      onClick={() => handleDelete(s.id, s.title)}
                       disabled={isActive}
                       className={`ml-2 rounded p-1 ${
                         isActive

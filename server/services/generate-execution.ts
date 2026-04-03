@@ -1,12 +1,11 @@
 import { getProvider } from './providers/registry.ts';
 import { getPromptBody } from '../db/prompts.ts';
-import { extractCode } from '../lib/extract-code.ts';
-import { loggedGenerateChat } from '../lib/llm-call-logger.ts';
+import { extractCode, extractCodeStreaming } from '../lib/extract-code.ts';
+import { loggedGenerateChatStream } from '../lib/llm-call-logger.ts';
 import { normalizeError } from '../lib/error-utils.ts';
 import { env } from '../env.ts';
-import { buildVirtualSkillFiles, listLatestSkillVersions } from '../db/skills.ts';
-import { formatSkillsForPrompt } from '../lib/skills/format-for-prompt.ts';
-import { selectSkillsForContext } from '../lib/skills/select-skills.ts';
+import { isLangfuseTracingEnabled } from '../lib/langfuse-tracing-enabled.ts';
+import { createTraceId, startActiveObservation } from '@langfuse/tracing';
 import {
   runAgenticWithEvaluation,
   type AgenticOrchestratorEvent,
@@ -34,6 +33,8 @@ export function createWriteGate(): WriteGate {
 }
 
 export type LaneEndMode = 'done' | 'lane_done';
+
+const GENERATE_ROOT_SPAN_ID = '0000000000000002';
 
 /**
  * Runs single-shot or agentic generation and writes SSE events.
@@ -93,6 +94,10 @@ export async function executeGenerateStream(
         await write('trace', { trace: event.trace });
         return;
       }
+      if (event.type === 'thinking') {
+        await write('thinking', { delta: event.payload, turnId: event.turnId });
+        return;
+      }
       if (event.type === 'activity') {
         await write('activity', { entry: event.payload });
       } else if (event.type === 'code') {
@@ -110,42 +115,14 @@ export async function executeGenerateStream(
       }
     };
 
-    const latestSkills = await listLatestSkillVersions();
-    const skillRows = latestSkills.map((r) => ({
-      key: r.skillKey,
-      name: r.name,
-      description: r.description,
-      nodeTypes: r.nodeTypes,
-    }));
-    const selectedSkills = selectSkillsForContext(skillRows, body.evaluationContext);
-    const selectedKeys = new Set(selectedSkills.map((s) => s.key));
-    const virtualSkillFiles: Record<string, string> = {};
-    for (const r of latestSkills) {
-      if (selectedKeys.has(r.skillKey)) {
-        Object.assign(virtualSkillFiles, buildVirtualSkillFiles(r));
-      }
-    }
-    const skillCatalog = formatSkillsForPrompt(
-      selectedSkills.map((s) => ({
-        name: s.key,
-        description: s.description,
-        location: `skills/${s.key}/SKILL.md`,
-      })),
-    );
-    const baseAgenticPrompt = await getPromptBody('genSystemHtmlAgentic');
-    const systemPrompt = skillCatalog ? `${baseAgenticPrompt}\n${skillCatalog}` : baseAgenticPrompt;
-
     const agenticResult = await runAgenticWithEvaluation({
       build: {
-        systemPrompt,
         userPrompt: body.prompt,
         providerId: body.providerId,
         modelId: body.modelId,
         thinkingLevel: body.thinkingLevel,
         signal: abortSignal,
         ...(correlationId ? { correlationId } : {}),
-        virtualSkillFiles:
-          Object.keys(virtualSkillFiles).length > 0 ? virtualSkillFiles : undefined,
       },
       compiledPrompt: body.prompt,
       evaluationContext: body.evaluationContext,
@@ -173,41 +150,104 @@ export async function executeGenerateStream(
     return;
   }
 
-  const systemPrompt = await getPromptBody('genSystemHtml');
-  await write('progress', { status: 'Generating design...' });
+  const runSingleShot = async () => {
+    const systemPrompt = await getPromptBody('genSystemHtml');
+    await write('progress', { status: 'Generating design…' });
 
-  const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: body.prompt },
-  ];
+    const messages: ChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: body.prompt },
+    ];
 
-  const response = await loggedGenerateChat(
-    provider,
-    body.providerId,
-    messages,
-    {
-      model: body.modelId,
-      supportsVision: body.supportsVision,
-      signal: abortSignal,
-    },
-    {
-      source: 'builder',
-      phase: 'Single-shot generate',
-      ...(correlationId ? { correlationId } : {}),
-      signal: abortSignal,
-    },
-  );
+    const streamStart = Date.now();
+    let lastChunkAt = streamStart;
+    const stallHeartbeatMs = 12_000;
+    const stallTimer = setInterval(() => {
+      const totalSec = Math.floor((Date.now() - streamStart) / 1000);
+      const idleSec = Math.floor((Date.now() - lastChunkAt) / 1000);
+      const status =
+        lastChunkAt === streamStart
+          ? `Waiting for model… ${totalSec}s`
+          : `Receiving response… idle ${idleSec}s · ${totalSec}s total`;
+      void write('progress', { status });
+    }, stallHeartbeatMs);
 
-  if (abortSignal.aborted) return;
+    let lastCodeEmitAt = 0;
+    let lastEmittedPreviewLen = 0;
+    const emitStreamCode = async (raw: string, force: boolean) => {
+      const preview = extractCodeStreaming(raw);
+      const now = Date.now();
+      if (
+        !force &&
+        preview.length - lastEmittedPreviewLen < 160 &&
+        now - lastCodeEmitAt < 100
+      ) {
+        return;
+      }
+      lastCodeEmitAt = now;
+      lastEmittedPreviewLen = preview.length;
+      await write('code', { code: preview });
+    };
 
-  const code = extractCode(response.raw);
-  await write('code', { code });
+    try {
+      const response = await loggedGenerateChatStream(
+        provider,
+        body.providerId,
+        messages,
+        {
+          model: body.modelId,
+          supportsVision: body.supportsVision,
+          signal: abortSignal,
+        },
+        {
+          source: 'builder',
+          phase: 'Single-shot generate',
+          ...(correlationId ? { correlationId } : {}),
+          signal: abortSignal,
+        },
+        async (accumulated) => {
+          lastChunkAt = Date.now();
+          await emitStreamCode(accumulated, false);
+        },
+      );
 
-  if (laneEndMode === 'lane_done' && laneIndex !== undefined) {
-    await write('lane_done', { laneIndex });
-  } else {
-    await write('done', {});
+      if (abortSignal.aborted) return;
+
+      const code = extractCode(response.raw);
+      await write('code', { code });
+    } finally {
+      clearInterval(stallTimer);
+    }
+
+    if (laneEndMode === 'lane_done' && laneIndex !== undefined) {
+      await write('lane_done', { laneIndex });
+    } else {
+      await write('done', {});
+    }
+  };
+
+  if (!isLangfuseTracingEnabled() || !correlationId) {
+    await runSingleShot();
+    return;
   }
+
+  const parentSpanContext = {
+    traceId: await createTraceId(correlationId),
+    spanId: GENERATE_ROOT_SPAN_ID,
+    traceFlags: 1,
+  };
+  await startActiveObservation(
+    'generate-single',
+    async (span) => {
+      span.update({
+        metadata: { correlationId, providerId: body.providerId, modelId: body.modelId },
+        input: { mode: 'single', promptPreview: body.prompt.slice(0, 400) },
+      });
+      await runSingleShot();
+      span.update({ output: { done: true } });
+    },
+    { parentSpanContext },
+  );
 }
 
 export async function executeGenerateStreamSafe(

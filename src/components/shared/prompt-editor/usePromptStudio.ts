@@ -1,7 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PROMPT_META, type PromptKey } from '../../../stores/prompt-store';
-import { PROMPT_DEFAULTS } from '../../../lib/prompts/shared-defaults';
 import { lineDiff } from '../../../lib/prompt-diff';
 import { fetchPromptHistory, fetchPromptVersionBody } from '../../../api/client';
 import { PROMPT_GROUPS, shortLabel, validatePrompt } from './validate-prompt';
@@ -9,7 +8,11 @@ import { FEEDBACK_DISMISS_MS } from '../../../lib/constants';
 
 const PROMPT_SAVE_ACK_MS = Math.max(FEEDBACK_DISMISS_MS * 2, 4000);
 
-type PutPromptResponse = { version: number; key?: string };
+type PutPromptResponse = {
+  version: number;
+  key?: string;
+  baselineBody?: string;
+};
 
 export function usePromptStudio(initialPromptKey?: PromptKey) {
   const [selectedKey, setSelectedKey] = useState<PromptKey>(initialPromptKey ?? 'compilerSystem');
@@ -39,19 +42,22 @@ export function usePromptStudio(initialPromptKey?: PromptKey) {
   const { data, error: promptError } = useQuery({
     queryKey: ['prompt', selectedKey],
     queryFn: () => fetchJsonOrThrow(`/api/prompts/${selectedKey}`),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   const { data: allPrompts, error: promptsError } = useQuery({
     queryKey: ['prompts'],
     queryFn: () => fetchJsonOrThrow('/api/prompts') as Promise<{ key: string; isDefault: boolean }[]>,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   const { data: history = [] } = useQuery({
     queryKey: ['prompt-history', selectedKey],
     queryFn: () => fetchPromptHistory(selectedKey),
-    staleTime: 60 * 1000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   useEffect(() => {
@@ -65,7 +71,8 @@ export function usePromptStudio(initialPromptKey?: PromptKey) {
     queryKey: ['prompt-version', selectedKey, compareVersion],
     queryFn: () => fetchPromptVersionBody(selectedKey, compareVersion!),
     enabled: compareKind === 'version' && compareVersion != null,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   const mutation = useMutation({
@@ -89,11 +96,7 @@ export function usePromptStudio(initialPromptKey?: PromptKey) {
 
   const resetMutation = useMutation({
     mutationFn: (key: PromptKey) =>
-      fetch(`/api/prompts/${key}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: PROMPT_DEFAULTS[key] }),
-      }).then(async (r) => {
+      fetch(`/api/prompts/${key}/revert-baseline`, { method: 'POST' }).then(async (r) => {
         const json = await r.json();
         if (!r.ok) throw new Error(json.error ?? `Failed to reset prompt ${key}`);
         return json;
@@ -116,10 +119,10 @@ export function usePromptStudio(initialPromptKey?: PromptKey) {
   const meta = PROMPT_META.find((m) => m.key === selectedKey)!;
 
   const referenceText = useMemo(() => {
-    if (compareKind === 'default') return PROMPT_DEFAULTS[selectedKey];
+    if (compareKind === 'default') return data?.baselineBody ?? '';
     if (compareVersion == null) return '';
     return versionQuery.data?.body ?? '';
-  }, [compareKind, compareVersion, selectedKey, versionQuery.data?.body]);
+  }, [compareKind, compareVersion, data?.baselineBody, versionQuery.data?.body]);
 
   const diffLines = useMemo(
     () => lineDiff(referenceText, displayValue),

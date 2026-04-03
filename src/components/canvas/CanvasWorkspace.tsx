@@ -15,6 +15,7 @@ import { useCanvasStore, SECTION_NODE_TYPES, GRID_SIZE, type CanvasNodeType } fr
 import { useGenerationStore } from '../../stores/generation-store';
 import { GENERATION_STATUS } from '../../constants/generation';
 import { VARIANT_NODE_GENERATING_Z_INDEX } from '../../constants/canvas';
+import { FIT_VIEW_DELAY_MS, FIT_VIEW_DURATION_MS } from '../../lib/constants';
 import { toReactFlowEdges, toReactFlowNodes } from '../../workspace/reactflow-adapter';
 import { nodeTypes } from './nodes/node-types';
 import { edgeTypes } from './edges/edge-types';
@@ -26,17 +27,17 @@ import VariantRunInspector from './VariantRunInspector';
 import { useCanvasOrchestrator } from './hooks/useCanvasOrchestrator';
 import { useNodeDeletion } from './hooks/useNodeDeletion';
 import { useFeedbackLoopConnection } from './hooks/useFeedbackLoopConnection';
-
 function CanvasInner() {
   useCanvasOrchestrator();
   useNodeDeletion();
   const { handleConnect } = useFeedbackLoopConnection();
   
-  const { setCenter, getNodes } = useReactFlow();
+  const { setCenter, getNodes, fitView } = useReactFlow();
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
   const viewport = useCanvasStore((s) => s.viewport);
   const genResults = useGenerationStore((s) => s.results);
+
   const rfNodes = useMemo(() => {
     const generatingByStrategy = new Set(
       genResults
@@ -71,6 +72,8 @@ function CanvasInner() {
   const autoLayout = useCanvasStore((s) => s.autoLayout);
   const computeLineage = useCanvasStore((s) => s.computeLineage);
   const setConnectingFrom = useCanvasStore((s) => s.setConnectingFrom);
+  const pendingFitViewAfterTemplate = useCanvasStore((s) => s.pendingFitViewAfterTemplate);
+  const consumePendingFitView = useCanvasStore((s) => s.consumePendingFitView);
 
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -80,6 +83,15 @@ function CanvasInner() {
   useEffect(() => {
     initializeCanvas();
   }, [initializeCanvas]);
+
+  useEffect(() => {
+    if (!pendingFitViewAfterTemplate) return;
+    const id = window.setTimeout(() => {
+      fitView({ duration: FIT_VIEW_DURATION_MS, padding: 0.15 });
+      consumePendingFitView();
+    }, FIT_VIEW_DELAY_MS);
+    return () => window.clearTimeout(id);
+  }, [pendingFitViewAfterTemplate, fitView, consumePendingFitView]);
 
   const handleViewportChange = useCallback(
     (vp: Viewport) => setViewport(vp),

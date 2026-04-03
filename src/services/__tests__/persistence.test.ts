@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { STORAGE_KEYS } from '../../lib/storage-keys';
-import { saveCanvas, loadCanvas, deleteCanvas, getCanvasList, importCanvas } from '../persistence';
+import {
+  saveSpecToLibrary,
+  getSavedSpec,
+  deleteSpecFromLibrary,
+  getCanvasList,
+  importCanvas,
+} from '../persistence';
 import type { DesignSpec, SpecSection, SpecSectionId } from '../../types/spec';
 
 // Mock localStorage
@@ -38,48 +44,62 @@ function makeSpec(overrides: Partial<DesignSpec> & { id: string }): DesignSpec {
 
 // ── getAllCanvases validation ────────────────────────────────────────────
 
-describe('loadCanvas / getAllCanvases validation', () => {
+describe('getSavedSpec / getAllCanvases validation', () => {
   it('returns null for missing spec', () => {
-    expect(loadCanvas('nonexistent')).toBeNull();
+    expect(getSavedSpec('nonexistent')).toBeNull();
   });
 
   it('handles corrupt localStorage (not JSON)', () => {
     storage.set(STORAGE_KEYS.CANVASES, '{{invalid json}}');
-    expect(loadCanvas('any')).toBeNull();
+    expect(getSavedSpec('any')).toBeNull();
   });
 
   it('handles localStorage containing an array instead of object', () => {
     storage.set(STORAGE_KEYS.CANVASES, '[1,2,3]');
-    expect(loadCanvas('any')).toBeNull();
+    expect(getSavedSpec('any')).toBeNull();
   });
 
   it('handles localStorage containing a string instead of object', () => {
     storage.set(STORAGE_KEYS.CANVASES, '"just a string"');
-    expect(loadCanvas('any')).toBeNull();
+    expect(getSavedSpec('any')).toBeNull();
   });
 
   it('handles localStorage containing null', () => {
     storage.set(STORAGE_KEYS.CANVASES, 'null');
-    expect(loadCanvas('any')).toBeNull();
+    expect(getSavedSpec('any')).toBeNull();
+  });
+
+  it('keeps valid canvases when another entry fails validation', () => {
+    const good = makeSpec({ id: 'good', title: 'Keep me' });
+    storage.set(
+      STORAGE_KEYS.CANVASES,
+      JSON.stringify({
+        good,
+        bad: { id: 'bad', title: 'Broken' },
+      }),
+    );
+    expect(getSavedSpec('good')?.title).toBe('Keep me');
+    expect(getSavedSpec('bad')).toBeNull();
+    expect(getCanvasList()).toHaveLength(1);
   });
 });
 
-// ── saveCanvas / loadCanvas / deleteCanvas ──────────────────────────────────
+// ── saveSpecToLibrary / getSavedSpec / deleteSpecFromLibrary ──────────────────
 
-describe('saveCanvas and loadCanvas', () => {
+describe('saveSpecToLibrary and getSavedSpec', () => {
   it('round-trips a spec through save and load', () => {
     const spec = makeSpec({ id: 'spec-1', title: 'My Spec' });
-    saveCanvas(spec);
-    const loaded = loadCanvas('spec-1');
+    saveSpecToLibrary(spec);
+    const loaded = getSavedSpec('spec-1');
     expect(loaded?.title).toBe('My Spec');
   });
 
-  it('deleteCanvas removes a spec', () => {
+  it('deleteSpecFromLibrary removes a spec', () => {
     const spec = makeSpec({ id: 'spec-del' });
-    saveCanvas(spec);
-    expect(loadCanvas('spec-del')).not.toBeNull();
-    deleteCanvas('spec-del');
-    expect(loadCanvas('spec-del')).toBeNull();
+    saveSpecToLibrary(spec);
+    expect(getSavedSpec('spec-del')).not.toBeNull();
+    deleteSpecFromLibrary('spec-del');
+    expect(getSavedSpec('spec-del')).toBeNull();
   });
 });
 
@@ -87,8 +107,8 @@ describe('saveCanvas and loadCanvas', () => {
 
 describe('getCanvasList', () => {
   it('returns specs sorted by lastModified descending', () => {
-    saveCanvas(makeSpec({ id: 's1', title: 'Old', lastModified: '2024-01-01' }));
-    saveCanvas(makeSpec({ id: 's2', title: 'New', lastModified: '2024-06-01' }));
+    saveSpecToLibrary(makeSpec({ id: 's1', title: 'Old', lastModified: '2024-01-01' }));
+    saveSpecToLibrary(makeSpec({ id: 's2', title: 'New', lastModified: '2024-06-01' }));
     const list = getCanvasList();
     expect(list[0].title).toBe('New');
     expect(list[1].title).toBe('Old');

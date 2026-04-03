@@ -4,20 +4,24 @@ For a **readable end-to-end walkthrough** (canvas roles, prompts, PI agent, eval
 
 ## Client-Server Overview
 
-```
-┌─────────────────────────────────────────────┐
-│  Vercel Platform                            │
-│                                             │
-│  CDN ─── Static SPA (Vite build)           │
-│  /api/* ─── Serverless Function (Hono)     │
-└──────────────────┬──────────────────────────┘
-                   │
-┌──────────────────▼──────────────────────────┐
-│  Browser (React SPA)                        │
-│  Canvas UI → API Client → /api/*           │
-│  Zustand stores (UI state)                 │
-│  StoragePort (IndexedDB — swappable)       │
-└─────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+  subgraph vercel [Vercel Platform]
+    cdn[CDN — Static SPA Vite build]
+    fn[Serverless Function — Hono /api/*]
+  end
+
+  subgraph browser [Browser]
+    canvas[Canvas UI React and xyflow]
+    zustand[Zustand stores UI state]
+    idb[StoragePort IndexedDB swappable]
+    apiClient[API client REST and SSE]
+    canvas --> zustand
+    canvas --> apiClient
+    zustand --> idb
+  end
+
+  apiClient -->|/api/*| fn
 ```
 
 **Client** — React SPA with Zustand stores, `@xyflow/react` canvas, IndexedDB for generated code. Makes REST and SSE calls to `/api/*`.
@@ -26,39 +30,88 @@ For a **readable end-to-end walkthrough** (canvas roles, prompts, PI agent, eval
 
 **Local dev** — Two processes: Vite (SPA + HMR on 5173) and Hono (API on 3001 via `tsx watch`). Vite proxy forwards `/api/*` to Hono.
 
+## Layered architecture (diagram)
+
+The SPA is not classic MVC, but it helps to map roles: **View** (React / `@xyflow`), **Model** (Zustand stores, workspace DTOs, IndexedDB via `StoragePort`), **Controller** (hooks, `domain-commands`, `src/api/client.ts`). The server keeps routes thin and pushes orchestration into `generate-execution`, providers, and the agentic pipeline.
+
+```mermaid
+flowchart TB
+  subgraph client [Browser SPA]
+    viewLayer[View React canvas]
+    controllerLayer[Controller hooks and domain-commands]
+    modelLayer[Model Zustand stores and DTOs]
+    storagePort[StoragePort IndexedDB]
+    apiClient[API client REST and SSE]
+    viewLayer --> controllerLayer
+    controllerLayer --> modelLayer
+    controllerLayer --> apiClient
+    modelLayer --> storagePort
+  end
+
+  subgraph server [Hono API]
+    routes[Routes generate hypothesis compile]
+    genExec[executeGenerateStream]
+    singleShot[Single-shot LLM generateChat]
+    providers[Provider registry]
+    agentOrch[agenticOrchestrator]
+    routes --> genExec
+    genExec --> singleShot
+    genExec --> agentOrch
+    singleShot --> providers
+  end
+
+  subgraph evaluation [Post-build evaluation]
+    evalSvc[design-evaluation-service rubrics and browser QA]
+  end
+
+  subgraph piAdapter [Pi adapter and NPM boundary]
+    runSession[runDesignAgentSession]
+    virtualTools[pi-sdk virtual-tools]
+    piSdkRest[pi-sdk types stream budget]
+    piNpm["@mariozechner pi-ai and pi-coding-agent"]
+    eventBridge[pi-session-event-bridge]
+    bashTool[pi-bash-tool]
+    appTools[pi-app-tools]
+    runSession --> virtualTools
+    runSession --> piSdkRest
+    runSession --> piNpm
+    runSession --> eventBridge
+    runSession --> bashTool
+    runSession --> appTools
+    piSdkRest --> piNpm
+  end
+
+  subgraph vws [Virtual workspace]
+    sandboxSeed[agent-bash-sandbox]
+    bashRuntime[just-bash FS and exec]
+    sandboxSeed --> bashRuntime
+  end
+
+  agentOrch --> evalSvc
+  agentOrch --> runSession
+  runSession --> sandboxSeed
+  virtualTools --> bashRuntime
+  bashTool --> bashRuntime
+
+  apiClient -->|HTTP and SSE| routes
+```
+
+- **`agentic-orchestrator`** calls **`runDesignAgentSession`** only — it does not import `@mariozechner/*` directly. To replace Pi, rework **`server/services/pi-sdk/`**, **`pi-agent-service.ts`**, and the event bridge; keep the orchestrator’s build/eval/revision contract stable.
+- **`createAgentSession`** uses **`tools: []`** so default Pi tools never touch the host filesystem; **`virtual-tools`** maps native Pi file tool schemas to **`just-bash`**, and **`pi-bash-tool`** runs shell commands in the same instance.
+- **`pi-session-event-bridge`** turns Pi session callbacks into **`AgentRunEvent`**, which **`executeGenerateStream`** serializes to SSE for the client.
+- **`agent-bash-sandbox`** seeds skills and design files, then **`extractDesignFiles`** collects artifacts after the run; evaluation runs in **`design-evaluation-service`** (parallel workers), not inside Pi tool definitions.
+
 ## Four Abstraction Layers
 
-```
-┌─────────────────────────────────────────────┐
-│  UI Layer (React components)                │
-│  Canvas (primary, only route)               │
-└──────────────────┬──────────────────────────┘
-                   │
-┌──────────────────▼──────────────────────────┐
-│  1. Spec Model                              │
-│  DesignSpec → 5 SpecSections + images       │
-│  types/spec.ts (Zod-validated)              │
-└──────────────────┬──────────────────────────┘
-                   │
-┌──────────────────▼──────────────────────────┐
-│  2. API Client + Prompt Compiler            │
-│  Client: compileVariantPrompts() (local)    │
-│  Server: compileSpec() → DimensionMap       │
-│  Server: generate() → HTML or files         │
-└──────────────────┬──────────────────────────┘
-                   │
-┌──────────────────▼──────────────────────────┐
-│  3. Storage Abstraction                     │
-│  StoragePort interface (swappable)          │
-│  BrowserStorage → IndexedDB                 │
-└──────────────────┬──────────────────────────┘
-                   │
-┌──────────────────▼──────────────────────────┐
-│  4. Output Rendering                        │
-│  Single-file: HTML → sandboxed iframe       │
-│  Multi-file: bundleVirtualFS → iframe       │
-│  Canvas VariantNode                         │
-└─────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+  ui["UI Layer — React components, Canvas"]
+  spec["1. Spec Model — DesignSpec, 5 SpecSections, images, types/spec.ts"]
+  api["2. API Client + Prompt Compiler — compileVariantPrompts locally, compileSpec and generate on server"]
+  storage["3. Storage Abstraction — StoragePort interface, BrowserStorage, IndexedDB"]
+  output["4. Output Rendering — HTML iframe or bundleVirtualFS, VariantNode"]
+
+  ui --> spec --> api --> storage --> output
 ```
 
 ## Domain model, canvas projection, and session DTOs
@@ -66,6 +119,8 @@ For a **readable end-to-end walkthrough** (canvas roles, prompts, PI agent, eval
 **Canonical client model** — `src/stores/workspace-domain-store.ts` (persisted) holds workflow semantics without requiring a graph: incubator input wiring (section / variant / critique node ids), model assignments per incubator and per hypothesis, design-system attachments, hypothesis ↔ incubator ↔ variant-strategy links, variant slots (active result / pins), and mirrors for model/design-system/critique payloads synced from the canvas. `src/types/workspace-domain.ts` defines the shapes.
 
 **Canvas as projection** — `src/stores/canvas-store.ts` still persists React Flow–backed **nodes and edges** for layout and interaction. Graph edits call `src/workspace/domain-commands.ts` so domain relations stay the source of truth for compile/generate. `src/workspace/domain-to-graph.ts` holds small view helpers derived from domain state.
+
+**Node removal** — Prefer `canvas-store.removeNode` for deletes so domain cleanup (`syncDomainForRemovedNode`), compiler variant pruning, and cascade removal of attached variant nodes stay consistent. Orchestrator paths that filter nodes out of Zustand directly must still call `syncDomainForRemovedNode` for each removed id (see `useCanvasOrchestrator`).
 
 **Compile inputs** — `buildCompileInputs()` in `src/lib/canvas-graph.ts` accepts optional `DomainIncubatorWiring`; when present, structural inputs come from the domain list instead of only incoming edges to the compiler node.
 
@@ -79,34 +134,35 @@ The **server** LLM engine stays UI-agnostic; client-only modules under `src/work
 
 ## Data Flow
 
-```
-DesignSpec (freeform text + images)
-    │
-    ▼ POST /api/compile  (client sends spec + prompt overrides)
-DimensionMap (dimensions + variant strategies)
-    │
-    ▼ user edits hypotheses on canvas
-    │
-    ▼ compileVariantPrompts() runs client-side (prompt assembly only)
-CompiledPrompt[] (one full prompt per variant)
-    │
-    ▼ POST /api/generate  (SSE stream per variant)
-    │
-    ├─ mode=single ──────────────────────────────────────────────┐
-    │  Server: provider.generateChat(messages) → raw HTML        │
-    │  SSE events: progress, code, done                          │
-    │  Client: code → StoragePort (code store), meta → Zustand   │
-    │                                                            │
-    └─ mode=agentic ─────────────────────────────────────────────┤
-       Server: PI Agent loop (virtual workspace: read/grep/edit/write, ls, find, optional plan_files) │
-       SSE events: activity, progress, plan, file, done          │
-       Client: files → StoragePort (files store), meta → Zustand │
-    │
-    ▼ iframe srcdoc attribute
-Rendered variants (sandboxed, interactive)
-    │
-    ▼ optional: variant → Existing Design (screenshot capture)
-Next iteration cycle
+```mermaid
+flowchart TB
+  designSpec[DesignSpec text and images]
+  dimensionMap[DimensionMap dimensions and variant strategies]
+  compiledPrompt["CompiledPrompt[] one per variant"]
+  generate[POST /api/generate SSE stream]
+
+  designSpec -->|POST /api/compile| dimensionMap
+  dimensionMap -->|user edits on canvas| compiledPrompt
+  compiledPrompt -->|compileVariantPrompts client-side| generate
+
+  generate --> singleMode
+  generate --> agenticMode
+
+  subgraph singleMode [mode=single]
+    singleLLM[provider.generateChat → raw HTML]
+    singleStore[code → StoragePort, meta → Zustand]
+    singleLLM --> singleStore
+  end
+
+  subgraph agenticMode [mode=agentic]
+    piLoop["Pi agent: virtual read/write/edit/ls/find/grep + bash"]
+    agenticStore[files → StoragePort, meta → Zustand]
+    piLoop --> agenticStore
+  end
+
+  singleStore --> iframe[Rendered iframe srcdoc]
+  agenticStore --> iframe
+  iframe -->|optional screenshot| nextIteration[Next iteration cycle]
 ```
 
 ## API Surface
@@ -137,7 +193,7 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 ### Validation stacks (Zod vs TypeBox)
 
 - **Zod** — HTTP request and response shapes, shared client/server DTOs, and guarded deserialization from persistence (for example skill `filesJson` in `server/db/skills.ts`).
-- **TypeBox** — Tool argument schemas in [`server/services/pi-agent-tools.ts`](server/services/pi-agent-tools.ts) for `@mariozechner/pi-agent-core`. Keep these aligned with PI’s tool API; do not migrate to Zod unless the PI stack documents equivalent support.
+- **TypeBox** — Pi SDK `ToolDefinition` parameters in [`server/services/pi-sdk/virtual-tools.ts`](server/services/pi-sdk/virtual-tools.ts) (mapped native tools), [`server/services/pi-bash-tool.ts`](server/services/pi-bash-tool.ts), and [`server/services/pi-app-tools.ts`](server/services/pi-app-tools.ts). Keep these aligned with the Pi coding-agent tool surface; do not migrate to Zod unless the Pi stack documents equivalent support.
 
 ## Server Architecture (`server/`)
 
@@ -156,12 +212,16 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 | `routes/models.ts` | GET /api/models/:provider |
 | `routes/logs.ts` | GET `/api/logs` → `{ llm, trace }`; POST `/api/logs/trace` (Zod); DELETE clears both rings (file append-only) |
 | `routes/design-system.ts` | POST /api/design-system/extract |
-| `routes/prompts.ts` | GET `/api/prompts/:key` — latest prompt body from Prisma |
+| `routes/prompts.ts` | GET `/api/prompts/:key` — latest prompt body from Langfuse (label from `LANGFUSE_PROMPT_LABEL`) |
 | `routes/skills.ts` | GET `/api/skills`, `/api/skills/:key` — latest skill versions (metadata + body + optional `filesJson`) |
 | `db/` | Prisma client singleton (`DATABASE_URL`, SQLite in dev) |
-| `services/pi-agent-service.ts` | PI Agent adapter — single import boundary for `@mariozechner/pi-agent-core`. Hosts `VirtualWorkspace`, tool wiring (`write_file`, `edit_file`, `read_file`, `ls`, `find`, `grep`, validators, optional `plan_files`), context compaction, and SSE event emission. |
+| `services/pi-sdk/` | **Only** place that imports `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent`; types, `createAgentSession`, `streamSimple`, stream budget, **`virtual-tools.ts`** (Pi tool definitions → `just-bash` FS / `grep` via `bash.exec`). |
+| `services/pi-agent-service.ts` | Pi session adapter — `tools: []`, `customTools` = virtual file tools + bash + app tools; `session.prompt`; LLM log wrapping; merges app + SDK system prompts; SSE via `pi-session-event-bridge.ts`. |
+| `services/agent-bash-sandbox.ts` | `just-bash` instance: seed design files + skills, extract artifacts after the run. |
+| `services/pi-bash-tool.ts` | Pi `bash` tool → `bash.exec`, snapshot diff → SSE file events for design paths. |
+| `services/pi-app-tools.ts` | Pi tools: `todo_write`, `validate_js`, `validate_html`. |
+| `services/pi-session-event-bridge.ts` | Maps `AgentSession` subscribe events → app `AgentRunEvent` stream. |
 | `services/agentic-orchestrator.ts` | Agentic evaluation / tool orchestration helpers |
-| `services/pi-agent-tools.ts` | Tool definitions wired into the PI agent |
 | `services/design-evaluation-service.ts` | Design evaluation payload handling |
 | `services/browser-qa-evaluator.ts` | Deterministic browser QA preflight (HTML + VM) |
 | `services/browser-playwright-evaluator.ts` | Playwright headless render + DOM/console checks |
@@ -202,7 +262,7 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 
 **Env defaults** (`server/env.ts`): `AGENTIC_MAX_REVISION_ROUNDS` (default `5`, clamped 0–20), optional `AGENTIC_MIN_OVERALL_SCORE`. Request body may pass `agenticMaxRevisionRounds` / `agenticMinOverallScore`. For Playwright in production: install browsers once (`pnpm exec playwright install chromium`).
 
-`server/services/pi-agent-service.ts` is the **only** file that imports from `@mariozechner/pi-agent-core`. All PI types are isolated here.
+`server/services/pi-sdk/` is the **NPM import boundary** for Pi packages (and the right place to replace Pi with another agent later). Other server code uses `./pi-sdk` or `../services/pi-sdk` for types/session helpers only — not deep Pi imports. Session orchestration stays in `pi-agent-service.ts`; app-specific Pi tools in `pi-*-tool(s).ts`; virtual FS mapping in `pi-sdk/virtual-tools.ts`; sandbox in `agent-bash-sandbox.ts`.
 
 ### Generation Cancellation
 
@@ -333,9 +393,9 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 **Why `src/lib/prompts/shared-defaults.ts`.** Prompt text is the same on client and server. A single shared module is the one source of truth. Both `src/lib/prompts/defaults.ts` (client) and `server/lib/prompts/defaults.ts` (server) import from it. `tsconfig.server.json` explicitly includes the file.
 
-**Why `pi-agent-service.ts` is an isolation boundary.** `@mariozechner/pi-agent-core` is pre-1.0 (pinned). Keeping all PI imports in one file means TypeScript surfaces any breaking API changes in exactly one place when upgrading.
+**Why `pi-sdk/` exists.** `@mariozechner/pi-coding-agent` / `pi-ai` can ship breaking changes. All direct imports live in [`server/services/pi-sdk/types.ts`](server/services/pi-sdk/types.ts) (and `stream-budget.ts` for Pi context heuristics). Upgrades start there; app code imports only from `pi-sdk/` + orchestration modules.
 
-**Why window-based context compaction instead of a second LLM call.** Compaction is purely structural: keep the original hypothesis prompt + recent working context + a file-list summary. No summarization LLM needed. The original user message (the full hypothesis/spec/design system context) is always preserved as `messages[0]`.
+**Why SDK-managed compaction.** The Pi session uses **token-aware compaction** built into the coding-agent stack instead of a bespoke message-window strategy. App prompts still carry full hypothesis/spec context on each orchestrator call.
 
 **Why `src/lib/provider-fetch.ts`.** LLM fetch logic is identical on client and server, but `import.meta.env` (client) and `process.env` (server) are incompatible. The shared module contains only environment-agnostic functions. Client and server each have their own `buildChatRequestFromMessages` that reads the correct env API, then re-export everything else from the shared module.
 

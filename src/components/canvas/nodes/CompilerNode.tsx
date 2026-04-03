@@ -20,6 +20,7 @@ import { buildCompileInputs } from '../../../lib/canvas-graph';
 import { useWorkspaceDomainStore } from '../../../stores/workspace-domain-store';
 import { FIT_VIEW_DELAY_MS, FIT_VIEW_DURATION_MS } from '../../../lib/constants';
 import { processingOrFilled } from '../../../lib/node-status';
+import { isPlaceholderHypothesis } from '../../../lib/hypothesis-node-utils';
 import { EDGE_STATUS } from '../../../constants/canvas';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
 import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
@@ -39,7 +40,6 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
 
   const isCompiling = useCompilerStore((s) => s.isCompiling);
   const error = useCompilerStore((s) => s.error);
-  const dimensionMap = useCompilerStore((s) => s.dimensionMaps[id]);
   const appendVariantsToNode = useCompilerStore((s) => s.appendVariantsToNode);
   const setCompiling = useCompilerStore((s) => s.setCompiling);
   const setError = useCompilerStore((s) => s.setError);
@@ -83,8 +83,17 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
     }).length;
   }, [domainWiring, edges, nodes, id]);
 
-  // Total hypothesis count from dimension map
-  const totalHypotheses = dimensionMap?.variants.length ?? 0;
+  /** Hypothesis cards on the canvas wired to this incubator (not stale rows in persisted dimension map). */
+  const totalHypotheses = useMemo(() => {
+    const outgoingTargets = edges.filter((e) => e.source === id).map((e) => e.target);
+    const targetSet = new Set(outgoingTargets);
+    return nodes.filter(
+      (n) =>
+        n.type === 'hypothesis' &&
+        targetSet.has(n.id) &&
+        !isPlaceholderHypothesis(n.data),
+    ).length;
+  }, [edges, nodes, id]);
 
   const handleCountChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {

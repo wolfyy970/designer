@@ -23,10 +23,13 @@ describe('prompt-log-mapping', () => {
     expect(parsePromptKey('not_a_key')).toBeNull();
   });
 
-  it('maps compiler and designSystem', () => {
+  it('maps compiler, designSystem, and agent compaction', () => {
     expect(promptKeyFromLlmLogEntry(baseEntry({ source: 'compiler' }))).toBe('compilerSystem');
     expect(promptKeyFromLlmLogEntry(baseEntry({ source: 'designSystem' }))).toBe(
       'designSystemExtract',
+    );
+    expect(promptKeyFromLlmLogEntry(baseEntry({ source: 'agentCompaction' }))).toBe(
+      'agentCompactionSystem',
     );
   });
 

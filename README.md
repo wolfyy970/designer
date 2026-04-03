@@ -53,22 +53,25 @@ The header also opens **Settings** (API keys; **Prompt Studio** saves prompts on
 | `pnpm dev:all` | Start API then Vite (waits for `/api/health` — avoids proxy race) |
 | `pnpm dev:kill` | Stop processes listening on ports 3001 (API) and 5173 (Vite) |
 | `pnpm build` | Type-check and production build |
-| `pnpm test` | Run unit tests (Vitest) |
+| `pnpm test` | Vitest unit tests (Playwright merge test excluded in config; see [CLAUDE.md](CLAUDE.md)) |
 | `pnpm lint` | Run ESLint |
 | `pnpm db:migrate` | Apply Prisma migrations (set `DATABASE_URL` in `.env`) |
-| `pnpm db:seed` | Seed prompts/skills into the DB |
+| `pnpm db:seed` | Upsert **Langfuse text prompts** only (`prisma/seed.ts`); agent skills live in the DB via migrations / separate data paths, not this script |
+| `pnpm knip` | Optional unused-export report (not run in CI by default) |
 
 ## Documentation
 
 | Document | Purpose |
 |----------|---------|
-| [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) | End-to-end: canvas roles, system prompts, PI agent, evaluation loop |
-| [PRODUCT.md](PRODUCT.md) | What exists today — features, generation modes, canvas nodes, providers |
-| [USER_GUIDE.md](USER_GUIDE.md) | How to use the canvas workflow |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System design, generation engine, module boundaries, API reference |
-| [DOCUMENTATION.md](DOCUMENTATION.md) | How docs are organized and maintained |
+| [LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md) | Langfuse prompt **names** → what each is for (Prompt Studio) |
+| [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) | Narrative: canvas, prompts, agentic loop, evaluation |
+| [PRODUCT.md](PRODUCT.md) | Feature-level description: modes, nodes, providers |
+| [USER_GUIDE.md](USER_GUIDE.md) | Setup and day-to-day canvas workflow |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Technical reference: routes, stores, data flow, Pi adapter boundary |
+| [docker/langfuse/README.md](docker/langfuse/README.md) | Optional **self-hosted** Langfuse via Docker (default is Langfuse Cloud) |
+| [DOCUMENTATION.md](DOCUMENTATION.md) | How this doc set is organized (hub = this README) |
 | [CLAUDE.md](CLAUDE.md) | Commands and conventions for AI-assisted development |
 
 ## Tech Stack
 
-Vite + React 19 + TypeScript, Zustand (state), Tailwind CSS v4 (styling), @xyflow/react v12 (canvas), react-router-dom v7 (routing), @tanstack/react-query (async state), Zod (schema validation), Vitest (testing), @mariozechner/pi-agent-core (agentic loop). See [ARCHITECTURE.md](ARCHITECTURE.md) for details.
+Vite + React 19 + TypeScript, Zustand (state), Tailwind CSS v4 (styling), @xyflow/react v12 (canvas), react-router-dom v7 (routing), @tanstack/react-query (async state), Zod (schema validation), Vitest (testing). Agentic mode: `@mariozechner/pi-coding-agent` with **`just-bash`**; native Pi file tools are mapped to the virtual project in `server/services/pi-sdk/` so the host filesystem stays isolated. See [ARCHITECTURE.md](ARCHITECTURE.md).

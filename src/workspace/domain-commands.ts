@@ -7,6 +7,7 @@ import type { CanvasNodeType } from '../types/workspace-graph';
 import type { WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
 import { SECTION_NODE_TYPES } from '../lib/canvas-layout';
+import { getHypothesisRefId, isPlaceholderHypothesis } from '../lib/hypothesis-node-utils';
 
 function nodeById(nodes: WorkspaceNode[], id: string): WorkspaceNode | undefined {
   return nodes.find((n) => n.id === id);
@@ -34,10 +35,10 @@ export function syncDomainForNewEdge(
   const d = useWorkspaceDomainStore.getState();
 
   if (src.type === NODE_TYPES.MODEL && tgt.type === NODE_TYPES.HYPOTHESIS) {
-    const refId = (tgt.data as { refId?: string })?.refId;
+    const refId = getHypothesisRefId(tgt);
     const inc = findIncubatorForHypothesis(allEdges, nodes, tgt.id);
     if (refId && inc) d.linkHypothesisToIncubator(tgt.id, inc, refId);
-    d.setHypothesisPlaceholder(tgt.id, Boolean((tgt.data as { placeholder?: boolean }).placeholder));
+    d.setHypothesisPlaceholder(tgt.id, isPlaceholderHypothesis(tgt.data));
     d.attachModelToTarget(src.id, tgt.id, NODE_TYPES.HYPOTHESIS);
     return;
   }
@@ -49,9 +50,9 @@ export function syncDomainForNewEdge(
   }
 
   if (src.type === NODE_TYPES.COMPILER && tgt.type === NODE_TYPES.HYPOTHESIS) {
-    const refId = (tgt.data as { refId?: string })?.refId;
+    const refId = getHypothesisRefId(tgt);
     if (refId) d.linkHypothesisToIncubator(tgt.id, src.id, refId);
-    d.setHypothesisPlaceholder(tgt.id, Boolean((tgt.data as { placeholder?: boolean }).placeholder));
+    d.setHypothesisPlaceholder(tgt.id, isPlaceholderHypothesis(tgt.data));
     return;
   }
 
@@ -75,7 +76,7 @@ export function syncDomainForNewEdge(
 
   if (src.type === NODE_TYPES.DESIGN_SYSTEM && tgt.type === NODE_TYPES.HYPOTHESIS) {
     d.attachDesignSystemToHypothesis(src.id, tgt.id);
-    const refId = (tgt.data as { refId?: string })?.refId;
+    const refId = getHypothesisRefId(tgt);
     const inc = findIncubatorForHypothesis(allEdges, nodes, tgt.id);
     if (refId && inc) d.linkHypothesisToIncubator(tgt.id, inc, refId);
   }

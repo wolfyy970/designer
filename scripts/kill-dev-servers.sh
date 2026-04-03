@@ -23,5 +23,8 @@ kill_port() {
 }
 
 kill_port 3001
-kill_port 5173
+# Vite default and common fallbacks when 5173 is busy
+for port in 5173 5174 5175 5176; do
+  kill_port "$port"
+done
 echo "Done."

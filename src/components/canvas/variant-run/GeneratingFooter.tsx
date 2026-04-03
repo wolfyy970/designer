@@ -39,7 +39,7 @@ export function GeneratingFooter({
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 2000);
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -147,7 +147,11 @@ export function GeneratingFooter({
           )}
           {(lastModelTokenSec != null || lastTraceSec != null) && (
             <span className="pl-[18px] text-[10px] leading-snug text-fg-muted">
-              {lastModelTokenSec != null ? `Last model token ${lastModelTokenSec}s ago` : 'No model tokens yet'}
+              {lastModelTokenSec != null
+                ? lastModelTokenSec === 0
+                  ? 'Model output updating'
+                  : `Last model output ${lastModelTokenSec}s ago`
+                : 'No model output yet'}
               {lastTraceSec != null ? ` · last trace ${lastTraceSec}s ago` : ''}
             </span>
           )}

@@ -33,8 +33,10 @@ export default function Modal({ open, onClose, title, children, size = 'md' }: M
         className="absolute inset-0 bg-overlay"
         onClick={onClose}
       />
-      <div className={`relative z-10 mx-4 max-h-[80vh] w-full ${SIZE_CLASSES[size]} overflow-y-auto rounded-xl bg-surface-raised shadow-xl`}>
-        <div className="sticky top-0 flex items-center justify-between border-b border-border bg-surface-raised px-5 py-3">
+      <div
+        className={`relative z-10 mx-4 flex max-h-[85vh] w-full min-h-0 flex-col overflow-hidden rounded-xl bg-surface-raised shadow-xl ${SIZE_CLASSES[size]}`}
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-border bg-surface-raised px-5 py-3">
           <h2 className="text-base font-semibold text-fg">{title}</h2>
           <button
             onClick={onClose}
@@ -43,7 +45,7 @@ export default function Modal({ open, onClose, title, children, size = 'md' }: M
             <X size={18} />
           </button>
         </div>
-        <div className="px-5 py-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
       </div>
     </div>
   );

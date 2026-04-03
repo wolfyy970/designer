@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractCode } from '../extract-code';
+import { extractCode, extractCodeStreaming } from '../extract-code';
 
 describe('extractCode', () => {
   it('extracts HTML from ```html fences', () => {
@@ -61,5 +61,21 @@ describe('extractCode', () => {
     const code = '<div>\n  <h1>Title</h1>\n  <p>Paragraph</p>\n</div>';
     const input = `\`\`\`html\n${code}\n\`\`\``;
     expect(extractCode(input)).toBe(code);
+  });
+});
+
+describe('extractCodeStreaming', () => {
+  it('returns inner HTML for an unclosed ```html fence', () => {
+    const input = 'Here:\n```html\n<div>partial';
+    expect(extractCodeStreaming(input)).toBe('<div>partial');
+  });
+
+  it('matches extractCode when the fence is closed', () => {
+    const input = '```html\n<div>x</div>\n```';
+    expect(extractCodeStreaming(input)).toBe(extractCode(input));
+  });
+
+  it('returns growing raw HTML without fences', () => {
+    expect(extractCodeStreaming('<html><bod')).toBe('<html><bod');
   });
 });

@@ -7,7 +7,13 @@ import type {
 } from '../../../src/types/provider.ts';
 import { env } from '../../env.ts';
 import { completionMaxTokensForChat } from '../../lib/completion-budget.ts';
-import { buildChatRequestFromMessages, fetchChatCompletion, fetchModelList, parseChatResponse } from '../../lib/provider-helpers.ts';
+import {
+  buildChatRequestFromMessages,
+  fetchChatCompletion,
+  fetchModelList,
+  parseChatResponse,
+} from '../../lib/provider-helpers.ts';
+import { streamOpenAICompatibleChat } from '../../lib/openai-chat-stream.ts';
 import { supportsReasoningModel } from '../../../src/lib/model-capabilities.ts';
 
 function authHeaders(): Record<string, string> {
@@ -59,6 +65,31 @@ export class OpenRouterGenerationProvider implements GenerationProvider {
       options.signal,
     );
     return parseChatResponse(data);
+  }
+
+  async generateChatStream(
+    messages: ChatMessage[],
+    options: ProviderOptions,
+    onDelta: (accumulatedRaw: string) => void | Promise<void>,
+  ): Promise<ChatResponse> {
+    const model = options.model || 'anthropic/claude-sonnet-4.5';
+    const purpose = options.completionPurpose ?? 'default';
+    const maxTok = await completionMaxTokensForChat('openrouter', model, messages, purpose);
+    const requestBody = buildChatRequestFromMessages(model, messages, { stream: true }, maxTok);
+    return streamOpenAICompatibleChat(
+      `${env.OPENROUTER_BASE_URL}/api/v1/chat/completions`,
+      requestBody,
+      {
+        headers: authHeaders(),
+        signal: options.signal,
+        errorMap: {
+          401: 'Invalid OpenRouter API key.',
+          429: 'Rate limit exceeded. Wait a moment and try again.',
+        },
+        providerLabel: 'OpenRouter',
+      },
+      onDelta,
+    );
   }
 
   isAvailable(): boolean {

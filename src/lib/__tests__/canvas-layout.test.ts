@@ -158,8 +158,8 @@ describe('computeHypothesisPositions', () => {
   it('single position is at centerY', () => {
     const [pos] = computeHypothesisPositions(1, 400, col);
     // With one node: startY = centerY - height/2, pos = startY
-    // snapping may shift slightly
-    expect(Math.abs(pos.y - 230)).toBeLessThan(GRID_SIZE * 2);
+    // snapping may shift slightly (hypothesis fallback height matches FALLBACK_H.hypothesis)
+    expect(Math.abs(pos.y - 180)).toBeLessThan(GRID_SIZE * 2);
   });
 });
 

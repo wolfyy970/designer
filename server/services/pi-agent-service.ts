@@ -1,99 +1,47 @@
 /**
- * PI Agent session runner + stable re-exports.
- *
- * `pi-agent-service.ts` and `pi-agent-tools.ts` are the only modules that import
- * `@mariozechner/pi-agent-core`. PI is pre-1.0 (pinned at ~0.58.x); keep upgrades scoped here.
+ * Pi coding agent (see `pi-sdk/`) + just-bash virtual project.
  */
-import { Agent } from '@mariozechner/pi-agent-core';
-import type { AgentMessage } from '@mariozechner/pi-agent-core';
-import type { RunTraceEvent, TodoItem } from '../../src/types/provider.ts';
-import { PI_AGENT_CONTEXT_WINDOW, PI_LLM_LOG_PHASE } from '../constants/pi-agent.ts';
-import { makeLoggedPiStreamFn } from '../lib/pi-llm-log.ts';
-import { handlePiAgentSubscribeEvent } from './pi-agent-subscribe-handlers.ts';
-import { buildModel, compactWithLLM, type ThinkingLevel } from './pi-agent-compaction.ts';
 import {
-  makeEditFileTool,
-  makeFindTool,
-  makeGrepTool,
-  makeLsTool,
-  makePlanFilesTool,
-  makeReadFileTool,
-  makeTodoWriteTool,
-  makeValidateHtmlTool,
-  makeValidateJsTool,
-  makeWriteFileTool,
-} from './pi-agent-tools.ts';
-import { VirtualWorkspace } from './virtual-workspace.ts';
-import { getProviderModelContextWindow } from '../lib/provider-model-context.ts';
+  AuthStorage,
+  createAgentSession,
+  SessionManager,
+  type CreateAgentSessionOptions,
+  type ToolDefinition,
+} from './pi-sdk/index.ts';
+import type { RunTraceEvent, TodoItem } from '../../src/types/provider.ts';
 import { env } from '../env.ts';
+import { wrapPiStreamWithLogging, PI_LLM_LOG_PHASE } from '../lib/pi-llm-log.ts';
+import { getPromptBody } from '../db/prompts.ts';
+import { getProviderModelContextWindow } from '../lib/provider-model-context.ts';
+import { buildModel } from './pi-model.ts';
+import {
+  createAgentBashSandbox,
+  extractDesignFiles,
+  SANDBOX_PROJECT_ROOT,
+} from './agent-bash-sandbox.ts';
+import { createSandboxBashTool } from './pi-bash-tool.ts';
+import {
+  createTodoWriteTool,
+  createValidateHtmlTool,
+  createValidateJsTool,
+} from './pi-app-tools.ts';
+import { createVirtualPiCodingTools } from './pi-sdk/virtual-tools.ts';
+import { subscribePiSessionBridge } from './pi-session-event-bridge.ts';
+import type {
+  AgentRunParams,
+  AgentSessionParams,
+  AgentRunEvent,
+  DesignAgentSessionResult,
+} from './pi-agent-run-types.ts';
 
-// ── Re-exports (stable import surface for orchestrator + tests) ───────────────
+export type { ThinkingLevel } from './pi-model.ts';
+export type { AgentRunParams, AgentSessionParams, AgentRunEvent, DesignAgentSessionResult };
 
-export {
-  buildModel,
-  buildFallbackSummary,
-  compactWithLLM,
-} from './pi-agent-compaction.ts';
-export type { ThinkingLevel } from './pi-agent-compaction.ts';
-export {
-  makeEditFileTool,
-  makeReadFileTool,
-  makeLsTool,
-  makeFindTool,
-  makeTodoWriteTool,
-  makeGrepTool,
-  makeValidateJsTool,
-  makeValidateHtmlTool,
-} from './pi-agent-tools.ts';
-export { VirtualWorkspace } from './virtual-workspace.ts';
-export type { WorkspaceFileSnapshot } from './virtual-workspace.ts';
-
-// ── Public API types (app-domain only, no PI types cross this boundary) ───────
-
-export interface AgentRunParams {
-  systemPrompt: string;
-  userPrompt: string;
-  providerId: string;
-  modelId: string;
-  thinkingLevel?: ThinkingLevel;
-  signal?: AbortSignal;
+/** Optional: Langfuse / prompts that still reference agent compaction copy. */
+export async function loadAgentCompactionSystemPrompt(): Promise<string> {
+  return getPromptBody('agentCompactionSystem');
 }
 
-/** Extended session for revision rounds: seeded virtual FS + compaction hint */
-export interface AgentSessionParams extends AgentRunParams {
-  /** Ties Pi turns and compaction LLM rows to one generate / hypothesis run */
-  correlationId?: string;
-  seedFiles?: Record<string, string>;
-  /**
-   * Read-only skill files (e.g. under `skills/…`) preloaded before the first turn.
-   * Stripped from the returned `files` map so evaluators only see design artifacts.
-   */
-  virtualSkillFiles?: Record<string, string>;
-  /** Appended to compaction summaries so the model retains evaluation context */
-  compactionNote?: string;
-  /** First progress line (default: initial build message) */
-  initialProgressMessage?: string;
-}
-
-export interface DesignAgentSessionResult {
-  files: Record<string, string>;
-  todos: TodoItem[];
-}
-
-export type AgentRunEvent =
-  | { type: 'activity' | 'progress' | 'code' | 'error'; payload: string }
-  | { type: 'file'; path: string; content: string }
-  | { type: 'plan'; files: string[] }
-  | { type: 'todos'; todos: TodoItem[] }
-  | { type: 'trace'; trace: RunTraceEvent };
-
-// ── Main export ───────────────────────────────────────────────────────────────
-
-/**
- * Run the PI agentic design loop (possibly with seeded files for revision).
- *
- * Returns final file map + todos, or null on error (emitted as `{ type: 'error' }`).
- */
 export async function runDesignAgentSession(
   params: AgentSessionParams,
   onEvent: (event: AgentRunEvent) => void | Promise<void>,
@@ -124,25 +72,15 @@ export async function runDesignAgentSession(
     }),
   );
 
-  const workspace = new VirtualWorkspace();
-  if (params.virtualSkillFiles) {
-    for (const [path, content] of Object.entries(params.virtualSkillFiles)) {
-      workspace.seed(path, content);
-    }
-  }
-  if (params.seedFiles) {
-    for (const [path, content] of Object.entries(params.seedFiles)) {
-      workspace.seed(path, content);
-    }
-  }
+  const bash = createAgentBashSandbox({
+    seedFiles: params.seedFiles,
+    virtualSkillFiles: params.virtualSkillFiles,
+  });
 
   const todoState: { current: TodoItem[] } = { current: [] };
   const hasSeed = !!params.seedFiles && Object.keys(params.seedFiles).length > 0;
 
-  const registryCw = await getProviderModelContextWindow(
-    params.providerId,
-    params.modelId,
-  );
+  const registryCw = await getProviderModelContextWindow(params.providerId, params.modelId);
   const fallbackCw =
     params.providerId === 'lmstudio' ? env.LM_STUDIO_CONTEXT_WINDOW : 131_072;
   const contextWindow = registryCw ?? fallbackCw;
@@ -152,16 +90,16 @@ export async function runDesignAgentSession(
     params.thinkingLevel,
     contextWindow,
   );
-  const planTool = makePlanFilesTool((files) => {
-    void onEvent({ type: 'plan', files });
-    void onEvent(
-      trace('files_planned', `Planned ${files.length} file${files.length === 1 ? '' : 's'}`, {
-        phase: 'building',
-        status: 'success',
-      }),
-    );
-  });
-  const writeTool = makeWriteFileTool(workspace, (path, content) => {
+
+  const authStorage = AuthStorage.inMemory();
+  if (params.providerId === 'lmstudio') {
+    authStorage.setRuntimeApiKey('lmstudio', 'local');
+  }
+  if (params.providerId === 'openrouter' && env.OPENROUTER_API_KEY) {
+    authStorage.setRuntimeApiKey('openrouter', env.OPENROUTER_API_KEY);
+  }
+
+  const onDesignFile = (path: string, content: string) => {
     void onEvent({ type: 'file', path, content });
     void onEvent(
       trace('file_written', `Saved ${path}`, {
@@ -170,142 +108,101 @@ export async function runDesignAgentSession(
         status: 'success',
       }),
     );
-  });
-  const editTool = makeEditFileTool(workspace, (path, content) => {
-    void onEvent({ type: 'file', path, content });
-    void onEvent(
-      trace('file_written', `Updated ${path}`, {
-        phase: 'building',
-        path,
-        status: 'success',
-      }),
-    );
-  });
-  const readTool = makeReadFileTool(workspace);
-  const lsTool = makeLsTool(workspace);
-  const findTool = makeFindTool(workspace);
-  const todoTool = makeTodoWriteTool(todoState, (todos) => {
+  };
+  const virtualPiTools = createVirtualPiCodingTools(bash, onDesignFile);
+  const bashTool = createSandboxBashTool(bash, onDesignFile);
+  const todoTool = createTodoWriteTool(todoState, (todos) => {
     void onEvent({ type: 'todos', todos });
   });
-  const grepTool = makeGrepTool(workspace);
-  const validateJsTool = makeValidateJsTool(workspace);
-  const validateHtmlTool = makeValidateHtmlTool(workspace);
-
-  const { KEEP_RECENT, COMPACT_THRESHOLD } = PI_AGENT_CONTEXT_WINDOW;
-
-  const compactionExtra = params.compactionNote?.trim()
-    ? `[Evaluation / revision context]\n${params.compactionNote.trim()}`
-    : undefined;
+  const validateJsTool = createValidateJsTool(bash);
+  const validateHtmlTool = createValidateHtmlTool(bash);
 
   const llmTurnLogRef: { current?: string } = {};
 
-  const agent = new Agent({
-    streamFn: makeLoggedPiStreamFn({
-      providerId: params.providerId,
-      modelId: params.modelId,
-      source: 'builder',
-      phase: params.compactionNote?.trim()
-        ? PI_LLM_LOG_PHASE.REVISION
-        : PI_LLM_LOG_PHASE.AGENTIC_TURN,
-      turnLogRef: llmTurnLogRef,
-      correlationId: params.correlationId,
-    }),
-    initialState: {
-      systemPrompt: params.systemPrompt,
-      model,
-      thinkingLevel: params.thinkingLevel ?? 'off',
-      tools: [
-        writeTool,
-        editTool,
-        readTool,
-        lsTool,
-        findTool,
-        grepTool,
-        todoTool,
-        planTool,
-        validateJsTool,
-        validateHtmlTool,
-      ],
-    },
-    transformContext: async (messages) => {
-      if (messages.length <= COMPACT_THRESHOLD) return messages;
-
-      const first = messages[0];
-      const recent = messages.slice(-KEEP_RECENT);
-      const toSummarize = messages.slice(1, messages.length - KEEP_RECENT);
-      const snapshot = workspace.getFileSnapshot();
-
-      await onEvent({ type: 'progress', payload: 'Compacting context...' });
-      await onEvent(
-        trace('compaction', 'Compacting context window', {
-          phase: 'building',
-        }),
-      );
-      const summaryText = await compactWithLLM(toSummarize, params.providerId, params.modelId, {
-        extraContext: compactionExtra,
-        snapshot,
-        signal: params.signal,
-        correlationId: params.correlationId
-          ? `${params.correlationId}:compact`
-          : undefined,
-      });
-
-      const todoAppendix =
-        todoState.current.length > 0
-          ? '\n\n[Current todo list at time of compaction]\n' +
-            todoState.current
-              .map((t) => {
-                const icon = t.status === 'completed' ? '✓' : t.status === 'in_progress' ? '●' : '○';
-                return `${icon} [${t.status}] ${t.task}`;
-              })
-              .join('\n')
-          : '';
-
-      const summary: AgentMessage = {
-        role: 'user',
-        content: `[Context checkpoint]\n${summaryText}${todoAppendix}`,
-        timestamp: Date.now(),
-      };
-
-      return [first, summary, ...recent];
-    },
+  const { session, modelFallbackMessage } = await createAgentSession({
+    authStorage,
+    model,
+    thinkingLevel: (params.thinkingLevel ?? 'medium') as NonNullable<
+      CreateAgentSessionOptions['thinkingLevel']
+    >,
+    tools: [],
+    customTools: [...virtualPiTools, bashTool, todoTool, validateJsTool, validateHtmlTool] as ToolDefinition[],
+    sessionManager: SessionManager.inMemory(),
+    cwd: process.cwd(),
   });
 
-  if (params.signal) {
-    params.signal.addEventListener('abort', () => agent.abort());
+  if (modelFallbackMessage && process.env.NODE_ENV !== 'production') {
+    console.warn('[pi-agent-service]', modelFallbackMessage);
   }
 
+  const prevStream = session.agent.streamFn;
+  session.agent.streamFn = wrapPiStreamWithLogging(prevStream, {
+    providerId: params.providerId,
+    modelId: params.modelId,
+    source: 'builder',
+    phase: params.compactionNote?.trim() ? PI_LLM_LOG_PHASE.REVISION : PI_LLM_LOG_PHASE.AGENTIC_TURN,
+    turnLogRef: llmTurnLogRef,
+    correlationId: params.correlationId,
+  });
+
+  const mergedSystem = `${params.systemPrompt.trim()}\n\n${session.agent.state.systemPrompt}`.trim();
+  session.agent.setSystemPrompt(mergedSystem);
+
+  const streamActivityAt = { current: Date.now() };
   const subscribeCtx = {
     onEvent,
     trace,
     toolPathByCallId: new Map<string, string | undefined>(),
     waitingForFirstToken: { current: false },
     turnLogRef: llmTurnLogRef,
+    streamActivityAt,
+    modelTurnId: { current: 0 },
   };
-  agent.subscribe((event) => {
+  const unsubscribe = subscribePiSessionBridge(session, subscribeCtx);
+
+  if (params.signal) {
+    params.signal.addEventListener('abort', () => session.agent.abort());
+  }
+
+  const IDLE_PROGRESS_GAP_SEC = 18;
+  const idleCheckMs = 10_000;
+  const idleTimer = setInterval(() => {
     if (params.signal?.aborted) return;
-    handlePiAgentSubscribeEvent(subscribeCtx, event);
-  });
+    const gapSec = Math.floor((Date.now() - streamActivityAt.current) / 1000);
+    if (gapSec < IDLE_PROGRESS_GAP_SEC) return;
+    void onEvent({
+      type: 'progress',
+      payload: `Still working… ${gapSec}s since last streamed output`,
+    });
+  }, idleCheckMs);
 
   try {
-    await agent.prompt(params.userPrompt);
+    await session.prompt(
+      `${params.userPrompt}\n\n[Workspace root: ${SANDBOX_PROJECT_ROOT} — use read, write, edit, ls, find, and grep for files; use bash for shell/commands. The skills/ tree is read-only context.]`,
+      { expandPromptTemplates: false },
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await onEvent({ type: 'error', payload: `Agent error: ${message}` });
     return null;
+  } finally {
+    clearInterval(idleTimer);
+    unsubscribe();
   }
 
-  if (!hasSeed && workspace.designPathCount() === 0 && !params.signal?.aborted) {
+  const files = await extractDesignFiles(bash);
+
+  if (!hasSeed && Object.keys(files).length === 0 && !params.signal?.aborted) {
     await onEvent({
       type: 'error',
       payload:
-        'Agent completed without calling write_file. Try a model that supports tool use.',
+        'Agent completed without creating design files in the sandbox. Try a model that supports tool use, or ensure the bash tool runs successfully.',
     });
     return null;
   }
 
   return {
-    files: workspace.entriesForDesignOutput(),
+    files,
     todos: [...todoState.current],
   };
 }

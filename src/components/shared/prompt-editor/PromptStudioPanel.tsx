@@ -127,7 +127,7 @@ export function PromptStudioPanel({
               className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-micro text-fg-secondary hover:bg-surface"
             >
               <RotateCcw size={10} />
-              Reset to default
+              Reset to baseline
             </button>
           )}
         </div>
@@ -155,7 +155,7 @@ export function PromptStudioPanel({
           }}
           className="rounded border border-border bg-surface px-2 py-1 text-nano text-fg-secondary"
         >
-          <option value="default">Shipped default (repo)</option>
+          <option value="default">Database baseline (lowest version)</option>
           <option value="version">Saved version…</option>
         </select>
         {savedVersion != null && (
@@ -310,7 +310,7 @@ export function PromptStudioPanel({
         )}
         {isModified && (
           <span className="rounded bg-warning-subtle px-1.5 py-0.5 text-nano font-medium text-warning">
-            Modified vs shipped default
+            Modified vs database baseline
           </span>
         )}
       </div>

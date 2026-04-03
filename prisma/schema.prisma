@@ -7,22 +7,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-model Prompt {
-  key      String          @id
-  versions PromptVersion[]
-}
-
-model PromptVersion {
-  id        Int      @id @default(autoincrement())
-  promptKey String
-  prompt    Prompt   @relation(fields: [promptKey], references: [key])
-  body      String
-  version   Int
-  createdAt DateTime @default(now())
-
-  @@unique([promptKey, version])
-}
-
 model Skill {
   key         String         @id
   name        String

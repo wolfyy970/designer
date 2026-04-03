@@ -12,15 +12,15 @@
 
 **README.md is the ONLY entry point.** All other docs link from it. No intermediary navigation files.
 
-```
-README.md (Hub)
-├── SYSTEM_OVERVIEW.md — End-to-end narrative: prompts, canvas roles, PI agent, evaluation
-├── PRODUCT.md         — Feature spec, what exists
-├── USER_GUIDE.md      — Setup, canvas workflow, managing specs
-├── ARCHITECTURE.md    — System design, data flow, module boundaries, API tables
-├── CLAUDE.md          — Conventions for AI coding agents (not a human onboarding path)
-└── DOCUMENTATION.md   — This file (meta-documentation)
-```
+- **[README.md](README.md)** — Hub and entry point
+  - **[LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)** — Langfuse prompt identifiers → goals (Prompt Studio)
+  - **[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)** — Narrative: canvas roles, prompts, agentic loop, evaluation
+  - **[PRODUCT.md](PRODUCT.md)** — Feature spec (what exists)
+  - **[USER_GUIDE.md](USER_GUIDE.md)** — Setup and canvas workflow
+  - **[ARCHITECTURE.md](ARCHITECTURE.md)** — Technical reference: routes, modules, data flow
+  - **[docker/langfuse/README.md](docker/langfuse/README.md)** — Optional self-hosted Langfuse (most setups use cloud)
+  - **[CLAUDE.md](CLAUDE.md)** — Conventions for AI coding agents (not human onboarding)
+  - **[DOCUMENTATION.md](DOCUMENTATION.md)** — This file (meta only)
 
 ---
 
@@ -29,10 +29,12 @@ README.md (Hub)
 | Document | Purpose | Update Trigger |
 |----------|---------|----------------|
 | **README.md** | Entry point, quick start, doc map | Major features |
+| **LANGFUSE_PROMPTS.md** | Map Langfuse keys → purpose (Prompt Studio) | Prompt keys/flows change |
 | **PRODUCT.md** | Feature source of truth (prevents hallucination) | Feature launches |
 | **USER_GUIDE.md** | Setup, canvas workflow, managing specs | UX changes |
 | **ARCHITECTURE.md** | System design, module boundaries, data flow | Architecture changes |
 | **CLAUDE.md** | Agent-focused commands and repo gotchas | Workflow or stack shifts |
+| **docker/langfuse/README.md** | Optional self-hosted Langfuse (Docker) | Compose stack or seed path changes |
 | **DOCUMENTATION.md** | Meta: documentation philosophy and rules | Rarely |
 
 ---
@@ -60,12 +62,12 @@ README.md (Hub)
 ## Maintenance
 
 **After code changes:**
-1. Check which docs are affected (agentic server behavior → **ARCHITECTURE.md** + **PRODUCT.md** + **SYSTEM_OVERVIEW.md** if the narrative changes; UX/setup → **USER_GUIDE.md** or **README.md**)
-2. Update or remove outdated content
-3. Verify cross-references still work
-4. When a **GET** response shape used by the client changes (e.g. `/api/logs`), update `src/api/response-schemas.ts` and `src/api/__tests__/response-schemas.test.ts`
+1. Decide which doc owns the fact (see table above). Agentic / Pi / sandbox behavior → **ARCHITECTURE.md** + **SYSTEM_OVERVIEW.md**; product-visible behavior → **PRODUCT.md**; UX/setup → **USER_GUIDE.md** or **README.md**.
+2. **Pi coding-agent adapter** — Imports of `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent`, virtual file tools, and stream/session wiring belong under `server/services/pi-sdk/` (`virtual-tools.ts`, `types.ts`, etc.). Orchestration and the rest of the server should not import Pi packages directly. If you change that boundary, update **ARCHITECTURE.md** and **SYSTEM_OVERVIEW.md** (not scattered mentions elsewhere).
+3. Update or remove outdated content; verify cross-references.
+4. When a **GET** response shape used by the client changes (e.g. `/api/logs`), update `src/api/response-schemas.ts` and `src/api/__tests__/response-schemas.test.ts`.
 
-**Where architecture lives:** Client domain model vs canvas projection, API routes, stores, and data flow are described only in [ARCHITECTURE.md](ARCHITECTURE.md) — avoid duplicating that narrative in other files.
+**Where architecture lives:** Client domain model vs canvas projection, API routes, stores, and data flow live in [ARCHITECTURE.md](ARCHITECTURE.md) only — do not copy that narrative into other docs; link to it.
 
 **Documentation bloat indicators:**
 - Same information in multiple places

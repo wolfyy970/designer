@@ -94,6 +94,20 @@ export function appendLlmCallResponse(id: string, chunk: string): void {
   row.response += chunk;
 }
 
+/** Replace entire `response` for an in-flight row (e.g. first stream chunk after waiting pulse). */
+export function setLlmCallResponseBody(id: string, body: string): void {
+  const row = entries.find((e) => e.id === id);
+  if (!row || row.status !== 'in_progress') return;
+  row.response = body;
+}
+
+/** Heartbeat text while blocking on the provider (Observability poll sees elapsed time). */
+export function setLlmCallWaitingStatus(id: string, message: string): void {
+  const row = entries.find((e) => e.id === id);
+  if (!row || row.status !== 'in_progress') return;
+  row.response = message;
+}
+
 export function finalizeLlmCall(
   id: string,
   patch: Partial<Omit<LlmLogEntry, 'id' | 'timestamp' | 'status'>>,

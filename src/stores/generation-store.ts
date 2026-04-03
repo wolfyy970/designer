@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { z } from 'zod';
 import type { GenerationResult } from '../types/provider';
 import { GENERATION_STATUS } from '../constants/generation';
 import { storage } from '../storage';
@@ -8,6 +9,53 @@ import { STORAGE_KEYS } from '../lib/storage-keys';
 /** Fire-and-forget cleanup — log in dev, silent in prod */
 const idbCleanup = (p: Promise<void>) =>
   p.catch((err) => { if (import.meta.env.DEV) console.warn('[idb] cleanup failed:', err); });
+
+const generationStatusSchema = z.enum([
+  GENERATION_STATUS.PENDING,
+  GENERATION_STATUS.GENERATING,
+  GENERATION_STATUS.COMPLETE,
+  GENERATION_STATUS.ERROR,
+]);
+
+const persistedGenerationResultSchema = z
+  .object({
+    id: z.string(),
+    variantStrategyId: z.string(),
+    providerId: z.string(),
+    status: generationStatusSchema,
+    runId: z.string(),
+    runNumber: z.number(),
+    metadata: z.object({ model: z.string() }).passthrough().optional(),
+  })
+  .passthrough();
+
+const generationPersistSliceSchema = z.object({
+  results: z.array(persistedGenerationResultSchema),
+  selectedVersions: z.record(z.string(), z.string()).optional(),
+});
+
+/** @internal Exported for tests — validates persisted slice after version migrations. */
+export function pickValidatedGenerationPersistSlice(state: Record<string, unknown>): {
+  results: GenerationResult[];
+  selectedVersions: Record<string, string>;
+} | null {
+  const parsed = generationPersistSliceSchema.safeParse({
+    results: state.results,
+    selectedVersions: state.selectedVersions,
+  });
+  if (!parsed.success) return null;
+  const results = parsed.data.results.map(
+    (r) =>
+      ({
+        ...r,
+        metadata: r.metadata ?? { model: '' },
+      }) as GenerationResult,
+  );
+  return {
+    results,
+    selectedVersions: parsed.data.selectedVersions ?? {},
+  };
+}
 
 interface GenerationStore {
   results: GenerationResult[];
@@ -159,6 +207,17 @@ export const useGenerationStore = create<GenerationStore>()(
             delete next.evaluationStatus;
             return next;
           });
+        }
+        const validated = pickValidatedGenerationPersistSlice(state);
+        if (!validated) {
+          if (import.meta.env.DEV) {
+            console.error('[generation-store] migrate: invalid persisted slice; resetting generation metadata');
+          }
+          state.results = [];
+          state.selectedVersions = {};
+        } else {
+          state.results = validated.results;
+          state.selectedVersions = validated.selectedVersions;
         }
         // Zustand merges migrated state with initial state — partial is expected
         return state as unknown as GenerationStore;

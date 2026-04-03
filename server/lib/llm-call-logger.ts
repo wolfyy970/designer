@@ -12,10 +12,31 @@ import type {
 } from '../../src/types/provider.ts';
 import type { ReferenceImage } from '../../src/types/spec.ts';
 import type { LlmLogEntry } from '../log-store.ts';
-import { beginLlmCall, failLlmCall, finalizeLlmCall } from '../log-store.ts';
+import {
+  appendLlmCallResponse,
+  beginLlmCall,
+  failLlmCall,
+  finalizeLlmCall,
+  setLlmCallResponseBody,
+  setLlmCallWaitingStatus,
+} from '../log-store.ts';
 import type { CompletionPurpose } from './completion-budget.ts';
 import { callLLM } from '../services/compiler.ts';
 import { providerLogFields } from './llm-log-metadata.ts';
+import { runWithOptionalLlmGeneration } from './langfuse-llm-generation.ts';
+
+const LLM_WAIT_PULSE_MS = 6000;
+
+/** Updates in-progress log row with elapsed seconds until cancelled (blocking + pre-first-token stream). */
+function runWaitingPulse(logId: string, t0: number): () => void {
+  const tick = () => {
+    const sec = Math.round((performance.now() - t0) / 1000);
+    setLlmCallWaitingStatus(logId, `Waiting for provider… (${sec}s)`);
+  };
+  const handle = setInterval(tick, LLM_WAIT_PULSE_MS);
+  tick();
+  return () => clearInterval(handle);
+}
 
 export type LlmLogContext = Pick<LlmLogEntry, 'source' | 'phase' | 'correlationId'> & {
   signal?: AbortSignal;
@@ -32,6 +53,16 @@ function usageLogFields(meta?: ChatResponseMetadata): Partial<LlmLogEntry> {
   if (meta.costCredits != null) o.costCredits = meta.costCredits;
   if (meta.truncated) o.truncated = true;
   return o;
+}
+
+function usageDetailsForLangfuse(meta?: ChatResponseMetadata): Record<string, number> | undefined {
+  if (!meta) return undefined;
+  const o: Record<string, number> = {};
+  if (meta.promptTokens != null) o.prompt_tokens = meta.promptTokens;
+  if (meta.completionTokens != null) o.completion_tokens = meta.completionTokens;
+  if (meta.totalTokens != null) o.total_tokens = meta.totalTokens;
+  if (meta.reasoningTokens != null) o.reasoning_tokens = meta.reasoningTokens;
+  return Object.keys(o).length ? o : undefined;
 }
 
 export function chatMessagesToLogFields(messages: ChatMessage[]): {
@@ -67,51 +98,182 @@ export async function loggedGenerateChat(
   const t0 = performance.now();
   const pv = providerLogFields(providerId);
   const sig = ctx.signal ?? options.signal;
-  const logId = beginLlmCall({
-    source: ctx.source,
-    phase: ctx.phase,
-    model,
-    ...pv,
-    systemPrompt,
-    userPrompt,
-    response: 'Waiting for provider…',
-    ...(ctx.correlationId ? { correlationId: ctx.correlationId } : {}),
-  });
 
-  let settled = false;
-  const onAbort = () => {
-    if (settled) return;
-    settled = true;
-    failLlmCall(logId, 'Aborted', Math.round(performance.now() - t0));
-  };
+  return runWithOptionalLlmGeneration(
+    `llm:${ctx.source}:${ctx.phase}`,
+    ctx.correlationId,
+    async (upd) => {
+      upd({
+        model,
+        input: { systemPrompt, userPrompt },
+        metadata: { ...pv, providerId, source: ctx.source, phase: ctx.phase },
+      });
 
-  if (sig?.aborted) {
-    onAbort();
-    throw new DOMException('Aborted', 'AbortError');
-  }
-  if (sig) sig.addEventListener('abort', onAbort);
+      const logId = beginLlmCall({
+        source: ctx.source,
+        phase: ctx.phase,
+        model,
+        ...pv,
+        systemPrompt,
+        userPrompt,
+        response: 'Waiting for provider…',
+        ...(ctx.correlationId ? { correlationId: ctx.correlationId } : {}),
+      });
 
-  const mergedOptions: ProviderOptions = { ...options, signal: sig };
+      let settled = false;
+      const onAbort = () => {
+        if (settled) return;
+        settled = true;
+        failLlmCall(logId, 'Aborted', Math.round(performance.now() - t0));
+      };
 
-  try {
-    const response = await provider.generateChat(messages, mergedOptions);
-    if (sig) sig.removeEventListener('abort', onAbort);
-    if (settled) throw new DOMException('Aborted', 'AbortError');
-    settled = true;
-    finalizeLlmCall(logId, {
-      response: response.raw,
-      durationMs: Math.round(performance.now() - t0),
-      ...usageLogFields(response.metadata),
-    });
-    return response;
-  } catch (err) {
-    if (sig) sig.removeEventListener('abort', onAbort);
-    if (!settled) {
-      settled = true;
-      failLlmCall(logId, String(err), Math.round(performance.now() - t0));
-    }
-    throw err;
-  }
+      if (sig?.aborted) {
+        onAbort();
+        throw new DOMException('Aborted', 'AbortError');
+      }
+      if (sig) sig.addEventListener('abort', onAbort);
+
+      const mergedOptions: ProviderOptions = { ...options, signal: sig };
+      const stopPulse = runWaitingPulse(logId, t0);
+
+      try {
+        const response = await provider.generateChat(messages, mergedOptions);
+        if (sig) sig.removeEventListener('abort', onAbort);
+        if (settled) throw new DOMException('Aborted', 'AbortError');
+        settled = true;
+        finalizeLlmCall(logId, {
+          response: response.raw,
+          durationMs: Math.round(performance.now() - t0),
+          ...usageLogFields(response.metadata),
+        });
+        upd({
+          output: response.raw,
+          usageDetails: usageDetailsForLangfuse(response.metadata),
+        });
+        return response;
+      } catch (err) {
+        if (sig) sig.removeEventListener('abort', onAbort);
+        if (!settled) {
+          settled = true;
+          failLlmCall(logId, String(err), Math.round(performance.now() - t0));
+        }
+        upd({ level: 'ERROR', statusMessage: String(err) });
+        throw err;
+      } finally {
+        stopPulse();
+      }
+    },
+  );
+}
+
+/**
+ * Like {@link loggedGenerateChat}, but uses {@link GenerationProvider.generateChatStream} when present
+ * so the UI can show tokens as they arrive; falls back to {@link loggedGenerateChat} otherwise.
+ */
+export async function loggedGenerateChatStream(
+  provider: GenerationProvider,
+  providerId: string,
+  messages: ChatMessage[],
+  options: ProviderOptions,
+  ctx: LlmLogContext,
+  onDelta: (accumulatedRaw: string) => void | Promise<void>,
+): Promise<ChatResponse> {
+  const model = options.model ?? '';
+  const { systemPrompt, userPrompt } = chatMessagesToLogFields(messages);
+  const t0 = performance.now();
+  const pv = providerLogFields(providerId);
+  const sig = ctx.signal ?? options.signal;
+
+  return runWithOptionalLlmGeneration(
+    `llm:${ctx.source}:${ctx.phase}`,
+    ctx.correlationId,
+    async (upd) => {
+      upd({
+        model,
+        input: { systemPrompt, userPrompt },
+        metadata: { ...pv, providerId, source: ctx.source, phase: ctx.phase },
+      });
+
+      const logId = beginLlmCall({
+        source: ctx.source,
+        phase: ctx.phase,
+        model,
+        ...pv,
+        systemPrompt,
+        userPrompt,
+        response: 'Waiting for provider…',
+        ...(ctx.correlationId ? { correlationId: ctx.correlationId } : {}),
+      });
+
+      let settled = false;
+      const onAbort = () => {
+        if (settled) return;
+        settled = true;
+        failLlmCall(logId, 'Aborted', Math.round(performance.now() - t0));
+      };
+
+      if (sig?.aborted) {
+        onAbort();
+        throw new DOMException('Aborted', 'AbortError');
+      }
+      if (sig) sig.addEventListener('abort', onAbort);
+
+      const mergedOptions: ProviderOptions = { ...options, signal: sig };
+      let stopPulse = runWaitingPulse(logId, t0);
+      let accSeenLen = 0;
+      let streamBodyStarted = false;
+
+      const onDeltaForLog = async (accumulated: string) => {
+        const incremental = accumulated.slice(accSeenLen);
+        accSeenLen = accumulated.length;
+        if (incremental) {
+          if (!streamBodyStarted) {
+            streamBodyStarted = true;
+            stopPulse();
+            stopPulse = () => {};
+            setLlmCallResponseBody(logId, incremental);
+          } else {
+            appendLlmCallResponse(logId, incremental);
+          }
+        }
+        await onDelta(accumulated);
+      };
+
+      try {
+        const streamFn = provider.generateChatStream;
+        const response = streamFn
+          ? await streamFn.call(provider, messages, mergedOptions, onDeltaForLog)
+          : await (async () => {
+              const r = await provider.generateChat(messages, mergedOptions);
+              await onDeltaForLog(r.raw);
+              return r;
+            })();
+        if (sig) sig.removeEventListener('abort', onAbort);
+        if (settled) throw new DOMException('Aborted', 'AbortError');
+        settled = true;
+        finalizeLlmCall(logId, {
+          response: response.raw,
+          durationMs: Math.round(performance.now() - t0),
+          ...usageLogFields(response.metadata),
+        });
+        upd({
+          output: response.raw,
+          usageDetails: usageDetailsForLangfuse(response.metadata),
+        });
+        return response;
+      } catch (err) {
+        if (sig) sig.removeEventListener('abort', onAbort);
+        if (!settled) {
+          settled = true;
+          failLlmCall(logId, String(err), Math.round(performance.now() - t0));
+        }
+        upd({ level: 'ERROR', statusMessage: String(err) });
+        throw err;
+      } finally {
+        stopPulse();
+      }
+    },
+  );
 }
 
 type CallLLMOptions = {
@@ -135,53 +297,73 @@ export async function loggedCallLLM(
   const pv = providerLogFields(providerId);
   const sig = options.signal ?? ctx.signal;
 
-  const logId = beginLlmCall({
-    source: ctx.source,
-    phase: ctx.phase,
-    model,
-    ...pv,
-    systemPrompt,
-    userPrompt,
-    response: 'Waiting for provider…',
-    ...(ctx.correlationId ? { correlationId: ctx.correlationId } : {}),
-  });
+  return runWithOptionalLlmGeneration(
+    `llm:${ctx.source}:${ctx.phase}`,
+    ctx.correlationId,
+    async (upd) => {
+      upd({
+        model,
+        input: { systemPrompt, userPrompt },
+        metadata: { ...pv, providerId, source: ctx.source, phase: ctx.phase },
+      });
 
-  let settled = false;
-  const onAbort = () => {
-    if (settled) return;
-    settled = true;
-    failLlmCall(logId, 'Aborted', Math.round(performance.now() - t0));
-  };
+      const logId = beginLlmCall({
+        source: ctx.source,
+        phase: ctx.phase,
+        model,
+        ...pv,
+        systemPrompt,
+        userPrompt,
+        response: 'Waiting for provider…',
+        ...(ctx.correlationId ? { correlationId: ctx.correlationId } : {}),
+      });
 
-  if (sig?.aborted) {
-    onAbort();
-    throw new DOMException('Aborted', 'AbortError');
-  }
-  if (sig) sig.addEventListener('abort', onAbort);
+      let settled = false;
+      const onAbort = () => {
+        if (settled) return;
+        settled = true;
+        failLlmCall(logId, 'Aborted', Math.round(performance.now() - t0));
+      };
 
-  try {
-    const response = await callLLM(messages, model, providerId, {
-      temperature: options.temperature,
-      max_tokens: options.max_tokens,
-      images: options.images,
-      signal: sig,
-      completionPurpose: options.completionPurpose,
-    });
-    if (sig) sig.removeEventListener('abort', onAbort);
-    if (settled) throw new DOMException('Aborted', 'AbortError');
-    settled = true;
-    finalizeLlmCall(logId, {
-      response: response.raw,
-      durationMs: Math.round(performance.now() - t0),
-      ...usageLogFields(response.metadata),
-    });
-    return response.raw;
-  } catch (err) {
-    if (sig) sig.removeEventListener('abort', onAbort);
-    if (!settled) {
-      settled = true;
-      failLlmCall(logId, String(err), Math.round(performance.now() - t0));
-    }
-    throw err;
-  }
+      if (sig?.aborted) {
+        onAbort();
+        throw new DOMException('Aborted', 'AbortError');
+      }
+      if (sig) sig.addEventListener('abort', onAbort);
+
+      const stopPulse = runWaitingPulse(logId, t0);
+      try {
+        const response = await callLLM(messages, model, providerId, {
+          temperature: options.temperature,
+          max_tokens: options.max_tokens,
+          images: options.images,
+          signal: sig,
+          completionPurpose: options.completionPurpose,
+        });
+        if (sig) sig.removeEventListener('abort', onAbort);
+        if (settled) throw new DOMException('Aborted', 'AbortError');
+        settled = true;
+        finalizeLlmCall(logId, {
+          response: response.raw,
+          durationMs: Math.round(performance.now() - t0),
+          ...usageLogFields(response.metadata),
+        });
+        upd({
+          output: response.raw,
+          usageDetails: usageDetailsForLangfuse(response.metadata),
+        });
+        return response.raw;
+      } catch (err) {
+        if (sig) sig.removeEventListener('abort', onAbort);
+        if (!settled) {
+          settled = true;
+          failLlmCall(logId, String(err), Math.round(performance.now() - t0));
+        }
+        upd({ level: 'ERROR', statusMessage: String(err) });
+        throw err;
+      } finally {
+        stopPulse();
+      }
+    },
+  );
 }

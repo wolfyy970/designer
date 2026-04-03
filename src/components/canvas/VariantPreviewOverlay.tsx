@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, Columns2, ChevronLeft, ChevronRight, Loader2, AlertCircle } from 'lucide-react';
 import { useCompilerStore, findVariantStrategy } from '../../stores/compiler-store';
 import { useCanvasStore } from '../../stores/canvas-store';
+import { useGenerationStore } from '../../stores/generation-store';
 import { bundleVirtualFS, prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
 import { normalizeError } from '../../lib/error-utils';
 import { useResultCode } from '../../hooks/useResultCode';
@@ -11,13 +12,27 @@ import { badgeColor } from '../../lib/badge-colors';
 import type { GenerationResult } from '../../types/provider';
 import { GENERATION_STATUS } from '../../constants/generation';
 
+/** Sorted list of variant canvas node IDs that have at least one result. */
+function useVariantNodeIds(): string[] {
+  const nodes = useCanvasStore((s) => s.nodes);
+  const results = useGenerationStore((s) => s.results);
+  return useMemo(() => {
+    const variantNodes = nodes
+      .filter((n) => n.type === 'variant')
+      .sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
+    const vsIdsWithResults = new Set(results.map((r) => r.variantStrategyId));
+    return variantNodes.filter((n) => {
+      const vsId = n.data.variantStrategyId as string | undefined;
+      return vsId && vsIdsWithResults.has(vsId);
+    }).map((n) => n.id);
+  }, [nodes, results]);
+}
+
 export default function VariantPreviewOverlay() {
-  // expandedVariantId is now a canvas node ID
   const expandedVariantId = useCanvasStore((s) => s.expandedVariantId);
   const setExpandedVariant = useCanvasStore((s) => s.setExpandedVariant);
   const dimensionMaps = useCompilerStore((s) => s.dimensionMaps);
 
-  // Look up node data from canvas store (primitive selectors for stability)
   const variantStrategyId = useCanvasStore(
     (s) => {
       if (!expandedVariantId) return undefined;
@@ -44,7 +59,6 @@ export default function VariantPreviewOverlay() {
     goOlder,
   } = useVersionStack(variantStrategyId, pinnedRunId);
 
-  // Legacy fallback: expandedVariantId might be a resultId from old code
   const legacyResult = useMemo(
     () =>
       !activeResult && expandedVariantId
@@ -54,7 +68,6 @@ export default function VariantPreviewOverlay() {
   );
   const result = activeResult ?? legacyResult;
 
-  // Load code from IndexedDB
   const { code, isLoading: codeLoading } = useResultCode(result?.id, result?.status);
   const { files } = useResultFiles(result?.id, result?.status);
   const compareResult = useMemo(
@@ -64,33 +77,50 @@ export default function VariantPreviewOverlay() {
   const { code: compareCode, isLoading: compareCodeLoading } = useResultCode(compareResult?.id, compareResult?.status);
   const { files: compareFiles } = useResultFiles(compareResult?.id, compareResult?.status);
 
-  // Other complete results (for compare mode)
   const otherResults = useMemo(
     () => stack.filter((r: GenerationResult) => r.status === GENERATION_STATUS.COMPLETE && r.id !== result?.id),
     [stack, result?.id],
   );
+
+  // Cross-variant (left/right) navigation
+  const variantNodeIds = useVariantNodeIds();
+  const variantIdx = expandedVariantId ? variantNodeIds.indexOf(expandedVariantId) : -1;
+  const hasPrevVariant = variantIdx > 0;
+  const hasNextVariant = variantIdx >= 0 && variantIdx < variantNodeIds.length - 1;
+
+  const goToPrevVariant = useCallback(() => {
+    if (hasPrevVariant) {
+      setCompareId(null);
+      setExpandedVariant(variantNodeIds[variantIdx - 1]);
+    }
+  }, [hasPrevVariant, variantNodeIds, variantIdx, setExpandedVariant]);
+
+  const goToNextVariant = useCallback(() => {
+    if (hasNextVariant) {
+      setCompareId(null);
+      setExpandedVariant(variantNodeIds[variantIdx + 1]);
+    }
+  }, [hasNextVariant, variantNodeIds, variantIdx, setExpandedVariant]);
 
   const close = useCallback(() => {
     setExpandedVariant(null);
     setCompareId(null);
   }, [setExpandedVariant]);
 
-  // Close on Escape
   useEffect(() => {
     if (!expandedVariantId) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close();
+      if (e.key === 'ArrowLeft' && !e.metaKey && !e.ctrlKey) goToPrevVariant();
+      if (e.key === 'ArrowRight' && !e.metaKey && !e.ctrlKey) goToNextVariant();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [expandedVariantId, close]);
+  }, [expandedVariantId, close, goToPrevVariant, goToNextVariant]);
 
   if (!expandedVariantId || !result) return null;
 
-  const strategy = findVariantStrategy(
-    dimensionMaps,
-    result.variantStrategyId,
-  );
+  const strategy = findVariantStrategy(dimensionMaps, result.variantStrategyId);
 
   function renderPanel(
     r: GenerationResult,
@@ -119,36 +149,20 @@ export default function VariantPreviewOverlay() {
     return (
       <div className="flex flex-1 flex-col overflow-hidden">
         {label && (
-          <div className="shrink-0 border-b border-white/10 px-4 py-1.5 text-micro text-white/60">
-            {label}
+          <div className="shrink-0 border-b border-white/10 px-4 py-1.5">
+            <span className="text-micro text-white/60">{label}</span>
+            <span className="ml-2 text-xs font-medium text-white">
+              {strat?.name ?? 'Variant'}
+              {r.runNumber != null && (
+                <span
+                  className={`ml-1.5 rounded px-1 py-px text-badge font-bold leading-none ${badgeColor(r.runNumber).bg} ${badgeColor(r.runNumber).text}`}
+                >
+                  v{r.runNumber}
+                </span>
+              )}
+            </span>
           </div>
         )}
-        <div className="shrink-0 border-b border-white/10 px-4 py-2">
-          <h3 className="text-sm font-medium text-white">
-            {strat?.name ?? 'Variant'}
-            {r.runNumber != null && (
-              <span
-                className={`ml-2 rounded px-1 py-px text-badge font-bold leading-none ${badgeColor(r.runNumber).bg} ${badgeColor(r.runNumber).text}`}
-              >
-                v{r.runNumber}
-              </span>
-            )}
-          </h3>
-          {r.metadata?.model && (
-            <p className="text-xs text-white/50">
-              {r.metadata.model}
-              {r.metadata.durationMs != null && (
-                <>
-                  {' '}
-                  &middot; {(r.metadata.durationMs / 1000).toFixed(1)}s
-                </>
-              )}
-              {r.metadata.tokensUsed != null && (
-                <> &middot; {r.metadata.tokensUsed.toLocaleString()} tok</>
-              )}
-            </p>
-          )}
-        </div>
         <div className="flex-1 overflow-hidden bg-white">
           {isLoading ? (
             <div className="flex h-full items-center justify-center">
@@ -176,8 +190,33 @@ export default function VariantPreviewOverlay() {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-overlay-heavy">
       {/* Top bar */}
-      <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-3">
+      <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-2.5">
         <div className="flex items-center gap-4">
+          {/* Cross-variant navigation */}
+          {variantNodeIds.length > 1 && (
+            <div className="flex items-center gap-1 text-white/60">
+              <button
+                onClick={goToPrevVariant}
+                disabled={!hasPrevVariant}
+                className="rounded p-1 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
+                title="Previous design (←)"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <span className="text-xs tabular-nums">
+                {variantIdx + 1} / {variantNodeIds.length}
+              </span>
+              <button
+                onClick={goToNextVariant}
+                disabled={!hasNextVariant}
+                className="rounded p-1 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
+                title="Next design (→)"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
+
           <div>
             <h2 className="text-sm font-semibold text-white">
               {strategy?.name ?? 'Variant Preview'}
@@ -192,41 +231,47 @@ export default function VariantPreviewOverlay() {
                 </span>
               )}
             </h2>
-            {result.metadata?.model && (
-              <p className="text-xs text-white/40">
-                {result.metadata.model}
-              </p>
-            )}
+            <p className="text-xs text-white/40">
+              {result.metadata?.model}
+              {result.metadata?.durationMs != null && (
+                <> &middot; {(result.metadata.durationMs / 1000).toFixed(1)}s</>
+              )}
+              {result.metadata?.tokensUsed != null && (
+                <> &middot; {result.metadata.tokensUsed.toLocaleString()} tok</>
+              )}
+              {stackTotal > 1 && (
+                <> &middot; v{(result.runNumber ?? stackIndex + 1)}</>
+              )}
+            </p>
           </div>
 
-          {/* Version navigation */}
+          {/* Version navigation (within the same variant) */}
           {stackTotal > 1 && (
-            <div className="flex items-center gap-1 text-white/60">
+            <div className="flex items-center gap-1 rounded-md border border-white/10 px-1.5 py-0.5 text-white/60">
               <button
                 onClick={goNewer}
                 disabled={stackIndex <= 0}
-                className="rounded p-1 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
+                className="rounded p-0.5 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
                 title="Newer version"
               >
-                <ChevronLeft size={16} />
+                <ChevronLeft size={14} />
               </button>
-              <span className="text-xs tabular-nums">
-                {stackIndex + 1} / {stackTotal}
+              <span className="text-[10px] tabular-nums">
+                v{stackIndex + 1}/{stackTotal}
               </span>
               <button
                 onClick={goOlder}
                 disabled={stackIndex >= stackTotal - 1}
-                className="rounded p-1 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
+                className="rounded p-0.5 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
                 title="Older version"
               >
-                <ChevronRight size={16} />
+                <ChevronRight size={14} />
               </button>
             </div>
           )}
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Compare toggle */}
           {!compareId && otherResults.length > 0 && (
             <button
               onClick={() => setCompareId(otherResults[0].id)}
@@ -254,14 +299,13 @@ export default function VariantPreviewOverlay() {
         </div>
       </div>
 
-      {/* Content */}
+      {/* Content — no per-panel header in single mode (top bar covers it) */}
       <div className="flex flex-1 overflow-hidden">
         {compareId && compareResult ? (
           <>
             {renderPanel(result, code, codeLoading, files, 'Original')}
             <div className="w-px bg-white/10" />
             <div className="flex flex-1 flex-col overflow-hidden">
-              {/* Compare selector */}
               <div className="shrink-0 border-b border-white/10 px-4 py-1.5">
                 <select
                   value={compareId}
@@ -269,16 +313,9 @@ export default function VariantPreviewOverlay() {
                   className="rounded border border-white/20 bg-transparent px-2 py-0.5 text-micro text-white/70 outline-none"
                 >
                   {otherResults.map((r) => {
-                    const s = findVariantStrategy(
-                      dimensionMaps,
-                      r.variantStrategyId,
-                    );
+                    const s = findVariantStrategy(dimensionMaps, r.variantStrategyId);
                     return (
-                      <option
-                        key={r.id}
-                        value={r.id}
-                        className="bg-bg text-white"
-                      >
+                      <option key={r.id} value={r.id} className="bg-bg text-white">
                         {s?.name ?? r.metadata?.model ?? r.id}
                         {r.runNumber != null ? ` (v${r.runNumber})` : ''}
                       </option>

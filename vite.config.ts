@@ -5,10 +5,18 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   test: {
     // `.vendor` holds upstream Pi sources; their test suite expects optional packages we don't install.
-    exclude: ['node_modules/**', '.vendor/**'],
+    exclude: [
+      'node_modules/**',
+      '.vendor/**',
+      // Optional Playwright browser stack; keep unit tests hermetic.
+      '**/browser-playwright-evaluator.test.ts',
+    ],
   },
   plugins: [react(), tailwindcss()],
   server: {
+    port: 5173,
+    /** Same origin as `http://localhost:5173` so localStorage (active spec + canvas manager) stays stable. */
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://localhost:3001',

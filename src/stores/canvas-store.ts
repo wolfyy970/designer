@@ -44,6 +44,7 @@ import {
 import { isValidConnection as checkValidConnection, buildAutoConnectEdges, buildModelEdgeForNode, buildModelEdgesFromParent, findMissingPrerequisite } from '../lib/canvas-connections';
 import { buildEdgeId, EDGE_TYPES, EDGE_STATUS, type EdgeStatus } from '../constants/canvas';
 import { computeLineage } from '../lib/canvas-graph';
+import { getHypothesisRefId } from '../lib/hypothesis-node-utils';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 import { PREREQUISITE_DEFAULTS } from '../lib/constants';
 import { migrateCanvasState } from './canvas-migrations';
@@ -91,6 +92,9 @@ interface CanvasStore {
   variantNodeIdMap: Map<string, string>;
   /** Transient: which node type + handle type is currently being dragged from (for handle glow) */
   connectingFrom: { nodeType: CanvasNodeType; handleType: 'source' | 'target' } | null;
+  /** Transient: React Flow layer should fitView after default template nodes are created (not persisted). */
+  pendingFitViewAfterTemplate: boolean;
+  consumePendingFitView: () => void;
 
   onNodesChange: (changes: Parameters<typeof applyWorkspaceNodeChanges>[0]) => void;
   onEdgesChange: (changes: Parameters<typeof applyWorkspaceEdgeChanges>[0]) => void;
@@ -150,6 +154,9 @@ export const useCanvasStore = create<CanvasStore>()(
       lineageEdgeIds: new Set<string>(),
       variantNodeIdMap: new Map<string, string>(),
       connectingFrom: null,
+      pendingFitViewAfterTemplate: false,
+
+      consumePendingFitView: () => set({ pendingFitViewAfterTemplate: false }),
 
       onNodesChange: (changes) => {
         set({ nodes: applyWorkspaceNodeChanges(changes, get().nodes) });
@@ -298,7 +305,7 @@ export const useCanvasStore = create<CanvasStore>()(
         // and remove the strategy from the compiler store
         const removeIds = new Set<string>([nodeId]);
         if (node.type === 'hypothesis') {
-          const refId = (node.data as HypothesisNodeData).refId;
+          const refId = getHypothesisRefId(node);
           if (refId) useCompilerStore.getState().removeVariant(refId);
           for (const e of state.edges) {
             if (e.source !== nodeId) continue;
@@ -519,6 +526,7 @@ export const useCanvasStore = create<CanvasStore>()(
               data: { status: EDGE_STATUS.IDLE },
             },
           ],
+          pendingFitViewAfterTemplate: true,
         });
         hydrateDomainFromCanvasGraph({
           nodes: get().nodes as { id: string; type: CanvasNodeType; data: Record<string, unknown> }[],
@@ -818,6 +826,7 @@ export const useCanvasStore = create<CanvasStore>()(
           runInspectorVariantNodeId: null,
           lineageNodeIds: new Set(),
           lineageEdgeIds: new Set(),
+          pendingFitViewAfterTemplate: false,
         });
         get().initializeCanvas();
       },
@@ -831,6 +840,7 @@ export const useCanvasStore = create<CanvasStore>()(
           runInspectorVariantNodeId: null,
           lineageNodeIds: new Set(),
           lineageEdgeIds: new Set(),
+          pendingFitViewAfterTemplate: false,
         }),
     }),
     {

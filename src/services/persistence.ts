@@ -1,39 +1,48 @@
 import { type DesignSpec, DesignSpecSchema } from '../types/spec';
 import { STORAGE_KEYS } from '../lib/storage-keys';
-import { z } from 'zod';
 
 const CANVASES_KEY = STORAGE_KEYS.CANVASES;
 
-const AllCanvasesSchema = z.record(z.string(), DesignSpecSchema);
-
-export function saveCanvas(spec: DesignSpec): void {
+export function saveSpecToLibrary(spec: DesignSpec): void {
   const canvases = getAllCanvases();
   canvases[spec.id] = spec;
   localStorage.setItem(CANVASES_KEY, JSON.stringify(canvases));
 }
 
-export function loadCanvas(specId: string): DesignSpec | null {
+export function getSavedSpec(specId: string): DesignSpec | null {
   const canvases = getAllCanvases();
   return canvases[specId] ?? null;
 }
 
+/**
+ * Parse saved canvas library from localStorage. Each entry is validated individually so one corrupt
+ * or schema-outdated snapshot does not wipe the whole list (and a subsequent saveSpecToLibrary erase others).
+ */
 function getAllCanvases(): Record<string, DesignSpec> {
   const raw = localStorage.getItem(CANVASES_KEY);
   if (!raw) return {};
   try {
-    const parsed = JSON.parse(raw);
-    const result = AllCanvasesSchema.safeParse(parsed);
-    if (!result.success) {
-      console.warn('Invalid canvases found in local storage', result.error);
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      console.warn('Invalid canvases in localStorage: expected a JSON object');
       return {};
     }
-    return result.data;
+    const out: Record<string, DesignSpec> = {};
+    for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
+      const result = DesignSpecSchema.safeParse(value);
+      if (result.success) {
+        out[id] = result.data;
+      } else {
+        console.warn(`Skipping invalid saved canvas "${id}"`, result.error);
+      }
+    }
+    return out;
   } catch {
     return {};
   }
 }
 
-export function deleteCanvas(specId: string): void {
+export function deleteSpecFromLibrary(specId: string): void {
   const canvases = getAllCanvases();
   delete canvases[specId];
   localStorage.setItem(CANVASES_KEY, JSON.stringify(canvases));

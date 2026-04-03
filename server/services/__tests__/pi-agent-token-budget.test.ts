@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach, vi } from 'vitest';
-import { buildModel, maxCompletionBudgetForContextWindow } from '../pi-agent-compaction.ts';
+import { buildModel, maxCompletionBudgetForContextWindow } from '../pi-model.ts';
 
 describe('maxCompletionBudgetForContextWindow', () => {
   afterEach(() => {

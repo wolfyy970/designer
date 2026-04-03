@@ -8,6 +8,7 @@ import SettingsModal from '../shared/SettingsModal';
 import LogViewer from './LogViewer';
 import { parsePromptKey } from '../../lib/prompt-log-mapping';
 import type { PromptKey } from '../../stores/prompt-store';
+import { scheduleLibraryTitleSyncIfEntryExists } from '../../services/canvas-library-session';
 
 export default function CanvasHeader() {
   const title = useSpecStore((s) => s.spec.title);
@@ -54,9 +55,15 @@ export default function CanvasHeader() {
 
   const handleSave = useCallback(() => {
     const trimmed = editValue.trim();
-    if (trimmed) setTitle(trimmed);
-    setIsEditing(false);
-  }, [editValue, setTitle]);
+    if (trimmed) {
+      setTitle(trimmed);
+      scheduleLibraryTitleSyncIfEntryExists();
+      setIsEditing(false);
+    } else {
+      setEditValue(title);
+      setIsEditing(false);
+    }
+  }, [editValue, title, setTitle]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -95,15 +102,18 @@ export default function CanvasHeader() {
               onChange={(e) => setEditValue(e.target.value)}
               onBlur={handleSave}
               onKeyDown={handleKeyDown}
-              className="rounded border border-border px-2 py-0.5 text-sm text-fg text-center input-focus"
+              aria-label="Canvas title"
+              className="min-w-[12rem] max-w-[min(28rem,calc(100vw-8rem))] rounded border border-border px-2 py-0.5 text-sm text-fg text-center input-focus"
             />
           ) : (
             <button
+              type="button"
               onClick={() => setIsEditing(true)}
-              className="flex items-center gap-1.5 text-sm text-fg-secondary hover:text-fg"
+              className="flex max-w-[min(28rem,calc(100vw-8rem))] items-center gap-1.5 truncate text-sm text-fg-secondary hover:text-fg"
+              aria-label={`Rename canvas: ${title || 'Untitled Canvas'}`}
             >
-              {title || 'Untitled Canvas'}
-              <Pencil size={12} className="text-fg-muted" />
+              <span className="truncate">{title || 'Untitled Canvas'}</span>
+              <Pencil size={12} className="shrink-0 text-fg-muted" aria-hidden />
             </button>
           )}
         </div>

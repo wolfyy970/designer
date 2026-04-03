@@ -1,1 +1,1 @@
-export { extractCode } from '../../src/lib/extract-code.ts';
+export { extractCode, extractCodeStreaming } from '../../src/lib/extract-code.ts';

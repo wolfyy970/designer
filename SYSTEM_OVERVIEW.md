@@ -18,13 +18,15 @@ Multi-model runs per hypothesis use **`/api/hypothesis/generate`**: one SSE stre
 
 ## Prompts and where they come from
 
+For a **plain-English map** of each Langfuse prompt name (`compilerSystem`, `variant`, …), see [LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md).
+
 | Role | Purpose | Typical storage |
 |------|---------|-----------------|
-| **Compiler** | Turn the design spec into dimensions + variant strategies | DB seeds (`compilerSystem`, `compilerUser`) + client overrides |
-| **Variant** | Per-hypothesis user-facing generation prompt template | DB + `compileVariantPrompts()` on client; bundle API uses same template server-side |
-| **Single-shot system** | Constraints for one HTML response | `genSystemHtml` (defaults in `shared-defaults`, overridable) |
-| **Agentic system** | Multi-file static artifact rules (entry `index.html`, local assets, etc.) | `genSystemHtmlAgentic` + DB skills appended on server |
-| **Skills** | Versioned markdown “playbooks” under a virtual `skills/` tree | Prisma seed; loaded into the agentic system prompt and virtual workspace |
+| **Compiler** | Turn the design spec into dimensions + variant strategies | Langfuse (`compilerSystem`, `compilerUser`); `pnpm db:seed` bootstraps from `shared-defaults` |
+| **Variant** | Per-hypothesis user-facing generation prompt template | Langfuse `variant` + `compileVariantPrompts()` on client; bundle API uses same template server-side |
+| **Single-shot system** | Constraints for one HTML response | Langfuse `genSystemHtml` |
+| **Agentic system** | Multi-file static artifact rules (entry `index.html`, local assets, etc.) | Langfuse `genSystemHtmlAgentic` + Prisma **skills** appended on server |
+| **Skills** | Versioned markdown “playbooks” under a virtual `skills/` tree | Prisma SQLite; loaded into the agentic system prompt and virtual workspace |
 
 Evaluators use separate LLM rubrics (browser / design / strategy / implementation) orchestrated on the server — not the same prompts as the builder model.
 
@@ -32,13 +34,13 @@ Evaluators use separate LLM rubrics (browser / design / strategy / implementatio
 
 ## PI engine (agentic generation)
 
-Isolation boundary: **`server/services/pi-agent-service.ts`** and **`pi-agent-tools.ts`** own `@mariozechner/pi-agent-core`. The rest of the app talks to them through **`runDesignAgentSession`** / generate execution.
+**Swap boundary** — Only `server/services/pi-sdk/` imports **`@mariozechner/pi-ai`** / **`@mariozechner/pi-coding-agent`**. Session wiring lives in **`pi-agent-service.ts`** (plus `agent-bash-sandbox.ts`, `pi-bash-tool.ts`, `pi-app-tools.ts`, `pi-session-event-bridge.ts`). The rest of the server calls **`runDesignAgentSession`** through generate/orchestrator code — not the Pi SDK directly — so another agent runtime could replace Pi behind the same seam.
 
-**Virtual workspace** — In-memory file map (`VirtualWorkspace`): the model **read**s, **grep**s, **edit**s, **write**s, **ls**, **find**, optional **plan_files**, **todo_write**, and **validate_**html/js. Thinking tokens are sanitized before streaming to the client.
+**Sandbox** — **`just-bash`** provides an in-memory tree at a fixed project root; skills mount read-only under `skills/…`. **`tools: []`** disables Pi’s default host-FS tools. **`pi-sdk/virtual-tools.ts`** registers the same Pi tool *schemas* (`read`, `write`, `edit`, `ls`, `find`, `grep`) with `operations` / `bash.exec` backed by that virtual FS, plus **`bash`**, **`todo_write`**, **`validate_js`**, **`validate_html`**. SSE **`file`** events fire when design files change (virtual tool writes and bash-driven changes; `skills/` excluded).
 
-**Loop** — The PI `Agent` streams turns; the subscribe handler (see `pi-agent-subscribe-handlers.ts`) forwards progress, activity, traces, and file writes to SSE. Long histories **compact** via `compactWithLLM` (summarize mid-conversation) with evaluation context appended when in revision rounds.
+**Loop** — `createAgentSession` + `session.prompt`; subscribe events are bridged to app SSE. Long histories **compact** with the SDK’s token-aware compaction; evaluation context is still appended in revision rounds.
 
-**Evaluation and revision** — After a build pass, **design-evaluation-service** runs rubric workers and a deterministic **browser QA** preflight (VM); optional **Playwright** merges in when enabled and Chromium is available. Scores and a revision brief can **re-seed** the agent for another round (bounded max rounds).
+**Evaluation and revision** — After a build pass, **design-evaluation-service** runs rubric workers and a deterministic **browser QA** preflight (VM); optional **Playwright** merges when enabled and Chromium is available. Scores and a revision brief can **re-seed** the agent (bounded max rounds).
 
 ---
 

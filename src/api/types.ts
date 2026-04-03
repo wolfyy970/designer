@@ -97,6 +97,7 @@ export interface HypothesisGenerateApiPayload extends HypothesisWorkspaceApiPayl
 export type GenerateSSEEvent =
   | { type: 'progress'; status: string }
   | { type: 'activity'; entry: string }
+  | { type: 'thinking'; delta: string; turnId: number }
   | { type: 'trace'; trace: RunTraceEvent }
   | { type: 'code'; code: string }
   | { type: 'error'; error: string }

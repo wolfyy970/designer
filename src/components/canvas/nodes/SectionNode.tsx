@@ -48,8 +48,8 @@ function SectionNode({ id, type, selected }: NodeProps<SectionNodeType>) {
         )}
       </NodeHeader>
 
-      {/* Content */}
-      <div className="px-3 py-2.5">
+      {/* Content — same textarea footprint across all section inputs */}
+      <div className="px-3 pt-1 pb-2.5">
         <textarea
           value={content}
           onChange={(e) => updateSection(sectionId, e.target.value)}
@@ -58,8 +58,8 @@ function SectionNode({ id, type, selected }: NodeProps<SectionNodeType>) {
               ? 'What do you want to design? e.g. "Redesign the checkout flow for mobile users"'
               : `Describe the ${meta.title.toLowerCase()}...`
           }
-          rows={isDesignBrief ? 5 : 3}
-          className="nodrag nowheel w-full resize-none rounded border border-border px-2.5 py-2 text-xs text-fg-secondary placeholder:text-fg-faint outline-none input-focus"
+          rows={10}
+          className="nodrag nowheel min-h-[240px] w-full resize-y rounded border border-border px-2.5 py-2 text-xs leading-relaxed text-fg-secondary placeholder:text-fg-faint outline-none input-focus"
         />
 
         {/* Reference images for existing design */}

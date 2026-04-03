@@ -50,7 +50,8 @@ export function validatePrompt(key: PromptKey, value: string): Diagnostic[] {
 export const PROMPT_GROUPS: { label: string; keys: PromptKey[] }[] = [
   { label: 'Incubator', keys: ['compilerSystem', 'compilerUser'] },
   { label: 'Designer', keys: ['variant', 'genSystemHtml', 'genSystemHtmlAgentic'] },
-  { label: 'Design System', keys: ['designSystemExtract'] },
+  { label: 'Design System', keys: ['designSystemExtract', 'designSystemExtractUser'] },
+  { label: 'Agent', keys: ['agentCompactionSystem'] },
   {
     label: 'Evaluator',
     keys: ['evalDesignSystem', 'evalStrategySystem', 'evalImplementationSystem'],

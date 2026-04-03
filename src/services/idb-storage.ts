@@ -43,6 +43,10 @@ export function saveProvenance(
   return set(resultId, provenance, provenanceStore);
 }
 
+export function loadProvenance(resultId: string): Promise<Provenance | undefined> {
+  return get(resultId, provenanceStore);
+}
+
 export function deleteProvenance(resultId: string): Promise<void> {
   return del(resultId, provenanceStore);
 }

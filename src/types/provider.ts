@@ -87,11 +87,21 @@ export interface RunTraceEvent {
   at: string;
   kind: RunTraceKind;
   label: string;
+  /** PI model turn index (1-based), set on `model_turn_start` for timeline grouping */
+  turnId?: number;
   phase?: AgenticPhase;
   round?: number;
   toolName?: string;
   path?: string;
   status?: 'info' | 'success' | 'warning' | 'error';
+}
+
+/** One PI model turn's streamed reasoning (collapsible timeline). */
+export interface ThinkingTurnSlice {
+  turnId: number;
+  text: string;
+  startedAt: number;
+  endedAt?: number;
 }
 
 export interface GenerationResult {
@@ -129,6 +139,10 @@ export interface GenerationResult {
   activeToolName?: string;
   activeToolPath?: string;
   activityLog?: string[];
+  /** Assistant text output per PI turn (for timeline). In-memory only. */
+  activityByTurn?: Record<number, string>;
+  /** Streamed reasoning per turn; in-memory only. */
+  thinkingTurns?: ThinkingTurnSlice[];
   /** Capped structured trace for this in-flight run. Never persisted. */
   liveTrace?: RunTraceEvent[];
   /** Agentic harness: high-level phase for UI */
@@ -172,6 +186,15 @@ export interface GenerationProvider {
   supportsImages: boolean;
   supportsParallel: boolean;
   generateChat(messages: ChatMessage[], options: ProviderOptions): Promise<ChatResponse>;
+  /**
+   * OpenAI-compatible token streaming; accumulated raw assistant text matches {@link generateChat}’s `raw`.
+   * When omitted, callers fall back to {@link generateChat} and emit one delta at the end.
+   */
+  generateChatStream?(
+    messages: ChatMessage[],
+    options: ProviderOptions,
+    onDelta: (accumulatedRaw: string) => void | Promise<void>,
+  ): Promise<ChatResponse>;
   listModels(): Promise<ProviderModel[]>;
   isAvailable(): boolean;
 }

@@ -90,6 +90,8 @@ export async function compile(req: CompileRequest): Promise<CompileResponse> {
 export interface GenerateStreamCallbacks {
   onProgress?: (status: string) => void;
   onActivity?: (entry: string) => void;
+  /** Model reasoning stream (PI `thinking_delta`), scoped by PI turn id */
+  onThinking?: (turnId: number, delta: string) => void;
   onTrace?: (trace: RunTraceEvent) => void;
   onCode?: (code: string) => void;
   onError?: (error: string) => void;
@@ -131,6 +133,9 @@ function dispatchParsedGenerateStreamEvent(
       break;
     case 'activity':
       callbacks.onActivity?.(event.entry);
+      break;
+    case 'thinking':
+      callbacks.onThinking?.(event.turnId, event.delta);
       break;
     case 'trace':
       callbacks.onTrace?.(event.trace);

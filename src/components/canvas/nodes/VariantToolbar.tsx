@@ -1,5 +1,6 @@
 import {
   Download,
+  FileText,
   X,
   Minus,
   Plus,
@@ -28,9 +29,12 @@ interface VariantToolbarProps {
   zoomOut: () => void;
   resetZoom: () => void;
   onDownload: () => void;
+  /** Markdown debug bundle (run trace, thinking, eval, code). */
+  onDownloadDebug?: () => void;
   onDeleteVersion: () => void;
   onExpand: () => void;
-  onOpenWorkspace: () => void;
+  onToggleWorkspace: () => void;
+  isWorkspaceOpen: boolean;
   onRemove: () => void;
 }
 
@@ -49,9 +53,11 @@ export default function VariantToolbar({
   zoomOut,
   resetZoom,
   onDownload,
+  onDownloadDebug,
   onDeleteVersion,
   onExpand,
-  onOpenWorkspace,
+  onToggleWorkspace,
+  isWorkspaceOpen,
   onRemove,
 }: VariantToolbarProps) {
   return (
@@ -138,13 +144,31 @@ export default function VariantToolbar({
         onPointerDown={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          onOpenWorkspace();
+          onToggleWorkspace();
         }}
-        className="nodrag rounded p-0.5 text-fg-faint transition-colors hover:text-fg-muted"
-        title="Open run workspace"
+        className={`nodrag rounded p-0.5 transition-colors ${
+          isWorkspaceOpen
+            ? 'text-accent hover:text-accent/80'
+            : 'text-fg-faint hover:text-fg-muted'
+        }`}
+        title={isWorkspaceOpen ? 'Close run workspace' : 'Open run workspace'}
       >
         <PanelRight size={10} />
       </button>
+      {onDownloadDebug ? (
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onClick={onDownloadDebug}
+          className="nodrag rounded p-0.5 text-fg-faint transition-colors hover:text-fg-muted"
+          title="Export debug snapshot (Markdown) — choose sections in the dialog"
+        >
+          <FileText size={10} />
+        </button>
+      ) : null}
       {hasCode && (
         <>
           <button

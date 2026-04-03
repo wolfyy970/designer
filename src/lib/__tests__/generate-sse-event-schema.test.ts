@@ -22,6 +22,12 @@ describe('safeParseGenerateSSEEvent', () => {
     if (r.ok) expect(r.event).toEqual({ type: 'progress', status: 'x' });
   });
 
+  it('accepts thinking with turnId and delta', () => {
+    const r = safeParseGenerateSSEEvent('thinking', { delta: 'hello', turnId: 2 });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.event).toEqual({ type: 'thinking', delta: 'hello', turnId: 2 });
+  });
+
   it('accepts trace with extra trace fields', () => {
     const r = safeParseGenerateSSEEvent('trace', {
       trace: {

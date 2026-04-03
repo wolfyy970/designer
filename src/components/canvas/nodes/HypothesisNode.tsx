@@ -1,18 +1,11 @@
 import { memo, useCallback, useState } from 'react';
 import { type NodeProps, type Node, Handle, Position } from '@xyflow/react';
-import {
-  ChevronDown,
-  ChevronRight,
-  ClipboardCopy,
-  Loader2,
-  Pencil,
-  Sparkles,
-  X,
-  Zap,
-} from 'lucide-react';
+import { ClipboardCopy, FileText, Loader2, Pencil, Sparkles, X, Zap } from 'lucide-react';
 import { useCompilerStore, findVariantStrategy } from '../../../stores/compiler-store';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { useGenerationStore } from '../../../stores/generation-store';
+import { useSpecStore } from '../../../stores/spec-store';
+import { useWorkspaceDomainStore } from '../../../stores/workspace-domain-store';
 import type { HypothesisNodeData } from '../../../types/canvas-data';
 import { useHypothesisGeneration } from '../../../hooks/useHypothesisGeneration';
 import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
@@ -24,10 +17,22 @@ import {
   countIncomingModelsWithModelSelected,
   countOutgoingNodesOfType,
 } from '../../../workspace/graph-queries';
+import {
+  buildHypothesisDebugMarkdown,
+  downloadTextFile,
+  findDimensionMapForVariant,
+} from '../../../lib/debug-markdown-export';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
 import GeneratingSkeleton from './GeneratingSkeleton';
-import CompactField from './CompactField';
+
+type HypothesisEditorTab = 'hypothesis' | 'why' | 'measurements';
+
+const TAB_DEFS: { id: HypothesisEditorTab; label: string }[] = [
+  { id: 'hypothesis', label: 'Hypothesis' },
+  { id: 'why', label: 'Why' },
+  { id: 'measurements', label: 'Measurements' },
+];
 
 type HypothesisNodeType = Node<HypothesisNodeData, 'hypothesis'>;
 
@@ -67,7 +72,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
   const { handleGenerate, generationProgress, generationError } =
     useHypothesisGeneration({ nodeId, strategyId });
 
-  const [expanded, setExpanded] = useState(false);
+  const [editorTab, setEditorTab] = useState<HypothesisEditorTab>('hypothesis');
   const [editingName, setEditingName] = useState(false);
 
   const update = useCallback(
@@ -76,6 +81,40 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
     },
     [strategyId, updateVariant],
   );
+
+  const handleExportDebugMarkdown = useCallback(() => {
+    if (!strategy) return;
+    const spec = useSpecStore.getState().spec;
+    const compiler = useCompilerStore.getState();
+    const domain = useWorkspaceDomainStore.getState();
+    const gen = useGenerationStore.getState();
+    const dimensionMap = findDimensionMapForVariant(compiler.dimensionMaps, strategyId);
+    const domainHypothesis = domain.hypotheses[nodeId];
+    const compiledPromptsForStrategy = compiler.compiledPrompts.filter(
+      (p) => p.variantStrategyId === strategyId,
+    );
+    const resultsForStrategy = gen.results.filter((r) => r.variantStrategyId === strategyId);
+    const md = buildHypothesisDebugMarkdown({
+      exportedAt: new Date().toISOString(),
+      canvasTitle: spec.title,
+      hypothesisNodeId: nodeId,
+      strategy,
+      dimensionMap,
+      domainHypothesis,
+      modelProfiles: domain.modelProfiles,
+      designSystems: domain.designSystems,
+      spec,
+      compiledPromptsForStrategy,
+      resultsForStrategy,
+      agentModeOnNode: agentMode,
+    });
+    const slug = (strategy.name || 'hypothesis')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+    const stamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    downloadTextFile(`${slug}-hypothesis-debug-${stamp}.md`, md);
+  }, [strategy, strategyId, nodeId, agentMode]);
 
   const handleDelete = useCallback(() => {
     const snap = useCanvasStore.getState();
@@ -155,17 +194,31 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
     >
       <NodeHeader onRemove={handleDelete}>
         {editingName ? (
-          <input
-            autoFocus
-            value={strategy.name}
-            onChange={(e) => update('name', e.target.value)}
-            onFocus={(e) => e.target.select()}
-            onBlur={() => setEditingName(false)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === 'Escape') setEditingName(false);
-            }}
-            className="nodrag nowheel min-w-0 flex-1 rounded border border-accent bg-transparent px-1 text-xs font-semibold text-fg outline-none"
-          />
+          <>
+            <input
+              autoFocus
+              value={strategy.name}
+              onChange={(e) => update('name', e.target.value)}
+              onFocus={(e) => e.target.select()}
+              onBlur={() => setEditingName(false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === 'Escape') setEditingName(false);
+              }}
+              className="nodrag nowheel min-w-0 flex-1 rounded border border-accent bg-transparent px-1 text-xs font-semibold text-fg outline-none"
+            />
+            <button
+              type="button"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={handleExportDebugMarkdown}
+              className="nodrag shrink-0 rounded p-0.5 text-fg-faint transition-colors hover:text-fg-muted"
+              title="Download hypothesis debug snapshot (Markdown)"
+            >
+              <FileText size={10} />
+            </button>
+          </>
         ) : (
           <div
             className="flex min-w-0 flex-1 items-center gap-1"
@@ -181,48 +234,76 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
             >
               <Pencil size={10} />
             </button>
+            <button
+              type="button"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={handleExportDebugMarkdown}
+              className="nodrag shrink-0 rounded p-0.5 text-fg-faint transition-colors hover:text-fg-muted"
+              title="Download hypothesis debug snapshot (Markdown)"
+            >
+              <FileText size={10} />
+            </button>
           </div>
         )}
       </NodeHeader>
 
-      {/* Hypothesis */}
-      <div className="px-3 py-2">
-        <label className="mb-0.5 block text-nano font-medium text-fg-muted">
-          Hypothesis
-        </label>
-        <textarea
-          value={strategy.hypothesis}
-          onChange={(e) => update('hypothesis', e.target.value)}
-          rows={2}
-          className="nodrag nowheel w-full resize-none rounded border border-border px-2 py-1.5 text-micro text-fg-secondary input-focus"
-        />
-      </div>
-
-      {/* Expandable details */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-1 px-3 py-1.5 text-nano text-fg-muted hover:text-fg-secondary"
-      >
-        {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-        {expanded ? 'Hide details' : 'Show details'}
-      </button>
-
-      {expanded && (
-        <div className="space-y-2 px-3 pb-3">
-          <CompactField
-            label="Why"
-            value={strategy.rationale}
-            onChange={(v) => update('rationale', v)}
-            rows={2}
-          />
-          <CompactField
-            label="Measurements"
-            value={strategy.measurements}
-            onChange={(v) => update('measurements', v)}
-            rows={2}
-          />
+      {/* Hypothesis / Why / Measurements — one tab at a time for readable editing */}
+      <div className="flex min-h-[200px] flex-col px-3 pb-2 pt-1">
+        <div
+          className="nodrag nowheel mb-1.5 flex gap-0.5 rounded-md border border-border bg-surface-raised p-0.5"
+          role="tablist"
+          aria-label="Hypothesis fields"
+        >
+          {TAB_DEFS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={editorTab === id}
+              onPointerDown={() => setEditorTab(id)}
+              className={`nodrag nowheel min-w-0 flex-1 rounded px-2 py-1 text-center text-[10px] font-medium transition-colors ${
+                editorTab === id
+                  ? 'bg-fg text-bg shadow-sm'
+                  : 'text-fg-muted hover:bg-surface hover:text-fg-secondary'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-      )}
+        <div className="min-h-0 flex-1" role="tabpanel">
+          {editorTab === 'hypothesis' && (
+            <textarea
+              value={strategy.hypothesis}
+              onChange={(e) => update('hypothesis', e.target.value)}
+              rows={8}
+              placeholder="What you're exploring or validating with this variant..."
+              className="nodrag nowheel min-h-[176px] w-full resize-y rounded border border-border px-2.5 py-2 text-micro leading-relaxed text-fg-secondary placeholder:text-fg-faint input-focus"
+            />
+          )}
+          {editorTab === 'why' && (
+            <textarea
+              value={strategy.rationale}
+              onChange={(e) => update('rationale', e.target.value)}
+              rows={8}
+              placeholder="Rationale, tradeoffs, and why this hypothesis is worth testing..."
+              className="nodrag nowheel min-h-[176px] w-full resize-y rounded border border-border px-2.5 py-2 text-micro leading-relaxed text-fg-secondary placeholder:text-fg-faint input-focus"
+            />
+          )}
+          {editorTab === 'measurements' && (
+            <textarea
+              value={strategy.measurements}
+              onChange={(e) => update('measurements', e.target.value)}
+              rows={8}
+              placeholder="Signals, metrics, or evaluation criteria..."
+              className="nodrag nowheel min-h-[176px] w-full resize-y rounded border border-border px-2.5 py-2 text-micro leading-relaxed text-fg-secondary placeholder:text-fg-faint input-focus"
+            />
+          )}
+        </div>
+      </div>
 
       {/* Skeleton while generating */}
       {isGenerating && (

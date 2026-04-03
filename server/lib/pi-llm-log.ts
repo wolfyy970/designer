@@ -1,22 +1,22 @@
 /**
- * Wrap Pi `streamSimple` so each agent model turn is recorded in the dev LLM log (`/api/logs`).
- * Rows start as soon as the turn begins (prompts visible); assistant text is appended from stream
- * deltas; the row is finalized when `stream.result()` settles.
+ * Wrap Pi `streamFn` (coding-agent `Agent`) so each model turn is recorded in the dev LLM log (`/api/logs`).
  */
 import { performance } from 'node:perf_hooks';
-import { streamSimple } from '@mariozechner/pi-ai';
-import type {
-  Api,
-  AssistantMessage,
-  Context,
-  Message,
-  SimpleStreamOptions,
-  StreamFunction,
-  ToolResultMessage,
-  UserMessage,
-} from '@mariozechner/pi-ai';
+import {
+  streamSimple,
+  type Context,
+  type Message,
+  type AssistantMessage,
+  type UserMessage,
+  type ToolResultMessage,
+  piStreamCompletionMaxTokens,
+} from '../services/pi-sdk/index.ts';
+
+/** Pi agent `streamFn` hook: `streamSimple` arity, stream or Promise of stream. */
+export type PiAgentStreamFn = (
+  ...args: Parameters<typeof streamSimple>
+) => ReturnType<typeof streamSimple> | Promise<ReturnType<typeof streamSimple>>;
 import type { LlmLogEntry } from '../log-store.ts';
-import { piStreamCompletionMaxTokens } from './completion-budget.ts';
 import {
   beginLlmCall,
   failLlmCall,
@@ -26,6 +26,12 @@ import {
 } from '../log-store.ts';
 import { providerLogFields } from './llm-log-metadata.ts';
 import { stripProviderControlTokens } from './stream-sanitize.ts';
+
+/** `phase` on LLM log rows for Pi agent turns (see `wrapPiStreamWithLogging`). */
+export const PI_LLM_LOG_PHASE = {
+  AGENTIC_TURN: 'agentic_turn',
+  REVISION: 'revision',
+} as const;
 
 /** Never throws; logging must not break Pi streaming. Exported for tests. */
 export function safeLogLlmCall(entry: Omit<LlmLogEntry, 'id' | 'timestamp'>): void {
@@ -76,24 +82,24 @@ function formatAssistantForLog(m: AssistantMessage): string {
       parts.push(`[thinking]\n${stripProviderControlTokens(c.thinking)}`);
     else if (c.type === 'toolCall') {
       const path = typeof c.arguments?.path === 'string' ? c.arguments.path : undefined;
-      parts.push(
-        path
-          ? `[tool_call ${c.name} path=${path}]`
-          : `[tool_call ${c.name} ${JSON.stringify(c.arguments)}]`,
-      );
+      const cmd =
+        typeof c.arguments?.command === 'string' ? c.arguments.command : undefined;
+      if (c.name === 'bash' && cmd) {
+        const short = cmd.length > 200 ? `${cmd.slice(0, 197)}…` : cmd;
+        parts.push(`[tool_call ${c.name} command=${JSON.stringify(short)}]`);
+      } else {
+        parts.push(
+          path
+            ? `[tool_call ${c.name} path=${path}]`
+            : `[tool_call ${c.name} ${JSON.stringify(c.arguments)}]`,
+        );
+      }
     }
   }
   return parts.join('\n');
 }
 
-/**
- * `message_update` deltas append to the ring buffer; `stream.result()` may yield a shorter
- * `AssistantMessage` summary. Keep the richer body so logs match what was streamed.
- */
-export function mergeStreamedAndFormattedAssistantResponse(
-  streamed: string,
-  formatted: string,
-): string {
+export function mergeStreamedAndFormattedAssistantResponse(streamed: string, formatted: string): string {
   const s = streamed.length;
   const f = formatted.length;
   if (s > f) return streamed;
@@ -116,64 +122,68 @@ export interface LoggedPiStreamFnParams {
   source: LlmLogEntry['source'];
   phase?: string;
   correlationId?: string;
-  /** Set to the in-flight LLM log row id for the current Pi turn (streaming deltas). */
   turnLogRef: { current?: string };
 }
 
-export function makeLoggedPiStreamFn(params: LoggedPiStreamFnParams): StreamFunction<Api, SimpleStreamOptions> {
-  return (model, context, options) => {
-    /**
-     * `@mariozechner/pi-ai` defaults to `min(model.maxTokens, 32000)` when `maxTokens` is omitted.
-     * Use context-sized, prompt-aware budget (shrinks as transcript grows).
-     */
+/**
+ * Wrap an existing Pi `StreamFn` (e.g. the SDK's auth-injecting `streamFn`) with LLM logging.
+ */
+export function wrapPiStreamWithLogging(
+  inner: PiAgentStreamFn,
+  params: LoggedPiStreamFnParams,
+): PiAgentStreamFn {
+  return ((model, context, options) => {
     const streamMax = piStreamCompletionMaxTokens(model, context, options?.maxTokens);
-    const stream = streamSimple(model, context, { ...options, maxTokens: streamMax });
-    const t0 = performance.now();
-    const pv = providerLogFields(params.providerId);
-    const modelLabel = params.modelId || model.id;
-    const { systemPrompt, userPrompt } = piContextToLogFields(context);
+    return Promise.resolve(
+      inner(model, context, { ...options, maxTokens: streamMax }),
+    ).then((stream) => {
+      const t0 = performance.now();
+      const pv = providerLogFields(params.providerId);
+      const modelLabel = params.modelId || model.id;
+      const { systemPrompt, userPrompt } = piContextToLogFields(context);
 
-    const logId = beginLlmCall({
-      source: params.source,
-      phase: params.phase,
-      model: modelLabel,
-      ...pv,
-      systemPrompt,
-      userPrompt,
-      response: '',
-      ...(params.correlationId ? { correlationId: params.correlationId } : {}),
-    });
-    params.turnLogRef.current = logId;
+      const logId = beginLlmCall({
+        source: params.source,
+        phase: params.phase,
+        model: modelLabel,
+        ...pv,
+        systemPrompt,
+        userPrompt,
+        response: '',
+        ...(params.correlationId ? { correlationId: params.correlationId } : {}),
+      });
+      params.turnLogRef.current = logId;
 
-    void (async () => {
-      try {
-        const final = await stream.result();
-        const formatted = formatAssistantForLog(final);
-        const streamed = getLlmLogResponseSnapshot(logId) ?? '';
-        const response = mergeStreamedAndFormattedAssistantResponse(streamed, formatted);
-        const toolCalls = toolCallsForLog(final);
-        finalizeLlmCall(logId, {
-          response,
-          durationMs: Math.round(performance.now() - t0),
-          promptTokens: final.usage?.input,
-          completionTokens: final.usage?.output,
-          totalTokens: final.usage?.totalTokens,
-          truncated: final.stopReason === 'length',
-          toolCalls: toolCalls.length ? toolCalls : undefined,
-          error:
-            final.stopReason === 'error' || final.stopReason === 'aborted'
-              ? (final.errorMessage ?? final.stopReason)
-              : undefined,
-        });
-      } catch (err) {
-        failLlmCall(logId, String(err), Math.round(performance.now() - t0));
-      } finally {
-        if (params.turnLogRef.current === logId) {
-          params.turnLogRef.current = undefined;
+      void (async () => {
+        try {
+          const final = await stream.result();
+          const formatted = formatAssistantForLog(final);
+          const streamed = getLlmLogResponseSnapshot(logId) ?? '';
+          const response = mergeStreamedAndFormattedAssistantResponse(streamed, formatted);
+          const toolCalls = toolCallsForLog(final);
+          finalizeLlmCall(logId, {
+            response,
+            durationMs: Math.round(performance.now() - t0),
+            promptTokens: final.usage?.input,
+            completionTokens: final.usage?.output,
+            totalTokens: final.usage?.totalTokens,
+            truncated: final.stopReason === 'length',
+            toolCalls: toolCalls.length ? toolCalls : undefined,
+            error:
+              final.stopReason === 'error' || final.stopReason === 'aborted'
+                ? (final.errorMessage ?? final.stopReason)
+                : undefined,
+          });
+        } catch (err) {
+          failLlmCall(logId, String(err), Math.round(performance.now() - t0));
+        } finally {
+          if (params.turnLogRef.current === logId) {
+            params.turnLogRef.current = undefined;
+          }
         }
-      }
-    })();
+      })();
 
-    return stream;
-  };
+      return stream;
+    });
+  }) as PiAgentStreamFn;
 }

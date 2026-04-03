@@ -15,6 +15,8 @@ export function promptKeyFromLlmLogEntry(entry: LlmLogEntry): PromptKey | null {
 
   if (source === 'designSystem') return 'designSystemExtract';
 
+  if (source === 'agentCompaction') return 'agentCompactionSystem';
+
   if (source === 'evaluator') {
     if (phase.includes('design')) return 'evalDesignSystem';
     if (phase.includes('strategy')) return 'evalStrategySystem';

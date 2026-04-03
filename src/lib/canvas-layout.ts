@@ -16,7 +16,7 @@ const NODE_W_VARIANT = 480;
 export const GRID_SIZE = 20;
 const NODE_SPACING = 60;
 const FALLBACK_H: Record<string, number> = {
-  section: 200, compiler: 220, designSystem: 300, hypothesis: 340, variant: 400, critique: 260, model: 180,
+  section: 400, compiler: 220, designSystem: 300, hypothesis: 440, variant: 400, critique: 260, model: 180,
 };
 export const DEFAULT_COL_GAP = 160;
 export const MIN_COL_GAP = 80;

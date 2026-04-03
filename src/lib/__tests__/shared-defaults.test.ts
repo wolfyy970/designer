@@ -8,6 +8,8 @@ const EXPECTED_KEYS = [
   'genSystemHtmlAgentic',
   'variant',
   'designSystemExtract',
+  'designSystemExtractUser',
+  'agentCompactionSystem',
   'evalDesignSystem',
   'evalStrategySystem',
   'evalImplementationSystem',
@@ -31,6 +33,12 @@ describe('PROMPT_DEFAULTS', () => {
   it('compilerSystem contains expected structural content', () => {
     expect(PROMPT_DEFAULTS.compilerSystem).toContain('dimension map');
     expect(PROMPT_DEFAULTS.compilerSystem).toContain('JSON');
+  });
+
+  it('compilerSystem avoids example strategy names models tend to echo', () => {
+    expect(PROMPT_DEFAULTS.compilerSystem).not.toContain('Trust-Forward');
+    expect(PROMPT_DEFAULTS.compilerSystem).not.toContain('Trust first');
+    expect(PROMPT_DEFAULTS.compilerSystem).not.toContain('Progressive Disclosure');
   });
 
   it('genSystemHtml contains HTML instruction', () => {

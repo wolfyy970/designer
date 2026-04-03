@@ -10,7 +10,7 @@ Given a design specification with up to 5 sections (Design Brief, Existing Desig
 
 1. Identify dimensions from the Design Constraints section. Each dimension is a variable that can change across variants (e.g., information architecture, messaging approach, layout density, interaction pattern). The Design Constraints section defines both the non-negotiable boundaries and the exploration space.
 
-2. Reason about interactions between dimensions. Which variables are coupled? A 40-word headline needs different spatial treatment than a 6-word one. Trust signal density affects information architecture. Identify these couplings.
+2. Reason about interactions between dimensions. Which variables are coupled? A 40-word headline needs different spatial treatment than a 6-word one. How much supporting detail appears above the fold is coupled to layout and scan patterns. Identify these couplings.
 
 3. Produce variant strategies — each is a coherent plan for one generated variant. Not random permutations, but intentional strategies that make different bets about what matters most, grounded in the spec's stated needs and research insights.
 </task>
@@ -28,7 +28,7 @@ Return ONLY valid JSON. No markdown fences, no explanation, no text outside the 
   ],
   "variants": [
     {
-      "name": "string — short strategy label (e.g., 'Progressive Disclosure', 'Trust-Forward')",
+      "name": "string — short strategy label coined from this spec only (constraints, audience, metrics, or research). Do not reuse sample labels from any schema example in this prompt.",
       "hypothesis": "string — the core design bet: what this variant believes will work and for whom",
       "rationale": "string — the evidence and reasoning behind this bet, grounded in the spec's stated needs and research",
       "measurements": "string — concrete, observable criteria for evaluating whether this hypothesis succeeds (e.g., 'items visible per viewport', 'clicks to complete core task')",
@@ -46,7 +46,7 @@ Return ONLY valid JSON. No markdown fences, no explanation, no text outside the 
 - Ground every rationale in the spec's stated needs, research insights, or objectives. No generic reasoning.
 - Measurements must be concrete and observable — not vague qualities like "good usability" but specific signals like "parts visible without scrolling" or "steps to complete a comparison." Derive them from the Objectives & Metrics section when available.
 - If the spec is sparse, produce more divergent variants. If it's dense with tight ranges, produce focused variations.
-- Name strategies descriptively. "Variant A" is useless. "Anxiety-First Progressive Disclosure" tells the designer what bet this variant is making.
+- Name strategies descriptively. "Variant A" is useless. Prefer names that encode the bet using language from this spec, not recycled UX pattern names.
 - The dimension map is a negotiation tool — the designer will edit it. Be explicit about your reasoning so they can correct misinterpretations.
 </guidelines>`,
 
@@ -191,6 +191,42 @@ Return ONLY valid JSON. No markdown fences, no explanation, no text outside the 
 4. **Don't invent what you can't see.** If you only have light mode screenshots, don't fabricate dark mode tokens. If motion isn't observable, say so. Honest gaps beat confident fiction.
 5. **Multiple screenshots reveal the system.** Any single page might have one-off treatments. Look for what's *consistent* across pages — those are the real tokens. Note inconsistencies as potential variants.
 </principles>`,
+
+  designSystemExtractUser: `Extract the design system from the provided screenshots.`,
+
+  agentCompactionSystem: `You are summarizing a design agent session for context window management.
+
+Output a structured checkpoint another model will use to continue seamlessly.
+
+Use this EXACT section structure (markdown headings):
+
+## Goal
+What design hypothesis or user intent is being implemented (one short paragraph).
+
+## Constraints & Preferences
+Product rules that matter (e.g. static local web artifact with a clear HTML entry such as index.html, flexible multi-file layout, relative local asset links only, no CDN unless explicitly allowed).
+
+## Progress
+### Done
+- [x] substantive milestones completed
+
+### In Progress
+- [ ] what is being worked on now
+
+### Blocked
+- issues, if any (or "(none)")
+
+## Key Decisions
+- Bullet list: palette, typography, layout, motion, content choices tied to the hypothesis.
+
+## Next Steps
+1. Ordered list of what to do next (concrete, tool-oriented).
+
+## Critical Context
+- Anything that must not be lost: exact error messages, evaluator feedback, or risky edge cases.
+- Short note on important file roles only if essential (paths only, not full contents).
+
+Be specific. Do NOT continue the conversation. Do NOT answer questions from the transcript.`,
 
   genSystemHtmlAgentic: `You are a coding-style design agent: you explore a virtual workspace with tools, then ship a static web artifact that embodies one design hypothesis.
 

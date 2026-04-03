@@ -17,7 +17,15 @@ import {
   isEvalSatisfied,
   runEvaluationWorkers,
 } from './design-evaluation-service.ts';
+import { buildAgenticSystemContext } from '../lib/build-agentic-system-context.ts';
+import { isLangfuseTracingEnabled } from '../lib/langfuse-tracing-enabled.ts';
+import { createTraceId, startActiveObservation } from '@langfuse/tracing';
 import { runDesignAgentSession, type AgentRunEvent, type AgentSessionParams } from './pi-agent-service.ts';
+
+const AGENTIC_ROOT_SPAN_ID = '0000000000000001';
+
+/** PI session fields supplied by the caller; system prompt and skill files come from DB per session. */
+export type AgenticOrchestratorBuildInput = Omit<AgentSessionParams, 'systemPrompt' | 'virtualSkillFiles'>;
 
 export type AgenticOrchestratorEvent =
   | AgentRunEvent
@@ -27,7 +35,7 @@ export type AgenticOrchestratorEvent =
   | { type: 'revision_round'; round: number; brief: string };
 
 export interface AgenticOrchestratorOptions {
-  build: AgentSessionParams;
+  build: AgenticOrchestratorBuildInput;
   compiledPrompt: string;
   evaluationContext?: EvaluationContextPayload;
   /** Override provider/model for LLM evaluators; defaults to build provider/model */
@@ -161,6 +169,44 @@ function mergeSeedWithDesign(
 export async function runAgenticWithEvaluation(
   options: AgenticOrchestratorOptions,
 ): Promise<AgenticOrchestratorResult | null> {
+  if (!isLangfuseTracingEnabled()) {
+    return runAgenticWithEvaluationImpl(options);
+  }
+  const seed = options.build.correlationId ?? '';
+  const parentSpanContext = {
+    traceId: await createTraceId(seed),
+    spanId: AGENTIC_ROOT_SPAN_ID,
+    traceFlags: 1,
+  };
+  return startActiveObservation(
+    'agentic-orchestration',
+    async (span) => {
+      span.update({
+        metadata: {
+          correlationId: options.build.correlationId,
+          providerId: options.build.providerId,
+          modelId: options.build.modelId,
+        },
+        input: { mode: 'agentic' },
+      });
+      const result = await runAgenticWithEvaluationImpl(options);
+      if (result) {
+        span.update({
+          output: {
+            stopReason: result.checkpoint.stopReason,
+            rounds: result.rounds.length,
+          },
+        });
+      }
+      return result;
+    },
+    { parentSpanContext },
+  );
+}
+
+async function runAgenticWithEvaluationImpl(
+  options: AgenticOrchestratorOptions,
+): Promise<AgenticOrchestratorResult | null> {
   const provider = getProvider(options.build.providerId);
   const parallel = provider?.supportsParallel ?? false;
   const signal = options.build.signal;
@@ -176,7 +222,21 @@ export async function runAgenticWithEvaluation(
 
   await emit(options.onStream, { type: 'phase', phase: 'building' });
 
-  const buildResult = await runDesignAgentSession(options.build, forward);
+  const initialCtx = await buildAgenticSystemContext({
+    getPromptBody: options.getPromptBody,
+    evaluationContext: options.evaluationContext,
+  });
+  const initialSkillSeed =
+    Object.keys(initialCtx.virtualSkillFiles).length > 0 ? initialCtx.virtualSkillFiles : undefined;
+
+  const buildResult = await runDesignAgentSession(
+    {
+      ...options.build,
+      systemPrompt: initialCtx.systemPrompt,
+      virtualSkillFiles: initialSkillSeed,
+    },
+    forward,
+  );
   if (!buildResult || signal?.aborted) return null;
 
   let files = buildResult.files;
@@ -201,8 +261,6 @@ export async function runAgenticWithEvaluation(
       }),
     };
   }
-
-  const skillSeed = options.build.virtualSkillFiles;
 
   while (
     !isEvalSatisfied(snapshot.aggregate, satisfactionOpts) &&
@@ -232,11 +290,20 @@ export async function runAgenticWithEvaluation(
       ...snapshot.aggregate.prioritizedFixes.map((f, i) => `${i + 1}. ${f}`),
     ].join('\n');
 
+    const revisionCtx = await buildAgenticSystemContext({
+      getPromptBody: options.getPromptBody,
+      evaluationContext: options.evaluationContext,
+    });
+    const revisionSkillSeed =
+      Object.keys(revisionCtx.virtualSkillFiles).length > 0 ? revisionCtx.virtualSkillFiles : undefined;
+
     const revised = await runDesignAgentSession(
       {
         ...options.build,
+        systemPrompt: revisionCtx.systemPrompt,
+        virtualSkillFiles: revisionSkillSeed,
         userPrompt: revisionUser,
-        seedFiles: mergeSeedWithDesign(files, skillSeed),
+        seedFiles: mergeSeedWithDesign(files, revisionSkillSeed),
         compactionNote: `Post-evaluation revision requested. Overall ${snapshot.aggregate.overallScore.toFixed(2)}. Hard fails: ${snapshot.aggregate.hardFails.length}.`,
         initialProgressMessage: 'Revising design from evaluation feedback…',
       },

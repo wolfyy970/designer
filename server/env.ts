@@ -1,10 +1,16 @@
+import { config as loadEnv } from 'dotenv';
+import path from 'node:path';
+
+// Must run before `export const env` reads `process.env`. ESM hoists `import`s above the body of
+// `server/dev.ts`, so `config()` there ran too late — Langfuse keys from `.env.local` were missed.
+loadEnv({ path: '.env.local' });
+loadEnv({ path: '.env' });
+
 function clampInt(value: string | undefined, fallback: number, min: number, max: number): number {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, Math.trunc(n)));
 }
-
-import path from 'node:path';
 
 function optionalScore(value: string | undefined): number | undefined {
   if (value === undefined || value === '') return undefined;
@@ -68,5 +74,24 @@ export const env = {
   get BROWSER_PLAYWRIGHT_EVAL() {
     if (process.env.VITEST === 'true') return false;
     return process.env.BROWSER_PLAYWRIGHT_EVAL !== '0';
+  },
+  /** Self-hosted or cloud Langfuse origin (no trailing slash). */
+  LANGFUSE_BASE_URL: (process.env.LANGFUSE_BASE_URL ?? 'http://localhost:3100').replace(/\/$/, ''),
+  LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY ?? '',
+  LANGFUSE_SECRET_KEY: process.env.LANGFUSE_SECRET_KEY ?? '',
+  /** Label used for runtime `getPromptBody` and new Prompt Studio saves. Default `production`. */
+  LANGFUSE_PROMPT_LABEL: (process.env.LANGFUSE_PROMPT_LABEL ?? 'production').trim() || 'production',
+  /**
+   * Optional path to a SQLite file that still has the legacy `PromptVersion` table (e.g. backup before
+   * `20260402120000_drop_prisma_prompts`). `pnpm db:seed` prefers latest bodies per key over shared-defaults.
+   */
+  get LANGFUSE_PROMPT_IMPORT_SQLITE(): string {
+    return (process.env.LANGFUSE_PROMPT_IMPORT_SQLITE ?? '').trim();
+  },
+  get langfuseTracingEnabled() {
+    if (process.env.VITEST === 'true') return false;
+    const pk = this.LANGFUSE_PUBLIC_KEY.trim();
+    const sk = this.LANGFUSE_SECRET_KEY.trim();
+    return Boolean(pk && sk && this.LANGFUSE_BASE_URL);
   },
 } as const;

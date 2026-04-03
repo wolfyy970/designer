@@ -18,7 +18,9 @@ export default function NodeHeader({
   children,
 }: NodeHeaderProps) {
   return (
-    <div className={`px-3 py-2.5 ${className}`}>
+    <div
+      className={`px-3 pt-2.5 ${description != null ? 'pb-1' : 'pb-2.5'} ${className}`}
+    >
       <div className="flex items-center gap-2">
         {children}
         <button
@@ -30,7 +32,7 @@ export default function NodeHeader({
         </button>
       </div>
       {description != null && (
-        <p className="mt-0.5 text-nano leading-tight text-fg-muted">
+        <p className="mt-0.5 text-nano leading-snug text-fg-muted italic">
           {description}
         </p>
       )}

@@ -45,6 +45,11 @@ const agenticCheckpointSchema = z
 export const generateSSEEventSchema = z.union([
   z.object({ type: z.literal('progress'), status: z.string() }),
   z.object({ type: z.literal('activity'), entry: z.string() }),
+  z.object({
+    type: z.literal('thinking'),
+    delta: z.string(),
+    turnId: z.number(),
+  }),
   z.object({ type: z.literal('trace'), trace: runTraceEventSchema }),
   z.object({ type: z.literal('code'), code: z.string() }),
   z.object({ type: z.literal('error'), error: z.string() }),

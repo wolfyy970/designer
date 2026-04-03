@@ -16,11 +16,22 @@ import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
 import { variantStatus } from '../../../lib/node-status';
 import { GENERATION_STATUS } from '../../../constants/generation';
 import { downloadFilesAsZip } from '../../../lib/zip-utils';
+import {
+  type DesignDebugExportOptions,
+  buildDesignRunDebugMarkdown,
+  downloadTextFile,
+} from '../../../lib/debug-markdown-export';
+import { loadProvenance, loadCode, loadFiles } from '../../../services/idb-storage';
 import NodeShell from './NodeShell';
 import VariantToolbar from './VariantToolbar';
 import VariantFooter from './VariantFooter';
 import FileExplorer from './FileExplorer';
-import { EvaluationScorecard, GeneratingFooter, AgenticHarnessStripe } from '../variant-run';
+import {
+  DesignDebugExportDialog,
+  EvaluationScorecard,
+  GeneratingFooter,
+  AgenticHarnessStripe,
+} from '../variant-run';
 
 type VariantNodeType = Node<VariantNodeData, 'variant'>;
 
@@ -70,6 +81,8 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
   const onRemove = useNodeRemoval(id);
   const setExpandedVariant = useCanvasStore((s) => s.setExpandedVariant);
   const setRunInspectorVariant = useCanvasStore((s) => s.setRunInspectorVariant);
+  const closeRunInspector = useCanvasStore((s) => s.closeRunInspector);
+  const isWorkspaceOpen = useCanvasStore((s) => s.runInspectorVariantNodeId === id);
 
   const variantName = strategy?.name ?? 'Variant';
 
@@ -134,6 +147,63 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
     }
   }, [files, code, slug]);
 
+  const [debugExportOpen, setDebugExportOpen] = useState(false);
+
+  const debugExportPreviewInput = useMemo(
+    () =>
+      result
+        ? {
+            exportedAt: new Date().toISOString(),
+            variantNodeId: id,
+            variantName,
+            strategyName: strategy?.name,
+            strategy,
+            result,
+            code: code ?? result.liveCode ?? undefined,
+            files: files ?? result.liveFiles ?? undefined,
+          }
+        : null,
+    [id, variantName, strategy, result, code, files],
+  );
+
+  const handleConfirmDebugExport = useCallback(
+    async (exportOptions: DesignDebugExportOptions) => {
+      if (!result) return;
+      const safeLoad = async <T,>(p: Promise<T | undefined>): Promise<T | undefined> => {
+        try {
+          return await p;
+        } catch {
+          return undefined;
+        }
+      };
+      const [provenance, codeIdb, filesIdb] = await Promise.all([
+        safeLoad(loadProvenance(result.id)),
+        safeLoad(loadCode(result.id)),
+        safeLoad(loadFiles(result.id)),
+      ]);
+      const mergedFiles = filesIdb ?? files ?? result.liveFiles;
+      const mergedCode = codeIdb ?? code ?? result.liveCode;
+      const md = buildDesignRunDebugMarkdown(
+        {
+          exportedAt: new Date().toISOString(),
+          variantNodeId: id,
+          variantName,
+          strategyName: strategy?.name,
+          strategy,
+          result,
+          provenance: provenance ?? undefined,
+          code: mergedCode ?? undefined,
+          files: mergedFiles ?? undefined,
+        },
+        exportOptions,
+      );
+      const stamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+      downloadTextFile(`${slug}-run-v${result.runNumber}-debug-${stamp}.md`, md);
+      setDebugExportOpen(false);
+    },
+    [id, result, variantName, strategy, slug, code, files],
+  );
+
   const { contentRef, zoom, zoomIn, zoomOut, resetZoom } = useVariantZoom();
 
   const isGenerating = result?.status === GENERATION_STATUS.GENERATING;
@@ -189,9 +259,11 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
         zoomOut={zoomOut}
         resetZoom={resetZoom}
         onDownload={handleDownload}
+        onDownloadDebug={result ? () => setDebugExportOpen(true) : undefined}
         onDeleteVersion={handleDeleteVersion}
         onExpand={() => setExpandedVariant(id)}
-        onOpenWorkspace={() => setRunInspectorVariant(id)}
+        onToggleWorkspace={() => isWorkspaceOpen ? closeRunInspector() : setRunInspectorVariant(id)}
+        isWorkspaceOpen={isWorkspaceOpen}
         onRemove={onRemove}
       />
 
@@ -369,6 +441,16 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
       {result?.status === GENERATION_STATUS.COMPLETE && (
         <VariantFooter result={result} />
       )}
+
+      {debugExportPreviewInput ? (
+        <DesignDebugExportDialog
+          open={debugExportOpen}
+          onClose={() => setDebugExportOpen(false)}
+          variantLabel={variantName}
+          previewInput={debugExportPreviewInput}
+          onConfirm={handleConfirmDebugExport}
+        />
+      ) : null}
     </NodeShell>
   );
 }

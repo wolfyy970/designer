@@ -15,6 +15,13 @@ vi.mock('../pi-agent-service.ts', () => ({
   runDesignAgentSession: mocks.runDesignAgentSession,
 }));
 
+vi.mock('../../lib/build-agentic-system-context.ts', () => ({
+  buildAgenticSystemContext: vi.fn().mockResolvedValue({
+    systemPrompt: 'sys',
+    virtualSkillFiles: {},
+  }),
+}));
+
 vi.mock('../design-evaluation-service.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../design-evaluation-service.ts')>();
   return {
@@ -80,7 +87,6 @@ describe('runAgenticWithEvaluation', () => {
 
   const baseOpts = {
     build: {
-      systemPrompt: 'sys',
       userPrompt: 'user',
       providerId: 'openrouter',
       modelId: 'test/model',

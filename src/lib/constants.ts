@@ -5,42 +5,42 @@ export const SPEC_SECTIONS: SpecSectionMeta[] = [
     id: 'design-brief',
     title: 'Design Brief',
     description:
-      'What do you want to design? The primary directive — describe the design challenge, target experience, and desired outcome.',
+      'State the design challenge, who it is for, and the outcome you want.',
     required: true,
   },
   {
     id: 'existing-design',
     title: 'Existing Design',
     description:
-      'What exists today. Screenshots, what works, what fails, what prompted this redesign.',
+      "Today's baseline: what works, what fails, and notes or screenshots of the current experience.",
     required: false,
   },
   {
     id: 'research-context',
     title: 'Research & Context',
     description:
-      'Who is the user, what do they need, and what do we know? Decision context, user intent, behavioral insights, supporting research, why current solutions fail.',
+      "Who you're designing for, what they need, and why today's options fall short.",
     required: true,
   },
   {
     id: 'objectives-metrics',
     title: 'Objectives & Metrics',
     description:
-      'What success looks like for the business and user. Goals, primary KPIs, secondary metrics, evaluation criteria, time horizon.',
+      "Success for the business and user: goals, KPIs, how you'll measure, and timeframe.",
     required: true,
   },
   {
     id: 'design-constraints',
     title: 'Design Constraints',
     description:
-      'Boundaries and exploration space. Non-negotiable requirements (brand, accessibility, legal, ethical) plus what may vary across variants (layout, messaging, interaction patterns, visual treatment).',
+      'Non-negotiables versus what may vary—brand, accessibility, legal limits, and exploration axes.',
     required: true,
   },
   {
     id: 'design-system',
     title: 'Design System',
     description:
-      'Design tokens, components, patterns, and visual language. Drop screenshots to auto-extract, or describe manually.',
+      'Tokens, components, and patterns: describe them here or capture from screenshots elsewhere.',
     required: false,
   },
 ];

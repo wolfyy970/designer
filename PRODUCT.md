@@ -57,18 +57,18 @@ The server sends the compiled variant prompt (hypothesis + spec context) to the 
 
 ### Agentic Mode
 
-Enabled by choosing **Agentic** in Mode on a Hypothesis node; use **Run agent** to start it. Powered by `@mariozechner/pi-agent-core`.
+Enabled by choosing **Agentic** in Mode on a Hypothesis node; use **Run agent** to start it. Powered by `@mariozechner/pi-coding-agent` with a **`just-bash`** in-memory project shell.
 
 **Server pipeline (not a single LLM call):**
 1. **Build** — PI multi-turn tool loop produces the file tree (streaming events: plan, files, activity, todos).
 2. **Evaluate** — Four workers run: **design**, **strategy**, and **implementation** rubrics (structured JSON from the LLM) plus **browser QA**. Browser QA starts with a fast **VM/preflight** pass on bundled HTML (structure, assets, inline script checks). When Playwright browsers are installed, a **headless Chromium** pass adds real render signals (console/page errors, layout/text heuristics) and may attach a **viewport screenshot** that appears on the variant scorecard. If Chromium is unavailable, the merge keeps preflight only and records a note — setup gaps do not hard-fail the whole evaluation.
 3. **Revise** — If the merged scores trip the revision gate, the server can run additional PI sessions seeded with the current files and an evaluation brief, until satisfied or until **max revision rounds** (server default / env / API). Provenance stores **checkpoint** metadata (e.g. stop reason, revision attempt count).
 
-**Tools** (virtual workspace): `write_file`, `edit_file`, `read_file` (with line windows), `ls`, `find`, `grep`, `todo_write`, optional `plan_files`, `validate_js`, `validate_html`.
+**Tools:** Pi-native **`read`**, **`write`**, **`edit`** (search/replace), **`ls`**, **`find`**, **`grep`** against the **virtual** project tree (not the host disk); plus **`bash`** for shell utilities; **`todo_write`**, **`validate_js`**, **`validate_html`**.
 
-**Typical flow:** declare a plan → write files → validate / read / edit → optional self-critique. Live file events update the variant preview as files land.
+**Typical flow:** plan milestones → create or edit files with `write` / `edit` → validate → optional bash for edge cases. Live **`file`** events update the variant preview as design artifacts change.
 
-**Skills.** Versioned skill packages live in the database (starter seed + `GET /api/skills` for inspection). Each agentic request selects skills using tags on the skill row and hypothesis context (including **output format** hints from dimension values when present). Matching skills are mounted read-only under `skills/…`; the system prompt includes an Agent Skills–style catalog so the model can load full instructions with `read_file`.
+**Skills.** Versioned skill packages live in the database (Prisma-backed data + `GET /api/skills` for inspection; not created by `pnpm db:seed`, which only seeds Langfuse prompts). Each agentic request selects skills using tags on the skill row and hypothesis context (including **output format** hints from dimension values when present). Matching skills are mounted read-only under `skills/…`; the system prompt includes an Agent Skills–style catalog so the model can load full instructions with the **`read`** tool.
 
 **Files are bundled for preview.** `bundleVirtualFS()` inlines linked CSS and JS into a single HTML document for sandboxed iframe rendering. The original files remain separately accessible in the code tab.
 
@@ -78,25 +78,11 @@ Enabled by choosing **Agentic** in Mode on a Hypothesis node; use **Run agent** 
 
 **Thinking** (Hypothesis node). When the connected model advertises reasoning support: **None / Light / Deep** map to API levels *off* / *minimal* / *medium*. Other levels exist in the stack but are not exposed in this UI.
 
-**Prompt override.** The agentic system prompt (`genSystemHtmlAgentic`) is in the Prompt Editor. Evaluator system prompts for the three LLM rubrics are editable there too. Loop limits (e.g. max revision rounds) are server-configured; there is no dedicated canvas control yet.
+**Prompts.** Compile, variant, single-shot and agentic system prompts, evaluators, design-system extract, and agent compaction templates are stored in **Langfuse** and edited in **Prompt Studio** (**Settings → Prompts**); save commits a new version. Stable key names and plain-English descriptions: **[LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)**. Loop limits (e.g. max revision rounds) are server-configured unless overridden via API/env — there is no dedicated canvas control yet.
 
-## Prompt Editor
+## Prompt Studio (Langfuse)
 
-All LLM prompts are exposed to the user and editable at runtime via the Prompt Editor (accessible from the canvas header):
-
-| Prompt | Purpose |
-|--------|---------|
-| Incubator — System | Role, output format, and guidelines for dimension map production |
-| Incubator — User | Template for spec data (variables: `{{SPEC_TITLE}}`, etc.) |
-| Designer — System | System prompt for single-shot HTML generation |
-| Designer — System (Agentic) | System prompt for the agentic multi-file loop. Includes hypothesis reasoning framework, self-critique instructions, and tool mechanics. |
-| Designer — User | User prompt template for variant generation (variables: `{{STRATEGY_NAME}}`, `{{DESIGN_BRIEF}}`, etc.) |
-| Evaluator — Design | System prompt for the design-quality JSON rubric (agentic evaluation) |
-| Evaluator — Strategy | System prompt for the strategy/hypothesis JSON rubric |
-| Evaluator — Implementation | System prompt for the implementation/craft JSON rubric |
-| Design System — Extract | Prompt for vision-based token extraction from screenshots |
-
-Overrides persist in localStorage. All overrides are sent per-request to the server — the server is stateless.
+Do not duplicate the prompt catalog here — use **[LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)** for the list of keys and when each runs.
 
 ## Providers
 

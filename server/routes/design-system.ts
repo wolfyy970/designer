@@ -25,8 +25,10 @@ designSystem.post('/extract', async (c) => {
   }
   const body = parsed.data;
 
-  const systemPrompt = await getPromptBody('designSystemExtract');
-  const userPrompt = 'Extract the design system from the provided screenshots.';
+  const [systemPrompt, userPrompt] = await Promise.all([
+    getPromptBody('designSystemExtract'),
+    getPromptBody('designSystemExtractUser'),
+  ]);
 
   try {
     const response = await loggedCallLLM(

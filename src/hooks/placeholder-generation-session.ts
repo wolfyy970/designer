@@ -4,7 +4,12 @@ import { GENERATION_STATUS } from '../constants/generation';
 import { storage } from '../storage';
 import type { CompiledPrompt } from '../types/compiler';
 import type { AgenticCheckpoint, EvaluationRoundSnapshot } from '../types/evaluation';
-import type { GenerationResult, Provenance, RunTraceEvent } from '../types/provider';
+import type {
+  GenerationResult,
+  Provenance,
+  RunTraceEvent,
+  ThinkingTurnSlice,
+} from '../types/provider';
 import type { ProvenanceContext } from '../types/provenance-context';
 import { postTraceEvents, type GenerateStreamCallbacks } from '../api/client';
 import { useGenerationStore } from '../stores/generation-store';
@@ -89,7 +94,14 @@ export function createPlaceholderGenerationSession(
   }
 
   let activityText = '';
+  /** PI turn id for text_delta routing (0 until first `model_turn_start`). */
+  let currentModelTurnId = 0;
+  let activityByTurn: Record<number, string> = {};
+  let thinkingTurns: ThinkingTurnSlice[] = [];
+  let thinkingRafId: ReturnType<typeof requestAnimationFrame> | null = null;
   let rafId: ReturnType<typeof requestAnimationFrame> | null = null;
+  let codeRafId: ReturnType<typeof requestAnimationFrame> | null = null;
+  let pendingLiveCode = '';
   let generatedCode = '';
   let liveFiles: Record<string, string> = {};
   let liveTrace: RunTraceEvent[] = [];
@@ -111,6 +123,28 @@ export function createPlaceholderGenerationSession(
     }
     updateResult(placeholderId, next);
     scheduleTraceServerForward(trace);
+  };
+
+  const onTraceWithTurnHandling = (trace: RunTraceEvent) => {
+    if (trace.kind === 'model_turn_start') {
+      if (thinkingRafId !== null) {
+        cancelAnimationFrame(thinkingRafId);
+        thinkingRafId = null;
+        updateResult(placeholderId, { thinkingTurns: [...thinkingTurns] });
+      }
+      const tid = trace.turnId ?? currentModelTurnId + 1;
+      currentModelTurnId = tid;
+      const now = Date.now();
+      thinkingTurns = thinkingTurns.map((t) =>
+        t.turnId < tid && t.endedAt == null ? { ...t, endedAt: now } : t,
+      );
+      const startedAt = Number.isFinite(Date.parse(trace.at)) ? Date.parse(trace.at) : now;
+      if (!thinkingTurns.some((t) => t.turnId === tid)) {
+        thinkingTurns = [...thinkingTurns, { turnId: tid, text: '', startedAt }];
+      }
+      updateResult(placeholderId, { thinkingTurns: [...thinkingTurns] });
+    }
+    pushTrace(trace);
   };
 
   const callbacks: GenerateStreamCallbacks = {
@@ -211,25 +245,58 @@ export function createPlaceholderGenerationSession(
     },
     onActivity: (entry) => {
       activityText += entry;
+      const tid = currentModelTurnId || 1;
+      activityByTurn = {
+        ...activityByTurn,
+        [tid]: (activityByTurn[tid] ?? '') + entry,
+      };
       if (rafId === null) {
         rafId = requestAnimationFrame(() => {
           updateResult(placeholderId, {
             activityLog: [activityText],
+            activityByTurn: { ...activityByTurn },
             lastActivityAt: Date.now(),
           });
           rafId = null;
         });
       }
     },
-    onTrace: (trace) => {
-      pushTrace(trace);
+    onTrace: onTraceWithTurnHandling,
+    onThinking: (turnId, delta) => {
+      if (!delta) return;
+      const existing = thinkingTurns.find((t) => t.turnId === turnId);
+      const startedAt = existing?.startedAt ?? Date.now();
+      const next: ThinkingTurnSlice = {
+        turnId,
+        text: (existing?.text ?? '') + delta,
+        startedAt,
+        endedAt: existing?.endedAt,
+      };
+      thinkingTurns = [...thinkingTurns.filter((t) => t.turnId !== turnId), next].sort(
+        (a, b) => a.turnId - b.turnId,
+      );
+      if (thinkingRafId === null) {
+        thinkingRafId = requestAnimationFrame(() => {
+          updateResult(placeholderId, { thinkingTurns: [...thinkingTurns] });
+          thinkingRafId = null;
+        });
+      }
     },
     onProgress: (status) => {
       updateResult(placeholderId, { progressMessage: status });
     },
     onCode: (code) => {
       generatedCode = code;
-      updateResult(placeholderId, { liveCode: code });
+      pendingLiveCode = code;
+      if (codeRafId === null) {
+        codeRafId = requestAnimationFrame(() => {
+          updateResult(placeholderId, {
+            liveCode: pendingLiveCode,
+            lastActivityAt: Date.now(),
+          });
+          codeRafId = null;
+        });
+      }
     },
     onFile: (path, content) => {
       liveFiles = { ...liveFiles, [path]: content };
@@ -250,6 +317,32 @@ export function createPlaceholderGenerationSession(
   };
 
   const finalizeAfterStream = async () => {
+    if (thinkingRafId !== null) {
+      cancelAnimationFrame(thinkingRafId);
+      thinkingRafId = null;
+    }
+    const endMs = Date.now();
+    thinkingTurns = thinkingTurns.map((t) =>
+      t.endedAt == null ? { ...t, endedAt: endMs } : t,
+    );
+    updateResult(placeholderId, { thinkingTurns: [...thinkingTurns] });
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+      updateResult(placeholderId, {
+        activityLog: [activityText],
+        activityByTurn: { ...activityByTurn },
+        lastActivityAt: Date.now(),
+      });
+    }
+    if (codeRafId !== null) {
+      cancelAnimationFrame(codeRafId);
+      codeRafId = null;
+      updateResult(placeholderId, {
+        liveCode: generatedCode,
+        lastActivityAt: Date.now(),
+      });
+    }
     for (let attempt = 0; attempt < 5 && pendingServerTraces.length > 0; attempt++) {
       await flushTraceToServer();
     }

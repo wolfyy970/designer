@@ -1,0 +1,109 @@
+/**
+ * Idempotently ensures all app prompts exist in Langfuse.
+ * Target text per key: latest `PromptVersion` from legacy SQLite when configured / auto-detected, else `shared-defaults`.
+ * Creates missing prompts as v1 with `production` (or LANGFUSE_PROMPT_LABEL) label; if the labeled version differs, adds a new version.
+ *
+ * Uses `lf.api.prompts.list` / `lf.api.prompts.get` instead of `lf.prompt.get` so first-time seed does not spam
+ * PromptManager 404 errors to the console.
+ */
+import type { LangfuseClient } from '@langfuse/client';
+import { env } from '../env.ts';
+import { getLangfuseAppClient, isLangfuseAppConfigured } from './langfuse-app-client.ts';
+import { parseTextPromptGet, promptListIndicatesVersions } from './langfuse-prompt-dto.ts';
+import { loadLegacyPromptBodiesForSeed } from './legacy-sqlite-prompts.ts';
+import { PROMPT_KEYS } from './prompts/defaults.ts';
+import { PROMPT_DEFAULTS } from '../../src/lib/prompts/shared-defaults.ts';
+
+async function promptHasAnyVersion(lf: LangfuseClient, name: string): Promise<boolean> {
+  try {
+    const list = await lf.api.prompts.list({ name, limit: 1 });
+    return promptListIndicatesVersions(list);
+  } catch {
+    return false;
+  }
+}
+
+/** Resolved `production` (or configured label) text via REST API — avoids PromptManager error logging on 404. */
+async function getLabeledTextPromptBodyViaApi(
+  lf: LangfuseClient,
+  name: string,
+  label: string,
+): Promise<string | null> {
+  try {
+    const res = await lf.api.prompts.get(name, { label });
+    const parsed = parseTextPromptGet(res);
+    if (!parsed.ok) return null;
+    return parsed.prompt;
+  } catch {
+    return null;
+  }
+}
+
+export async function seedLangfusePromptsFromDefaults(): Promise<void> {
+  if (!isLangfuseAppConfigured()) {
+    console.error(
+      'Langfuse keys missing — set LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL before db:seed.',
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  const { bodies: legacyBodies, sourceLabel } = await loadLegacyPromptBodiesForSeed(process.cwd());
+  const legacyCount = Object.keys(legacyBodies).length;
+  const explicitLegacy = Boolean(env.LANGFUSE_PROMPT_IMPORT_SQLITE);
+  if (explicitLegacy) {
+    if (legacyCount === 0) {
+      console.warn(
+        `LANGFUSE_PROMPT_IMPORT_SQLITE points at ${sourceLabel || '(unset)'} but no PromptVersion rows were read (wrong path, tables already dropped, or Node.js needs 22.5+ with node:sqlite). Falling back to shared-defaults.`,
+      );
+    } else {
+      console.log(`Prompt seed: ${legacyCount} body(ies) from legacy SQLite ${sourceLabel}`);
+    }
+  } else if (legacyCount > 0 && sourceLabel) {
+    console.log(`Prompt seed: ${legacyCount} body(ies) from legacy SQLite ${sourceLabel}`);
+  }
+
+  const lf = getLangfuseAppClient();
+  const label = env.LANGFUSE_PROMPT_LABEL;
+
+  for (const key of PROMPT_KEYS) {
+    const targetBody = legacyBodies[key] ?? PROMPT_DEFAULTS[key];
+    const exists = await promptHasAnyVersion(lf, key);
+
+    if (!exists) {
+      await lf.prompt.create({
+        name: key,
+        type: 'text',
+        prompt: targetBody,
+        labels: [label],
+      });
+      console.log(`Seeded prompt: ${key}`);
+      continue;
+    }
+
+    const current = await getLabeledTextPromptBodyViaApi(lf, key, label);
+    if (current === null) {
+      await lf.prompt.create({
+        name: key,
+        type: 'text',
+        prompt: targetBody,
+        labels: [label],
+      });
+      console.log(`Updated prompt in Langfuse: ${key} (no labeled version; added)`);
+      continue;
+    }
+
+    if (current === targetBody) {
+      console.log(`Prompt up to date: ${key}`);
+      continue;
+    }
+
+    await lf.prompt.create({
+      name: key,
+      type: 'text',
+      prompt: targetBody,
+      labels: [label],
+    });
+    console.log(`Updated prompt in Langfuse: ${key}`);
+  }
+}
