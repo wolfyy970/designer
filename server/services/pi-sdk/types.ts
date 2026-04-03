@@ -19,6 +19,7 @@ export type {
   AgentToolResult,
   AgentToolUpdateCallback,
   GrepToolDetails,
+  ResourceLoader,
   ToolDefinition,
   ExtensionContext,
   PromptOptions,
@@ -26,6 +27,7 @@ export type {
 export {
   AuthStorage,
   createAgentSession,
+  createExtensionRuntime,
   SessionManager,
   createReadToolDefinition,
   createWriteToolDefinition,

@@ -5,9 +5,15 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Brain, ChevronDown, ChevronRight, ChevronsDown } from 'lucide-react';
-import { Streamdown } from 'streamdown';
+import {
+  Brain,
+  ChevronDown,
+  ChevronRight,
+  ChevronsDown,
+  Wrench,
+} from 'lucide-react';
 import type { RunTraceEvent, ThinkingTurnSlice } from '../../../types/provider';
+import { StreamdownTimeline } from './StreamdownTimeline.tsx';
 
 const NEAR_BOTTOM_PX = 48;
 
@@ -16,6 +22,28 @@ const STATUS_COLOR: Record<string, string> = {
   warning: 'text-amber-500',
   success: 'text-accent',
 };
+
+/** Per-turn trace lines grouped under the Tool use accordion (matches bridge + UX). */
+const TOOL_USE_KINDS = new Set<RunTraceEvent['kind']>([
+  'model_first_token',
+  'tool_started',
+  'tool_finished',
+  'tool_failed',
+  'file_written',
+]);
+
+function partitionToolUseTraces(traces: RunTraceEvent[]): {
+  toolUse: RunTraceEvent[];
+  rest: RunTraceEvent[];
+} {
+  const toolUse: RunTraceEvent[] = [];
+  const rest: RunTraceEvent[] = [];
+  for (const t of traces) {
+    if (TOOL_USE_KINDS.has(t.kind)) toolUse.push(t);
+    else rest.push(t);
+  }
+  return { toolUse, rest };
+}
 
 function traceTimeLabel(at: string): string {
   const ms = Date.parse(at);
@@ -143,6 +171,55 @@ function ThinkingBlock({
   );
 }
 
+function ToolUseBlock({
+  traces,
+  isStreaming,
+  isActiveTurn,
+  open,
+  onToggle,
+}: {
+  traces: RunTraceEvent[];
+  isStreaming: boolean;
+  isActiveTurn: boolean;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  if (traces.length === 0) return null;
+
+  return (
+    <div className="mb-2 border-l-2 border-border-subtle pl-2">
+      <button
+        type="button"
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onClick={onToggle}
+        className="nodrag flex w-full items-center gap-1.5 rounded px-0 py-0.5 text-left text-[9px] text-fg-muted transition-colors hover:bg-surface-secondary/50 hover:text-fg-secondary"
+      >
+        {open ? (
+          <ChevronDown size={12} className="shrink-0 opacity-70" />
+        ) : (
+          <ChevronRight size={12} className="shrink-0 opacity-70" />
+        )}
+        <Wrench size={12} className="shrink-0 text-fg-faint" />
+        <span className="font-medium">Tool use</span>
+        <span className="tabular-nums text-fg-faint">({traces.length})</span>
+        {isStreaming && isActiveTurn && (
+          <span className="ml-1 inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+        )}
+      </button>
+      {open && (
+        <div className="mt-1 max-h-[min(40vh,320px)] space-y-px overflow-y-auto rounded bg-surface-secondary/40 px-2 py-1.5">
+          {traces.map((t) => (
+            <TraceLine key={t.id} t={t} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Trace + per-turn thinking + markdown output, with sticky-bottom scroll follow.
  */
@@ -163,6 +240,9 @@ export function Timeline({
   const followLatestRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
   const [thinkingExpanded, setThinkingExpanded] = useState<
+    Record<number, boolean | undefined>
+  >({});
+  const [toolUseExpanded, setToolUseExpanded] = useState<
     Record<number, boolean | undefined>
   >({});
 
@@ -197,6 +277,29 @@ export function Timeline({
   const toggleThinking = useCallback(
     (turnId: number) => {
       setThinkingExpanded((prev) => {
+        const currentlyOpen =
+          prev[turnId] !== undefined
+            ? prev[turnId]!
+            : isStreaming && turnId === activeTurnId;
+        return { ...prev, [turnId]: !currentlyOpen };
+      });
+    },
+    [isStreaming, activeTurnId],
+  );
+
+  const resolvedToolUseOpen = useCallback(
+    (turnId: number) => {
+      if (toolUseExpanded[turnId] !== undefined) {
+        return toolUseExpanded[turnId]!;
+      }
+      return isStreaming && turnId === activeTurnId;
+    },
+    [toolUseExpanded, isStreaming, activeTurnId],
+  );
+
+  const toggleToolUse = useCallback(
+    (turnId: number) => {
+      setToolUseExpanded((prev) => {
         const currentlyOpen =
           prev[turnId] !== undefined
             ? prev[turnId]!
@@ -265,15 +368,15 @@ export function Timeline({
         <div
           ref={scrollRef}
           onScroll={onScroll}
-          className="nodrag nowheel max-h-full min-h-0 overflow-y-auto px-3 py-1.5 text-fg-muted [&_.streamdown]:text-[10px] [&_.streamdown]:leading-relaxed"
+          className="nodrag nowheel max-h-full min-h-0 overflow-y-auto px-3 py-1.5 text-fg-muted"
         >
-          <Streamdown
+          <StreamdownTimeline
             mode={isStreaming ? 'streaming' : 'static'}
             isAnimating={isStreaming}
             className="streamdown-timeline"
           >
             {streamBodyNoTrace}
-          </Streamdown>
+          </StreamdownTimeline>
         </div>
         {showJump ? (
           <button
@@ -330,14 +433,14 @@ export function Timeline({
               ))}
             </div>
             {fallbackActivity ? (
-              <div className="text-fg-muted [&_.streamdown]:text-[10px] [&_.streamdown]:leading-relaxed">
-                <Streamdown
+              <div className="text-fg-muted">
+                <StreamdownTimeline
                   mode={isStreaming ? 'streaming' : 'static'}
                   isAnimating={isStreaming}
                   className="streamdown-timeline"
                 >
                   {fallbackActivity}
-                </Streamdown>
+                </StreamdownTimeline>
               </div>
             ) : null}
           </>
@@ -355,6 +458,8 @@ export function Timeline({
 
             {segments.map((seg, segIdx) => {
               const slice = thinkingMap.get(seg.turnId);
+              const { toolUse: toolUseTraces, rest: otherTraces } =
+                partitionToolUseTraces(seg.traces);
               const rawText =
                 activityByTurn?.[seg.turnId] ??
                 (segIdx === segments.length - 1 && !activityByTurn
@@ -374,23 +479,31 @@ export function Timeline({
                     onToggle={() => toggleThinking(seg.turnId)}
                   />
 
-                  {seg.traces.length > 0 && (
+                  <ToolUseBlock
+                    traces={toolUseTraces}
+                    isStreaming={isStreaming}
+                    isActiveTurn={isActive}
+                    open={resolvedToolUseOpen(seg.turnId)}
+                    onToggle={() => toggleToolUse(seg.turnId)}
+                  />
+
+                  {otherTraces.length > 0 && (
                     <div className="mb-2 space-y-px">
-                      {seg.traces.map((t) => (
+                      {otherTraces.map((t) => (
                         <TraceLine key={t.id} t={t} />
                       ))}
                     </div>
                   )}
 
                   {rawText ? (
-                    <div className="text-fg-muted [&_.streamdown]:text-[10px] [&_.streamdown]:leading-relaxed">
-                      <Streamdown
+                    <div className="text-fg-muted">
+                      <StreamdownTimeline
                         mode={isStreaming && isActive ? 'streaming' : 'static'}
                         isAnimating={isStreaming && isActive}
                         className="streamdown-timeline"
                       >
                         {rawText}
-                      </Streamdown>
+                      </StreamdownTimeline>
                     </div>
                   ) : null}
                 </div>

@@ -83,10 +83,21 @@ export const env = {
   LANGFUSE_PROMPT_LABEL: (process.env.LANGFUSE_PROMPT_LABEL ?? 'production').trim() || 'production',
   /**
    * Optional path to a SQLite file that still has the legacy `PromptVersion` table (e.g. backup before
-   * `20260402120000_drop_prisma_prompts`). `pnpm db:seed` prefers latest bodies per key over shared-defaults.
+   * `20260402120000_drop_prisma_prompts`). Seed uses latest bodies per key when set; otherwise
+   * `shared-defaults`. **Create-only** seed never overwrites an existing labeled prompt unless
+   * `LANGFUSE_SEED_SYNC` is set — see `langfuse-seed-prompts.ts`.
    */
   get LANGFUSE_PROMPT_IMPORT_SQLITE(): string {
     return (process.env.LANGFUSE_PROMPT_IMPORT_SQLITE ?? '').trim();
+  },
+  /**
+   * When true (`1`, `true`, `yes`), Langfuse seed **syncs** every key: new versions are created when the
+   * labeled body differs from repo/SQLite target text (moves `LANGFUSE_PROMPT_LABEL`). Default false:
+   * **Prompt Studio / Langfuse** is source of truth after initial bootstrap (`pnpm langfuse:sync-prompts`).
+   */
+  get langfuseSeedSync(): boolean {
+    const v = (process.env.LANGFUSE_SEED_SYNC ?? '').trim().toLowerCase();
+    return v === '1' || v === 'true' || v === 'yes';
   },
   get langfuseTracingEnabled() {
     if (process.env.VITEST === 'true') return false;

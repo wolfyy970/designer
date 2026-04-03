@@ -44,7 +44,7 @@ The **Langfuse** tab does not load traces into the app; it links to the **Langfu
 
 **Settings** (gear) → **Prompts** opens **Prompt Studio** for versioned system prompts. Changes are **not** auto-saved — click **Save** or use ⌘S / Ctrl+S. A confirmation shows the stored **version**.
 
-Templates are stored in **Langfuse**; the technical names (`compilerSystem`, `variant`, …) are listed with plain-English explanations in [LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md). **`pnpm db:seed`** only bootstraps those Langfuse prompts (see `prisma/seed.ts`), not agent skills — skills are loaded from the database via Prisma.
+Templates are stored in **Langfuse**; the technical names (`compilerSystem`, `variant`, …) are listed with plain-English explanations in [LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md). **`pnpm db:seed`** creates **missing** Langfuse prompts only (Prompt Studio stays canonical after that). To reset all prompts from the repo, run **`pnpm langfuse:sync-prompts`**. Agent **skills** are not part of seed — they load from the database via Prisma.
 
 ## Canvas Workflow
 

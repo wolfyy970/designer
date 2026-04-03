@@ -17,6 +17,7 @@
     "langfuse:down": "docker compose -f docker/langfuse/docker-compose.yml down",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
+    "langfuse:sync-prompts": "LANGFUSE_SEED_SYNC=1 prisma db seed",
     "knip": "knip || exit 0"
   },
   "prisma": {

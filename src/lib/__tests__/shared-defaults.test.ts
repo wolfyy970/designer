@@ -10,6 +10,7 @@ const EXPECTED_KEYS = [
   'designSystemExtract',
   'designSystemExtractUser',
   'agentCompactionSystem',
+  'sandboxAgentsContext',
   'evalDesignSystem',
   'evalStrategySystem',
   'evalImplementationSystem',
@@ -81,6 +82,14 @@ describe('PROMPT_DEFAULTS', () => {
     expect(p).not.toContain('three-file bundle');
     expect(p).toContain('file count is not a goal');
     expect(p).toContain('local relative paths');
+  });
+
+  it('sandboxAgentsContext describes static workspace limits and forbids bundlers', () => {
+    const p = PROMPT_DEFAULTS.sandboxAgentsContext;
+    expect(p).toContain('virtual filesystem');
+    expect(p).toContain('Vite');
+    expect(p).toContain('npm');
+    expect(p).toContain('index.html');
   });
 
   it('variant prompt contains template variables', () => {

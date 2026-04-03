@@ -158,9 +158,11 @@ function buildCheckpoint(
 function mergeSeedWithDesign(
   designFiles: Record<string, string>,
   skillFiles?: Record<string, string>,
+  sandboxSeedFiles?: Record<string, string>,
 ): Record<string, string> {
-  if (!skillFiles || Object.keys(skillFiles).length === 0) return { ...designFiles };
-  return { ...skillFiles, ...designFiles };
+  const skills = skillFiles && Object.keys(skillFiles).length > 0 ? skillFiles : {};
+  const sand = sandboxSeedFiles && Object.keys(sandboxSeedFiles).length > 0 ? sandboxSeedFiles : {};
+  return { ...skills, ...sand, ...designFiles };
 }
 
 /**
@@ -228,12 +230,19 @@ async function runAgenticWithEvaluationImpl(
   });
   const initialSkillSeed =
     Object.keys(initialCtx.virtualSkillFiles).length > 0 ? initialCtx.virtualSkillFiles : undefined;
+  const initialSeedFiles = {
+    ...initialCtx.sandboxSeedFiles,
+    ...(options.build.seedFiles ?? {}),
+  };
+  const seedFilesForBuild =
+    Object.keys(initialSeedFiles).length > 0 ? initialSeedFiles : undefined;
 
   const buildResult = await runDesignAgentSession(
     {
       ...options.build,
       systemPrompt: initialCtx.systemPrompt,
       virtualSkillFiles: initialSkillSeed,
+      seedFiles: seedFilesForBuild,
     },
     forward,
   );
@@ -303,7 +312,7 @@ async function runAgenticWithEvaluationImpl(
         systemPrompt: revisionCtx.systemPrompt,
         virtualSkillFiles: revisionSkillSeed,
         userPrompt: revisionUser,
-        seedFiles: mergeSeedWithDesign(files, revisionSkillSeed),
+        seedFiles: mergeSeedWithDesign(files, revisionSkillSeed, revisionCtx.sandboxSeedFiles),
         compactionNote: `Post-evaluation revision requested. Overall ${snapshot.aggregate.overallScore.toFixed(2)}. Hard fails: ${snapshot.aggregate.hardFails.length}.`,
         initialProgressMessage: 'Revising design from evaluation feedback…',
       },

@@ -1,5 +1,6 @@
 /**
- * Fresh agentic system prompt + virtual skill files from DB (genSystemHtmlAgentic + selected skills).
+ * Fresh agentic system prompt + virtual skill files + sandbox AGENTS.md seed from DB
+ * (genSystemHtmlAgentic + sandboxAgentsContext + selected skills).
  * Call once per PI session boundary so Prompt Studio / skill edits apply to the next build or revision.
  */
 import type { PromptKey } from './prompts/defaults.ts';
@@ -11,7 +12,11 @@ import { selectSkillsForContext } from './skills/select-skills.ts';
 export async function buildAgenticSystemContext(input: {
   getPromptBody: (key: PromptKey) => Promise<string>;
   evaluationContext?: EvaluationContextPayload;
-}): Promise<{ systemPrompt: string; virtualSkillFiles: Record<string, string> }> {
+}): Promise<{
+  systemPrompt: string;
+  virtualSkillFiles: Record<string, string>;
+  sandboxSeedFiles: Record<string, string>;
+}> {
   const latestSkills = await listLatestSkillVersions();
   const skillRows = latestSkills.map((r) => ({
     key: r.skillKey,
@@ -36,5 +41,10 @@ export async function buildAgenticSystemContext(input: {
   );
   const baseAgenticPrompt = await input.getPromptBody('genSystemHtmlAgentic');
   const systemPrompt = skillCatalog ? `${baseAgenticPrompt}\n${skillCatalog}` : baseAgenticPrompt;
-  return { systemPrompt, virtualSkillFiles };
+  const agentsContext = (await input.getPromptBody('sandboxAgentsContext')).trim();
+  const sandboxSeedFiles: Record<string, string> = {};
+  if (agentsContext.length > 0) {
+    sandboxSeedFiles['AGENTS.md'] = agentsContext;
+  }
+  return { systemPrompt, virtualSkillFiles, sandboxSeedFiles };
 }

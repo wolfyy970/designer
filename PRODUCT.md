@@ -68,7 +68,7 @@ Enabled by choosing **Agentic** in Mode on a Hypothesis node; use **Run agent** 
 
 **Typical flow:** plan milestones → create or edit files with `write` / `edit` → validate → optional bash for edge cases. Live **`file`** events update the variant preview as design artifacts change.
 
-**Skills.** Versioned skill packages live in the database (Prisma-backed data + `GET /api/skills` for inspection; not created by `pnpm db:seed`, which only seeds Langfuse prompts). Each agentic request selects skills using tags on the skill row and hypothesis context (including **output format** hints from dimension values when present). Matching skills are mounted read-only under `skills/…`; the system prompt includes an Agent Skills–style catalog so the model can load full instructions with the **`read`** tool.
+**Skills.** Versioned skill packages live in the database (Prisma-backed data + `GET /api/skills` for inspection; not created by `pnpm db:seed`, which only bootstraps **missing** Langfuse text prompts). Each agentic request selects skills using tags on the skill row and hypothesis context (including **output format** hints from dimension values when present). Matching skills are mounted read-only under `skills/…`; the system prompt includes an Agent Skills–style catalog so the model can load full instructions with the **`read`** tool.
 
 **Files are bundled for preview.** `bundleVirtualFS()` inlines linked CSS and JS into a single HTML document for sandboxed iframe rendering. The original files remain separately accessible in the code tab.
 

@@ -1,7 +1,12 @@
 /**
- * Idempotently ensures all app prompts exist in Langfuse.
+ * Ensures all app prompts exist in Langfuse.
  * Target text per key: latest `PromptVersion` from legacy SQLite when configured / auto-detected, else `shared-defaults`.
- * Creates missing prompts as v1 with `production` (or LANGFUSE_PROMPT_LABEL) label; if the labeled version differs, adds a new version.
+ *
+ * **Default (create-only):** Creates missing prompts + repairs a missing label; if a labeled version already
+ * exists, **does not overwrite** — Prompt Studio is source of truth.
+ *
+ * **Sync mode** (`LANGFUSE_SEED_SYNC=1` or `seedLangfusePromptsFromDefaults({ sync: true })`): if the labeled
+ * body differs from target text, adds a new Langfuse version and moves `LANGFUSE_PROMPT_LABEL` to it.
  *
  * Uses `lf.api.prompts.list` / `lf.api.prompts.get` instead of `lf.prompt.get` so first-time seed does not spam
  * PromptManager 404 errors to the console.
@@ -39,13 +44,24 @@ async function getLabeledTextPromptBodyViaApi(
   }
 }
 
-export async function seedLangfusePromptsFromDefaults(): Promise<void> {
+export type SeedLangfusePromptsOptions = {
+  /** Override env `LANGFUSE_SEED_SYNC`. When true, push repo/SQLite bodies when they differ from Langfuse. */
+  sync?: boolean;
+};
+
+export async function seedLangfusePromptsFromDefaults(options?: SeedLangfusePromptsOptions): Promise<void> {
+  const sync = options?.sync ?? env.langfuseSeedSync;
+
   if (!isLangfuseAppConfigured()) {
     console.error(
       'Langfuse keys missing — set LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL before db:seed.',
     );
     process.exitCode = 1;
     return;
+  }
+
+  if (sync) {
+    console.log('Langfuse seed: sync mode — labeled prompts will be updated when body differs from repo/SQLite.');
   }
 
   const { bodies: legacyBodies, sourceLabel } = await loadLegacyPromptBodiesForSeed(process.cwd());
@@ -95,6 +111,11 @@ export async function seedLangfusePromptsFromDefaults(): Promise<void> {
 
     if (current === targetBody) {
       console.log(`Prompt up to date: ${key}`);
+      continue;
+    }
+
+    if (!sync) {
+      console.log(`Skipping existing (Prompt Studio): ${key}`);
       continue;
     }
 

@@ -1,6 +1,6 @@
 /**
  * Prompt keys only — runtime bodies come from Langfuse via `getPromptBody` when configured,
- * else from `src/lib/prompts/shared-defaults.ts` (same text used for `pnpm db:seed`).
+ * else from `src/lib/prompts/shared-defaults.ts` (bodies used when **creating** missing prompts via `pnpm db:seed`).
  */
 export type PromptKey =
   | 'compilerSystem'
@@ -11,6 +11,7 @@ export type PromptKey =
   | 'designSystemExtract'
   | 'designSystemExtractUser'
   | 'agentCompactionSystem'
+  | 'sandboxAgentsContext'
   | 'evalDesignSystem'
   | 'evalStrategySystem'
   | 'evalImplementationSystem';
@@ -25,6 +26,7 @@ export const PROMPT_KEYS: PromptKey[] = [
   'designSystemExtract',
   'designSystemExtractUser',
   'agentCompactionSystem',
+  'sandboxAgentsContext',
   'evalDesignSystem',
   'evalStrategySystem',
   'evalImplementationSystem',

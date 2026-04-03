@@ -9,6 +9,7 @@ export type PromptKey =
   | 'designSystemExtract'
   | 'designSystemExtractUser'
   | 'agentCompactionSystem'
+  | 'sandboxAgentsContext'
   | 'evalDesignSystem'
   | 'evalStrategySystem'
   | 'evalImplementationSystem';
@@ -87,6 +88,12 @@ export const PROMPT_META: PromptMeta[] = [
     label: 'Agent — Context compaction',
     description:
       'System prompt for LLM summarization when the agentic session context window is compacted. Defines checkpoint structure.',
+  },
+  {
+    key: 'sandboxAgentsContext',
+    label: 'Agent — Sandbox context',
+    description:
+      'Seeded as AGENTS.md in the virtual workspace. Environment limits for the design agent (static HTML/CSS/JS, no npm/Vite/build tools).',
   },
   {
     key: 'evalDesignSystem',

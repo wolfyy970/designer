@@ -19,6 +19,7 @@ vi.mock('../../lib/build-agentic-system-context.ts', () => ({
   buildAgenticSystemContext: vi.fn().mockResolvedValue({
     systemPrompt: 'sys',
     virtualSkillFiles: {},
+    sandboxSeedFiles: {},
   }),
 }));
 

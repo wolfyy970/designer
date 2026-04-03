@@ -6,7 +6,7 @@ import type { PromptKey } from '../lib/prompts/defaults.ts';
 import { PROMPT_DEFAULTS } from '../../src/lib/prompts/shared-defaults.ts';
 
 function missingPromptMessage(key: PromptKey): string {
-  return `Prompt "${key}" was not found in Langfuse. Run \`pnpm db:seed\` after starting Langfuse (see docker/langfuse/README.md).`;
+  return `Prompt "${key}" was not found in Langfuse. Run \`pnpm db:seed\` after starting Langfuse to create missing prompts (see docker/langfuse/README.md).`;
 }
 
 /** Resolve prompt text for the configured deployment label (default `production`). */

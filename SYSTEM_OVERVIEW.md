@@ -22,7 +22,7 @@ For a **plain-English map** of each Langfuse prompt name (`compilerSystem`, `var
 
 | Role | Purpose | Typical storage |
 |------|---------|-----------------|
-| **Compiler** | Turn the design spec into dimensions + variant strategies | Langfuse (`compilerSystem`, `compilerUser`); `pnpm db:seed` bootstraps from `shared-defaults` |
+| **Compiler** | Turn the design spec into dimensions + variant strategies | Langfuse (`compilerSystem`, `compilerUser`); `pnpm db:seed` creates missing prompts from `shared-defaults` / legacy SQLite — not a full overwrite |
 | **Variant** | Per-hypothesis user-facing generation prompt template | Langfuse `variant` + `compileVariantPrompts()` on client; bundle API uses same template server-side |
 | **Single-shot system** | Constraints for one HTML response | Langfuse `genSystemHtml` |
 | **Agentic system** | Multi-file static artifact rules (entry `index.html`, local assets, etc.) | Langfuse `genSystemHtmlAgentic` + Prisma **skills** appended on server |
@@ -34,7 +34,7 @@ Evaluators use separate LLM rubrics (browser / design / strategy / implementatio
 
 ## PI engine (agentic generation)
 
-**Swap boundary** — Only `server/services/pi-sdk/` imports **`@mariozechner/pi-ai`** / **`@mariozechner/pi-coding-agent`**. Session wiring lives in **`pi-agent-service.ts`** (plus `agent-bash-sandbox.ts`, `pi-bash-tool.ts`, `pi-app-tools.ts`, `pi-session-event-bridge.ts`). The rest of the server calls **`runDesignAgentSession`** through generate/orchestrator code — not the Pi SDK directly — so another agent runtime could replace Pi behind the same seam.
+**Swap boundary** — Only `server/services/pi-sdk/` imports **`@mariozechner/pi-ai`** / **`@mariozechner/pi-coding-agent`**. Session wiring lives in **`pi-agent-service.ts`** (plus `agent-bash-sandbox.ts`, **`sandbox-resource-loader.ts`** for a no-op Pi resource loader, `pi-bash-tool.ts`, `pi-app-tools.ts`, `pi-session-event-bridge.ts`). The rest of the server calls **`runDesignAgentSession`** through generate/orchestrator code — not the Pi SDK directly — so another agent runtime could replace Pi behind the same seam.
 
 **Sandbox** — **`just-bash`** provides an in-memory tree at a fixed project root; skills mount read-only under `skills/…`. **`tools: []`** disables Pi’s default host-FS tools. **`pi-sdk/virtual-tools.ts`** registers the same Pi tool *schemas* (`read`, `write`, `edit`, `ls`, `find`, `grep`) with `operations` / `bash.exec` backed by that virtual FS, plus **`bash`**, **`todo_write`**, **`validate_js`**, **`validate_html`**. SSE **`file`** events fire when design files change (virtual tool writes and bash-driven changes; `skills/` excluded).
 

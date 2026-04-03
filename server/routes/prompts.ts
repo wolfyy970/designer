@@ -139,7 +139,7 @@ prompts.post('/:key/revert-baseline', async (c) => {
   if (baseline === null) {
     return c.json(
       {
-        error: `Prompt "${key}" has no baseline (version 1) in Langfuse. Run \`pnpm db:seed\`.`,
+        error: `Prompt "${key}" has no baseline (version 1) in Langfuse. Run \`pnpm db:seed\` or \`pnpm langfuse:sync-prompts\` to create prompts.`,
       },
       500,
     );

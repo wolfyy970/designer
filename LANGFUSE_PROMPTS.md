@@ -2,7 +2,7 @@
 
 In **Langfuse** and **Prompt Studio**, templates are keyed by short **camelCase names**. Those strings are stable API identifiers — they are not meant to read like prose. This page maps each name to **what it’s for** and **when the app uses it**.
 
-**Source of truth for template text:** [Langfuse Cloud](https://langfuse.com/docs/deployment/cloud) (or self-hosted). Repo baselines live in `src/lib/prompts/shared-defaults.ts`. Initial upload: `pnpm db:seed`.
+**Source of truth for template text:** [Langfuse Cloud](https://langfuse.com/docs/deployment/cloud) (or self-hosted) and **Prompt Studio** — not the repo. Repo baselines in `src/lib/prompts/shared-defaults.ts` are used only when **creating** a missing prompt. **`pnpm db:seed`** bootstraps missing keys only; **`pnpm langfuse:sync-prompts`** forces every labeled prompt to match repo/SQLite (overwrites drift).
 
 **In-app labels** (Prompt Studio sidebar) match [`PROMPT_META`](src/lib/prompts/defaults.ts) — use that file for **template variables** (e.g. `{{DESIGN_BRIEF}}`) per key.
 
@@ -42,13 +42,14 @@ In **Langfuse** and **Prompt Studio**, templates are keyed by short **camelCase 
 
 ---
 
-## Agent (context compaction)
+## Agent (context compaction + sandbox)
 
 | Langfuse name | Plain-language goal |
 |----------------|---------------------|
 | **`agentCompactionSystem`** | When the agentic session **truncates history**, this prompt defines how to **summarize** prior work into a checkpoint the model can continue from without losing the thread. |
+| **`sandboxAgentsContext`** | Body seeded as **`AGENTS.md`** at the virtual workspace root (`/home/user/project`). Tells the tool-using agent what the sandbox supports (static HTML/CSS/JS) and forbids (npm, Vite, bundlers, CDNs, etc.). |
 
-**Runs during:** long **agentic** runs when compaction runs (`pi-agent-service`).
+**Runs during:** **`agentCompactionSystem`** — when the Pi session compacts long histories (still in `pi-agent-service`). **`sandboxAgentsContext`** — when **`buildAgenticSystemContext`** runs at each orchestrator Pi session boundary (initial build and revision rounds), merged into sandbox seed files as **`AGENTS.md`**.
 
 ---
 
@@ -75,7 +76,9 @@ Three **separate rubrics** score the artifact for **design quality**, **strategy
 | Agent doesn’t plan, files are messy, or tools misused | `genSystemHtmlAgentic` (+ **Skills** in Prisma, not Langfuse) |
 | Extract misses tokens or invents structure | `designSystemExtract` |
 | Agent “forgets” after long runs | `agentCompactionSystem` |
+| Agent tries npm/Vite/host-repo workflows | `sandboxAgentsContext` (+ sealed Pi `cwd` / resource loader; see ARCHITECTURE) |
 | Scores don’t match what you care about | `evalDesignSystem`, `evalStrategySystem`, `evalImplementationSystem` |
+| Need to **reset all** prompt bodies from repo/SQLite | `pnpm langfuse:sync-prompts` (overwrites labeled versions); routine `pnpm db:seed` does **not** |
 
 ---
 

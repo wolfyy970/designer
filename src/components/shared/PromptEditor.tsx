@@ -54,7 +54,7 @@ export default function PromptEditor({ initialPromptKey }: PromptEditorProps) {
         <p className="font-medium text-fg">Prompt loading failed</p>
         <p className="mt-1">{message}</p>
         <p className="mt-2 text-fg-muted">
-          Prompt bodies must exist in the database. Run <code>pnpm db:seed</code> if prompts are missing.
+          Prompt bodies must exist in Langfuse. Run <code>pnpm db:seed</code> to bootstrap missing prompts (safe with Prompt Studio edits).
         </p>
       </div>
     );

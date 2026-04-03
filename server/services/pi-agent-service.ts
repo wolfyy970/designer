@@ -27,6 +27,7 @@ import {
 } from './pi-app-tools.ts';
 import { createVirtualPiCodingTools } from './pi-sdk/virtual-tools.ts';
 import { subscribePiSessionBridge } from './pi-session-event-bridge.ts';
+import { createSandboxResourceLoader } from './sandbox-resource-loader.ts';
 import type {
   AgentRunParams,
   AgentSessionParams,
@@ -128,7 +129,8 @@ export async function runDesignAgentSession(
     tools: [],
     customTools: [...virtualPiTools, bashTool, todoTool, validateJsTool, validateHtmlTool] as ToolDefinition[],
     sessionManager: SessionManager.inMemory(),
-    cwd: process.cwd(),
+    cwd: SANDBOX_PROJECT_ROOT,
+    resourceLoader: createSandboxResourceLoader(),
   });
 
   if (modelFallbackMessage && process.env.NODE_ENV !== 'production') {
@@ -145,8 +147,7 @@ export async function runDesignAgentSession(
     correlationId: params.correlationId,
   });
 
-  const mergedSystem = `${params.systemPrompt.trim()}\n\n${session.agent.state.systemPrompt}`.trim();
-  session.agent.setSystemPrompt(mergedSystem);
+  session.agent.setSystemPrompt(params.systemPrompt.trim());
 
   const streamActivityAt = { current: Date.now() };
   const subscribeCtx = {

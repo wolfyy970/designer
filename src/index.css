@@ -179,6 +179,28 @@ body {
   animation: none !important;
 }
 
+/* ── Agent timeline (Streamdown) ─────────────────────────────────── */
+
+/* Nested markdown often overrides parent font-size; keep assistant prose
+   aligned with compact log lines (see Timeline + Activity). */
+.streamdown-timeline {
+  font-size: var(--text-nano);
+  line-height: 1.55;
+}
+.streamdown-timeline :where(p, ul, ol, li, blockquote, td, th, a) {
+  font-size: inherit;
+  line-height: inherit;
+}
+.streamdown-timeline :where(h1, h2, h3, h4, h5, h6) {
+  font-size: inherit;
+  line-height: 1.35;
+  font-weight: 600;
+  margin: 0.65em 0 0.35em;
+}
+.streamdown-timeline :where(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}
+
 /* ── Variant Version Stack ────────────────────────────────────────── */
 
 /* One card behind (2 versions) */

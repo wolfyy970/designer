@@ -318,6 +318,30 @@ Atmosphere: Create depth with layered gradients, subtle textures, geometric patt
 Content: Include realistic, plausible content — never lorem ipsum. Names, dates, prices, and copy should feel authentic and reinforce the hypothesis.
 </design_quality>`,
 
+  sandboxAgentsContext: `# Sandbox Environment
+
+You are building inside a virtual filesystem. There is no package manager, no build tool, and no network access.
+
+## Available
+- HTML files (entry point: index.html with proper DOCTYPE)
+- CSS files (use CSS custom properties for design tokens; fully responsive)
+- JavaScript files (vanilla JS only; no import/export, no npm packages)
+- SVG (inline in HTML or as separate .svg files)
+- Local font files via @font-face
+
+## Not available
+- npm, pnpm, yarn, or any package manager
+- Vite, webpack, esbuild, or any bundler/build tool
+- React, Vue, Svelte, or any framework
+- TypeScript (write plain JS)
+- External CDN links or hosted fonts
+- Network requests of any kind
+
+## File structure
+- Keep CSS in separate .css files, JS in separate .js files
+- Link everything from index.html with relative paths
+- Every referenced local asset must exist in this workspace`,
+
   variant: `Generate a design implementing the following hypothesis, grounded in the specification context below.
 
 <hypothesis>
