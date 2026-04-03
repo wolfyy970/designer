@@ -306,7 +306,7 @@ export default function VariantPreviewOverlay() {
                   <button
                     type="button"
                     onClick={() => setUserBest(variantStrategyId, null)}
-                    className="flex items-center gap-1.5 rounded-md border border-white/20 px-3 py-1.5 text-xs text-amber-200/90 transition-colors hover:border-white/40 hover:text-white"
+                    className="flex items-center gap-1.5 rounded-md border border-white/20 px-3 py-1.5 text-xs text-warning transition-colors hover:border-white/40 hover:text-fg"
                     title="Use evaluator ranking again"
                   >
                     <Star size={14} className="fill-current" />

@@ -19,8 +19,8 @@ const NEAR_BOTTOM_PX = 48;
 
 const STATUS_COLOR: Record<string, string> = {
   error: 'text-error',
-  warning: 'text-amber-500',
-  success: 'text-accent',
+  warning: 'text-warning',
+  success: 'text-success',
 };
 
 /** Per-turn trace lines grouped under the Tool use accordion (matches bridge + UX). */

@@ -18,6 +18,7 @@ import {
   runEvaluationWorkers,
 } from './design-evaluation-service.ts';
 import { buildAgenticSystemContext } from '../lib/build-agentic-system-context.ts';
+import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
 import { isLangfuseTracingEnabled } from '../lib/langfuse-tracing-enabled.ts';
 import { createTraceId, startActiveObservation } from '@langfuse/tracing';
 import { runDesignAgentSession, type AgentRunEvent, type AgentSessionParams } from './pi-agent-service.ts';
@@ -300,25 +301,17 @@ async function runAgenticWithEvaluationImpl(
       ...snapshot.aggregate.prioritizedFixes.map((f, i) => `${i + 1}. ${f}`),
     ].join('\n');
 
-    // #region agent log
-    fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
-      body: JSON.stringify({
-        sessionId: '5b9be9',
-        hypothesisId: 'H7',
-        location: 'agentic-orchestrator.ts:revision_start',
-        message: 'runDesignAgentSession (revision) starting',
-        data: {
-          revisionAttempt: revisionAttempts + 1,
-          revisionUserChars: revisionUser.length,
-          prioritizedFixesCount: snapshot.aggregate.prioritizedFixes.length,
-          designFileCount: Object.keys(files).length,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
+    debugAgentIngest({
+      hypothesisId: 'H7',
+      location: 'agentic-orchestrator.ts:revision_start',
+      message: 'runDesignAgentSession (revision) starting',
+      data: {
+        revisionAttempt: revisionAttempts + 1,
+        revisionUserChars: revisionUser.length,
+        prioritizedFixesCount: snapshot.aggregate.prioritizedFixes.length,
+        designFileCount: Object.keys(files).length,
+      },
+    });
 
     const revisionCtx = await buildAgenticSystemContext({
       getPromptBody: options.getPromptBody,
@@ -342,20 +335,12 @@ async function runAgenticWithEvaluationImpl(
 
     if (!revised || signal?.aborted) {
       const stopReason: AgenticStopReason = signal?.aborted ? 'aborted' : 'revision_failed';
-      // #region agent log
-      fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
-        body: JSON.stringify({
-          sessionId: '5b9be9',
-          hypothesisId: 'H7',
-          location: 'agentic-orchestrator.ts:revision_end',
-          message: 'runDesignAgentSession (revision) aborted or null',
-          data: { revisionAttempt: revisionAttempts + 1, aborted: !!signal?.aborted },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
+      debugAgentIngest({
+        hypothesisId: 'H7',
+        location: 'agentic-orchestrator.ts:revision_end',
+        message: 'runDesignAgentSession (revision) aborted or null',
+        data: { revisionAttempt: revisionAttempts + 1, aborted: !!signal?.aborted },
+      });
       return {
         files,
         rounds,
@@ -368,23 +353,15 @@ async function runAgenticWithEvaluationImpl(
       };
     }
 
-    // #region agent log
-    fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
-      body: JSON.stringify({
-        sessionId: '5b9be9',
-        hypothesisId: 'H7',
-        location: 'agentic-orchestrator.ts:revision_end',
-        message: 'runDesignAgentSession (revision) finished',
-        data: {
-          revisionAttempt: revisionAttempts + 1,
-          outFileCount: Object.keys(revised.files).length,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
+    debugAgentIngest({
+      hypothesisId: 'H7',
+      location: 'agentic-orchestrator.ts:revision_end',
+      message: 'runDesignAgentSession (revision) finished',
+      data: {
+        revisionAttempt: revisionAttempts + 1,
+        outFileCount: Object.keys(revised.files).length,
+      },
+    });
 
     files = revised.files;
     revisionAttempts += 1;

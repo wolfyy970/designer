@@ -147,6 +147,23 @@ export function syncDomainForRemovedNode(node: WorkspaceNode): void {
   }
 
   if (node.type === NODE_TYPES.VARIANT) {
+    // Clear any slot that still points at this canvas node (active or pinned); otherwise
+    // generation / overlay logic keeps stale bindings and the next sync can resurrect a variant.
+    const slotClears: { hypothesisId: string; variantStrategyId: string }[] = [];
+    for (const slot of Object.values(d.variantSlots)) {
+      if (slot.variantNodeId === node.id) {
+        slotClears.push({
+          hypothesisId: slot.hypothesisId,
+          variantStrategyId: slot.variantStrategyId,
+        });
+      }
+    }
+    for (const { hypothesisId, variantStrategyId } of slotClears) {
+      d.setVariantSlot(hypothesisId, variantStrategyId, {
+        variantNodeId: null,
+        activeResultId: null,
+      });
+    }
     for (const incId of Object.keys(d.incubatorWirings)) {
       d.detachIncubatorInput(incId, node.id, NODE_TYPES.VARIANT);
     }

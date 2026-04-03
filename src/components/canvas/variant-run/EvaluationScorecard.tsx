@@ -36,7 +36,7 @@ export function EvaluationScorecard({
       ) : null}
 
       {mode === 'compact' && nonBrowserFails.length > 0 ? (
-        <div className="mb-1 text-nano text-error">
+        <div className="mb-1 text-nano text-fg-secondary">
           {nonBrowserFails.length} design/strategy fail(s)
         </div>
       ) : null}

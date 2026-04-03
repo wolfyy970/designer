@@ -1,15 +1,16 @@
 import { useEffect } from 'react';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { SECTION_NODE_TYPES } from '../../../lib/canvas-layout';
-import type { Node } from '@xyflow/react';
+import type { WorkspaceNode } from '../../../types/workspace-graph';
+import { useRequestPermanentDelete } from '../../../hooks/useRequestPermanentDelete';
+import { keyboardMultiDeleteCopy } from '../../../lib/canvas-permanent-delete-copy';
 
 /**
- * Hook to manage deletion of nodes in the Canvas.
- * Handles the Delete/Backspace key and protects system nodes.
- * Warns before cascading deletion of hypothesis variants.
+ * Delete/Backspace on selected nodes: same permanent-delete dialog as header X (see PermanentDeleteConfirmProvider).
  */
 export function useNodeDeletion() {
   const nodes = useCanvasStore((s) => s.nodes);
+  const { requestPermanentDelete } = useRequestPermanentDelete();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -23,7 +24,7 @@ export function useNodeDeletion() {
         return;
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        const selected = nodes.filter((n: Node) => n.selected);
+        const selected = nodes.filter((n) => (n as WorkspaceNode & { selected?: boolean }).selected);
         if (selected.length === 0) return;
         e.preventDefault();
 
@@ -32,37 +33,23 @@ export function useNodeDeletion() {
           ...SECTION_NODE_TYPES,
         ]);
 
-        const removable = selected.filter(
-          (n: Node) => !PROTECTED.has(n.type as string),
-        );
+        const removable = selected.filter((n) => !PROTECTED.has(n.type));
         if (removable.length === 0) return;
 
-        // Warn when deleting hypotheses — variants cascade-delete
-        const hypotheses = removable.filter((n: Node) => n.type === 'hypothesis');
-        if (hypotheses.length > 0) {
-          const { edges: storeEdges, nodes: storeNodes } = useCanvasStore.getState();
-          let variantCount = 0;
-          for (const h of hypotheses) {
-            for (const edge of storeEdges) {
-              if (edge.source !== h.id) continue;
-              if (storeNodes.find((n: Node) => n.id === edge.target && n.type === 'variant')) {
-                variantCount++;
-              }
-            }
-          }
-          const hLabel = hypotheses.length === 1 ? 'hypothesis' : 'hypotheses';
-          const msg = variantCount > 0
-            ? `Delete ${hypotheses.length} ${hLabel} and ${variantCount} connected ${variantCount === 1 ? 'variant' : 'variants'}?`
-            : `Delete ${hypotheses.length} ${hLabel}?`;
-          if (!window.confirm(msg)) return;
-        }
-
-        const removeNode = useCanvasStore.getState().removeNode;
-        removable.forEach((n: Node) => removeNode(n.id));
+        const { edges: storeEdges, nodes: storeNodes } = useCanvasStore.getState();
+        const { title, description } = keyboardMultiDeleteCopy(removable, storeNodes, storeEdges);
+        requestPermanentDelete({
+          title,
+          description,
+          onConfirm: () => {
+            const removeNode = useCanvasStore.getState().removeNode;
+            removable.forEach((n) => removeNode(n.id));
+          },
+        });
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [nodes]);
+  }, [nodes, requestPermanentDelete]);
 }

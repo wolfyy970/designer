@@ -27,6 +27,7 @@ import VariantRunInspector from './VariantRunInspector';
 import { useCanvasOrchestrator } from './hooks/useCanvasOrchestrator';
 import { useNodeDeletion } from './hooks/useNodeDeletion';
 import { useFeedbackLoopConnection } from './hooks/useFeedbackLoopConnection';
+import { PermanentDeleteConfirmProvider } from '../../contexts/PermanentDeleteConfirmProvider';
 function CanvasInner() {
   useCanvasOrchestrator();
   useNodeDeletion();
@@ -241,7 +242,9 @@ function CanvasInner() {
 export default function CanvasWorkspace() {
   return (
     <ReactFlowProvider>
-      <CanvasInner />
+      <PermanentDeleteConfirmProvider>
+        <CanvasInner />
+      </PermanentDeleteConfirmProvider>
     </ReactFlowProvider>
   );
 }

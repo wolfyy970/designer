@@ -3,6 +3,7 @@
  */
 import type { AgentSessionEvent, AgentSession } from './pi-sdk/types.ts';
 import { appendLlmCallResponse } from '../log-store.ts';
+import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
 import { parsePiToolExecutionArgs } from '../lib/pi-tool-args.ts';
 import { stripProviderControlTokens } from '../lib/stream-sanitize.ts';
 import type { AgentRunEvent } from './pi-agent-run-types.ts';
@@ -81,23 +82,15 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
           phase: 'building',
         }),
       );
-      // #region agent log
-      fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
-        body: JSON.stringify({
-          sessionId: '5b9be9',
-          hypothesisId: 'H1',
-          location: 'pi-session-event-bridge.ts:turn_start',
-          message: 'model turn_start',
-          data: {
-            modelTurnId: ctx.modelTurnId.current,
-            pendingToolCalls: toolStartMs.size,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
+      debugAgentIngest({
+        hypothesisId: 'H1',
+        location: 'pi-session-event-bridge.ts:turn_start',
+        message: 'model turn_start',
+        data: {
+          modelTurnId: ctx.modelTurnId.current,
+          pendingToolCalls: toolStartMs.size,
+        },
+      });
       syncPendingToolProbe(ctx, toolStartMs);
       return;
     }
@@ -138,29 +131,21 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
       const { path, pattern } = parsePiToolExecutionArgs(tn, event.args);
       const reusedToolCallId = toolStartMs.has(event.toolCallId);
       toolStartMs.set(event.toolCallId, Date.now());
-      // #region agent log
-      fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
-        body: JSON.stringify({
-          sessionId: '5b9be9',
-          hypothesisId: 'H2',
-          location: 'pi-session-event-bridge.ts:tool_execution_start',
-          message: 'tool_execution_start',
-          data: {
-            toolCallId: event.toolCallId,
-            toolName: tn,
-            path,
-            pattern,
-            reusedToolCallId,
-            commandPreview:
-              command != null && command.length > 160 ? `${command.slice(0, 157)}…` : command,
-            pendingAfter: toolStartMs.size,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
+      debugAgentIngest({
+        hypothesisId: 'H2',
+        location: 'pi-session-event-bridge.ts:tool_execution_start',
+        message: 'tool_execution_start',
+        data: {
+          toolCallId: event.toolCallId,
+          toolName: tn,
+          path,
+          pattern,
+          reusedToolCallId,
+          commandPreview:
+            command != null && command.length > 160 ? `${command.slice(0, 157)}…` : command,
+          pendingAfter: toolStartMs.size,
+        },
+      });
       syncPendingToolProbe(ctx, toolStartMs);
       ctx.toolPathByCallId.set(event.toolCallId, path);
       void ctx.onEvent(
@@ -182,28 +167,20 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
       const started = toolStartMs.get(event.toolCallId);
       const durationMs = started != null ? Date.now() - started : undefined;
       toolStartMs.delete(event.toolCallId);
-      // #region agent log
-      fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
-        body: JSON.stringify({
-          sessionId: '5b9be9',
-          hypothesisId: started == null ? 'H3' : 'H2',
-          location: 'pi-session-event-bridge.ts:tool_execution_end',
-          message: 'tool_execution_end',
-          data: {
-            toolCallId: event.toolCallId,
-            toolName: event.toolName,
-            isError: event.isError,
-            durationMs,
-            hadMatchedStart: started != null,
-            orphanEnd: started == null,
-            pendingAfter: toolStartMs.size,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
+      debugAgentIngest({
+        hypothesisId: started == null ? 'H3' : 'H2',
+        location: 'pi-session-event-bridge.ts:tool_execution_end',
+        message: 'tool_execution_end',
+        data: {
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          isError: event.isError,
+          durationMs,
+          hadMatchedStart: started != null,
+          orphanEnd: started == null,
+          pendingAfter: toolStartMs.size,
+        },
+      });
       syncPendingToolProbe(ctx, toolStartMs);
       if (event.isError) {
         const path = ctx.toolPathByCallId.get(event.toolCallId);

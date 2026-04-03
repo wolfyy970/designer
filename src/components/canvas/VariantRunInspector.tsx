@@ -9,6 +9,7 @@ import { useResultCode } from '../../hooks/useResultCode';
 import { useResultFiles } from '../../hooks/useResultFiles';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
 import { GENERATION_STATUS } from '../../constants/generation';
+import { abortGenerationForStrategy } from '../../lib/generation-abort-registry';
 import { bundleVirtualFS, prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
 import { normalizeError } from '../../lib/error-utils';
 import {
@@ -84,6 +85,7 @@ export default function VariantRunInspector() {
       ? results.find((r) => r.id === data.refId)
       : undefined;
   const result = activeResult ?? legacyResult;
+  const laneStrategyIdForAbort = variantStrategyId ?? result?.variantStrategyId;
 
   const strategy = useCompilerStore((s) => {
     const vsId = variantStrategyId ?? result?.variantStrategyId;
@@ -246,14 +248,26 @@ export default function VariantRunInspector() {
           <h2 className="min-w-0 truncate text-sm font-semibold leading-tight text-fg">
             {variantName}
           </h2>
-          <button
-            type="button"
-            onClick={closeRunInspector}
-            className="shrink-0 rounded p-0.5 text-fg-muted transition-colors hover:bg-surface-secondary hover:text-fg"
-            title="Close (Esc)"
-          >
-            <X size={14} />
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            {isGenerating && laneStrategyIdForAbort ? (
+              <button
+                type="button"
+                onClick={() => abortGenerationForStrategy(laneStrategyIdForAbort)}
+                className="rounded border border-error/35 bg-error-subtle px-2 py-0.5 text-nano font-semibold text-error transition-colors hover:bg-error/20"
+                title="Stop generation (cancels the in-flight request)"
+              >
+                Stop
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={closeRunInspector}
+              className="shrink-0 rounded p-0.5 text-fg-muted transition-colors hover:bg-surface-secondary hover:text-fg"
+              title="Close (Esc)"
+            >
+              <X size={14} />
+            </button>
+          </div>
         </div>
         <div className="mt-0.5 flex items-center gap-1.5 text-nano text-fg-muted">
           {versionKey && result?.runNumber != null && (

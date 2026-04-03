@@ -2,7 +2,8 @@ import { memo, useCallback } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import type { CritiqueNodeData } from '../../../types/canvas-data';
-import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
+import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
+import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
 import { filledOrEmpty } from '../../../lib/node-status';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
@@ -11,7 +12,7 @@ import CompactField from './CompactField';
 type CritiqueNodeType = Node<CritiqueNodeData, 'critique'>;
 
 function CritiqueNode({ id, data, selected }: NodeProps<CritiqueNodeType>) {
-  const onRemove = useNodeRemoval(id);
+  const onRemove = useCanvasNodePermanentRemove(id, STATIC_NODE_DELETE_COPY.critique);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
 
   const title = data.title || '';

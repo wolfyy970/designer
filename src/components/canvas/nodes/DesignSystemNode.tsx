@@ -8,7 +8,8 @@ import type { DesignSystemNodeData } from '../../../types/canvas-data';
 import { extractDesignSystem } from '../../../api/client';
 import { generateId, now } from '../../../lib/utils';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
-import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
+import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
+import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
 import { filledOrEmpty } from '../../../lib/node-status';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
@@ -17,7 +18,7 @@ import type { ReferenceImage } from '../../../types/spec';
 type DesignSystemNodeType = Node<DesignSystemNodeData, 'designSystem'>;
 
 function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType>) {
-  const onRemove = useNodeRemoval(id);
+  const onRemove = useCanvasNodePermanentRemove(id, STATIC_NODE_DELETE_COPY.designSystem);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
 
   const title = data.title || 'Design System';

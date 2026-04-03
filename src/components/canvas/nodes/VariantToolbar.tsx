@@ -42,6 +42,9 @@ interface VariantToolbarProps {
   showClearUserBest?: boolean;
   onMarkUserBest?: () => void;
   onClearUserBest?: () => void;
+  /** In-flight generation for this hypothesis lane — stop cancels the SSE / agent on the server. */
+  showStopGeneration?: boolean;
+  onStopGeneration?: () => void;
 }
 
 export default function VariantToolbar({
@@ -69,6 +72,8 @@ export default function VariantToolbar({
   showClearUserBest = false,
   onMarkUserBest,
   onClearUserBest,
+  showStopGeneration = false,
+  onStopGeneration,
 }: VariantToolbarProps) {
   return (
     <div className="flex items-center gap-1 border-b border-border-subtle px-2.5 py-1">
@@ -85,6 +90,20 @@ export default function VariantToolbar({
           Best
         </span>
       )}
+      {showStopGeneration && onStopGeneration ? (
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onStopGeneration();
+          }}
+          className="nodrag shrink-0 rounded border border-error/35 bg-error-subtle px-1.5 py-px text-badge font-semibold text-error transition-colors hover:bg-error/20"
+          title="Stop generation (cancels the in-flight request)"
+        >
+          Stop
+        </button>
+      ) : null}
 
       {/* Stack navigation */}
       {stackTotal > 1 && (
@@ -158,7 +177,7 @@ export default function VariantToolbar({
             e.stopPropagation();
             onClearUserBest();
           }}
-          className="nodrag rounded p-0.5 text-amber-500 transition-colors hover:text-amber-400"
+          className="nodrag rounded p-0.5 text-warning transition-colors hover:text-warning/85"
           title="Clear your best pick (use evaluator ranking)"
         >
           <Star size={10} className="fill-current" />
@@ -249,8 +268,8 @@ export default function VariantToolbar({
         className="nodrag shrink-0 rounded p-0.5 text-fg-faint transition-colors hover:bg-error-subtle hover:text-error"
         title={
           versionStackLength > 1
-            ? 'Remove this version (keep other versions in the stack)'
-            : 'Remove variant from canvas'
+            ? 'Delete this generation version (others stay on the card)'
+            : 'Delete variant from canvas'
         }
       >
         <X size={10} />

@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
 import { Loader2 } from 'lucide-react';
 import { useSpecStore } from '../../../stores/spec-store';
@@ -9,7 +9,8 @@ import {
 import type { SectionNodeData } from '../../../types/canvas-data';
 import { SPEC_SECTIONS } from '../../../lib/constants';
 import { filledOrEmpty } from '../../../lib/node-status';
-import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
+import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
+import { sectionCardDeleteCopy } from '../../../lib/canvas-permanent-delete-copy';
 import ReferenceImageUpload from '../../shared/ReferenceImageUpload';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
@@ -17,9 +18,10 @@ import NodeHeader from './NodeHeader';
 type SectionNodeType = Node<SectionNodeData, CanvasNodeType>;
 
 function SectionNode({ id, type, selected }: NodeProps<SectionNodeType>) {
-  const onRemove = useNodeRemoval(id);
   const sectionId = NODE_TYPE_TO_SECTION[type as CanvasNodeType]!;
   const meta = SPEC_SECTIONS.find((s) => s.id === sectionId)!;
+  const deleteCopy = useMemo(() => sectionCardDeleteCopy(meta.title), [meta.title]);
+  const onRemove = useCanvasNodePermanentRemove(id, deleteCopy);
   const section = useSpecStore((s) => s.spec.sections[sectionId]);
   const updateSection = useSpecStore((s) => s.updateSection);
   const capturingImage = useSpecStore((s) => s.capturingImage);

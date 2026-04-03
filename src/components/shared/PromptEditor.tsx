@@ -50,7 +50,7 @@ export default function PromptEditor({ initialPromptKey }: PromptEditorProps) {
   if (loadError) {
     const message = loadError instanceof Error ? loadError.message : String(loadError);
     return (
-      <div className="rounded-lg border border-amber-500/30 bg-amber-500/8 p-4 text-sm text-fg-secondary">
+      <div className="rounded-lg border border-warning/35 bg-warning-subtle p-4 text-sm text-fg-secondary">
         <p className="font-medium text-fg">Prompt loading failed</p>
         <p className="mt-1">{message}</p>
         <p className="mt-2 text-fg-muted">

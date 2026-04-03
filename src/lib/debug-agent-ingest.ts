@@ -1,0 +1,38 @@
+/** Browser: local debug ingest when dev + `VITE_DEBUG_AGENT_INGEST=1`. */
+const DEBUG_AGENT_INGEST_URL =
+  'http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1';
+
+/** Default correlation id for ingest payloads and `X-Debug-Session-Id` header. */
+const DEBUG_AGENT_INGEST_SESSION_ID = '5b9be9';
+
+type ViteEnv = { DEV?: boolean; VITE_DEBUG_AGENT_INGEST?: string };
+
+function clientIngestEnabled(): boolean {
+  const env = (import.meta as { env?: ViteEnv }).env;
+  return Boolean(env?.DEV && env.VITE_DEBUG_AGENT_INGEST === '1');
+}
+
+export type DebugAgentIngestPayload = {
+  sessionId?: string;
+  hypothesisId?: string;
+  location: string;
+  message: string;
+  data?: Record<string, unknown>;
+};
+
+export function debugAgentIngest(payload: DebugAgentIngestPayload): void {
+  if (!clientIngestEnabled()) return;
+  const sessionId = payload.sessionId ?? DEBUG_AGENT_INGEST_SESSION_ID;
+  fetch(DEBUG_AGENT_INGEST_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Debug-Session-Id': sessionId,
+    },
+    body: JSON.stringify({
+      ...payload,
+      sessionId,
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+}

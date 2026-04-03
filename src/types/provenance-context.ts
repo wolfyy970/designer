@@ -1,4 +1,4 @@
-/** Provenance payload assembled before `/api/generate` — UI-agnostic shape. */
+/** Provenance payload assembled before generation finalizes — UI-agnostic shape. */
 export interface ProvenanceContext {
   strategies: Record<
     string,

@@ -11,24 +11,26 @@ import {
   FIT_VIEW_DURATION_MS,
 } from '../lib/constants';
 import { warnIfWorkspaceSnapshotInvalid } from '../lib/workspace-snapshot-warn';
-import {
-  buildHypothesisGenerationContext,
-  provenanceFromHypothesisContext,
-} from '../workspace/workspace-session';
+import { buildHypothesisGenerationContext } from '../workspace/workspace-session';
+import { normalizeError } from '../lib/error-utils';
 import { normalizeModelProfilesForApi } from '../workspace/hypothesis-generation-pure';
 import { GENERATION_STATUS } from '../constants/generation';
 import { EDGE_STATUS } from '../constants/canvas';
 import {
   fetchHypothesisPromptBundle,
   generateHypothesisStream,
-  type HypothesisLaneSession,
 } from '../api/client';
 import type { HypothesisGenerateApiPayload } from '../api/types';
-import type { GenerationResult } from '../types/provider';
 import {
-  createPlaceholderGenerationSession,
-  runFinalizeWithCatch,
-} from './placeholder-generation-session';
+  applyGenerationFailureToLanes,
+  executeHypothesisGenerationRun,
+} from './hypothesis-generation-run';
+import {
+  clearGenerationAbortController,
+  GENERATION_STOPPED_MESSAGE,
+  isAbortError,
+  swapGenerationAbortController,
+} from '../lib/generation-abort-registry';
 
 interface HypothesisGenerationParams {
   nodeId: string;
@@ -116,100 +118,79 @@ export function useHypothesisGeneration({
       total: genCtx.modelCredentials.length,
     });
 
-    const lanePlaceholderIds: string[] = [];
+    let lanePlaceholderIds: string[] = [];
+    const abortController = swapGenerationAbortController(strategyId);
 
     try {
-      const bundle = await fetchHypothesisPromptBundle(workspacePayload);
-      setCompiledPrompts(bundle.prompts);
+      const onLaneComplete = (id: string) => {
+        setGenerationProgress((prev) =>
+          prev ? { ...prev, completed: prev.completed + 1 } : null,
+        );
+        const r = useGenerationStore.getState().results.find((x) => x.id === id);
+        if (r) {
+          const variantNodeId = useCanvasStore.getState().variantNodeIdMap.get(
+            r.variantStrategyId,
+          );
+          if (variantNodeId) {
+            setEdgeStatusByTarget(variantNodeId, EDGE_STATUS.COMPLETE);
+          }
+        }
+      };
 
-      const prompt = bundle.prompts[0];
-      if (!prompt) {
+      const runResult = await executeHypothesisGenerationRun(
+        {
+          workspacePayload,
+          genCtx,
+          nodeId,
+          runId,
+          signal: abortController.signal,
+          setCompiledPrompts,
+          addResult,
+          updateResult,
+          nextRunNumberForVariant: (variantStrategyId) =>
+            nextRunNumber(useGenerationStore.getState(), variantStrategyId),
+          syncAfterGenerate,
+          getCanvasState: () => useCanvasStore.getState(),
+          scheduleFitView: () =>
+            setTimeout(
+              () => fitView({ duration: FIT_VIEW_DURATION_MS, padding: 0.15 }),
+              FIT_VIEW_DELAY_MS,
+            ),
+          fetchBundle: fetchHypothesisPromptBundle,
+          runStream: generateHypothesisStream,
+          onLaneIdsReady: (ids) => {
+            lanePlaceholderIds = [...ids];
+          },
+        },
+        onLaneComplete,
+      );
+
+      if (!runResult.ok) {
         setGenerationError('No prompt from server');
         setGenerating(false);
         setEdgeStatusBySource(nodeId, EDGE_STATUS.ERROR);
         return;
       }
-
-      const provenanceCtx =
-        bundle.provenance ?? provenanceFromHypothesisContext(genCtx);
-
-      const placeholderResults: GenerationResult[] = [];
-      const laneSessions: HypothesisLaneSession[] = [];
-
-      for (const cred of bundle.generationContext.modelCredentials) {
-        const placeholderId = crypto.randomUUID();
-        const currentRunNumber = nextRunNumber(
-          useGenerationStore.getState(),
-          prompt.variantStrategyId,
-        );
-        const result: GenerationResult = {
-          id: placeholderId,
-          variantStrategyId: prompt.variantStrategyId,
-          providerId: cred.providerId,
-          status: GENERATION_STATUS.GENERATING,
-          runId,
-          runNumber: currentRunNumber,
-          metadata: { model: cred.modelId },
-        };
-        addResult(result);
-        placeholderResults.push(result);
-        lanePlaceholderIds.push(placeholderId);
-
-        const { callbacks, finalizeAfterStream } = createPlaceholderGenerationSession({
-          placeholderId,
-          prompt,
-          providerId: cred.providerId,
-          model: cred.modelId,
-          mode: genCtx.agentMode,
-          provenanceCtx,
-          updateResult,
-          correlationId: runId,
-          onResultComplete: (id) => {
-            setGenerationProgress((prev) =>
-              prev ? { ...prev, completed: prev.completed + 1 } : null,
-            );
-            const r = useGenerationStore.getState().results.find((x) => x.id === id);
-            if (r) {
-              const variantNodeId = useCanvasStore.getState().variantNodeIdMap.get(
-                r.variantStrategyId,
-              );
-              if (variantNodeId) {
-                setEdgeStatusByTarget(variantNodeId, EDGE_STATUS.COMPLETE);
-              }
-            }
-          },
-        });
-
-        laneSessions.push({
-          callbacks,
-          finalizeAfterStream: () =>
-            runFinalizeWithCatch(finalizeAfterStream, placeholderId, updateResult),
-        });
-      }
-
-      syncAfterGenerate(placeholderResults, nodeId);
-      if (bundle.generationContext.agentMode === 'agentic') {
-        const variantNodeId = useCanvasStore
-          .getState()
-          .variantNodeIdMap.get(prompt.variantStrategyId);
-        if (variantNodeId) {
-          useCanvasStore.getState().setRunInspectorVariant(variantNodeId);
-        }
-      }
-      setTimeout(() => fitView({ duration: FIT_VIEW_DURATION_MS, padding: 0.15 }), FIT_VIEW_DELAY_MS);
-
-      await generateHypothesisStream(workspacePayload, laneSessions);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      for (const id of lanePlaceholderIds) {
-        const r = useGenerationStore.getState().results.find((x) => x.id === id);
-        if (r?.status === GENERATION_STATUS.GENERATING) {
-          updateResult(id, { status: GENERATION_STATUS.ERROR, error: msg });
-        }
+      const aborted = isAbortError(err);
+      const msg = aborted
+        ? GENERATION_STOPPED_MESSAGE
+        : normalizeError(err, 'Generation failed');
+      applyGenerationFailureToLanes(
+        lanePlaceholderIds,
+        msg,
+        () => useGenerationStore.getState().results,
+        updateResult,
+      );
+      if (aborted) {
+        setGenerationError(null);
+        setEdgeStatusBySource(nodeId, EDGE_STATUS.COMPLETE);
+      } else {
+        setGenerationError(msg);
+        setEdgeStatusBySource(nodeId, EDGE_STATUS.ERROR);
       }
-      setGenerationError(msg);
-      setEdgeStatusBySource(nodeId, EDGE_STATUS.ERROR);
     } finally {
+      clearGenerationAbortController(strategyId, abortController);
       clearVariantNodeIdMap();
       setEdgeStatusBySource(nodeId, EDGE_STATUS.COMPLETE);
       const stillGenerating = useGenerationStore.getState().results.some(
@@ -225,7 +206,8 @@ export function useHypothesisGeneration({
           (r) =>
             idSet.has(r.id) &&
             r.variantStrategyId === strategyId &&
-            r.status === GENERATION_STATUS.ERROR,
+            r.status === GENERATION_STATUS.ERROR &&
+            r.error !== GENERATION_STOPPED_MESSAGE,
         ).length;
       if (errorCount > 0) {
         setGenerationError(

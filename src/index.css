@@ -8,11 +8,10 @@
 
 /* ── Design System Tokens ────────────────────────────────────────────── */
 /*
- * Semantics:
- * - accent: brand / selection / primary actions only — not eval severity.
- * - error | warning | success | info: status & severity; *-subtle fills always
- *   derive from the same base via color-mix (single source of truth).
- * - file-*: syntax / file-role chrome (explorer icons); not brand accent.
+ * Palette: zinc neutrals + warm axis (accent + analogous warning) +
+ * cool axis (cyan-blue info + teal success) + rose error. Orange ↔ info are complements.
+ * file-* aliases accent|info|warning|success — no extra hues.
+ * accent: brand only — not eval severity. *-subtle = color-mix from same base.
  */
 
 @theme {
@@ -26,9 +25,9 @@
   --text-badge: 0.5625rem;  /* 9px */
   --text-pico: 0.5rem;      /* 8px — dense labels only */
 
-  /* Accent */
+  /* Accent (brand anchor) */
   --color-accent: #f97316;
-  --color-accent-hover: #ea580c;
+  --color-accent-hover: #d97706;
 
   /* Surfaces */
   --color-bg: #09090b;
@@ -53,21 +52,21 @@
   --color-overlay: rgba(0, 0, 0, 0.60);
   --color-overlay-heavy: rgba(9, 9, 11, 0.95);
 
-  /* Status bases + subtle fills (color-mix from same base) */
-  --color-error: #f27477;
+  /* Status — harmonized brightness on dark surfaces; warning analogous to accent, info complement to orange */
+  --color-error: #ef6b73;
   --color-error-subtle: color-mix(in srgb, var(--color-error) 12%, transparent);
-  --color-warning: #f0b830;
+  --color-warning: #e8a026;
   --color-warning-subtle: color-mix(in srgb, var(--color-warning) 12%, transparent);
-  --color-success: #5ec498;
+  --color-success: #36cfa3;
   --color-success-subtle: color-mix(in srgb, var(--color-success) 12%, transparent);
-  --color-info: #5b9de0;
+  --color-info: #3eb0ea;
   --color-info-subtle: color-mix(in srgb, var(--color-info) 12%, transparent);
 
-  /* File-type icons (virtual file explorer) — avoid default Tailwind palette in UI */
-  --color-file-html: #fb923c;
-  --color-file-css: #60a5fa;
-  --color-file-script: #facc15;
-  --color-file-data: #4ade80;
+  /* File-type icons — alias semantic hues (explorer only) */
+  --color-file-html: var(--color-accent);
+  --color-file-css: var(--color-info);
+  --color-file-script: var(--color-warning);
+  --color-file-data: var(--color-success);
 
   /* Node widths */
   --width-node: 320px;

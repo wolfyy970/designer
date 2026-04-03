@@ -3,7 +3,8 @@ import { type NodeProps, type Node } from '@xyflow/react';
 import { DEFAULT_COMPILER_PROVIDER } from '../../../lib/constants';
 import { filledOrEmpty } from '../../../lib/node-status';
 import { useNodeProviderModel } from '../../../hooks/useNodeProviderModel';
-import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
+import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
+import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import type { ModelNodeData } from '../../../types/canvas-data';
 import ProviderSelector from '../../shared/ProviderSelector';
@@ -14,7 +15,7 @@ import NodeHeader from './NodeHeader';
 type ModelNodeType = Node<ModelNodeData, 'model'>;
 
 function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
-  const onRemove = useNodeRemoval(id);
+  const onRemove = useCanvasNodePermanentRemove(id, STATIC_NODE_DELETE_COPY.model);
 
   const thinkingLevel = useCanvasStore(
     (s) =>

@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { TodoItem } from '../../../types/provider';
 import type { AgenticPhase } from '../../../types/evaluation';
+import {
+  FILE_STALL_WARN_SEC,
+  FIRST_FILE_WAIT_ELAPSED_SEC,
+  modelQuietSeconds,
+  STREAM_QUIET_WARN_SEC,
+} from '../../../lib/generation-liveness';
 
 export function GeneratingFooter({
   plan,
@@ -85,13 +91,15 @@ export function GeneratingFooter({
     isBuilding && lastAgentFileAt != null && (!hasPlan || written < total)
       ? Math.max(0, Math.floor((now - lastAgentFileAt) / 1000))
       : 0;
-  const lastModelTokenSec =
-    lastActivityAt != null ? Math.max(0, Math.floor((now - lastActivityAt) / 1000)) : undefined;
-  const lastTraceSec =
-    lastTraceAt != null ? Math.max(0, Math.floor((now - lastTraceAt) / 1000)) : undefined;
-  const showFileStall = fileStallSec >= 40;
+  const modelQuietSec = modelQuietSeconds(now, lastActivityAt, lastTraceAt);
+  const showStreamQuietWarning =
+    isBuilding && modelQuietSec != null && modelQuietSec >= STREAM_QUIET_WARN_SEC;
+  const showFileStall = fileStallSec >= FILE_STALL_WARN_SEC;
   const firstFileWait =
-    isBuilding && written === 0 && lastAgentFileAt == null && elapsed >= 50;
+    isBuilding &&
+    written === 0 &&
+    lastAgentFileAt == null &&
+    elapsed >= FIRST_FILE_WAIT_ELAPSED_SEC;
 
   return (
     <div className="flex flex-col gap-2 border-t border-border-subtle px-4 py-3">
@@ -145,21 +153,24 @@ export function GeneratingFooter({
               </span>
             </span>
           )}
-          {(lastModelTokenSec != null || lastTraceSec != null) && (
+          {modelQuietSec != null && (
             <span className="pl-[18px] text-nano leading-snug text-fg-muted">
-              {lastModelTokenSec != null
-                ? lastModelTokenSec === 0
-                  ? 'Model output updating'
-                  : `Last model output ${lastModelTokenSec}s ago`
-                : 'No model output yet'}
-              {lastTraceSec != null ? ` · last trace ${lastTraceSec}s ago` : ''}
+              {modelQuietSec === 0
+                ? 'Model activity updating'
+                : `Last model activity ${modelQuietSec}s ago`}
+            </span>
+          )}
+          {showStreamQuietWarning && (
+            <span className="pl-[18px] text-nano leading-snug text-warning">
+              No model or tool trace for {modelQuietSec}s — the run may still be working (slow
+              reasoning or provider queue). Use Stop if you believe it is stuck.
             </span>
           )}
           {(showFileStall || firstFileWait) && (
             <span className="pl-[18px] text-nano leading-snug text-warning">
               {firstFileWait
-                ? `No files saved yet after ${elapsed}s — planning or drafting first write may be slow on this model.`
-                : `No new file saved for ${fileStallSec}s — the model may still be streaming a large write_file argument (typical for big CSS/HTML). Check the activity log; cancel and retry if it is clearly stuck.`}
+                ? `Also: No files saved yet after ${elapsed}s — planning or drafting first write may be slow on this model.`
+                : `Also: No new file saved for ${fileStallSec}s — the model may still be streaming a large write_file argument (typical for big CSS/HTML). Check the activity log; use Stop if it is clearly stuck.`}
             </span>
           )}
         </div>

@@ -41,7 +41,7 @@ const GENERATE_ROOT_SPAN_ID = '0000000000000002';
  * When `laneIndex` is set, every payload includes `laneIndex` for client demux.
  * `laneEndMode: 'lane_done'` emits `lane_done` instead of a final `done` (orchestrator sends global `done`).
  */
-export async function executeGenerateStream(
+async function executeGenerateStream(
   stream: SseStreamWriter,
   body: GenerateStreamBody,
   abortSignal: AbortSignal,

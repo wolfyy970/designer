@@ -9,9 +9,12 @@ import { useWorkspaceDomainStore } from '../../../stores/workspace-domain-store'
 import type { HypothesisNodeData } from '../../../types/canvas-data';
 import { useHypothesisGeneration } from '../../../hooks/useHypothesisGeneration';
 import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
+import { useRequestPermanentDelete } from '../../../hooks/useRequestPermanentDelete';
+import { hypothesisDeleteCopy } from '../../../lib/canvas-permanent-delete-copy';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
 import { processingOrFilled } from '../../../lib/node-status';
 import { GENERATION_STATUS } from '../../../constants/generation';
+import { abortGenerationForStrategy } from '../../../lib/generation-abort-registry';
 import { NODE_STATUS, NODE_TYPES } from '../../../constants/canvas';
 import {
   countIncomingModelsWithModelSelected,
@@ -57,6 +60,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
   );
 
   const handleRemove = useNodeRemoval(nodeId);
+  const { requestPermanentDelete } = useRequestPermanentDelete();
 
   const connectedModelCount = useCanvasStore((s) =>
     countIncomingModelsWithModelSelected(nodeId, { nodes: s.nodes, edges: s.edges }),
@@ -71,6 +75,10 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
 
   const { handleGenerate, generationProgress, generationError } =
     useHypothesisGeneration({ nodeId, strategyId });
+
+  const handleStopGeneration = useCallback(() => {
+    abortGenerationForStrategy(strategyId);
+  }, [strategyId]);
 
   const [editorTab, setEditorTab] = useState<HypothesisEditorTab>('hypothesis');
   const [editingName, setEditingName] = useState(false);
@@ -119,11 +127,9 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
   const handleDelete = useCallback(() => {
     const snap = useCanvasStore.getState();
     const variantCount = countOutgoingNodesOfType(nodeId, NODE_TYPES.VARIANT, snap);
-    if (variantCount > 0) {
-      if (!window.confirm(`Delete this hypothesis and ${variantCount} connected ${variantCount === 1 ? 'variant' : 'variants'}?`)) return;
-    }
-    handleRemove();
-  }, [handleRemove, nodeId]);
+    const { title, description } = hypothesisDeleteCopy(variantCount);
+    requestPermanentDelete({ title, description, onConfirm: handleRemove });
+  }, [handleRemove, nodeId, requestPermanentDelete]);
 
   if (data.placeholder) {
     return (
@@ -152,7 +158,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
         <button
           onClick={handleDelete}
           className="nodrag absolute right-2 top-2 rounded p-0.5 text-fg-faint transition-colors hover:bg-error-subtle hover:text-error"
-          title="Remove"
+          title="Delete from canvas"
         >
           <X size={12} />
         </button>
@@ -397,6 +403,21 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               </>
             )}
           </button>
+          {isGenerating ? (
+            <p className="mt-1.5 text-center text-nano leading-snug text-fg-muted">
+              Stopping ends the server request; partial output may remain on the card.
+            </p>
+          ) : null}
+          {isGenerating ? (
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={handleStopGeneration}
+              className="mt-2 w-full rounded-md border border-error/35 bg-error-subtle px-3 py-2 text-xs font-semibold text-error transition-colors hover:bg-error/20"
+            >
+              Stop generation
+            </button>
+          ) : null}
         </div>
       </div>
     </NodeShell>

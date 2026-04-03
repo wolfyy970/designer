@@ -32,7 +32,7 @@ flowchart TB
 
 ## Design system (frontend)
 
-UI color and typography tokens: **[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)**. Implemented in `src/index.css` (`@theme`).
+UI color and typography tokens: **[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)** (warm/cool axes, complementary info vs orange, file icons alias semantics). Implemented in `src/index.css` (`@theme`).
 
 ## Layered architecture (diagram)
 
@@ -282,7 +282,7 @@ The primary interface is a node-graph canvas built on `@xyflow/react` v12.
 
 ### HypothesisNode — Generation Controls
 
-`HypothesisNode` stores `agentMode` (`single` | `agentic`) and `thinkingLevel` in canvas node data. The **Direct** / **Agentic** mode control and **Thinking** segmented control are inline on the node. At generation time, `useHypothesisGeneration` reads these from canvas state and passes them to `useGenerate()`.
+`HypothesisNode` stores `agentMode` (`single` | `agentic`) and `thinkingLevel` in canvas node data. The **Direct** / **Agentic** mode control and **Thinking** segmented control are inline on the node. At generation time, [`useHypothesisGeneration`](src/hooks/useHypothesisGeneration.ts) reads these from canvas state and drives the multiplexed hypothesis SSE stream (`/api/hypothesis/prompt-bundle` + `/api/hypothesis/generate` via [`src/api/client.ts`](src/api/client.ts)). Lane orchestration lives in [`hypothesis-generation-run.ts`](src/hooks/hypothesis-generation-run.ts); per-lane SSE callbacks and post-stream persistence are in [`placeholder-generation-session.ts`](src/hooks/placeholder-generation-session.ts) and [`placeholder-*`](src/hooks/placeholder-stream-handlers.ts) helpers.
 
 ### Variant Node — Multi-File Display
 
@@ -353,14 +353,12 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 | `workspace-domain-store` | localStorage | Domain-first relations and payloads (hypotheses, incubator wiring, model assignments, variant slots, mirrored node content). Prefer this for workflow semantics. |
 | `canvas-store` | localStorage | React Flow nodes/edges, viewport, auto-layout, transient UI (lineage, edge status, `variantNodeIdMap`). Kept in sync with domain on connect/disconnect and compile/generate lifecycle. |
 | `prompt-store` | localStorage | Prompt template overrides (sent as per-request overrides to server). Includes `genSystemHtmlAgentic`. |
-| `theme-store` | — | Theme mode (always `dark`; static store) |
 
 ### Hooks (`src/hooks/`)
 
 | File | Purpose |
 |------|---------|
-| `useGenerate.ts` | Generation orchestration — calls `apiClient.generate()` SSE stream, saves code or files to StoragePort. Forwards `mode`, `thinkingLevel`, and `genSystemHtmlAgentic` override. RAF-batches activity log updates to avoid >50 renders/sec. |
-| `useHypothesisGeneration.ts` | Reads `agentMode` and `thinkingLevel` from canvas node data at generation time; passes to `useGenerate()` |
+| `useHypothesisGeneration.ts` | Canvas **Generate** / **Run agent**: reads `agentMode`, `thinkingLevel`, and snapshot from stores; calls hypothesis prompt bundle + multiplexed SSE generate; uses `createPlaceholderGenerationSession` for callbacks, RAF-batched activity/thinking, trace forward, and IndexedDB finalize. |
 | `useResultCode.ts` | Loads generated code from StoragePort (single-file results) |
 | `useResultFiles.ts` | Loads multi-file result from StoragePort (agentic results) |
 | `useProviderModels.ts` | React Query hook — calls `apiClient.listModels()` |

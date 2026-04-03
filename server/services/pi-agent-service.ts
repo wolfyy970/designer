@@ -10,6 +10,7 @@ import {
 } from './pi-sdk/index.ts';
 import type { RunTraceEvent, TodoItem } from '../../src/types/provider.ts';
 import { env } from '../env.ts';
+import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
 import { wrapPiStreamWithLogging, PI_LLM_LOG_PHASE } from '../lib/pi-llm-log.ts';
 import { getPromptBody } from '../db/prompts.ts';
 import { getProviderModelContextWindow } from '../lib/provider-model-context.ts';
@@ -184,26 +185,18 @@ export async function runDesignAgentSession(
     if (params.signal?.aborted) return;
     const idleSec = Math.floor((Date.now() - streamActivityAt.current) / 1000);
     const isRevision = !!params.compactionNote?.trim();
-    // #region agent log
-    fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
-      body: JSON.stringify({
-        sessionId: '5b9be9',
-        hypothesisId: 'H6',
-        location: 'pi-agent-service.ts:stall_heartbeat',
-        message: 'agent session stall heartbeat',
-        data: {
-          idleSec,
-          pendingToolCalls: pendingToolCallsRef.current,
-          isRevision,
-          userPromptChars: params.userPrompt.length,
-          seedFileCount: params.seedFiles ? Object.keys(params.seedFiles).length : 0,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
+    debugAgentIngest({
+      hypothesisId: 'H6',
+      location: 'pi-agent-service.ts:stall_heartbeat',
+      message: 'agent session stall heartbeat',
+      data: {
+        idleSec,
+        pendingToolCalls: pendingToolCallsRef.current,
+        isRevision,
+        userPromptChars: params.userPrompt.length,
+        seedFileCount: params.seedFiles ? Object.keys(params.seedFiles).length : 0,
+      },
+    });
   }, STALL_DEBUG_MS);
 
   try {

@@ -45,7 +45,7 @@ A single-page app with one route: `/canvas`. Everything else redirects there.
 
 **State management** — Zustand stores with `persist` middleware:
 - `workspace-domain-store` — canonical workflow relations (incubator wiring, hypotheses, model assignments, variant slots, mirrored DS/model/critique payloads)
-- `canvas-store` — React Flow nodes, edges, viewport, layout (persist v13); kept in sync with domain via `workspace/domain-commands.ts`. Prefer `removeNode` for deletions so domain + compiler maps stay consistent; orchestrator-only graph filters must pair with `syncDomainForRemovedNode`.
+- `canvas-store` — React Flow nodes, edges, viewport, layout (persist v15); kept in sync with domain via `workspace/domain-commands.ts`. Prefer `removeNode` for deletions so domain + compiler maps stay consistent; orchestrator-only graph filters must pair with `syncDomainForRemovedNode`.
 - `generation-store` — result metadata only; code is in IndexedDB (persist v2)
 - `spec-store` — 8-section spec document
 - `compiler-store` — `DimensionMap` per incubator id + compiled prompts
@@ -63,12 +63,14 @@ Uses `@xyflow/react` v12. The canvas has 11 node types in a 4-column layout:
 
 **Model config** — Domain store records models per incubator and per hypothesis; `useConnectedModel(nodeId)` prefers that, then incoming model edges. There is no inline provider/model on processing nodes.
 
-**Canvas migrations** (`src/stores/canvas-migrations.ts`) run on every hydration via Zustand's `migrate` option. Current version: 13. Any schema change to canvas node data requires a new migration function.
+**Canvas migrations** (`src/stores/canvas-migrations.ts`) run on every hydration via Zustand's `migrate` option. Current version: 15 (see `version` in `canvas-store.ts`). Any schema change to canvas node data requires a new migration function.
 
 ### Generation flow
-**Single-shot:** User clicks Generate → `useGenerate()` POSTs `/api/generate` (SSE) → server `generateChat` + `extractCode()` → streamed code → IndexedDB → variant iframe.
+**Hypothesis (Direct and Agentic):** User clicks **Generate** on a hypothesis → [`useHypothesisGeneration`](src/hooks/useHypothesisGeneration.ts) POSTs `/api/hypothesis/prompt-bundle` then `/api/hypothesis/generate` (multiplexed SSE). [`executeHypothesisGenerationRun`](src/hooks/hypothesis-generation-run.ts) wires lanes; [`createPlaceholderGenerationSession`](src/hooks/placeholder-generation-session.ts) handles deltas, files, traces, and finalize → IndexedDB + variant iframe. Direct mode streams single-shot code; agentic mode runs the Pi pipeline below through the same SSE contract.
 
-**Agentic:** Same entrypoint with `mode: 'agentic'` → `runAgenticWithEvaluation` runs a Pi coding-agent session: **`server/services/pi-agent-service.ts`** uses `createAgentSession` with **`tools: []`** (no host-FS Pi tools) and **`customTools`** from **`server/services/pi-sdk/virtual-tools.ts`** (Pi `read` / `write` / `edit` / `ls` / `find` / `grep` mapped to **`just-bash`**) plus `pi-bash-tool`, `pi-app-tools`, then parallel evaluator workers (`design-evaluation-service.ts`): LLM rubrics + browser preflight (`browser-qa-evaluator.ts`), merged with optional Playwright when configured and Chromium is installed. Bounded revision rounds re-seed the agent with eval feedback. **Skills** load from Prisma into a virtual `skills/` tree (`generate.ts`, `db/skills.ts`, `lib/skills/*`). **Only `server/services/pi-sdk/`** should import `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent` directly.
+**Legacy `/api/generate`:** Still available on the server for non-canvas tools/tests; the canvas UI does **not** import a `useGenerate` hook — all canvas generation goes through the hypothesis routes above.
+
+**Agentic (server):** With `mode: 'agentic'` → `runAgenticWithEvaluation` runs a Pi coding-agent session: **`server/services/pi-agent-service.ts`** uses `createAgentSession` with **`tools: []`** (no host-FS Pi tools) and **`customTools`** from **`server/services/pi-sdk/virtual-tools.ts`** (Pi `read` / `write` / `edit` / `ls` / `find` / `grep` mapped to **`just-bash`**) plus `pi-bash-tool`, `pi-app-tools`, then parallel evaluator workers (`design-evaluation-service.ts`): LLM rubrics + browser preflight (`browser-qa-evaluator.ts`), merged with optional Playwright when configured and Chromium is installed. Bounded revision rounds re-seed the agent with eval feedback. **Skills** load from Prisma into a virtual `skills/` tree (`generate.ts`, `db/skills.ts`, `lib/skills/*`). **Only `server/services/pi-sdk/`** should import `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent` directly.
 
 **Multi-file persistence:** Agentic file maps go to IndexedDB via `saveFiles()`; provenance can include evaluation rounds + checkpoint.
 
@@ -86,5 +88,8 @@ Generated code renders in `sandbox="allow-scripts"` iframes. `wrapReactCode()` i
 **React 19 strict mode** — `useRef()` requires an explicit initial value: `useRef<T>(undefined)` or `useRef<T | null>(null)`.
 
 **TypeScript strict** — Unused imports and variables fail the build.
+
+### Errors and optional telemetry
+User-visible failures should use [`normalizeError`](src/lib/error-utils.ts) (and related helpers) so messages stay consistent. Optional debug POSTs to a local ingest URL must go through [`debugAgentIngest`](server/lib/debug-agent-ingest.ts) (server: `DEBUG_AGENT_INGEST=1`) or [`src/lib/debug-agent-ingest.ts`](src/lib/debug-agent-ingest.ts) (browser: dev + `VITE_DEBUG_AGENT_INGEST=1`) — they no-op by default. Avoid bare `.catch(() => {})` on real work; swallowing is only acceptable inside that guarded ingest or similarly optional side channels.
 
 **Experiment forking** — Changing provider/model/format on a HypothesisNode and clicking Generate pins old variants (`data.pinnedRunId`), disconnects them, shifts them 200px down, and creates new variant nodes. Pinned variants use scoped IndexedDB lookups keyed by `${vsId}:${runId}`.

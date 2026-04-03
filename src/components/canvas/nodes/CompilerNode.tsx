@@ -23,7 +23,8 @@ import { processingOrFilled } from '../../../lib/node-status';
 import { isPlaceholderHypothesis } from '../../../lib/hypothesis-node-utils';
 import { EDGE_STATUS } from '../../../constants/canvas';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
-import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
+import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
+import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
@@ -44,7 +45,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
   const setCompiling = useCompilerStore((s) => s.setCompiling);
   const setError = useCompilerStore((s) => s.setError);
 
-  const onRemove = useNodeRemoval(id);
+  const onRemove = useCanvasNodePermanentRemove(id, STATIC_NODE_DELETE_COPY.incubator);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const syncAfterCompile = useCanvasStore((s) => s.syncAfterCompile);
   const addPlaceholderHypotheses = useCanvasStore((s) => s.addPlaceholderHypotheses);

@@ -8,6 +8,11 @@ import { bundleVirtualFS, prepareIframeContent, renderErrorHtml } from '../../..
 import { useCanvasStore } from '../../../stores/canvas-store';
 import type { VariantNodeData } from '../../../types/canvas-data';
 import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
+import { useRequestPermanentDelete } from '../../../hooks/useRequestPermanentDelete';
+import {
+  variantNodeDeleteCopy,
+  variantVersionDeleteCopy,
+} from '../../../lib/canvas-permanent-delete-copy';
 import { useResultCode } from '../../../hooks/useResultCode';
 import { useResultFiles } from '../../../hooks/useResultFiles';
 import { useVersionStack } from '../../../hooks/useVersionStack';
@@ -15,6 +20,7 @@ import { useVariantZoom } from '../../../hooks/useVariantZoom';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
 import { variantStatus } from '../../../lib/node-status';
 import { GENERATION_STATUS } from '../../../constants/generation';
+import { abortGenerationForStrategy } from '../../../lib/generation-abort-registry';
 import { downloadFilesAsZip } from '../../../lib/zip-utils';
 import {
   type DesignDebugExportOptions,
@@ -68,6 +74,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
     [variantStrategyId, data.refId, results],
   );
   const result = activeResult ?? legacyResult;
+  const laneStrategyIdForAbort = variantStrategyId ?? result?.variantStrategyId;
 
   const deleteResult = useGenerationStore((s) => s.deleteResult);
 
@@ -83,13 +90,28 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
     return findVariantStrategy(s.dimensionMaps, vsId);
   });
 
-  const onRemove = useNodeRemoval(id);
   const setExpandedVariant = useCanvasStore((s) => s.setExpandedVariant);
   const setRunInspectorVariant = useCanvasStore((s) => s.setRunInspectorVariant);
   const closeRunInspector = useCanvasStore((s) => s.closeRunInspector);
   const isWorkspaceOpen = useCanvasStore((s) => s.runInspectorVariantNodeId === id);
 
   const variantName = strategy?.name ?? 'Variant';
+
+  const removeFromCanvas = useNodeRemoval(id);
+  const { requestPermanentDelete } = useRequestPermanentDelete();
+
+  const variantDeleteCopy = useMemo(
+    () => variantNodeDeleteCopy(variantName),
+    [variantName],
+  );
+
+  const onRemove = useCallback(() => {
+    requestPermanentDelete({
+      title: variantDeleteCopy.title,
+      description: variantDeleteCopy.description,
+      onConfirm: removeFromCanvas,
+    });
+  }, [variantDeleteCopy, removeFromCanvas, requestPermanentDelete]);
 
   // Tab state for multi-file complete view
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
@@ -132,6 +154,17 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
     }
     deleteResult(resultId);
   }, [result, versionKey, completedStack, stack, setSelectedVersion, deleteResult]);
+
+  const confirmDeleteVersion = useCallback(() => {
+    const { title, description } = variantVersionDeleteCopy();
+    requestPermanentDelete({
+      title,
+      description,
+      onConfirm: () => {
+        void handleDeleteVersion();
+      },
+    });
+  }, [handleDeleteVersion, requestPermanentDelete]);
 
   const slug = variantName
     .toLowerCase()
@@ -254,6 +287,14 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
         isBestCurrent={isActiveBest && result?.status !== GENERATION_STATUS.GENERATING}
         hasCode={hasCode}
         nodeId={id}
+        showStopGeneration={
+          result?.status === GENERATION_STATUS.GENERATING && !!laneStrategyIdForAbort
+        }
+        onStopGeneration={
+          laneStrategyIdForAbort
+            ? () => abortGenerationForStrategy(laneStrategyIdForAbort)
+            : undefined
+        }
         versionStackLength={stack.length}
         stackTotal={stackTotal}
         stackIndex={stackIndex}
@@ -265,7 +306,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
         resetZoom={resetZoom}
         onDownload={handleDownload}
         onDownloadDebug={result ? () => setDebugExportOpen(true) : undefined}
-        onDeleteVersion={handleDeleteVersion}
+        onDeleteVersion={confirmDeleteVersion}
         onExpand={() => setExpandedVariant(id)}
         onToggleWorkspace={() => isWorkspaceOpen ? closeRunInspector() : setRunInspectorVariant(id)}
         isWorkspaceOpen={isWorkspaceOpen}

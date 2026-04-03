@@ -100,6 +100,10 @@ Agentic runs take longer (often several minutes) but produce more considered des
 
 Running generation again adds new versions — use the version navigation arrows on the variant card to browse previous results.
 
+**While a run is in flight:** Use **Stop** on the hypothesis or in the variant run workspace to abort the in-flight request for that strategy lane (same as ending the SSE stream).
+
+**Removing nodes from the canvas:** Use **Backspace** or **Delete** with one or more nodes selected. A confirmation explains that removal is **permanent for the canvas** (edges and attached variant nodes may be removed with a hypothesis). The shared spec document is separate; text in section cards may still exist there until you edit it elsewhere.
+
 ### 7. Review Variants
 
 Variant nodes render the generated code in sandboxed iframes. Open the **run workspace** (panel icon on the toolbar) for the full timeline, tasks, **Design**/**Evaluation** tabs, and—when an agentic run had several evaluator rounds—a shared **Eval round** control on Design and Evaluation to preview that round’s files and scores.

@@ -17,6 +17,23 @@
 
 ---
 
+## Palette architecture (hue budget)
+
+We keep **one neutral foundation** (zinc-like surfaces and foreground steps) and a **small chromatic set** tuned for dark UI. The goal is fewer competing hues and a clear brand story, not fewer semantic *names* (error / warning / success / info stay).
+
+| Axis | Tokens | Role |
+|------|--------|------|
+| **Neutrals** | `bg`, `surface*`, `border*`, `fg*` | Structure and typography; no hue noise. |
+| **Warm** | `accent`, `accent-hover`, `warning` | Brand orange plus **analogous** amber for caution — warmth reads as one family. |
+| **Cool** | `info`, `success` | **Complement** to orange: cyan-blue for info; **analogous** teal-green for success so it is not a second blue. |
+| **Alert** | `error` | Rose/red kept distinct for convention and contrast vs success green. |
+
+**Complement:** Orange (~24°) pairs with cyan-blue (~200–220°); `info` sits in that range so secondary emphasis and “low severity” feel structurally related to the brand, not arbitrary.
+
+**File explorer icons:** `--color-file-html` … `--color-file-data` are **aliases** of `accent`, `info`, `warning`, and `success` — same hues as the rest of the product, no parallel palette.
+
+---
+
 ## Color semantics
 
 | Role | CSS variables (base) | Typical utilities | Use for |
@@ -27,11 +44,15 @@
 | **Success** | `--color-success`, `--color-success-subtle` | `text-success`, `bg-success-subtle` | Pass, completion, positive state |
 | **Info** | `--color-info`, `--color-info-subtle` | `text-info`, `bg-info-subtle` | Low / informational severity, neutral-positive emphasis |
 | **Surfaces / fg** | `--color-bg`, `--color-surface*`, `--color-border*`, `--color-fg*` | `bg-surface`, `text-fg-muted`, `border-border` | Layout and readable text hierarchy |
-| **File roles** | `--color-file-html`, `--color-file-css`, `--color-file-script`, `--color-file-data` | `text-file-html`, … | Virtual file explorer icons / syntax tint only — not brand |
+| **File roles** | `--color-file-html`, … (alias `accent` / `info` / `warning` / `success`) | `text-file-html`, … | Explorer icon tints only — **no extra hues** beyond the axes above |
 
-**Evaluation severity mapping (UI):** high / hard_fail → error; medium → warning; low → info (filled `bg-*-subtle` + matching `text-*`, compact badge type — see `EvalPrioritizedFixList.tsx`).
+**Evaluation inline tags (no chroma):** In `EvalPrioritizedFixList.tsx`, severity chips (`[high]`, `[medium]`, `[low]`) and hard-fail code chips (`[hard_fail:…]`, e.g. `MISSING_SIDEBAR`) are **neutral only** — `bg-surface-raised`, `text-fg-secondary`, `ring-border-subtle`. Do **not** map them to `info` / `warning` / `error`; the uppercase label already carries meaning. **Extremely sparing color:** reserve `error` / `warning` / `info` / `success` for deliberate product-level emphasis (e.g. destructive buttons, node status), not dense eval enumerations.
 
-**Version badges:** Colors in `src/lib/badge-colors.ts` are **decorative rotation** (v1, v2, …), not eval severity.
+**Evaluation scorecard summary line:** The compact “N design/strategy fail(s)” count under the eval header uses **foreground secondary** (`text-fg-secondary`), not `text-error`, for the same reason.
+
+**Elsewhere (browser QA, etc.):** Section headers or one-line outcomes may still use status tints when a single glance needs pass/fail — keep that rare and avoid duplicating hue on both a header and every row tag.
+
+**Version badges:** `badgeColor()` in `src/lib/badge-colors.ts` is **always accent** (`bg-accent-subtle` / `text-accent`) for v1, v2, … — no per-run hue rotation; not eval severity.
 
 ---
 

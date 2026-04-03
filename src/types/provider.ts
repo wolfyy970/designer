@@ -131,7 +131,7 @@ export interface GenerationResult {
   progressMessage?: string;
   /** Unix ms when `onFile` last ran — for "no new file" stall hints */
   lastAgentFileAt?: number;
-  /** Unix ms when streamed model text last arrived. */
+  /** Unix ms when model stream last advanced: answer tokens, code chunks, or thinking deltas (batched). */
   lastActivityAt?: number;
   /** Unix ms when the latest structured trace event arrived. */
   lastTraceAt?: number;

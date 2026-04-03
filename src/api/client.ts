@@ -1,7 +1,6 @@
 import type {
   CompileRequest,
   CompileResponse,
-  GenerateRequest,
   GenerateSSEEvent,
   HypothesisGenerateApiPayload,
   HypothesisPromptBundleResponse,
@@ -33,11 +32,17 @@ const API_BASE = '/api';
 
 const INVALID_SERVER_RESPONSE = 'Invalid server response';
 
-async function postParsed<T>(path: string, body: unknown, schema: ZodType<T>): Promise<T> {
+async function postParsed<T>(
+  path: string,
+  body: unknown,
+  schema: ZodType<T>,
+  signal?: AbortSignal,
+): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   });
   if (!response.ok) {
     const text = await response.text();
@@ -106,6 +111,19 @@ export interface GenerateStreamCallbacks {
   onDone?: () => void;
   /** Fired when SSE JSON fails schema validation (wire `event:` name + body). */
   onParseError?: (eventName: string, data: Record<string, unknown>, error: ZodError) => void;
+}
+
+/** Parse hypothesis SSE JSON line; returns null if not a plain object (arrays/primitives rejected). */
+function parseHypothesisSseJson(raw: string): Record<string, unknown> | null {
+  try {
+    const v = JSON.parse(raw) as unknown;
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      return v as Record<string, unknown>;
+    }
+  } catch {
+    /* dev warning in caller */
+  }
+  return null;
 }
 
 /** Remove server multiplex field before building typed SSE events. */
@@ -194,45 +212,11 @@ function dispatchGenerateStreamEvent(
   dispatchParsedGenerateStreamEvent(result.event, callbacks);
 }
 
-export async function generate(
-  req: GenerateRequest,
-  callbacks: GenerateStreamCallbacks,
-  signal?: AbortSignal,
-): Promise<void> {
-  const response = await fetch(`${API_BASE}/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req),
-    signal,
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(
-      normalizeError(parseApiErrorBody(text), 'Generation request failed'),
-    );
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error('No response body');
-
-  await readSseEventStream(reader, (currentEvent, raw) => {
-    try {
-      const parsed = JSON.parse(raw) as Record<string, unknown>;
-      const { rest } = stripLaneIndex(parsed);
-      dispatchGenerateStreamEvent(currentEvent, rest, callbacks);
-    } catch {
-      if (import.meta.env.DEV) {
-        console.warn('[generate SSE] malformed JSON line', currentEvent);
-      }
-    }
-  });
-}
-
 export async function fetchHypothesisPromptBundle(
   body: HypothesisWorkspaceApiPayload,
+  signal?: AbortSignal,
 ): Promise<HypothesisPromptBundleResponse> {
-  return postParsed('/hypothesis/prompt-bundle', body, HypothesisPromptBundleResponseSchema);
+  return postParsed('/hypothesis/prompt-bundle', body, HypothesisPromptBundleResponseSchema, signal);
 }
 
 export interface HypothesisLaneSession {
@@ -267,7 +251,13 @@ export async function generateHypothesisStream(
 
   await readSseEventStream(reader, async (currentEvent, raw) => {
     try {
-      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const parsed = parseHypothesisSseJson(raw);
+      if (parsed == null) {
+        if (import.meta.env.DEV) {
+          console.warn('[generate SSE] non-object or invalid JSON line', currentEvent);
+        }
+        return;
+      }
       if (currentEvent === 'lane_done') {
         const idx = parsed.laneIndex;
         if (typeof idx === 'number' && lanes[idx]) {
