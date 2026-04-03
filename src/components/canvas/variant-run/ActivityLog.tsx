@@ -8,13 +8,13 @@ function renderMarkdown(raw: string): string {
     .replace(/>/g, '&gt;');
 
   return escaped
-    .replace(/^### (.+)$/gm, '<h4 class="mt-2 mb-0.5 text-[10px] font-semibold text-fg-secondary">$1</h4>')
-    .replace(/^## (.+)$/gm, '<h3 class="mt-2 mb-0.5 text-[11px] font-semibold text-fg-secondary">$1</h3>')
-    .replace(/^# (.+)$/gm, '<h3 class="mt-2 mb-0.5 text-[11px] font-bold text-fg">$1</h3>')
+    .replace(/^### (.+)$/gm, '<h4 class="mt-2 mb-0.5 text-nano font-semibold text-fg-secondary">$1</h4>')
+    .replace(/^## (.+)$/gm, '<h3 class="mt-2 mb-0.5 text-micro font-semibold text-fg-secondary">$1</h3>')
+    .replace(/^# (.+)$/gm, '<h3 class="mt-2 mb-0.5 text-micro font-bold text-fg">$1</h3>')
     .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-fg-secondary">$1</strong>')
-    .replace(/`([^`]+)`/g, '<code class="rounded bg-surface-secondary px-0.5 text-[9px]">$1</code>')
-    .replace(/^\d+\.\s+(.+)$/gm, '<li class="ml-3 list-decimal text-[10px] leading-snug text-fg-muted">$1</li>')
-    .replace(/^[-•]\s+(.+)$/gm, '<li class="ml-3 list-disc text-[10px] leading-snug text-fg-muted">$1</li>')
+    .replace(/`([^`]+)`/g, '<code class="rounded bg-surface-secondary px-0.5 text-badge">$1</code>')
+    .replace(/^\d+\.\s+(.+)$/gm, '<li class="ml-3 list-decimal text-nano leading-snug text-fg-muted">$1</li>')
+    .replace(/^[-•]\s+(.+)$/gm, '<li class="ml-3 list-disc text-nano leading-snug text-fg-muted">$1</li>')
     .replace(/\n/g, '<br/>');
 }
 
@@ -47,7 +47,7 @@ export function ActivityLog({ entries }: { entries?: string[] }) {
   return (
     <div
       ref={scrollRef}
-      className="nodrag nowheel min-h-0 flex-1 overflow-y-auto px-3 py-1.5 text-[10px] leading-snug text-fg-muted"
+      className="nodrag nowheel min-h-0 flex-1 overflow-y-auto px-3 py-1.5 text-nano leading-snug text-fg-muted"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );

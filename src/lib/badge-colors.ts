@@ -1,4 +1,4 @@
-/** Color palette for version badges — cycles through for v1, v2, v3, etc. */
+/** Decorative version-badge rotation only — not eval severity. Cycles v1, v2, v3, … */
 const BADGE_COLORS = [
   { bg: 'bg-info-subtle', text: 'text-info' },
   { bg: 'bg-accent-subtle', text: 'text-accent' },

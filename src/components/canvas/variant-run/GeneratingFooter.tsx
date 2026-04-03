@@ -109,35 +109,35 @@ export function GeneratingFooter({
       )}
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="flex items-center gap-1.5 text-[10px] leading-tight text-fg-secondary">
+          <span className="flex items-center gap-1.5 text-nano leading-tight text-fg-secondary">
             <Loader2 size={10} className="shrink-0 animate-spin text-accent" />
             <span className="truncate">{primaryLine}</span>
           </span>
           {(isEvaluating || isRevising) && hasPlan && (
-            <span className="pl-[18px] text-[10px] leading-snug text-fg-muted">
+            <span className="pl-[18px] text-nano leading-snug text-fg-muted">
               Build: {written} / {total} files
             </span>
           )}
           {(isEvaluating || isRevising) && !hasPlan && written > 0 && (
-            <span className="pl-[18px] text-[10px] leading-snug text-fg-muted">
+            <span className="pl-[18px] text-nano leading-snug text-fg-muted">
               Saved {written} design file{written === 1 ? '' : 's'}
             </span>
           )}
           {hasPlan && progressMessage && progressMessage !== primaryLine && !isEvaluating && !isRevising && (
             <span
-              className="pl-[18px] text-[10px] leading-snug text-fg-muted"
+              className="pl-[18px] text-nano leading-snug text-fg-muted"
               title={progressMessage}
             >
               {progressMessage}
             </span>
           )}
           {todoHint && (
-            <span className="pl-[18px] text-[10px] leading-snug text-fg-muted">
+            <span className="pl-[18px] text-nano leading-snug text-fg-muted">
               {todoHint.label}: <span className="text-fg-secondary">{todoHint.task}</span>
             </span>
           )}
           {(activeToolName || activeToolPath) && !toolLineRedundant && (
-            <span className="pl-[18px] text-[10px] leading-snug text-fg-muted">
+            <span className="pl-[18px] text-nano leading-snug text-fg-muted">
               Tool:{' '}
               <span className="text-fg-secondary">
                 {activeToolName ?? 'running'}
@@ -146,7 +146,7 @@ export function GeneratingFooter({
             </span>
           )}
           {(lastModelTokenSec != null || lastTraceSec != null) && (
-            <span className="pl-[18px] text-[10px] leading-snug text-fg-muted">
+            <span className="pl-[18px] text-nano leading-snug text-fg-muted">
               {lastModelTokenSec != null
                 ? lastModelTokenSec === 0
                   ? 'Model output updating'
@@ -156,14 +156,14 @@ export function GeneratingFooter({
             </span>
           )}
           {(showFileStall || firstFileWait) && (
-            <span className="pl-[18px] text-[10px] leading-snug text-amber-700/90 dark:text-amber-400/85">
+            <span className="pl-[18px] text-nano leading-snug text-warning">
               {firstFileWait
                 ? `No files saved yet after ${elapsed}s — planning or drafting first write may be slow on this model.`
                 : `No new file saved for ${fileStallSec}s — the model may still be streaming a large write_file argument (typical for big CSS/HTML). Check the activity log; cancel and retry if it is clearly stuck.`}
             </span>
           )}
         </div>
-        <span className="shrink-0 tabular-nums text-[10px] leading-tight text-fg-muted">{elapsed}s</span>
+        <span className="shrink-0 tabular-nums text-nano leading-tight text-fg-muted">{elapsed}s</span>
       </div>
     </div>
   );

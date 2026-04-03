@@ -3,7 +3,11 @@ import { AGENTIC_PHASE } from '../constants/agentic-stream';
 import { GENERATION_STATUS } from '../constants/generation';
 import { storage } from '../storage';
 import type { CompiledPrompt } from '../types/compiler';
-import type { AgenticCheckpoint, EvaluationRoundSnapshot } from '../types/evaluation';
+import type {
+  AggregatedEvaluationReport,
+  AgenticCheckpoint,
+  EvaluationRoundSnapshot,
+} from '../types/evaluation';
 import type {
   GenerationResult,
   Provenance,
@@ -17,6 +21,30 @@ import { useGenerationStore } from '../stores/generation-store';
 const DEFAULT_TRACE_LIMIT = 120;
 const TRACE_SERVER_FLUSH_MS = 280;
 const TRACE_SERVER_BUFFER_MAX = 200;
+
+function fallbackAggregate(reason: string): AggregatedEvaluationReport {
+  return {
+    overallScore: 0,
+    normalizedScores: {},
+    hardFails: [],
+    prioritizedFixes: [`[high] ${reason}`],
+    shouldRevise: true,
+    revisionBrief: '',
+  };
+}
+
+function normalizeEvalSnapshot(snapshot: EvaluationRoundSnapshot): EvaluationRoundSnapshot {
+  const raw = snapshot.aggregate;
+  if (raw && typeof raw.overallScore === 'number' && Number.isFinite(raw.overallScore)) {
+    return snapshot;
+  }
+  return {
+    ...snapshot,
+    aggregate: fallbackAggregate(
+      'Evaluation aggregate missing or invalid after SSE — check server payload and client schema.',
+    ),
+  };
+}
 
 export interface PlaceholderSessionOptions {
   placeholderId: string;
@@ -196,25 +224,70 @@ export function createPlaceholderGenerationSession(
       });
     },
     onEvaluationReport: (_round, snapshot) => {
-      evaluationRounds = [
-        ...evaluationRounds.filter((r) => r.round !== snapshot.round),
-        snapshot,
-      ].sort((a, b) => a.round - b.round);
-      pushTrace({
-        id: crypto.randomUUID(),
-        at: new Date().toISOString(),
-        kind: 'evaluation_report',
-        label: `Evaluation round ${snapshot.round} scored ${snapshot.aggregate.overallScore.toFixed(1)}`,
-        phase: 'evaluating',
-        round: snapshot.round,
-        status: snapshot.aggregate.hardFails.length > 0 ? 'warning' : 'success',
-      });
-      updateResult(placeholderId, {
-        evaluationRounds,
-        evaluationSummary: snapshot.aggregate,
-        agenticPhase: 'evaluating',
-        progressMessage: 'Evaluator results received',
-      });
+      // #region agent log
+      fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
+        body: JSON.stringify({
+          sessionId: '5b9be9',
+          hypothesisId: 'E1',
+          location: 'placeholder-generation-session.ts:onEvaluationReport',
+          message: 'client evaluation_report received',
+          data: {
+            placeholderId,
+            round: snapshot.round,
+            hasAggregate: !!snapshot.aggregate,
+            overallType: typeof snapshot.aggregate?.overallScore,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      try {
+        const normalized = normalizeEvalSnapshot(snapshot);
+        evaluationRounds = [
+          ...evaluationRounds.filter((r) => r.round !== normalized.round),
+          normalized,
+        ].sort((a, b) => a.round - b.round);
+        const agg = normalized.aggregate;
+        const score = agg.overallScore;
+        const scoreLabel =
+          typeof score === 'number' && Number.isFinite(score) ? score.toFixed(1) : '—';
+        const hardFailsLen = agg.hardFails?.length ?? 0;
+        pushTrace({
+          id: crypto.randomUUID(),
+          at: new Date().toISOString(),
+          kind: 'evaluation_report',
+          label: `Evaluation round ${normalized.round} scored ${scoreLabel}`,
+          phase: 'evaluating',
+          round: normalized.round,
+          status: hardFailsLen > 0 ? 'warning' : 'success',
+        });
+        updateResult(placeholderId, {
+          evaluationRounds,
+          evaluationSummary: agg,
+          agenticPhase: 'evaluating',
+          progressMessage: 'Evaluator results received',
+        });
+      } catch (err) {
+        // #region agent log
+        fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
+          body: JSON.stringify({
+            sessionId: '5b9be9',
+            hypothesisId: 'E1',
+            location: 'placeholder-generation-session.ts:onEvaluationReport:error',
+            message: 'onEvaluationReport threw',
+            data: { placeholderId, err: String(err) },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+        if (import.meta.env.DEV) {
+          console.warn('[gen] onEvaluationReport failed', err);
+        }
+      }
     },
     onRevisionRound: (round, brief) => {
       pushTrace({
@@ -406,12 +479,37 @@ export function createPlaceholderGenerationSession(
           })
         : undefined;
 
+    const lastEvalAggregate =
+      evaluationRounds.length > 0
+        ? evaluationRounds[evaluationRounds.length - 1]!.aggregate
+        : undefined;
+
+    // #region agent log
+    fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
+      body: JSON.stringify({
+        sessionId: '5b9be9',
+        hypothesisId: 'E2',
+        location: 'placeholder-generation-session.ts:finalize',
+        message: 'finalize COMPLETE patch eval fields',
+        data: {
+          placeholderId,
+          evaluationRoundsLen: evaluationRounds.length,
+          hasLastAggregate: !!lastEvalAggregate,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
     updateResult(placeholderId, {
       id: placeholderId,
       status: GENERATION_STATUS.COMPLETE,
       agenticPhase: mode === 'agentic' ? 'complete' : undefined,
       evaluationStatus: undefined,
       ...(roundsMetaOnly ? { evaluationRounds: roundsMetaOnly } : {}),
+      ...(lastEvalAggregate ? { evaluationSummary: lastEvalAggregate } : {}),
       metadata: {
         model,
         completedAt: new Date().toISOString(),

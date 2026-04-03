@@ -7,6 +7,13 @@
 @import "@fontsource-variable/jetbrains-mono";
 
 /* ── Design System Tokens ────────────────────────────────────────────── */
+/*
+ * Semantics:
+ * - accent: brand / selection / primary actions only — not eval severity.
+ * - error | warning | success | info: status & severity; *-subtle fills always
+ *   derive from the same base via color-mix (single source of truth).
+ * - file-*: syntax / file-role chrome (explorer icons); not brand accent.
+ */
 
 @theme {
   /* Fonts */
@@ -17,6 +24,7 @@
   --text-micro: 0.6875rem;  /* 11px */
   --text-nano: 0.625rem;    /* 10px */
   --text-badge: 0.5625rem;  /* 9px */
+  --text-pico: 0.5rem;      /* 8px — dense labels only */
 
   /* Accent */
   --color-accent: #f97316;
@@ -37,23 +45,29 @@
   --color-fg-muted: #71717a;
   --color-fg-faint: #52525b;
 
-  /* Accent subtle & derived */
-  --color-accent-subtle: rgba(249, 115, 22, 0.09);
-  --color-accent-glow: rgba(249, 115, 22, 0.5);
+  /* Accent derived (from --color-accent) */
+  --color-accent-subtle: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  --color-accent-glow: color-mix(in srgb, var(--color-accent) 50%, transparent);
 
   /* Overlays */
   --color-overlay: rgba(0, 0, 0, 0.60);
   --color-overlay-heavy: rgba(9, 9, 11, 0.95);
 
-  /* Status */
+  /* Status bases + subtle fills (color-mix from same base) */
   --color-error: #f27477;
-  --color-error-subtle: rgba(229, 72, 77, 0.09);
+  --color-error-subtle: color-mix(in srgb, var(--color-error) 12%, transparent);
   --color-warning: #f0b830;
-  --color-warning-subtle: rgba(229, 160, 0, 0.09);
+  --color-warning-subtle: color-mix(in srgb, var(--color-warning) 12%, transparent);
   --color-success: #5ec498;
-  --color-success-subtle: rgba(46, 158, 106, 0.09);
+  --color-success-subtle: color-mix(in srgb, var(--color-success) 12%, transparent);
   --color-info: #5b9de0;
-  --color-info-subtle: rgba(48, 120, 208, 0.09);
+  --color-info-subtle: color-mix(in srgb, var(--color-info) 12%, transparent);
+
+  /* File-type icons (virtual file explorer) — avoid default Tailwind palette in UI */
+  --color-file-html: #fb923c;
+  --color-file-css: #60a5fa;
+  --color-file-script: #facc15;
+  --color-file-data: #4ade80;
 
   /* Node widths */
   --width-node: 320px;
@@ -138,7 +152,7 @@ body {
 
 .react-flow {
   --xy-node-boxshadow-selected: none;
-  --xy-selection-background-color: rgba(249, 115, 22, 0.06);
+  --xy-selection-background-color: color-mix(in srgb, var(--color-accent) 6%, transparent);
   --xy-selection-border: 1px solid var(--color-accent);
   --xy-edge-stroke-selected: var(--color-accent);
 }
@@ -199,6 +213,35 @@ body {
 }
 .streamdown-timeline :where(h1, h2, h3, h4, h5, h6):first-child {
   margin-top: 0;
+}
+
+/* Inline + fenced code: Streamdown / Shiki use larger defaults — force nano scale. */
+.streamdown-timeline :where(code, kbd, samp) {
+  font-size: inherit !important;
+  line-height: inherit;
+  font-weight: inherit;
+  vertical-align: baseline;
+}
+.streamdown-timeline :where(pre) {
+  font-size: inherit !important;
+  line-height: inherit !important;
+  margin: 0.5em 0;
+}
+.streamdown-timeline [data-streamdown='code-block'] {
+  font-size: var(--text-nano);
+  line-height: 1.45;
+  margin-block: 0.5rem;
+}
+.streamdown-timeline [data-streamdown='code-block'] :where(pre, code) {
+  font-size: inherit !important;
+  line-height: inherit !important;
+}
+.streamdown-timeline [data-streamdown='code-block'] pre {
+  margin: 0;
+}
+.streamdown-timeline [data-streamdown='code-block'] span {
+  font-size: inherit !important;
+  line-height: inherit !important;
 }
 
 /* ── Variant Version Stack ────────────────────────────────────────── */

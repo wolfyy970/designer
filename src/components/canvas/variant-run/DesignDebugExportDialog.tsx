@@ -56,7 +56,7 @@ function ExportCheckboxRow({
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-medium text-fg">{label}</span>
         {description ? (
-          <span className="mt-0.5 block text-[11px] leading-snug text-fg-muted">{description}</span>
+          <span className="mt-0.5 block text-micro leading-snug text-fg-muted">{description}</span>
         ) : null}
       </span>
     </label>
@@ -97,7 +97,7 @@ function PresetButton({
       }`}
     >
       <span className="text-xs font-semibold">{label}</span>
-      <span className="text-[10px] leading-snug text-fg-muted">{hint}</span>
+      <span className="text-nano leading-snug text-fg-muted">{hint}</span>
     </button>
   );
 }
@@ -129,7 +129,7 @@ function ArtifactChoice({
         />
         <span>
           <span className="block text-sm font-medium text-fg">{title}</span>
-          <span className="mt-0.5 block text-[11px] text-fg-muted">{body}</span>
+          <span className="mt-0.5 block text-micro text-fg-muted">{body}</span>
         </span>
       </label>
     );
@@ -281,7 +281,7 @@ export function DesignDebugExportDialog({
         </p>
 
         <div className="mb-4 shrink-0 space-y-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Start from</p>
+          <p className="text-nano font-semibold uppercase tracking-wider text-fg-faint">Start from</p>
           <div className="flex flex-wrap gap-2 sm:flex-nowrap">
             <PresetButton
               label="Light"
@@ -310,7 +310,7 @@ export function DesignDebugExportDialog({
         <div className="nodrag nowheel min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch]">
           <div className="space-y-5 pb-1">
             <section>
-              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Include in the file</h3>
+              <h3 className="mb-2 text-nano font-semibold uppercase tracking-wider text-fg-faint">Include in the file</h3>
               <div className="space-y-2">
                 <ExportCheckboxRow
                   id="exp-run-bundle"
@@ -373,7 +373,7 @@ export function DesignDebugExportDialog({
             </section>
 
             <section>
-              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">
+              <h3 className="mb-2 text-nano font-semibold uppercase tracking-wider text-fg-faint">
                 Generated design (what you preview in the iframe)
               </h3>
               <ArtifactChoice
@@ -382,13 +382,13 @@ export function DesignDebugExportDialog({
                 onChange={setArtifactMode}
               />
               {!hasArtifacts ? (
-                <p className="mt-2 text-[11px] text-fg-muted">No HTML or multi-file output for this run — these choices are disabled.</p>
+                <p className="mt-2 text-micro text-fg-muted">No HTML or multi-file output for this run — these choices are disabled.</p>
               ) : null}
             </section>
 
             <details className="rounded-lg border border-border-subtle bg-surface-secondary/30 px-3 py-2 text-xs">
               <summary className="cursor-pointer select-none font-medium text-fg-secondary">Advanced — duplicate evaluation block</summary>
-              <p className="mb-2 mt-2 text-[11px] text-fg-muted">
+              <p className="mb-2 mt-2 text-micro text-fg-muted">
                 Normally one evaluation section is enough. Turn this on only if you need the copy that was stored
                 separately inside provenance.
               </p>
