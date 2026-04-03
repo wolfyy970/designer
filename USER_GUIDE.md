@@ -98,11 +98,13 @@ Agentic runs take longer (often several minutes) but produce more considered des
 
 **Output format hint:** If your compiled strategy dimensions include a value for **format** (or `output_format`), it is sent as evaluation context so the server can pick matching **skills** for the agent. Details live in PRODUCT / ARCHITECTURE — you do not need to set this unless you use those dimensions.
 
-Running generation again adds new versions — use the version navigation arrows to browse previous results.
+Running generation again adds new versions — use the version navigation arrows on the variant card to browse previous results.
 
 ### 7. Review Variants
 
-Variant nodes render the generated code in sandboxed iframes.
+Variant nodes render the generated code in sandboxed iframes. Open the **run workspace** (panel icon on the toolbar) for the full timeline, tasks, **Design**/**Evaluation** tabs, and—when an agentic run had several evaluator rounds—a shared **Eval round** control on Design and Evaluation to preview that round’s files and scores.
+
+**Best pick:** If you disagree with the evaluator’s ranking, use **Mark as best** (star on the variant toolbar or “Mark as best” in full-screen). **Clear best pick** restores score-based default for that strategy lane. Full-screen **prev/next design** moves between variant nodes **for the same hypothesis** when domain slots are present.
 
 **Single-file results:**
 - **Zoom** — +/- buttons or auto-fit

@@ -46,13 +46,18 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
     activeResult,
     completedStack,
     isActiveBest,
+    bestCompletedResult,
     stackIndex,
     stackTotal,
     versionKey,
     goNewer,
     goOlder,
     setSelectedVersion,
+    setUserBest,
+    userBestOverrides,
   } = useVersionStack(variantStrategyId, pinnedRunId);
+
+  const hasUserBestOverride = !!(variantStrategyId && userBestOverrides[variantStrategyId]);
 
   // Legacy fallback: if no variantStrategyId, use refId directly
   const legacyResult = useMemo(
@@ -265,6 +270,22 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
         onToggleWorkspace={() => isWorkspaceOpen ? closeRunInspector() : setRunInspectorVariant(id)}
         isWorkspaceOpen={isWorkspaceOpen}
         onRemove={onRemove}
+        showClearUserBest={!isArchived && hasUserBestOverride}
+        showMarkUserBest={
+          !isArchived &&
+          !!variantStrategyId &&
+          result?.status === GENERATION_STATUS.COMPLETE &&
+          !!result &&
+          result.id !== bestCompletedResult?.id
+        }
+        onClearUserBest={
+          variantStrategyId ? () => setUserBest(variantStrategyId, null) : undefined
+        }
+        onMarkUserBest={
+          variantStrategyId && result
+            ? () => setUserBest(variantStrategyId, result.id)
+            : undefined
+        }
       />
 
       {/* ── Content area ──────────────────────────────────────── */}

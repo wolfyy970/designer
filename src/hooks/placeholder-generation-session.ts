@@ -360,9 +360,23 @@ export function createPlaceholderGenerationSession(
     if (generatedCode) await storage.saveCode(placeholderId, generatedCode);
     if (Object.keys(liveFiles).length > 0) await storage.saveFiles(placeholderId, liveFiles);
 
+    for (const er of evaluationRounds) {
+      if (er.files && Object.keys(er.files).length > 0) {
+        await storage.saveRoundFiles(placeholderId, er.round, er.files);
+      }
+    }
+
     if (provenanceCtx) {
       const strategySnapshot = provenanceCtx.strategies[prompt.variantStrategyId];
       if (strategySnapshot) {
+        const roundsWithoutFileBodies =
+          evaluationRounds.length > 0
+            ? evaluationRounds.map((er) => {
+                const meta = { ...er };
+                delete meta.files;
+                return meta;
+              })
+            : [];
         const provenance: Provenance = {
           hypothesisSnapshot: strategySnapshot,
           designSystemSnapshot: provenanceCtx.designSystemSnapshot,
@@ -371,10 +385,10 @@ export function createPlaceholderGenerationSession(
           model,
           timestamp: new Date().toISOString(),
           evaluation:
-            evaluationRounds.length > 0
+            roundsWithoutFileBodies.length > 0
               ? {
-                  rounds: evaluationRounds,
-                  finalAggregate: evaluationRounds[evaluationRounds.length - 1]!.aggregate,
+                  rounds: roundsWithoutFileBodies,
+                  finalAggregate: roundsWithoutFileBodies[roundsWithoutFileBodies.length - 1]!.aggregate,
                 }
               : undefined,
           checkpoint: agenticCheckpoint,
@@ -383,11 +397,21 @@ export function createPlaceholderGenerationSession(
       }
     }
 
+    const roundsMetaOnly =
+      evaluationRounds.length > 0
+        ? evaluationRounds.map((er) => {
+            const meta = { ...er };
+            delete meta.files;
+            return meta;
+          })
+        : undefined;
+
     updateResult(placeholderId, {
       id: placeholderId,
       status: GENERATION_STATUS.COMPLETE,
       agenticPhase: mode === 'agentic' ? 'complete' : undefined,
       evaluationStatus: undefined,
+      ...(roundsMetaOnly ? { evaluationRounds: roundsMetaOnly } : {}),
       metadata: {
         model,
         completedAt: new Date().toISOString(),

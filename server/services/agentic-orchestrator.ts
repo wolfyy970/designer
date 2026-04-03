@@ -120,6 +120,7 @@ async function runEvaluationRound(
 
   const snapshot: EvaluationRoundSnapshot = {
     round,
+    files: { ...files },
     design: workers.design,
     strategy: workers.strategy,
     implementation: workers.implementation,

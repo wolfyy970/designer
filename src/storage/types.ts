@@ -17,6 +17,13 @@ export interface StoragePort {
   saveFiles(resultId: string, files: Record<string, string>): Promise<void>;
   loadFiles(resultId: string): Promise<Record<string, string> | undefined>;
   deleteFiles(resultId: string): Promise<void>;
+  saveRoundFiles(
+    resultId: string,
+    round: number,
+    files: Record<string, string>,
+  ): Promise<void>;
+  loadRoundFiles(resultId: string, round: number): Promise<Record<string, string> | undefined>;
+  deleteRoundFilesForResult(resultId: string): Promise<void>;
   clearAllFiles(): Promise<void>;
   garbageCollect(activeResultIds: Set<string>): Promise<GCResult>;
 }

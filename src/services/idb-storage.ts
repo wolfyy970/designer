@@ -65,6 +65,37 @@ export function deleteFiles(resultId: string): Promise<void> {
   return del(resultId, filesStore);
 }
 
+/** Key pattern: `{resultId}:round:{round}` — keep in sync with garbageCollect. */
+export function roundFilesKey(resultId: string, round: number): string {
+  return `${resultId}:round:${round}`;
+}
+
+export function saveRoundFiles(
+  resultId: string,
+  round: number,
+  files: Record<string, string>,
+): Promise<void> {
+  return set(roundFilesKey(resultId, round), files, filesStore);
+}
+
+export function loadRoundFiles(
+  resultId: string,
+  round: number,
+): Promise<Record<string, string> | undefined> {
+  return get(roundFilesKey(resultId, round), filesStore);
+}
+
+/** Remove all persisted eval-round file snapshots for a result. */
+export async function deleteRoundFilesForResult(resultId: string): Promise<void> {
+  const prefix = `${resultId}:round:`;
+  const fileKeys = (await keys(filesStore)) as string[];
+  for (const key of fileKeys) {
+    if (typeof key === 'string' && key.startsWith(prefix)) {
+      await del(key, filesStore);
+    }
+  }
+}
+
 export function clearAllFiles(): Promise<void> {
   return clear(filesStore);
 }
@@ -96,8 +127,12 @@ export async function garbageCollect(
   }
 
   const fileKeys = (await keys(filesStore)) as string[];
+  const roundSep = ':round:';
   for (const key of fileKeys) {
-    if (!activeResultIds.has(key as string)) {
+    const k = key as string;
+    const roundIdx = k.indexOf(roundSep);
+    const ownerId = roundIdx === -1 ? k : k.slice(0, roundIdx);
+    if (!activeResultIds.has(ownerId)) {
       await del(key, filesStore);
       filesRemoved++;
     }

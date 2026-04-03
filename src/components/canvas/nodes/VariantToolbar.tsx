@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Trash2,
+  Star,
 } from 'lucide-react';
 import { ZOOM_MIN, ZOOM_MAX } from '../../../hooks/useVariantZoom';
 
@@ -36,6 +37,11 @@ interface VariantToolbarProps {
   onToggleWorkspace: () => void;
   isWorkspaceOpen: boolean;
   onRemove: () => void;
+  /** User “best” override (same hypothesis lane) */
+  showMarkUserBest?: boolean;
+  showClearUserBest?: boolean;
+  onMarkUserBest?: () => void;
+  onClearUserBest?: () => void;
 }
 
 export default function VariantToolbar({
@@ -59,6 +65,10 @@ export default function VariantToolbar({
   onToggleWorkspace,
   isWorkspaceOpen,
   onRemove,
+  showMarkUserBest = false,
+  showClearUserBest = false,
+  onMarkUserBest,
+  onClearUserBest,
 }: VariantToolbarProps) {
   return (
     <div className="flex items-center gap-1 border-b border-border-subtle px-2.5 py-1">
@@ -140,6 +150,34 @@ export default function VariantToolbar({
 
       {/* Actions */}
       <div className="h-3 w-px bg-border-subtle" />
+      {showClearUserBest && onClearUserBest ? (
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onClearUserBest();
+          }}
+          className="nodrag rounded p-0.5 text-amber-500 transition-colors hover:text-amber-400"
+          title="Clear your best pick (use evaluator ranking)"
+        >
+          <Star size={10} className="fill-current" />
+        </button>
+      ) : null}
+      {showMarkUserBest && onMarkUserBest ? (
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onMarkUserBest();
+          }}
+          className="nodrag rounded p-0.5 text-fg-faint transition-colors hover:text-fg-muted"
+          title="Mark this version as best for this lane"
+        >
+          <Star size={10} />
+        </button>
+      ) : null}
       <button
         onPointerDown={(e) => {
           e.preventDefault();

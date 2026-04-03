@@ -12,6 +12,9 @@ export const browserStorage: StoragePort = {
   saveFiles: idb.saveFiles,
   loadFiles: idb.loadFiles,
   deleteFiles: idb.deleteFiles,
+  saveRoundFiles: idb.saveRoundFiles,
+  loadRoundFiles: idb.loadRoundFiles,
+  deleteRoundFilesForResult: idb.deleteRoundFilesForResult,
   clearAllFiles: idb.clearAllFiles,
   garbageCollect: async (activeResultIds: Set<string>): Promise<GCResult> => {
     return idb.garbageCollect(activeResultIds);

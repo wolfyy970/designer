@@ -22,23 +22,25 @@ export function useVersionStack(
 ) {
   const results = useGenerationStore((s) => s.results);
   const selectedVersions = useGenerationStore((s) => s.selectedVersions);
+  const userBestOverrides = useGenerationStore((s) => s.userBestOverrides);
   const setSelectedVersion = useGenerationStore((s) => s.setSelectedVersion);
+  const setUserBest = useGenerationStore((s) => s.setUserBest);
 
   const stack = useMemo(() => {
     if (!variantStrategyId) return [] as GenerationResult[];
-    const state = { results, selectedVersions };
+    const state = { results, selectedVersions, userBestOverrides };
     return pinnedRunId
       ? getScopedStack(state, variantStrategyId, pinnedRunId)
       : getStack(state, variantStrategyId);
-  }, [results, selectedVersions, variantStrategyId, pinnedRunId]);
+  }, [results, selectedVersions, userBestOverrides, variantStrategyId, pinnedRunId]);
 
   const activeResult = useMemo(() => {
     if (!variantStrategyId) return undefined;
-    const state = { results, selectedVersions };
+    const state = { results, selectedVersions, userBestOverrides };
     return pinnedRunId
       ? getScopedActiveResult(state, variantStrategyId, pinnedRunId)
       : getActiveResult(state, variantStrategyId);
-  }, [results, selectedVersions, variantStrategyId, pinnedRunId]);
+  }, [results, selectedVersions, userBestOverrides, variantStrategyId, pinnedRunId]);
 
   const versionKey =
     pinnedRunId && variantStrategyId
@@ -50,8 +52,11 @@ export function useVersionStack(
     [stack],
   );
   const bestCompletedResult = useMemo(
-    () => getBestCompleteResult(completedStack),
-    [completedStack],
+    () =>
+      variantStrategyId
+        ? getBestCompleteResult(completedStack, { variantStrategyId, userBestOverrides })
+        : getBestCompleteResult(completedStack),
+    [completedStack, variantStrategyId, userBestOverrides],
   );
   const isActiveBest = !!activeResult && activeResult.id === bestCompletedResult?.id;
 
@@ -81,5 +86,7 @@ export function useVersionStack(
     goNewer,
     goOlder,
     setSelectedVersion,
+    setUserBest,
+    userBestOverrides,
   };
 }

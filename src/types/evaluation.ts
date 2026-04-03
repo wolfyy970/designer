@@ -62,6 +62,8 @@ export interface AggregatedEvaluationReport {
 
 export interface EvaluationRoundSnapshot {
   round: number;
+  /** Virtual file tree evaluated in this round (build or post-revision); persisted in IndexedDB per round. */
+  files?: Record<string, string>;
   design?: EvaluatorWorkerReport;
   strategy?: EvaluatorWorkerReport;
   implementation?: EvaluatorWorkerReport;

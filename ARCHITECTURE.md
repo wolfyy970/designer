@@ -305,7 +305,9 @@ Model connections are column-scoped: a Model node connects only to adjacent-colu
 
 ### Version Stacking
 
-Results accumulate across generation runs. Each result has a `runId` (UUID) and `runNumber` (sequential per hypothesis). Variant nodes reuse the same canvas node across runs, with version navigation.
+Results accumulate across generation runs. Each result has a `runId` (UUID) and `runNumber` (sequential per hypothesis). Variant nodes reuse the same canvas node across runs, with version navigation. **`userBestOverrides`** in `generation-store` pins which complete `GenerationResult` is treated as “best” for a `variantStrategyId` ahead of evaluator scores; see `getBestCompleteResult` / `setUserBest`. **`domain-variant-selectors.ts`** maps a variant node id → hypothesis and lists sibling variant node ids for **hypothesis-scoped** full-screen stepping.
+
+**Agentic eval-round files:** Each `EvaluationRoundSnapshot` may carry a `files` map; the orchestrator attaches the tree that was scored that round. The client persists those blobs under IndexedDB keys `{resultId}:round:{round}` and strips `files` from persisted `evaluationRounds` / provenance to save space (`StoragePort.saveRoundFiles` / `loadRoundFiles`).
 
 ### Parallel Generation
 
@@ -343,7 +345,7 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 |-------|-------------|--------------|
 | `spec-store` | localStorage | Active `DesignSpec`, section/image CRUD |
 | `compiler-store` | localStorage | `DimensionMap` per **incubator id** (same id as the Incubator canvas node today), `CompiledPrompt[]`, variant editing |
-| `generation-store` | localStorage + StoragePort | `GenerationResult[]` metadata in localStorage, code in IndexedDB (`code` store), multi-file in IndexedDB (`files` store). `liveCode`, `liveFiles`, `liveFilesPlan` are in-memory only, stripped by `partialize`. |
+| `generation-store` | localStorage + StoragePort | `GenerationResult[]` metadata in localStorage (persist v4 adds `userBestOverrides`; `evaluationRounds[].files` stripped in `partialize`), code in IndexedDB (`code` store), multi-file in IndexedDB (`files` store), optional per-eval-round file snapshots (`{resultId}:round:{n}` in the same files DB). `liveCode`, `liveFiles`, `liveFilesPlan` are in-memory only, stripped by `partialize`. |
 | `workspace-domain-store` | localStorage | Domain-first relations and payloads (hypotheses, incubator wiring, model assignments, variant slots, mirrored node content). Prefer this for workflow semantics. |
 | `canvas-store` | localStorage | React Flow nodes/edges, viewport, auto-layout, transient UI (lineage, edge status, `variantNodeIdMap`). Kept in sync with domain on connect/disconnect and compile/generate lifecycle. |
 | `prompt-store` | localStorage | Prompt template overrides (sent as per-request overrides to server). Includes `genSystemHtmlAgentic`. |

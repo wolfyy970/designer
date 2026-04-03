@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { X, Columns2, ChevronLeft, ChevronRight, Loader2, AlertCircle } from 'lucide-react';
+import { X, Columns2, ChevronLeft, ChevronRight, Loader2, AlertCircle, Star } from 'lucide-react';
 import { useCompilerStore, findVariantStrategy } from '../../stores/compiler-store';
 import { useCanvasStore } from '../../stores/canvas-store';
 import { useGenerationStore } from '../../stores/generation-store';
+import { useWorkspaceDomainStore } from '../../stores/workspace-domain-store';
+import {
+  findHypothesisIdForVariantNode,
+  getVariantNodeIdsForHypothesis,
+} from '../../workspace/domain-variant-selectors';
 import { bundleVirtualFS, prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
 import { normalizeError } from '../../lib/error-utils';
 import { useResultCode } from '../../hooks/useResultCode';
@@ -12,8 +17,8 @@ import { badgeColor } from '../../lib/badge-colors';
 import type { GenerationResult } from '../../types/provider';
 import { GENERATION_STATUS } from '../../constants/generation';
 
-/** Sorted list of variant canvas node IDs that have at least one result. */
-function useVariantNodeIds(): string[] {
+/** All canvas variant nodes with results, sorted by position (fallback). */
+function useAllVariantNodeIdsWithResults(): string[] {
   const nodes = useCanvasStore((s) => s.nodes);
   const results = useGenerationStore((s) => s.results);
   return useMemo(() => {
@@ -26,6 +31,21 @@ function useVariantNodeIds(): string[] {
       return vsId && vsIdsWithResults.has(vsId);
     }).map((n) => n.id);
   }, [nodes, results]);
+}
+
+/** Hypothesis-scoped variant node ids with results; falls back to canvas-wide when domain has no slot. */
+function useHypothesisScopedVariantNodeIds(expandedVariantId: string | null): string[] {
+  const variantSlots = useWorkspaceDomainStore((s) => s.variantSlots);
+  const fallback = useAllVariantNodeIdsWithResults();
+  return useMemo(() => {
+    if (!expandedVariantId) return fallback;
+    const hypothesisId = findHypothesisIdForVariantNode(variantSlots, expandedVariantId);
+    if (!hypothesisId) return fallback;
+    const candidateIds = getVariantNodeIdsForHypothesis(variantSlots, hypothesisId);
+    const allowed = new Set(candidateIds);
+    const ordered = fallback.filter((id) => allowed.has(id));
+    return ordered.length > 0 ? ordered : fallback;
+  }, [variantSlots, expandedVariantId, fallback]);
 }
 
 export default function VariantPreviewOverlay() {
@@ -53,10 +73,13 @@ export default function VariantPreviewOverlay() {
     stack,
     activeResult,
     isActiveBest,
+    bestCompletedResult,
     stackIndex,
     stackTotal,
     goNewer,
     goOlder,
+    setUserBest,
+    userBestOverrides,
   } = useVersionStack(variantStrategyId, pinnedRunId);
 
   const legacyResult = useMemo(
@@ -82,8 +105,11 @@ export default function VariantPreviewOverlay() {
     [stack, result?.id],
   );
 
-  // Cross-variant (left/right) navigation
-  const variantNodeIds = useVariantNodeIds();
+  // Cross-variant (left/right) navigation — same hypothesis only when domain slot exists
+  const variantNodeIds = useHypothesisScopedVariantNodeIds(expandedVariantId);
+  const hasUserBestOverride = !!(
+    variantStrategyId && userBestOverrides[variantStrategyId]
+  );
   const variantIdx = expandedVariantId ? variantNodeIds.indexOf(expandedVariantId) : -1;
   const hasPrevVariant = variantIdx > 0;
   const hasNextVariant = variantIdx >= 0 && variantIdx < variantNodeIds.length - 1;
@@ -272,6 +298,34 @@ export default function VariantPreviewOverlay() {
         </div>
 
         <div className="flex items-center gap-3">
+          {!pinnedRunId &&
+            variantStrategyId &&
+            result.status === GENERATION_STATUS.COMPLETE && (
+              <>
+                {hasUserBestOverride ? (
+                  <button
+                    type="button"
+                    onClick={() => setUserBest(variantStrategyId, null)}
+                    className="flex items-center gap-1.5 rounded-md border border-white/20 px-3 py-1.5 text-xs text-amber-200/90 transition-colors hover:border-white/40 hover:text-white"
+                    title="Use evaluator ranking again"
+                  >
+                    <Star size={14} className="fill-current" />
+                    Clear best pick
+                  </button>
+                ) : null}
+                {result.id !== bestCompletedResult?.id ? (
+                  <button
+                    type="button"
+                    onClick={() => setUserBest(variantStrategyId, result.id)}
+                    className="flex items-center gap-1.5 rounded-md border border-white/20 px-3 py-1.5 text-xs text-white/70 transition-colors hover:border-white/40 hover:text-white"
+                    title="Prefer this version over evaluator ranking"
+                  >
+                    <Star size={14} />
+                    Mark as best
+                  </button>
+                ) : null}
+              </>
+            )}
           {!compareId && otherResults.length > 0 && (
             <button
               onClick={() => setCompareId(otherResults[0].id)}

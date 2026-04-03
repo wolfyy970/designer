@@ -27,8 +27,9 @@ function makeResult(
 function mockState(
   results: GenerationResult[],
   selectedVersions: Record<string, string> = {},
+  userBestOverrides: Record<string, string> = {},
 ): GenerationState {
-  return { results, selectedVersions };
+  return { results, selectedVersions, userBestOverrides };
 }
 
 // ─── getStack ────────────────────────────────────────────────────────
@@ -190,6 +191,71 @@ describe('getBestCompleteResult', () => {
       makeResult({ id: 'r2', runNumber: 2, evaluationSummary: summary }),
     ]);
     expect(out?.id).toBe('r2');
+  });
+
+  it('honors userBestOverrides over evaluator score', () => {
+    const low = {
+      overallScore: 3.0,
+      normalizedScores: {},
+      hardFails: [],
+      prioritizedFixes: [],
+      shouldRevise: false,
+      revisionBrief: '',
+    };
+    const high = {
+      overallScore: 5.0,
+      normalizedScores: {},
+      hardFails: [],
+      prioritizedFixes: [],
+      shouldRevise: false,
+      revisionBrief: '',
+    };
+    const out = getBestCompleteResult(
+      [
+        makeResult({ id: 'r1', runNumber: 1, evaluationSummary: low }),
+        makeResult({ id: 'r2', runNumber: 2, evaluationSummary: high }),
+      ],
+      { variantStrategyId: 'vs-1', userBestOverrides: { 'vs-1': 'r1' } },
+    );
+    expect(out?.id).toBe('r1');
+  });
+
+  it('ignores userBestOverrides when result id missing from stack', () => {
+    const summary = {
+      overallScore: 5.0,
+      normalizedScores: {},
+      hardFails: [],
+      prioritizedFixes: [],
+      shouldRevise: false,
+      revisionBrief: '',
+    };
+    const out = getBestCompleteResult(
+      [makeResult({ id: 'r1', runNumber: 1, evaluationSummary: summary })],
+      { variantStrategyId: 'vs-1', userBestOverrides: { 'vs-1': 'ghost' } },
+    );
+    expect(out?.id).toBe('r1');
+  });
+});
+
+describe('getActiveResult user best override', () => {
+  it('uses user override when no explicit selection', () => {
+    const summary = (score: number) => ({
+      overallScore: score,
+      normalizedScores: {},
+      hardFails: [],
+      prioritizedFixes: [],
+      shouldRevise: false,
+      revisionBrief: '',
+    });
+    const state = mockState(
+      [
+        makeResult({ id: 'r1', runNumber: 1, evaluationSummary: summary(4.0) }),
+        makeResult({ id: 'r2', runNumber: 2, evaluationSummary: summary(5.0) }),
+      ],
+      {},
+      { 'vs-1': 'r1' },
+    );
+    expect(getActiveResult(state, 'vs-1')?.id).toBe('r1');
   });
 });
 

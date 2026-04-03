@@ -32,16 +32,19 @@ const persistedGenerationResultSchema = z
 const generationPersistSliceSchema = z.object({
   results: z.array(persistedGenerationResultSchema),
   selectedVersions: z.record(z.string(), z.string()).optional(),
+  userBestOverrides: z.record(z.string(), z.string()).optional(),
 });
 
 /** @internal Exported for tests — validates persisted slice after version migrations. */
 export function pickValidatedGenerationPersistSlice(state: Record<string, unknown>): {
   results: GenerationResult[];
   selectedVersions: Record<string, string>;
+  userBestOverrides: Record<string, string>;
 } | null {
   const parsed = generationPersistSliceSchema.safeParse({
     results: state.results,
     selectedVersions: state.selectedVersions,
+    userBestOverrides: state.userBestOverrides,
   });
   if (!parsed.success) return null;
   const results = parsed.data.results.map(
@@ -54,6 +57,7 @@ export function pickValidatedGenerationPersistSlice(state: Record<string, unknow
   return {
     results,
     selectedVersions: parsed.data.selectedVersions ?? {},
+    userBestOverrides: parsed.data.userBestOverrides ?? {},
   };
 }
 
@@ -62,11 +66,14 @@ interface GenerationStore {
   isGenerating: boolean;
   /** Which version is currently displayed per hypothesis (variantStrategyId → resultId) */
   selectedVersions: Record<string, string>;
+  /** User override: prefer this complete result as “best” for a variant strategy lane. */
+  userBestOverrides: Record<string, string>;
 
   addResult: (result: GenerationResult) => void;
   updateResult: (id: string, updates: Partial<GenerationResult>) => void;
   setGenerating: (isGenerating: boolean) => void;
   setSelectedVersion: (variantStrategyId: string, resultId: string) => void;
+  setUserBest: (variantStrategyId: string, resultId: string | null) => void;
   deleteResult: (resultId: string) => void;
   deleteRun: (runId: string) => void;
   reset: () => void;
@@ -78,6 +85,7 @@ export const useGenerationStore = create<GenerationStore>()(
       results: [],
       isGenerating: false,
       selectedVersions: {},
+      userBestOverrides: {},
 
       addResult: (result) =>
         set((state) => ({ results: [...state.results, result] })),
@@ -120,10 +128,22 @@ export const useGenerationStore = create<GenerationStore>()(
           },
         })),
 
+      setUserBest: (variantStrategyId, resultId) =>
+        set((state) => {
+          const userBestOverrides = { ...state.userBestOverrides };
+          if (resultId == null) {
+            delete userBestOverrides[variantStrategyId];
+          } else {
+            userBestOverrides[variantStrategyId] = resultId;
+          }
+          return { userBestOverrides };
+        }),
+
       deleteResult: (resultId) => {
         idbCleanup(storage.deleteCode(resultId));
         idbCleanup(storage.deleteProvenance(resultId));
         idbCleanup(storage.deleteFiles(resultId));
+        idbCleanup(storage.deleteRoundFilesForResult(resultId));
 
         set((state) => {
           const filtered = state.results.filter((r) => r.id !== resultId);
@@ -131,7 +151,11 @@ export const useGenerationStore = create<GenerationStore>()(
           for (const [vsId, rId] of Object.entries(sv)) {
             if (rId === resultId) delete sv[vsId];
           }
-          return { results: filtered, selectedVersions: sv };
+          const userBestOverrides = { ...state.userBestOverrides };
+          for (const [vsId, rId] of Object.entries(userBestOverrides)) {
+            if (rId === resultId) delete userBestOverrides[vsId];
+          }
+          return { results: filtered, selectedVersions: sv, userBestOverrides };
         });
       },
 
@@ -150,21 +174,29 @@ export const useGenerationStore = create<GenerationStore>()(
             idbCleanup(storage.deleteCode(id));
             idbCleanup(storage.deleteProvenance(id));
             idbCleanup(storage.deleteFiles(id));
+            idbCleanup(storage.deleteRoundFilesForResult(id));
           }
 
-          return { results: filtered, selectedVersions: sv };
+          const userBestOverrides = { ...state.userBestOverrides };
+          for (const id of toDelete) {
+            for (const [vsId, rId] of Object.entries(userBestOverrides)) {
+              if (rId === id) delete userBestOverrides[vsId];
+            }
+          }
+
+          return { results: filtered, selectedVersions: sv, userBestOverrides };
         });
       },
 
       reset: () => {
-        set({ results: [], isGenerating: false, selectedVersions: {} });
+        set({ results: [], isGenerating: false, selectedVersions: {}, userBestOverrides: {} });
         idbCleanup(storage.clearAllCodes());
         idbCleanup(storage.clearAllFiles());
       },
     }),
     {
       name: STORAGE_KEYS.GENERATION,
-      version: 3,
+      version: 4,
       partialize: (state) => ({
         // Strip `code`, `liveCode`, and `liveFiles` from persisted results — code lives in IndexedDB
         results: state.results.map((r) => {
@@ -182,9 +214,17 @@ export const useGenerationStore = create<GenerationStore>()(
           delete persisted.lastTraceAt;
           delete persisted.activeToolName;
           delete persisted.activeToolPath;
+          if (persisted.evaluationRounds?.length) {
+            persisted.evaluationRounds = persisted.evaluationRounds.map((er) => {
+              const meta = { ...er };
+              delete meta.files;
+              return meta;
+            });
+          }
           return persisted;
         }),
         selectedVersions: state.selectedVersions,
+        userBestOverrides: state.userBestOverrides,
       }),
       migrate: (persisted, version) => {
         const state = persisted as Record<string, unknown>;
@@ -208,6 +248,10 @@ export const useGenerationStore = create<GenerationStore>()(
             return next;
           });
         }
+        if (version < 4) {
+          (state as Record<string, unknown>).userBestOverrides =
+            (state as Record<string, unknown>).userBestOverrides ?? {};
+        }
         const validated = pickValidatedGenerationPersistSlice(state);
         if (!validated) {
           if (import.meta.env.DEV) {
@@ -215,9 +259,11 @@ export const useGenerationStore = create<GenerationStore>()(
           }
           state.results = [];
           state.selectedVersions = {};
+          (state as Record<string, unknown>).userBestOverrides = {};
         } else {
           state.results = validated.results;
           state.selectedVersions = validated.selectedVersions;
+          (state as Record<string, unknown>).userBestOverrides = validated.userBestOverrides;
         }
         // Zustand merges migrated state with initial state — partial is expected
         return state as unknown as GenerationStore;
@@ -232,6 +278,7 @@ export const useGenerationStore = create<GenerationStore>()(
 export interface GenerationState {
   results: GenerationResult[];
   selectedVersions: Record<string, string>;
+  userBestOverrides?: Record<string, string>;
 }
 
 function getEvaluationRank(result: GenerationResult): number {
@@ -241,9 +288,17 @@ function getEvaluationRank(result: GenerationResult): number {
 
 export function getBestCompleteResult(
   results: GenerationResult[],
+  options?: { variantStrategyId?: string; userBestOverrides?: Record<string, string> },
 ): GenerationResult | undefined {
   const completed = results.filter((r) => r.status === GENERATION_STATUS.COMPLETE);
   if (completed.length === 0) return undefined;
+
+  const vsId = options?.variantStrategyId;
+  const overrides = options?.userBestOverrides;
+  if (vsId && overrides?.[vsId]) {
+    const preferred = completed.find((r) => r.id === overrides[vsId]);
+    if (preferred) return preferred;
+  }
 
   const withEval = completed.filter((r) => r.evaluationSummary);
   if (withEval.length === 0) {
@@ -282,7 +337,12 @@ export function getActiveResult(
     const selected = state.results.find((r) => r.id === selectedId);
     if (selected) return selected;
   }
-  return getBestCompleteResult(stack) ?? stack[0];
+  return (
+    getBestCompleteResult(stack, {
+      variantStrategyId,
+      userBestOverrides: state.userBestOverrides,
+    }) ?? stack[0]
+  );
 }
 
 /** Get all results for a hypothesis scoped to a specific run, newest first */
@@ -313,7 +373,12 @@ export function getScopedActiveResult(
     const selected = state.results.find((r) => r.id === selectedId);
     if (selected) return selected;
   }
-  return getBestCompleteResult(stack) ?? stack[0];
+  return (
+    getBestCompleteResult(stack, {
+      variantStrategyId,
+      userBestOverrides: state.userBestOverrides,
+    }) ?? stack[0]
+  );
 }
 
 /** Next run number for a hypothesis */

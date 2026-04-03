@@ -30,4 +30,23 @@ describe('pickValidatedGenerationPersistSlice', () => {
       }),
     ).toBeNull();
   });
+
+  it('accepts userBestOverrides when present', () => {
+    const v = pickValidatedGenerationPersistSlice({
+      results: [
+        {
+          id: 'a',
+          variantStrategyId: 'vs',
+          providerId: 'p',
+          status: GENERATION_STATUS.COMPLETE,
+          runId: 'r',
+          runNumber: 1,
+          metadata: { model: 'm' },
+        },
+      ],
+      selectedVersions: { vs: 'a' },
+      userBestOverrides: { vs: 'a' },
+    });
+    expect(v?.userBestOverrides).toEqual({ vs: 'a' });
+  });
 });

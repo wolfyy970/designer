@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
+import { storage } from '../../storage';
 import { useCanvasStore } from '../../stores/canvas-store';
 import { useCompilerStore, findVariantStrategy } from '../../stores/compiler-store';
 import type { VariantNodeData } from '../../types/canvas-data';
@@ -91,18 +92,8 @@ export default function VariantRunInspector() {
   const { files, isLoading: filesLoading } = useResultFiles(result?.id, result?.status);
 
   const currentFiles = files ?? result?.liveFiles;
-  const isMultiFile = !!currentFiles && Object.keys(currentFiles).length > 0;
   const isGenerating = result?.status === GENERATION_STATUS.GENERATING;
   const elapsed = useElapsedTimer(isGenerating);
-
-  const bundledHtml = useMemo(() => {
-    if (!currentFiles || Object.keys(currentFiles).length === 0) return '';
-    try {
-      return bundleVirtualFS(currentFiles);
-    } catch (err) {
-      return renderErrorHtml(normalizeError(err));
-    }
-  }, [currentFiles]);
 
   const singleFileSrc = useMemo(() => {
     const src =
@@ -127,6 +118,69 @@ export default function VariantRunInspector() {
   const safeRoundIdx = Math.min(evalRoundIdx, Math.max(0, rounds.length - 1));
   const selectedRound = rounds.length > 0 ? rounds[safeRoundIdx] : undefined;
   const evalSummary = selectedRound?.aggregate ?? result?.evaluationSummary;
+
+  const lastRoundNum = rounds.length > 0 ? rounds[rounds.length - 1]!.round : undefined;
+  const isLatestEvalRound =
+    selectedRound != null && lastRoundNum != null && selectedRound.round === lastRoundNum;
+
+  const [roundFilesFromIdb, setRoundFilesFromIdb] = useState<Record<string, string> | undefined>(
+    undefined,
+  );
+  useEffect(() => {
+    if (
+      !result?.id ||
+      result.status !== GENERATION_STATUS.COMPLETE ||
+      !selectedRound ||
+      rounds.length <= 1
+    ) {
+      setRoundFilesFromIdb(undefined);
+      return;
+    }
+    if (isLatestEvalRound) {
+      setRoundFilesFromIdb(undefined);
+      return;
+    }
+    let cancelled = false;
+    void storage
+      .loadRoundFiles(result.id, selectedRound.round)
+      .then((f) => {
+        if (!cancelled) setRoundFilesFromIdb(f);
+      })
+      .catch(() => {
+        if (!cancelled) setRoundFilesFromIdb(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [result?.id, result?.status, selectedRound, rounds.length, isLatestEvalRound]);
+
+  const designPreviewFiles = useMemo(() => {
+    if (!result || rounds.length <= 1) {
+      return currentFiles;
+    }
+    if (isLatestEvalRound) {
+      return currentFiles;
+    }
+    return roundFilesFromIdb ?? selectedRound?.files ?? currentFiles;
+  }, [
+    result,
+    rounds.length,
+    isLatestEvalRound,
+    roundFilesFromIdb,
+    selectedRound?.files,
+    currentFiles,
+  ]);
+
+  const designIsMultiFile =
+    !!designPreviewFiles && Object.keys(designPreviewFiles).length > 0;
+  const designBundledHtml = useMemo(() => {
+    if (!designPreviewFiles || Object.keys(designPreviewFiles).length === 0) return '';
+    try {
+      return bundleVirtualFS(designPreviewFiles);
+    } catch (err) {
+      return renderErrorHtml(normalizeError(err));
+    }
+  }, [designPreviewFiles]);
 
   const tabBtn = useCallback(
     (id: TabId, label: string) => (
@@ -259,20 +313,55 @@ export default function VariantRunInspector() {
 
         {tab === 'design' && (
           <div className="flex min-h-0 flex-1 flex-col bg-bg">
+            {rounds.length > 1 && (
+              <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-3 py-1.5">
+                <span className="text-[9px] font-medium uppercase tracking-wider text-fg-faint">
+                  Eval round
+                </span>
+                <select
+                  className="nodrag max-w-[220px] rounded border border-border-subtle bg-surface px-2 py-0.5 text-[10px] text-fg"
+                  value={safeRoundIdx}
+                  onChange={(e) => setEvalRoundIdx(Number(e.target.value))}
+                >
+                  {rounds.map((r, i) => (
+                    <option key={r.round} value={i}>
+                      Round {r.round}
+                      {r.round === lastRoundNum ? ' (final)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             {(codeLoading || filesLoading) && result?.status === GENERATION_STATUS.COMPLETE && (
               <div className="flex flex-1 items-center justify-center">
                 <Loader2 size={20} className="animate-spin text-fg-muted" />
               </div>
             )}
-            {!codeLoading && !filesLoading && isMultiFile && (
+            {rounds.length > 1 &&
+              !isLatestEvalRound &&
+              result?.status === GENERATION_STATUS.COMPLETE &&
+              !roundFilesFromIdb &&
+              !selectedRound?.files && (
+                <div className="flex flex-1 items-center justify-center px-3">
+                  <Loader2 size={18} className="animate-spin text-fg-muted" />
+                </div>
+              )}
+            {!codeLoading &&
+              !filesLoading &&
+              !(rounds.length > 1 && !isLatestEvalRound && !roundFilesFromIdb && !selectedRound?.files) &&
+              designIsMultiFile && (
               <iframe
                 title={`Design preview: ${variantName}`}
                 sandbox="allow-scripts"
-                srcDoc={bundledHtml || undefined}
+                srcDoc={designBundledHtml || undefined}
                 className="min-h-[240px] flex-1 border-0 bg-white"
               />
             )}
-            {!codeLoading && !filesLoading && !isMultiFile && singleFileSrc && (
+            {!codeLoading &&
+              !filesLoading &&
+              !(rounds.length > 1 && !isLatestEvalRound && !roundFilesFromIdb && !selectedRound?.files) &&
+              !designIsMultiFile &&
+              singleFileSrc && (
               <iframe
                 title={`Design preview: ${variantName}`}
                 sandbox="allow-scripts"
@@ -280,10 +369,18 @@ export default function VariantRunInspector() {
                 className="min-h-[240px] flex-1 border-0 bg-white"
               />
             )}
-            {!codeLoading && !filesLoading && !isMultiFile && !singleFileSrc && (
+            {!codeLoading &&
+              !filesLoading &&
+              !(rounds.length > 1 && !isLatestEvalRound && !roundFilesFromIdb && !selectedRound?.files) &&
+              !designIsMultiFile &&
+              !singleFileSrc && (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
                 <p className="text-[10px] text-fg-muted">
-                  {isGenerating ? 'Preview appears when the first artifact is ready.' : 'No preview available.'}
+                  {isGenerating
+                    ? 'Preview appears when the first artifact is ready.'
+                    : rounds.length > 1 && !isLatestEvalRound
+                      ? 'No file snapshot for this round (re-run agentic to capture).'
+                      : 'No preview available.'}
                 </p>
               </div>
             )}

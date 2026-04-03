@@ -38,7 +38,7 @@ The primary interface is a visual node-graph canvas (`/canvas`, the default rout
 3. **Incubator** — Connect input nodes and a Model node, then click Generate to produce hypothesis strategies
 4. **Hypotheses** — Editable strategy cards. Connect a Model node, choose **Direct** (one-shot) or **Agentic**, then **Generate** or **Run agent**
 5. **Design System** (optional) — Connect to hypotheses to inject design tokens into generation
-6. **Variants** — Rendered design previews with zoom, version navigation, and full-screen. Agentic results include a file explorer, zip download, and (when the run finishes) an evaluation scorecard plus optional headless-browser thumbnail.
+6. **Variants** — Rendered design previews with zoom, version navigation, full-screen (hypothesis-scoped design stepping when domain slots exist), and optional **mark as best** vs evaluator ranking. Agentic results include a file explorer, zip download, run workspace with multi-round eval preview when applicable, and (when the run finishes) an evaluation scorecard plus optional headless-browser thumbnail.
 
 Nodes connect left-to-right. Auto-layout arranges everything based on connections. Variants can connect back to Existing Design for iterative feedback loops.
 
