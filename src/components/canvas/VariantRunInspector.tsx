@@ -18,11 +18,13 @@ import {
   Timeline,
   TodoTracker,
 } from './variant-run';
+import FileExplorer from './nodes/FileExplorer';
 
-type TabId = 'monitor' | 'design' | 'evaluation';
+type TabId = 'monitor' | 'files' | 'design' | 'evaluation';
 
 const TAB_DEFS: { id: TabId; label: string }[] = [
   { id: 'monitor', label: 'Monitor' },
+  { id: 'files', label: 'Files' },
   { id: 'design', label: 'Design' },
   { id: 'evaluation', label: 'Evaluation' },
 ];
@@ -64,9 +66,11 @@ export default function VariantRunInspector() {
   }, [runInspectorVariantNodeId, closeRunInspector]);
 
   const [tab, setTab] = useState<TabId>('monitor');
+  const [filesTabPath, setFilesTabPath] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     setTab('monitor');
+    setFilesTabPath(undefined);
   }, [runInspectorVariantNodeId]);
 
   const data = node?.type === 'variant' ? (node.data as VariantNodeData) : undefined;
@@ -182,13 +186,36 @@ export default function VariantRunInspector() {
     }
   }, [designPreviewFiles]);
 
+  const writtenForFilesTab = designPreviewFiles;
+  const filesTabPlanned =
+    isGenerating && result?.liveFilesPlan?.length ? result.liveFilesPlan : undefined;
+
+  useEffect(() => {
+    if (tab !== 'files') return;
+    const written = writtenForFilesTab ?? {};
+    const inWritten = filesTabPath != null && filesTabPath in written;
+    const inPlanned = filesTabPlanned?.includes(filesTabPath ?? '') ?? false;
+    if (filesTabPath && (inWritten || inPlanned)) return;
+    const preferred = ['index.html', 'styles.css', 'app.js'];
+    const firstWritten =
+      preferred.find((p) => p in written) ??
+      Object.keys(written).sort()[0];
+    const next = firstWritten ?? filesTabPlanned?.[0];
+    setFilesTabPath(next);
+  }, [tab, writtenForFilesTab, filesTabPlanned, filesTabPath]);
+
+  const filesTabSnippet =
+    filesTabPath && writtenForFilesTab && writtenForFilesTab[filesTabPath] != null
+      ? writtenForFilesTab[filesTabPath]
+      : undefined;
+
   const tabBtn = useCallback(
     (id: TabId, label: string) => (
       <button
         key={id}
         type="button"
         onClick={() => setTab(id)}
-        className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${
+        className={`shrink-0 rounded px-2 py-0.5 text-nano font-medium transition-colors ${
           tab === id
             ? 'bg-surface-secondary text-fg'
             : 'text-fg-muted hover:text-fg-secondary'
@@ -228,7 +255,7 @@ export default function VariantRunInspector() {
             <X size={14} />
           </button>
         </div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-fg-muted">
+        <div className="mt-0.5 flex items-center gap-1.5 text-nano text-fg-muted">
           {versionKey && result?.runNumber != null && (
             <span className="tabular-nums text-fg-secondary">v{result.runNumber}</span>
           )}
@@ -289,12 +316,12 @@ export default function VariantRunInspector() {
             {/* Tasks — fixed, auto-height, fits content snugly */}
             <div className="shrink-0 border-b border-border-subtle">
               <div className="flex items-center bg-surface-secondary/40 px-3 py-0.5">
-                <span className="text-[8px] font-semibold uppercase tracking-widest text-fg-faint">Tasks</span>
+                <span className="text-pico font-semibold uppercase tracking-widest text-fg-faint">Tasks</span>
               </div>
               {result?.liveTodos && result.liveTodos.length > 0 ? (
                 <TodoTracker todos={result.liveTodos} />
               ) : (
-                <p className="px-3 py-1.5 text-[10px] text-fg-muted">
+                <p className="px-3 py-1.5 text-nano text-fg-muted">
                   {isGenerating ? 'Planning…' : 'No tasks.'}
                 </p>
               )}
@@ -311,15 +338,104 @@ export default function VariantRunInspector() {
           </div>
         )}
 
+        {tab === 'files' && (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-bg">
+            {rounds.length > 1 && (
+              <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-3 py-1.5">
+                <span className="text-badge font-medium uppercase tracking-wider text-fg-faint">
+                  Eval round
+                </span>
+                <select
+                  className="nodrag max-w-[220px] rounded border border-border-subtle bg-surface px-2 py-0.5 text-nano text-fg"
+                  value={safeRoundIdx}
+                  onChange={(e) => setEvalRoundIdx(Number(e.target.value))}
+                >
+                  {rounds.map((r, i) => (
+                    <option key={r.round} value={i}>
+                      Round {r.round}
+                      {r.round === lastRoundNum ? ' (final)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {(codeLoading || filesLoading) && result?.status === GENERATION_STATUS.COMPLETE && (
+              <div className="flex flex-1 items-center justify-center">
+                <Loader2 size={20} className="animate-spin text-fg-muted" />
+              </div>
+            )}
+            {rounds.length > 1 &&
+              !isLatestEvalRound &&
+              result?.status === GENERATION_STATUS.COMPLETE &&
+              !roundFilesFromIdb &&
+              !selectedRound?.files && (
+                <div className="flex flex-1 items-center justify-center px-3">
+                  <Loader2 size={18} className="animate-spin text-fg-muted" />
+                </div>
+              )}
+            {!codeLoading &&
+              !filesLoading &&
+              !(rounds.length > 1 && !isLatestEvalRound && !roundFilesFromIdb && !selectedRound?.files) &&
+              (Object.keys(writtenForFilesTab ?? {}).length > 0 ||
+                (filesTabPlanned?.length ?? 0) > 0) && (
+                <div className="flex min-h-0 flex-1 overflow-hidden">
+                  <div className="flex w-[min(40%,11rem)] shrink-0 flex-col border-r border-border-subtle bg-surface">
+                    <div className="border-b border-border-subtle px-2 py-1.5">
+                      <span className="text-badge font-medium uppercase tracking-wider text-fg-faint">
+                        Files
+                      </span>
+                    </div>
+                    <FileExplorer
+                      files={writtenForFilesTab ?? {}}
+                      plannedFiles={filesTabPlanned}
+                      activeFile={filesTabPath}
+                      onSelectFile={setFilesTabPath}
+                      isGenerating={isGenerating}
+                      writingFile={result?.activeToolPath}
+                      allowSelectPlanned
+                      className="flex-1 min-h-0"
+                    />
+                  </div>
+                  <div className="nodrag nowheel min-h-0 min-w-0 flex-1 overflow-y-auto">
+                    {filesTabSnippet != null ? (
+                      <pre className="min-h-full p-3 font-mono text-nano leading-relaxed text-fg-secondary whitespace-pre-wrap">
+                        {filesTabSnippet}
+                      </pre>
+                    ) : (
+                      <p className="p-3 text-nano text-fg-muted">
+                        {filesTabPath
+                          ? 'Not written yet — watch the Monitor stream for updates.'
+                          : 'No files in this run.'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            {!codeLoading &&
+              !filesLoading &&
+              !(rounds.length > 1 && !isLatestEvalRound && !roundFilesFromIdb && !selectedRound?.files) &&
+              Object.keys(writtenForFilesTab ?? {}).length === 0 &&
+              (filesTabPlanned?.length ?? 0) === 0 && (
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+                  <p className="text-nano text-fg-muted">
+                    {isGenerating
+                      ? 'Paths appear here when the agent plans and writes files.'
+                      : 'No project files for this run.'}
+                  </p>
+                </div>
+              )}
+          </div>
+        )}
+
         {tab === 'design' && (
           <div className="flex min-h-0 flex-1 flex-col bg-bg">
             {rounds.length > 1 && (
               <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-3 py-1.5">
-                <span className="text-[9px] font-medium uppercase tracking-wider text-fg-faint">
+                <span className="text-badge font-medium uppercase tracking-wider text-fg-faint">
                   Eval round
                 </span>
                 <select
-                  className="nodrag max-w-[220px] rounded border border-border-subtle bg-surface px-2 py-0.5 text-[10px] text-fg"
+                  className="nodrag max-w-[220px] rounded border border-border-subtle bg-surface px-2 py-0.5 text-nano text-fg"
                   value={safeRoundIdx}
                   onChange={(e) => setEvalRoundIdx(Number(e.target.value))}
                 >
@@ -375,7 +491,7 @@ export default function VariantRunInspector() {
               !designIsMultiFile &&
               !singleFileSrc && (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
-                <p className="text-[10px] text-fg-muted">
+                <p className="text-nano text-fg-muted">
                   {isGenerating
                     ? 'Preview appears when the first artifact is ready.'
                     : rounds.length > 1 && !isLatestEvalRound
@@ -389,35 +505,76 @@ export default function VariantRunInspector() {
 
         {tab === 'evaluation' && (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {rounds.length > 1 && (
-              <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-3 py-1.5">
-                <span className="text-[9px] font-medium uppercase tracking-wider text-fg-faint">
-                  Round
-                </span>
-                <select
-                  className="nodrag max-w-[200px] rounded border border-border-subtle bg-surface px-2 py-0.5 text-[10px] text-fg"
-                  value={safeRoundIdx}
-                  onChange={(e) => setEvalRoundIdx(Number(e.target.value))}
-                >
-                  {rounds.map((r, i) => (
-                    <option key={r.round} value={i}>
-                      Round {r.round}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {evalSummary ? (
-                <EvaluationScorecard
-                  summary={evalSummary}
-                  latestSnapshot={selectedRound}
-                  className="max-h-none min-h-0 flex-1 border-t-0"
-                />
+            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+              {rounds.length > 0 ? (
+                <div className="flex flex-col gap-3 p-3">
+                  {rounds.map((round) => {
+                    const isLatest = lastRoundNum != null && round.round === lastRoundNum;
+                    return (
+                      <article
+                        key={round.round}
+                        className="overflow-hidden rounded-lg border border-border-subtle bg-surface-secondary/25"
+                      >
+                        <header className="flex items-start justify-between gap-2 border-b border-border-subtle bg-surface-secondary/50 px-3 py-2">
+                          <div className="min-w-0 space-y-0.5">
+                            <div className="text-nano font-semibold uppercase tracking-wide text-fg-secondary">
+                              Round {round.round}
+                              {isLatest ? (
+                                <span className="ml-1.5 font-normal normal-case text-fg-faint">
+                                  · latest
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="text-badge text-fg-muted">
+                              {round.aggregate.shouldRevise ? 'Revise suggested' : 'Pass'}
+                            </div>
+                          </div>
+                          <span className="shrink-0 tabular-nums font-mono text-sm text-accent">
+                            {round.aggregate.overallScore.toFixed(1)}
+                          </span>
+                        </header>
+                        <div className="px-3 pb-3 pt-1">
+                          <EvaluationScorecard
+                            summary={round.aggregate}
+                            latestSnapshot={round}
+                            mode="panel"
+                            showAggregateHeader={false}
+                          />
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : evalSummary ? (
+                <div className="p-3">
+                  <article className="overflow-hidden rounded-lg border border-border-subtle bg-surface-secondary/25">
+                    <header className="flex items-start justify-between gap-2 border-b border-border-subtle bg-surface-secondary/50 px-3 py-2">
+                      <div className="min-w-0 space-y-0.5">
+                        <div className="text-nano font-semibold uppercase tracking-wide text-fg-secondary">
+                          Evaluation
+                        </div>
+                        <div className="text-badge text-fg-muted">
+                          {evalSummary.shouldRevise ? 'Revise suggested' : 'Pass'}
+                        </div>
+                      </div>
+                      <span className="shrink-0 tabular-nums font-mono text-sm text-accent">
+                        {evalSummary.overallScore.toFixed(1)}
+                      </span>
+                    </header>
+                    <div className="px-3 pb-3 pt-1">
+                      <EvaluationScorecard
+                        summary={evalSummary}
+                        latestSnapshot={selectedRound}
+                        mode="panel"
+                        showAggregateHeader={false}
+                      />
+                    </div>
+                  </article>
+                </div>
               ) : (
-                <p className="px-3 py-3 text-[10px] text-fg-muted">
+                <p className="px-3 py-3 text-nano text-fg-muted">
                   {isGenerating
-                    ? 'Evaluation runs after the build phase.'
+                    ? 'Evaluation runs after the build phase; completed rounds will stack here.'
                     : 'No evaluation data for this run.'}
                 </p>
               )}

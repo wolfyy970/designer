@@ -41,6 +41,8 @@ Provider implementations are in `server/services/providers/` (OpenRouter + LM St
 ### Frontend (`src/`)
 A single-page app with one route: `/canvas`. Everything else redirects there.
 
+**Design tokens** — [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md); implementation `src/index.css` `@theme`. Use status colors for eval severity, not `accent`.
+
 **State management** — Zustand stores with `persist` middleware:
 - `workspace-domain-store` — canonical workflow relations (incubator wiring, hypotheses, model assignments, variant slots, mirrored DS/model/critique payloads)
 - `canvas-store` — React Flow nodes, edges, viewport, layout (persist v13); kept in sync with domain via `workspace/domain-commands.ts`. Prefer `removeNode` for deletions so domain + compiler maps stay consistent; orchestrator-only graph filters must pair with `syncDomainForRemovedNode`.

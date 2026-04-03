@@ -255,7 +255,7 @@ export function createVirtualPiCodingTools(
     },
   });
 
-  const ls = createLsToolDefinition(sessionCwd, {
+  const lsInner = createLsToolDefinition(sessionCwd, {
     operations: {
       exists: (absolutePath) => bash.fs.exists(absolutePath),
       stat: async (absolutePath) => {
@@ -267,6 +267,92 @@ export function createVirtualPiCodingTools(
       readdir: async (absolutePath) => bash.fs.readdir(absolutePath),
     },
   });
+
+  type LsExecute = (typeof lsInner)['execute'];
+
+  const ls = {
+    ...lsInner,
+    execute: async (
+      toolCallId: string,
+      params: Parameters<LsExecute>[1],
+      signal: AbortSignal | undefined,
+      onUpdate: Parameters<LsExecute>[3],
+      extCtx: ExtensionContext,
+    ) => {
+      const vfsPaths = bash.fs.getAllPaths();
+      const pathArg =
+        params != null &&
+        typeof params === 'object' &&
+        'path' in params &&
+        typeof (params as { path?: unknown }).path === 'string'
+          ? (params as { path: string }).path
+          : '';
+      const stray = vfsPaths.filter(
+        (p) => p !== SANDBOX_PROJECT_ROOT && !p.startsWith(`${SANDBOX_PROJECT_ROOT}/`),
+      );
+      // #region agent log
+      fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
+        body: JSON.stringify({
+          sessionId: '5b9be9',
+          hypothesisId: stray.length > 0 ? 'H5' : 'H4',
+          location: 'virtual-tools.ts:ls:enter',
+          message: 'virtual ls enter',
+          data: {
+            sandboxRoot: SANDBOX_PROJECT_ROOT,
+            toolCallId,
+            pathArg,
+            vfsTotal: vfsPaths.length,
+            strayCount: stray.length,
+            straySample: stray.slice(0, 6),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      const t0 = Date.now();
+      try {
+        const result = await lsInner.execute(toolCallId, params, signal, onUpdate, extCtx);
+        const first = result.content[0];
+        const textLen =
+          first && typeof first === 'object' && first !== null && 'text' in first
+            ? String((first as { text?: unknown }).text ?? '').length
+            : 0;
+        // #region agent log
+        fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
+          body: JSON.stringify({
+            sessionId: '5b9be9',
+            hypothesisId: 'H4',
+            location: 'virtual-tools.ts:ls:exit',
+            message: 'virtual ls exit',
+            data: { toolCallId, durationMs: Date.now() - t0, textLen },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+        return result;
+      } catch (err) {
+        // #region agent log
+        fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
+          body: JSON.stringify({
+            sessionId: '5b9be9',
+            hypothesisId: 'H4',
+            location: 'virtual-tools.ts:ls:error',
+            message: 'virtual ls throw',
+            data: { toolCallId, err: String(err) },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+        throw err;
+      }
+    },
+  } as (typeof lsInner);
 
   const find = createFindToolDefinition(sessionCwd, {
     operations: {

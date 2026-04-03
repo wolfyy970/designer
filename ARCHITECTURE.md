@@ -30,6 +30,10 @@ flowchart TB
 
 **Local dev** — Two processes: Vite (SPA + HMR on 5173) and Hono (API on 3001 via `tsx watch`). Vite proxy forwards `/api/*` to Hono.
 
+## Design system (frontend)
+
+UI color and typography tokens: **[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)**. Implemented in `src/index.css` (`@theme`).
+
 ## Layered architecture (diagram)
 
 The SPA is not classic MVC, but it helps to map roles: **View** (React / `@xyflow`), **Model** (Zustand stores, workspace DTOs, IndexedDB via `StoragePort`), **Controller** (hooks, `domain-commands`, `src/api/client.ts`). The server keeps routes thin and pushes orchestration into `generate-execution`, providers, and the agentic pipeline.

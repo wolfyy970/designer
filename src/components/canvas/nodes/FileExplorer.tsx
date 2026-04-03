@@ -8,14 +8,16 @@ interface FileExplorerProps {
   onSelectFile: (path: string) => void;
   isGenerating: boolean;
   writingFile?: string;
+  /** When true, paths that exist only in the plan (not yet written) are selectable. */
+  allowSelectPlanned?: boolean;
   className?: string;
 }
 
 function fileIcon(path: string) {
-  if (path.endsWith('.html')) return <FileCode size={11} className="shrink-0 text-orange-400" />;
-  if (path.endsWith('.css')) return <Paintbrush size={11} className="shrink-0 text-blue-400" />;
-  if (path.endsWith('.js') || path.endsWith('.ts')) return <Braces size={11} className="shrink-0 text-yellow-400" />;
-  if (path.endsWith('.json')) return <FileJson size={11} className="shrink-0 text-green-400" />;
+  if (path.endsWith('.html')) return <FileCode size={11} className="shrink-0 text-file-html" />;
+  if (path.endsWith('.css')) return <Paintbrush size={11} className="shrink-0 text-file-css" />;
+  if (path.endsWith('.js') || path.endsWith('.ts')) return <Braces size={11} className="shrink-0 text-file-script" />;
+  if (path.endsWith('.json')) return <FileJson size={11} className="shrink-0 text-file-data" />;
   return <File size={11} className="shrink-0 text-fg-muted" />;
 }
 
@@ -26,6 +28,7 @@ export default function FileExplorer({
   onSelectFile,
   isGenerating,
   writingFile,
+  allowSelectPlanned = false,
   className = '',
 }: FileExplorerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -53,7 +56,7 @@ export default function FileExplorer({
       {Object.entries(groups).map(([dir, groupPaths]) => (
         <div key={dir}>
           {dir && (
-            <div className="px-2 py-1 text-[9px] font-medium uppercase tracking-wider text-fg-faint truncate">
+            <div className="px-2 py-1 text-badge font-medium uppercase tracking-wider text-fg-faint truncate">
               {dir}/
             </div>
           )}
@@ -63,21 +66,27 @@ export default function FileExplorer({
             const isActive = path === activeFile;
             const isWriting = isGenerating && path === writingFile;
             const isPlannedOnly = !isWritten;
+            const canSelect = isWritten || allowSelectPlanned;
             return (
               <button
                 key={path}
-                onPointerDown={() => isWritten && onSelectFile(path)}
-                disabled={isPlannedOnly}
+                type="button"
+                onPointerDown={() => canSelect && onSelectFile(path)}
+                disabled={!canSelect}
                 className={`nodrag flex w-full items-center gap-1.5 px-2 py-1 text-left transition-colors ${
-                  isPlannedOnly
+                  !canSelect
                     ? 'cursor-default opacity-35'
-                    : isActive
-                      ? 'bg-accent/15 text-fg'
-                      : 'text-fg-secondary hover:bg-surface-raised'
+                    : isPlannedOnly
+                      ? isActive
+                        ? 'bg-accent/15 text-fg opacity-90'
+                        : 'cursor-pointer text-fg-muted opacity-80 hover:bg-surface-raised hover:opacity-100'
+                      : isActive
+                        ? 'bg-accent/15 text-fg'
+                        : 'text-fg-secondary hover:bg-surface-raised'
                 }`}
               >
                 {fileIcon(path)}
-                <span className="truncate text-[10px] leading-tight flex-1">{filename}</span>
+                <span className="truncate text-nano leading-tight flex-1">{filename}</span>
                 {isWriting && (
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent animate-pulse" />
                 )}

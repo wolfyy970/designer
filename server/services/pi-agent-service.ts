@@ -150,6 +150,7 @@ export async function runDesignAgentSession(
   session.agent.setSystemPrompt(params.systemPrompt.trim());
 
   const streamActivityAt = { current: Date.now() };
+  const pendingToolCallsRef = { current: 0 };
   const subscribeCtx = {
     onEvent,
     trace,
@@ -158,6 +159,7 @@ export async function runDesignAgentSession(
     turnLogRef: llmTurnLogRef,
     streamActivityAt,
     modelTurnId: { current: 0 },
+    pendingToolCallsRef,
   };
   const unsubscribe = subscribePiSessionBridge(session, subscribeCtx);
 
@@ -177,6 +179,33 @@ export async function runDesignAgentSession(
     });
   }, idleCheckMs);
 
+  const STALL_DEBUG_MS = 60_000;
+  const stallDebugTimer = setInterval(() => {
+    if (params.signal?.aborted) return;
+    const idleSec = Math.floor((Date.now() - streamActivityAt.current) / 1000);
+    const isRevision = !!params.compactionNote?.trim();
+    // #region agent log
+    fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
+      body: JSON.stringify({
+        sessionId: '5b9be9',
+        hypothesisId: 'H6',
+        location: 'pi-agent-service.ts:stall_heartbeat',
+        message: 'agent session stall heartbeat',
+        data: {
+          idleSec,
+          pendingToolCalls: pendingToolCallsRef.current,
+          isRevision,
+          userPromptChars: params.userPrompt.length,
+          seedFileCount: params.seedFiles ? Object.keys(params.seedFiles).length : 0,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+  }, STALL_DEBUG_MS);
+
   try {
     await session.prompt(
       `${params.userPrompt}\n\n[Workspace root: ${SANDBOX_PROJECT_ROOT} — use read, write, edit, ls, find, and grep for files; use bash for shell/commands. The skills/ tree is read-only context.]`,
@@ -188,6 +217,7 @@ export async function runDesignAgentSession(
     return null;
   } finally {
     clearInterval(idleTimer);
+    clearInterval(stallDebugTimer);
     unsubscribe();
   }
 

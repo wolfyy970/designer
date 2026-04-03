@@ -70,7 +70,7 @@ export function VerticalResizePanels({ panels }: { panels: Panel[] }) {
         }}>
           {/* Label — compact, inline with divider */}
           <div className="flex shrink-0 items-center px-3 py-0.5 bg-surface-secondary/40">
-            <span className="text-[8px] font-semibold uppercase tracking-widest text-fg-faint">
+            <span className="text-pico font-semibold uppercase tracking-widest text-fg-faint">
               {panel.label}
             </span>
           </div>

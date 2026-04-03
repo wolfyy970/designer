@@ -1,6 +1,16 @@
 import type { EvaluationRoundSnapshot } from '../../../types/evaluation';
 
-export function BrowserQASection({ snapshot }: { snapshot?: EvaluationRoundSnapshot }) {
+export function BrowserQASection({
+  snapshot,
+  className,
+  screenshotClassName,
+}: {
+  snapshot?: EvaluationRoundSnapshot;
+  /** Replace default section wrapper (padding, border). When omitted, uses drawer-style padding. */
+  className?: string;
+  /** Tailwind max-height class for the screenshot, e.g. `max-h-40`. */
+  screenshotClassName?: string;
+}) {
   const browserReport = snapshot?.browser;
   if (!browserReport) return null;
 
@@ -16,32 +26,35 @@ export function BrowserQASection({ snapshot }: { snapshot?: EvaluationRoundSnaps
       ? 'text-warning'
       : 'text-fg-faint';
 
+  const shellClass =
+    className ?? 'border-t border-border-subtle px-3 pt-1.5 pb-2 shrink-0';
+
   return (
-    <div className="border-t border-border-subtle px-3 pt-1.5 pb-2 shrink-0">
+    <div className={shellClass}>
       <div className="flex items-center gap-1.5 mb-1">
-        <span className={`text-[9px] font-medium uppercase tracking-wider ${statusColor}`}>
+        <span className={`text-badge font-medium uppercase tracking-wider ${statusColor}`}>
           Runtime QA
         </span>
         {jsScore !== undefined && (
-          <span className="tabular-nums font-mono text-[10px] text-fg-faint ml-auto">
+          <span className="tabular-nums font-mono text-nano text-fg-faint ml-auto">
             JS {jsScore}/5 · CTA {interactiveScore ?? '?'}/5
           </span>
         )}
       </div>
       {browserReport.hardFails.length > 0 && (
-        <div className="text-[10px] text-error mb-1">
+        <div className="text-nano text-error mb-1">
           {browserReport.hardFails.map((hf) => hf.message.slice(0, 80)).join(' · ')}
         </div>
       )}
       {runtimeErr.length > 0 && (
-        <ul className="list-disc pl-3 text-[10px] text-warning space-y-0.5 leading-snug mb-1">
+        <ul className="list-disc pl-3 text-nano text-warning space-y-0.5 leading-snug mb-1">
           {runtimeErr.slice(0, 2).map((f, i) => (
             <li key={i} className="truncate" title={f.detail}>{f.detail.slice(0, 90)}</li>
           ))}
         </ul>
       )}
       {otherFindings.length > 0 && (
-        <ul className="list-disc pl-3 text-[10px] text-fg-muted space-y-0.5 leading-snug">
+        <ul className="list-disc pl-3 text-nano text-fg-muted space-y-0.5 leading-snug">
           {otherFindings.slice(0, 2).map((f, i) => (
             <li key={i}>{f.summary}</li>
           ))}
@@ -49,7 +62,7 @@ export function BrowserQASection({ snapshot }: { snapshot?: EvaluationRoundSnaps
       )}
       {browserReport.artifacts?.browserScreenshot?.base64 && (
         <img
-          className="mt-1.5 w-full max-h-24 object-cover object-top rounded border border-border-subtle"
+          className={`mt-1.5 w-full object-contain object-top rounded border border-border-subtle ${screenshotClassName ?? 'max-h-24'}`}
           alt="Headless browser capture"
           src={`data:${browserReport.artifacts.browserScreenshot.mediaType};base64,${browserReport.artifacts.browserScreenshot.base64}`}
         />

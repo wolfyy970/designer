@@ -20,6 +20,8 @@ export interface PiSessionBridgeContext {
   turnLogRef: { current?: string };
   streamActivityAt: { current: number };
   modelTurnId: { current: number };
+  /** Mirror of in-flight Pi tool calls (for stall diagnostics). */
+  pendingToolCallsRef?: { current: number };
 }
 
 function emitFirstTokenIfNeeded(ctx: PiSessionBridgeContext): void {
@@ -60,8 +62,14 @@ function bumpStreamActivity(ctx: PiSessionBridgeContext): void {
   ctx.streamActivityAt.current = Date.now();
 }
 
+function syncPendingToolProbe(ctx: PiSessionBridgeContext, toolStartMs: Map<string, number>) {
+  if (ctx.pendingToolCallsRef) ctx.pendingToolCallsRef.current = toolStartMs.size;
+}
+
 /** Subscribe until `unsubscribe()`; call when the agent session is ready. */
 export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBridgeContext): () => void {
+  const toolStartMs = new Map<string, number>();
+  syncPendingToolProbe(ctx, toolStartMs);
   return session.subscribe((event: AgentSessionEvent) => {
     if (event.type === 'turn_start') {
       bumpStreamActivity(ctx);
@@ -73,6 +81,24 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
           phase: 'building',
         }),
       );
+      // #region agent log
+      fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
+        body: JSON.stringify({
+          sessionId: '5b9be9',
+          hypothesisId: 'H1',
+          location: 'pi-session-event-bridge.ts:turn_start',
+          message: 'model turn_start',
+          data: {
+            modelTurnId: ctx.modelTurnId.current,
+            pendingToolCalls: toolStartMs.size,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      syncPendingToolProbe(ctx, toolStartMs);
       return;
     }
 
@@ -110,6 +136,32 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
       const rawArgs = event.args as Record<string, unknown> | undefined;
       const command = typeof rawArgs?.command === 'string' ? rawArgs.command : undefined;
       const { path, pattern } = parsePiToolExecutionArgs(tn, event.args);
+      const reusedToolCallId = toolStartMs.has(event.toolCallId);
+      toolStartMs.set(event.toolCallId, Date.now());
+      // #region agent log
+      fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
+        body: JSON.stringify({
+          sessionId: '5b9be9',
+          hypothesisId: 'H2',
+          location: 'pi-session-event-bridge.ts:tool_execution_start',
+          message: 'tool_execution_start',
+          data: {
+            toolCallId: event.toolCallId,
+            toolName: tn,
+            path,
+            pattern,
+            reusedToolCallId,
+            commandPreview:
+              command != null && command.length > 160 ? `${command.slice(0, 157)}…` : command,
+            pendingAfter: toolStartMs.size,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      syncPendingToolProbe(ctx, toolStartMs);
       ctx.toolPathByCallId.set(event.toolCallId, path);
       void ctx.onEvent(
         ctx.trace('tool_started', path ? `${tn} → ${path}` : `Started ${tn}`, {
@@ -127,6 +179,32 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
 
     if (event.type === 'tool_execution_end') {
       bumpStreamActivity(ctx);
+      const started = toolStartMs.get(event.toolCallId);
+      const durationMs = started != null ? Date.now() - started : undefined;
+      toolStartMs.delete(event.toolCallId);
+      // #region agent log
+      fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
+        body: JSON.stringify({
+          sessionId: '5b9be9',
+          hypothesisId: started == null ? 'H3' : 'H2',
+          location: 'pi-session-event-bridge.ts:tool_execution_end',
+          message: 'tool_execution_end',
+          data: {
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            isError: event.isError,
+            durationMs,
+            hadMatchedStart: started != null,
+            orphanEnd: started == null,
+            pendingAfter: toolStartMs.size,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      syncPendingToolProbe(ctx, toolStartMs);
       if (event.isError) {
         const path = ctx.toolPathByCallId.get(event.toolCallId);
         void ctx.onEvent(

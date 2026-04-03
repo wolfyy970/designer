@@ -68,6 +68,7 @@ The header also opens **Settings** (API keys; **Prompt Studio** saves prompts on
 | [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) | Narrative: canvas, prompts, agentic loop, evaluation |
 | [PRODUCT.md](PRODUCT.md) | Feature-level description: modes, nodes, providers |
 | [USER_GUIDE.md](USER_GUIDE.md) | Setup and day-to-day canvas workflow |
+| [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) | SPA design tokens: accent vs status, typography, file-role colors (`src/index.css`) |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Technical reference: routes, stores, data flow, Pi adapter boundary |
 | [docker/langfuse/README.md](docker/langfuse/README.md) | Optional **self-hosted** Langfuse via Docker (default is Langfuse Cloud) |
 | [DOCUMENTATION.md](DOCUMENTATION.md) | How this doc set is organized (hub = this README) |
