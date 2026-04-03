@@ -25,8 +25,8 @@ For a **plain-English map** of each Langfuse prompt name (`compilerSystem`, `var
 | **Compiler** | Turn the design spec into dimensions + variant strategies | Langfuse (`compilerSystem`, `compilerUser`); `pnpm db:seed` creates missing prompts from `shared-defaults` / legacy SQLite — not a full overwrite |
 | **Variant** | Per-hypothesis user-facing generation prompt template | Langfuse `variant` + `compileVariantPrompts()` on client; bundle API uses same template server-side |
 | **Single-shot system** | Constraints for one HTML response | Langfuse `genSystemHtml` |
-| **Agentic system** | Multi-file static artifact rules (entry `index.html`, local assets, etc.) | Langfuse `genSystemHtmlAgentic` + Prisma **skills** appended on server |
-| **Skills** | Versioned markdown “playbooks” under a virtual `skills/` tree | Prisma SQLite; loaded into the agentic system prompt and virtual workspace |
+| **Agentic system** | Multi-file static artifact rules (entry `index.html`, local assets, etc.) | Langfuse `genSystemHtmlAgentic` (optional sandbox **`AGENTS.md`** from `sandboxAgentsContext`) |
+| **Skills** | Repo-backed Agent Skills packages (future Pi mount) | Files under repo-root **`skills/`**; not loaded into the agentic sandbox yet |
 
 Evaluators use separate LLM rubrics (browser / design / strategy / implementation) orchestrated on the server — not the same prompts as the builder model.
 

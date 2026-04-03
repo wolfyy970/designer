@@ -55,8 +55,7 @@ The header also opens **Settings** (API keys; **Prompt Studio** saves prompts on
 | `pnpm build` | Type-check and production build |
 | `pnpm test` | Vitest unit tests (Playwright merge test excluded in config; see [CLAUDE.md](CLAUDE.md)) |
 | `pnpm lint` | Run ESLint |
-| `pnpm db:migrate` | Apply Prisma migrations (set `DATABASE_URL` in `.env`) |
-| `pnpm db:seed` | Bootstrap **missing** Langfuse text prompts only (`prisma/seed.ts`); does **not** overwrite Prompt Studio edits. Use `pnpm langfuse:sync-prompts` to reset bodies from repo/SQLite. Agent skills are separate (DB migrations / data paths), not this script |
+| `pnpm db:seed` | Bootstrap **missing** Langfuse text prompts only (`scripts/seed-langfuse.ts`); does **not** overwrite Prompt Studio edits. Use `pnpm langfuse:sync-prompts` to reset bodies from `shared-defaults` / optional legacy SQLite import |
 | `pnpm langfuse:sync-prompts` | **`LANGFUSE_SEED_SYNC`**: push every prompt’s labeled version to match `shared-defaults` / legacy SQLite import (overwrites drift) |
 | `pnpm knip` | Optional unused-export report (not run in CI by default) |
 

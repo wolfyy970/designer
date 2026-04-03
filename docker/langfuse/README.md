@@ -38,7 +38,7 @@ pnpm db:seed
 
 **`pnpm db:seed`** creates **missing** prompts (or adds a label when versions exist but the deployment label is unset). It does **not** change prompts you edited in Prompt Studio. **`pnpm langfuse:sync-prompts`** runs seed with `LANGFUSE_SEED_SYNC` so every key’s labeled body is replaced when it differs from the import source.
 
-When **creating** new prompt rows, bodies come from `LANGFUSE_PROMPT_IMPORT_SQLITE` (copy of app DB from **before** Prisma prompt tables were dropped — latest `PromptVersion` per key) if set; else `src/lib/prompts/shared-defaults.ts`. If `prisma/dev.db` still has `PromptVersion`, that path is used automatically without the env var.
+When **creating** new prompt rows, bodies come from `LANGFUSE_PROMPT_IMPORT_SQLITE` (SQLite file with legacy `PromptVersion` rows) if set; else a `file:` **`DATABASE_URL`** pointing at that same SQLite shape; else `src/lib/prompts/shared-defaults.ts`.
 
 ## Shutdown
 

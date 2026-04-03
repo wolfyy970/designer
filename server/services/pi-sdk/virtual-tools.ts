@@ -32,13 +32,8 @@ import type {
 const GREP_MAX_LINE_LENGTH = 500;
 const DEFAULT_GREP_MATCH_LIMIT = 100;
 
-function isSkillSandboxPath(absPath: string): boolean {
-  return absPath.includes(`${SANDBOX_PROJECT_ROOT}/skills/`);
-}
-
 function toProjectRelative(absPath: string): string | null {
   if (!absPath.startsWith(`${SANDBOX_PROJECT_ROOT}/`)) return null;
-  if (isSkillSandboxPath(absPath)) return null;
   return absPath.slice(SANDBOX_PROJECT_ROOT.length + 1);
 }
 
@@ -109,7 +104,7 @@ function createVirtualGrepTool(bash: Bash, sessionCwd: string) {
       else argv.push('-E');
       if (contextLines > 0) argv.push('-C', String(contextLines));
       if (st.isDirectory) {
-        argv.push('-r', '--exclude-dir=skills');
+        argv.push('-r');
       }
       const g = globPat?.trim();
       if (g) {

@@ -111,9 +111,8 @@ function uniqueResolvedPaths(cwd: string, paths: Array<string | null | undefined
 }
 
 /**
- * Resolve legacy DB: `LANGFUSE_PROMPT_IMPORT_SQLITE` (only path attempted when set), else try, in order,
- * `DATABASE_URL` when it is a `file:` SQLite path, then `prisma/dev.db`. First file with non-empty
- * `PromptVersion` wins.
+ * Resolve legacy DB: `LANGFUSE_PROMPT_IMPORT_SQLITE` (only path attempted when set), else
+ * `DATABASE_URL` when it is a `file:` SQLite path. First file with non-empty `PromptVersion` wins.
  */
 export async function loadLegacyPromptBodiesForSeed(cwd: string): Promise<{
   bodies: Partial<Record<PromptKey, string>>;
@@ -126,8 +125,10 @@ export async function loadLegacyPromptBodiesForSeed(cwd: string): Promise<{
     return { bodies, sourceLabel: path.resolve(abs) };
   }
 
-  const fromUrl = sqliteFilePathFromPrismaDatabaseUrl(env.DATABASE_URL, cwd);
-  const tryPaths = uniqueResolvedPaths(cwd, [fromUrl, path.join(cwd, 'prisma', 'dev.db')]);
+  const fromUrl = env.DATABASE_URL.trim()
+    ? sqliteFilePathFromPrismaDatabaseUrl(env.DATABASE_URL, cwd)
+    : null;
+  const tryPaths = uniqueResolvedPaths(cwd, [fromUrl]);
 
   for (const abs of tryPaths) {
     const bodies = await readLatestPromptBodiesFromLegacySqlite(abs);

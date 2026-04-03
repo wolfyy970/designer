@@ -25,8 +25,7 @@ export function createSandboxBashTool(
     description:
       'Run a shell command in the isolated project at /home/user/project (your cwd). ' +
       'For creating or editing design files, prefer the `write` and `edit` tools (SEARCH/REPLACE); use `read` instead of `cat`. ' +
-      'Use bash for npm, multi-step shell pipelines, or when no dedicated tool fits. ' +
-      '`skills/` is read-only — do not modify it.',
+      'Use bash for npm, multi-step shell pipelines, or when no dedicated tool fits.',
     promptSnippet: 'bash: sandbox shell (prefer write/edit/read tools for files)',
     parameters: bashParams,
     async execute(_toolCallId, params, signal, _onUpdate, _ctx: ExtensionContext) {

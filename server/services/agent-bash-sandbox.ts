@@ -14,7 +14,6 @@ function toSandboxPath(rel: string): string {
 
 export interface AgentBashSandboxOptions {
   seedFiles?: Record<string, string>;
-  virtualSkillFiles?: Record<string, string>;
 }
 
 /**
@@ -22,12 +21,6 @@ export interface AgentBashSandboxOptions {
  */
 export function buildSandboxSeedMaps(options: AgentBashSandboxOptions): Record<string, string> {
   const files: Record<string, string> = {};
-  if (options.virtualSkillFiles) {
-    for (const [path, content] of Object.entries(options.virtualSkillFiles)) {
-      const key = path.startsWith('skills/') ? path : `skills/${path.replace(/^\/+/, '')}`;
-      files[toSandboxPath(key)] = content;
-    }
-  }
   if (options.seedFiles) {
     for (const [path, content] of Object.entries(options.seedFiles)) {
       files[toSandboxPath(path)] = content;
@@ -50,18 +43,14 @@ export function createAgentBashSandbox(options: AgentBashSandboxOptions): Bash {
   });
 }
 
-function isSkillSandboxPath(absPath: string): boolean {
-  return absPath.includes(`${SANDBOX_PROJECT_ROOT}/skills/`);
-}
-
 /**
- * Collect design artifacts (excludes `skills/` subtree) as relative paths from project root.
+ * Collect design artifacts as relative paths from project root.
  */
 export async function extractDesignFiles(bash: Bash): Promise<Record<string, string>> {
   const paths = bash.fs.getAllPaths().filter((p) => {
     if (!p.startsWith(`${SANDBOX_PROJECT_ROOT}/`) && p !== SANDBOX_PROJECT_ROOT) return false;
     if (p === SANDBOX_PROJECT_ROOT) return false;
-    return !isSkillSandboxPath(p);
+    return true;
   });
 
   const out: Record<string, string> = {};

@@ -25,8 +25,8 @@ import { runDesignAgentSession, type AgentRunEvent, type AgentSessionParams } fr
 
 const AGENTIC_ROOT_SPAN_ID = '0000000000000001';
 
-/** PI session fields supplied by the caller; system prompt and skill files come from DB per session. */
-export type AgenticOrchestratorBuildInput = Omit<AgentSessionParams, 'systemPrompt' | 'virtualSkillFiles'>;
+/** PI session fields supplied by the caller; system prompt comes from Langfuse per session. */
+export type AgenticOrchestratorBuildInput = Omit<AgentSessionParams, 'systemPrompt'>;
 
 export type AgenticOrchestratorEvent =
   | AgentRunEvent
@@ -159,12 +159,10 @@ function buildCheckpoint(
 
 function mergeSeedWithDesign(
   designFiles: Record<string, string>,
-  skillFiles?: Record<string, string>,
   sandboxSeedFiles?: Record<string, string>,
 ): Record<string, string> {
-  const skills = skillFiles && Object.keys(skillFiles).length > 0 ? skillFiles : {};
   const sand = sandboxSeedFiles && Object.keys(sandboxSeedFiles).length > 0 ? sandboxSeedFiles : {};
-  return { ...skills, ...sand, ...designFiles };
+  return { ...sand, ...designFiles };
 }
 
 /**
@@ -228,10 +226,7 @@ async function runAgenticWithEvaluationImpl(
 
   const initialCtx = await buildAgenticSystemContext({
     getPromptBody: options.getPromptBody,
-    evaluationContext: options.evaluationContext,
   });
-  const initialSkillSeed =
-    Object.keys(initialCtx.virtualSkillFiles).length > 0 ? initialCtx.virtualSkillFiles : undefined;
   const initialSeedFiles = {
     ...initialCtx.sandboxSeedFiles,
     ...(options.build.seedFiles ?? {}),
@@ -243,7 +238,6 @@ async function runAgenticWithEvaluationImpl(
     {
       ...options.build,
       systemPrompt: initialCtx.systemPrompt,
-      virtualSkillFiles: initialSkillSeed,
       seedFiles: seedFilesForBuild,
     },
     forward,
@@ -315,18 +309,14 @@ async function runAgenticWithEvaluationImpl(
 
     const revisionCtx = await buildAgenticSystemContext({
       getPromptBody: options.getPromptBody,
-      evaluationContext: options.evaluationContext,
     });
-    const revisionSkillSeed =
-      Object.keys(revisionCtx.virtualSkillFiles).length > 0 ? revisionCtx.virtualSkillFiles : undefined;
 
     const revised = await runDesignAgentSession(
       {
         ...options.build,
         systemPrompt: revisionCtx.systemPrompt,
-        virtualSkillFiles: revisionSkillSeed,
         userPrompt: revisionUser,
-        seedFiles: mergeSeedWithDesign(files, revisionSkillSeed, revisionCtx.sandboxSeedFiles),
+        seedFiles: mergeSeedWithDesign(files, revisionCtx.sandboxSeedFiles),
         compactionNote: `Post-evaluation revision requested. Overall ${snapshot.aggregate.overallScore.toFixed(2)}. Hard fails: ${snapshot.aggregate.hardFails.length}.`,
         initialProgressMessage: 'Revising design from evaluation feedback…',
       },

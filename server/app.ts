@@ -6,7 +6,6 @@ import models from './routes/models.ts';
 import logs from './routes/logs.ts';
 import designSystem from './routes/design-system.ts';
 import prompts from './routes/prompts.ts';
-import skills from './routes/skills.ts';
 import hypothesis from './routes/hypothesis.ts';
 
 const app = new Hono().basePath('/api');
@@ -30,7 +29,6 @@ app.route('/models', models);
 app.route('/logs', logs);
 app.route('/design-system', designSystem);
 app.route('/prompts', prompts);
-app.route('/skills', skills);
 app.route('/hypothesis', hypothesis);
 
 export default app;

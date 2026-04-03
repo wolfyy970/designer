@@ -103,7 +103,7 @@ flowchart TB
 - **`agentic-orchestrator`** calls **`runDesignAgentSession`** only — it does not import `@mariozechner/*` directly. To replace Pi, rework **`server/services/pi-sdk/`**, **`pi-agent-service.ts`**, and the event bridge; keep the orchestrator’s build/eval/revision contract stable.
 - **`createAgentSession`** uses **`tools: []`** so default Pi tools never touch the host filesystem; **`virtual-tools`** maps native Pi file tool schemas to **`just-bash`**, and **`pi-bash-tool`** runs shell commands in the same instance. **`cwd`** is the sandbox project root; **`createSandboxResourceLoader()`** is a no-op loader so Pi does not merge host-repo AGENTS/system prompts — sandbox **`AGENTS.md`** (if any) comes only from Langfuse **`sandboxAgentsContext`** via **`buildAgenticSystemContext`** → orchestrator seed merge.
 - **`pi-session-event-bridge`** turns Pi session callbacks into **`AgentRunEvent`**, which **`executeGenerateStream`** serializes to SSE for the client.
-- **`agent-bash-sandbox`** seeds skills and design files, then **`extractDesignFiles`** collects artifacts after the run; evaluation runs in **`design-evaluation-service`** (parallel workers), not inside Pi tool definitions.
+- **`agent-bash-sandbox`** seeds design files (and optional **`AGENTS.md`** from Langfuse), then **`extractDesignFiles`** collects artifacts after the run; evaluation runs in **`design-evaluation-service`** (parallel workers), not inside Pi tool definitions. Repo-root **`skills/`** is reserved for future Agent Skills packages and is **not** mounted into the sandbox yet.
 
 ## Four Abstraction Layers
 
@@ -182,8 +182,7 @@ flowchart TB
 | `/api/logs` | GET | Fetch LLM call log entries (dev-only) | JSON: `LlmLogEntry[]` |
 | `/api/logs` | DELETE | Clear log entries (dev-only) | 204 |
 | `/api/design-system/extract` | POST | Extract design tokens from screenshots | JSON: extracted tokens |
-| `/api/prompts/*` | GET | Versioned prompt bodies (e.g. variant template) from DB | JSON |
-| `/api/skills/*` | GET | Versioned skill definitions from DB | JSON |
+| `/api/prompts/*` | GET | Versioned prompt bodies from Langfuse (label from `LANGFUSE_PROMPT_LABEL`) | JSON |
 | `/api/health` | GET | Health check | JSON: `{ ok: true }` |
 
 **`/api/generate` request fields:** `prompt`, `providerId`, `modelId`, `promptOverrides` (`genSystemHtml`, `genSystemHtmlAgentic`, `variant`), `supportsVision`, `mode` (`single` | `agentic`), `thinkingLevel` (`off` | `minimal` | `low` | `medium` | `high`).
@@ -196,7 +195,7 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 
 ### Validation stacks (Zod vs TypeBox)
 
-- **Zod** — HTTP request and response shapes, shared client/server DTOs, and guarded deserialization from persistence (for example skill `filesJson` in `server/db/skills.ts`).
+- **Zod** — HTTP request and response shapes and shared client/server DTOs.
 - **TypeBox** — Pi SDK `ToolDefinition` parameters in [`server/services/pi-sdk/virtual-tools.ts`](server/services/pi-sdk/virtual-tools.ts) (mapped native tools), [`server/services/pi-bash-tool.ts`](server/services/pi-bash-tool.ts), and [`server/services/pi-app-tools.ts`](server/services/pi-app-tools.ts). Keep these aligned with the Pi coding-agent tool surface; do not migrate to Zod unless the Pi stack documents equivalent support.
 
 ## Server Architecture (`server/`)
@@ -217,11 +216,10 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 | `routes/logs.ts` | GET `/api/logs` → `{ llm, trace }`; POST `/api/logs/trace` (Zod); DELETE clears both rings (file append-only) |
 | `routes/design-system.ts` | POST /api/design-system/extract |
 | `routes/prompts.ts` | GET `/api/prompts/:key` — latest prompt body from Langfuse (label from `LANGFUSE_PROMPT_LABEL`) |
-| `routes/skills.ts` | GET `/api/skills`, `/api/skills/:key` — latest skill versions (metadata + body + optional `filesJson`) |
-| `db/` | Prisma client singleton (`DATABASE_URL`, SQLite in dev) |
+| `db/prompts.ts` | Langfuse prompt reads for runtime + Prompt Studio |
 | `services/pi-sdk/` | **Only** place that imports `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent`; types, `createAgentSession`, `streamSimple`, stream budget, **`virtual-tools.ts`** (Pi tool definitions → `just-bash` FS / `grep` via `bash.exec`). |
 | `services/pi-agent-service.ts` | Pi session adapter — `tools: []`, `customTools` = virtual file tools + bash + app tools; `session.prompt`; LLM log wrapping; merges app + SDK system prompts; SSE via `pi-session-event-bridge.ts`. |
-| `services/agent-bash-sandbox.ts` | `just-bash` instance: seed design files + skills, extract artifacts after the run. |
+| `services/agent-bash-sandbox.ts` | `just-bash` instance: seed design files, extract artifacts after the run. |
 | `services/pi-bash-tool.ts` | Pi `bash` tool → `bash.exec`, snapshot diff → SSE file events for design paths. |
 | `services/pi-app-tools.ts` | Pi tools: `todo_write`, `validate_js`, `validate_html`. |
 | `services/pi-session-event-bridge.ts` | Maps `AgentSession` subscribe events → app `AgentRunEvent` stream. |
@@ -229,8 +227,6 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 | `services/design-evaluation-service.ts` | Design evaluation payload handling |
 | `services/browser-qa-evaluator.ts` | Deterministic browser QA preflight (HTML + VM) |
 | `services/browser-playwright-evaluator.ts` | Playwright headless render + DOM/console checks |
-| `db/skills.ts` | List skill versions, build virtual skill file maps (`filesJson` or `body`) |
-| `lib/skills/*` | Skill catalog XML (`format-for-prompt`), selection (`select-skills`) |
 | `services/compiler.ts` | LLM compilation — Zod-validates request/response boundaries |
 | `services/providers/openrouter.ts` | OpenRouter provider (direct API, auth header) |
 | `services/providers/lmstudio.ts` | LM Studio provider (direct URL) |
@@ -254,14 +250,14 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 
 ### Agentic
 
-`server/routes/generate.ts` (when `mode === 'agentic'`) loads **versioned skills** from Prisma (`listLatestSkillVersions`), selects them with `selectSkillsForContext` using `evaluationContext.outputFormat` and `Skill.nodeTypes`, hydrates virtual paths under `skills/{key}/…` (`buildVirtualSkillFiles`), appends an Agent Skills–style `<available_skills>` catalog via `formatSkillsForPrompt`, then calls `server/services/agentic-orchestrator.ts` → `runAgenticWithEvaluation`.
+`server/routes/generate.ts` (when `mode === 'agentic'`) delegates to `server/services/agentic-orchestrator.ts` → `runAgenticWithEvaluation`. Agentic system text comes from Langfuse **`genSystemHtmlAgentic`** (and optional sandbox **`AGENTS.md`** from **`sandboxAgentsContext`** via `buildAgenticSystemContext`). Repo **`skills/`** is not injected into the Pi workspace yet.
 
 **Orchestrator (`runAgenticWithEvaluation`):**
-1. **Build:** `runDesignAgentSession` in `pi-agent-service.ts` — virtual FS is seeded with `virtualSkillFiles` (read-only; stripped from returned design `files`), then the agent writes design artifacts.
+1. **Build:** `runDesignAgentSession` in `pi-agent-service.ts` — virtual FS is seeded with optional **`AGENTS.md`** + any caller `seedFiles`, then the agent writes design artifacts.
 2. **Evaluate:** `runEvaluationWorkers` in `design-evaluation-service.ts` runs design / strategy / implementation LLM rubrics plus **browser** checks:
    - **Preflight:** `browser-qa-evaluator.ts` — HTML/VM heuristics (fast).
    - **Grounded:** `browser-playwright-evaluator.ts` — headless Chromium via Playwright (`setContent` on bundled HTML), console/page errors, visible text, layout box, broken images. Disabled when `VITEST=true` or `BROWSER_PLAYWRIGHT_EVAL=0`.
-3. **Revision loop:** Until `isEvalSatisfied` (primary: `!shouldRevise` after `enforceRevisionGate`; optional: `agenticMinOverallScore` + zero hard fails) or **`maxRevisionRounds`** is reached, or abort. Each revision re-seeds prior design files merged with skill files.
+3. **Revision loop:** Until `isEvalSatisfied` (primary: `!shouldRevise` after `enforceRevisionGate`; optional: `agenticMinOverallScore` + zero hard fails) or **`maxRevisionRounds`** is reached, or abort. Each revision re-seeds prior design files merged with fresh **`AGENTS.md`** (when configured).
 4. **Checkpoint:** `AgenticCheckpoint` includes `stopReason` (`satisfied` | `max_revisions` | `aborted` | `revision_failed`) and `revisionAttempts`.
 
 **Env defaults** (`server/env.ts`): `AGENTIC_MAX_REVISION_ROUNDS` (default `5`, clamped 0–20), optional `AGENTIC_MIN_OVERALL_SCORE`. Request body may pass `agenticMaxRevisionRounds` / `agenticMinOverallScore`. For Playwright in production: install browsers once (`pnpm exec playwright install chromium`).

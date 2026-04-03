@@ -14,7 +14,6 @@ export interface AgentRunParams {
 export interface AgentSessionParams extends AgentRunParams {
   correlationId?: string;
   seedFiles?: Record<string, string>;
-  virtualSkillFiles?: Record<string, string>;
   /** @deprecated Pi SDK manages compaction; reserved for future custom hooks */
   compactionNote?: string;
   initialProgressMessage?: string;

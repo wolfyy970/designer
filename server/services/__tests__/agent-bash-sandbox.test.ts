@@ -7,22 +7,20 @@ import {
 } from '../agent-bash-sandbox.ts';
 
 describe('agent-bash-sandbox', () => {
-  it('seeds skills under project skills/', () => {
+  it('maps seedFiles under project root', () => {
     const files = buildSandboxSeedMaps({
-      virtualSkillFiles: { 'x/SKILL.md': 'skill' },
-      seedFiles: { 'index.html': '<html></html>' },
+      seedFiles: { 'skills/x/SKILL.md': 'skill', 'index.html': '<html></html>' },
     });
     expect(files[`${SANDBOX_PROJECT_ROOT}/skills/x/SKILL.md`]).toBe('skill');
     expect(files[`${SANDBOX_PROJECT_ROOT}/index.html`]).toBe('<html></html>');
   });
 
-  it('extractDesignFiles omits skills subtree', async () => {
+  it('extractDesignFiles returns all files in the sandbox tree', async () => {
     const bash = createAgentBashSandbox({
-      seedFiles: { 'app.js': 'x' },
-      virtualSkillFiles: { 's/SKILL.md': 'ro' },
+      seedFiles: { 'app.js': 'x', 'skills/s/SKILL.md': 'ro' },
     });
     const map = await extractDesignFiles(bash);
     expect(map['app.js']).toBe('x');
-    expect(Object.keys(map).some((k) => k.includes('skills'))).toBe(false);
+    expect(map['skills/s/SKILL.md']).toBe('ro');
   });
 });

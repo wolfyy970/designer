@@ -76,7 +76,6 @@ export async function runDesignAgentSession(
 
   const bash = createAgentBashSandbox({
     seedFiles: params.seedFiles,
-    virtualSkillFiles: params.virtualSkillFiles,
   });
 
   const todoState: { current: TodoItem[] } = { current: [] };
@@ -201,7 +200,7 @@ export async function runDesignAgentSession(
 
   try {
     await session.prompt(
-      `${params.userPrompt}\n\n[Workspace root: ${SANDBOX_PROJECT_ROOT} — use read, write, edit, ls, find, and grep for files; use bash for shell/commands. The skills/ tree is read-only context.]`,
+      `${params.userPrompt}\n\n[Workspace root: ${SANDBOX_PROJECT_ROOT} — use read, write, edit, ls, find, and grep for files; use bash for shell/commands.]`,
       { expandPromptTemplates: false },
     );
   } catch (err) {
