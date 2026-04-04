@@ -1,7 +1,7 @@
 import { memo, useCallback, useState } from 'react';
 import { type NodeProps, type Node, Handle, Position } from '@xyflow/react';
 import { ClipboardCopy, FileText, Loader2, Pencil, Sparkles, X, Zap } from 'lucide-react';
-import { useCompilerStore, findVariantStrategy } from '../../../stores/compiler-store';
+import { useCompilerStore, findStrategy } from '../../../stores/compiler-store';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { useGenerationStore } from '../../../stores/generation-store';
 import { useSpecStore } from '../../../stores/spec-store';
@@ -13,9 +13,10 @@ import { useRequestPermanentDelete } from '../../../hooks/useRequestPermanentDel
 import { hypothesisDeleteCopy } from '../../../lib/canvas-permanent-delete-copy';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
 import { processingOrFilled } from '../../../lib/node-status';
-import { GENERATION_STATUS } from '../../../constants/generation';
+import { GENERATION_MODE, GENERATION_STATUS } from '../../../constants/generation';
+import type { AgentMode } from '../../../types/workspace-domain';
 import { abortGenerationForStrategy } from '../../../lib/generation-abort-registry';
-import { NODE_STATUS, NODE_TYPES } from '../../../constants/canvas';
+import { NODE_STATUS, NODE_TYPES, RF_INTERACTIVE } from '../../../constants/canvas';
 import {
   countIncomingModelsWithModelSelected,
   countOutgoingNodesOfType,
@@ -23,7 +24,7 @@ import {
 import {
   buildHypothesisDebugMarkdown,
   downloadTextFile,
-  findDimensionMapForVariant,
+  findPlanForStrategy,
 } from '../../../lib/debug-markdown-export';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
@@ -43,18 +44,18 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
   const strategyId = data.refId ?? '';
 
   const strategy = useCompilerStore(
-    (s) => findVariantStrategy(s.dimensionMaps, strategyId),
+    (s) => findStrategy(s.incubationPlans, strategyId),
   );
-  const updateVariant = useCompilerStore((s) => s.updateVariant);
+  const updateStrategy = useCompilerStore((s) => s.updateStrategy);
 
-  const agentMode = useCanvasStore(
-    (s) =>
-      ((s.nodes.find((n) => n.id === nodeId)?.data.agentMode as 'single' | 'agentic' | undefined) ??
-        'single'),
+  const agentModeDomain = useWorkspaceDomainStore((s) => s.hypotheses[nodeId]?.agentMode);
+  const agentModeCanvas = useCanvasStore((s) =>
+    (s.nodes.find((n) => n.id === nodeId)?.data.agentMode as AgentMode | undefined),
   );
+  const agentMode = agentModeDomain ?? agentModeCanvas ?? GENERATION_MODE.SINGLE;
 
   const setAgentMode = useCallback(
-    (mode: 'single' | 'agentic') =>
+    (mode: AgentMode) =>
       useCanvasStore.getState().updateNodeData(nodeId, { agentMode: mode }),
     [nodeId],
   );
@@ -68,7 +69,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
 
   // Check if THIS hypothesis is generating (not global)
   const isGenerating = useGenerationStore((s) =>
-    s.results.some((r) => r.variantStrategyId === strategyId && r.status === GENERATION_STATUS.GENERATING),
+    s.results.some((r) => r.strategyId === strategyId && r.status === GENERATION_STATUS.GENERATING),
   );
 
   const elapsed = useElapsedTimer(isGenerating);
@@ -85,9 +86,9 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
 
   const update = useCallback(
     (field: string, value: string) => {
-      updateVariant(strategyId, { [field]: value });
+      updateStrategy(strategyId, { [field]: value });
     },
-    [strategyId, updateVariant],
+    [strategyId, updateStrategy],
   );
 
   const handleExportDebugMarkdown = useCallback(() => {
@@ -96,18 +97,18 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
     const compiler = useCompilerStore.getState();
     const domain = useWorkspaceDomainStore.getState();
     const gen = useGenerationStore.getState();
-    const dimensionMap = findDimensionMapForVariant(compiler.dimensionMaps, strategyId);
+    const incubationPlan = findPlanForStrategy(compiler.incubationPlans, strategyId);
     const domainHypothesis = domain.hypotheses[nodeId];
     const compiledPromptsForStrategy = compiler.compiledPrompts.filter(
-      (p) => p.variantStrategyId === strategyId,
+      (p) => p.strategyId === strategyId,
     );
-    const resultsForStrategy = gen.results.filter((r) => r.variantStrategyId === strategyId);
+    const resultsForStrategy = gen.results.filter((r) => r.strategyId === strategyId);
     const md = buildHypothesisDebugMarkdown({
       exportedAt: new Date().toISOString(),
       canvasTitle: spec.title,
       hypothesisNodeId: nodeId,
       strategy,
-      dimensionMap,
+      incubationPlan,
       domainHypothesis,
       modelProfiles: domain.modelProfiles,
       designSystems: domain.designSystems,
@@ -126,7 +127,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
 
   const handleDelete = useCallback(() => {
     const snap = useCanvasStore.getState();
-    const variantCount = countOutgoingNodesOfType(nodeId, NODE_TYPES.VARIANT, snap);
+    const variantCount = countOutgoingNodesOfType(nodeId, NODE_TYPES.PREVIEW, snap);
     const { title, description, confirmLabel, cancelLabel } =
       hypothesisDeleteCopy(variantCount);
     requestPermanentDelete({
@@ -217,7 +218,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === 'Escape') setEditingName(false);
               }}
-              className="nodrag nowheel min-w-0 flex-1 rounded border border-accent bg-transparent px-1 text-xs font-semibold text-fg outline-none"
+              className={`${RF_INTERACTIVE} min-w-0 flex-1 rounded border border-accent bg-transparent px-1 text-xs font-semibold text-fg outline-none`}
             />
             <button
               type="button"
@@ -266,7 +267,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
       {/* Hypothesis / Why / Measurements — one tab at a time for readable editing */}
       <div className="flex min-h-[var(--min-height-hypothesis-shell)] flex-col px-3 pb-2 pt-1">
         <div
-          className="nodrag nowheel mb-1.5 flex gap-0.5 rounded-md border border-border bg-surface-raised p-0.5"
+          className={`${RF_INTERACTIVE} mb-1.5 flex gap-0.5 rounded-md border border-border bg-surface-raised p-0.5`}
           role="tablist"
           aria-label="Hypothesis fields"
         >
@@ -277,7 +278,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               role="tab"
               aria-selected={editorTab === id}
               onPointerDown={() => setEditorTab(id)}
-              className={`nodrag nowheel min-w-0 flex-1 rounded px-2 py-1 text-center text-nano font-medium transition-colors ${
+              className={`${RF_INTERACTIVE} min-w-0 flex-1 rounded px-2 py-1 text-center text-nano font-medium transition-colors ${
                 editorTab === id
                   ? 'bg-fg text-bg shadow-sm'
                   : 'text-fg-muted hover:bg-surface hover:text-fg-secondary'
@@ -294,7 +295,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               onChange={(e) => update('hypothesis', e.target.value)}
               rows={8}
               placeholder="What you're exploring or validating with this variant..."
-              className="nodrag nowheel min-h-[var(--min-height-hypothesis-textarea)] w-full resize-y rounded border border-border px-2.5 py-2 text-micro leading-relaxed text-fg-secondary placeholder:text-fg-faint input-focus"
+              className={`${RF_INTERACTIVE} min-h-[var(--min-height-hypothesis-textarea)] w-full resize-y rounded border border-border px-2.5 py-2 text-micro leading-relaxed text-fg-secondary placeholder:text-fg-faint input-focus`}
             />
           )}
           {editorTab === 'why' && (
@@ -303,7 +304,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               onChange={(e) => update('rationale', e.target.value)}
               rows={8}
               placeholder="Rationale, tradeoffs, and why this hypothesis is worth testing..."
-              className="nodrag nowheel min-h-[var(--min-height-hypothesis-textarea)] w-full resize-y rounded border border-border px-2.5 py-2 text-micro leading-relaxed text-fg-secondary placeholder:text-fg-faint input-focus"
+              className={`${RF_INTERACTIVE} min-h-[var(--min-height-hypothesis-textarea)] w-full resize-y rounded border border-border px-2.5 py-2 text-micro leading-relaxed text-fg-secondary placeholder:text-fg-faint input-focus`}
             />
           )}
           {editorTab === 'measurements' && (
@@ -312,7 +313,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               onChange={(e) => update('measurements', e.target.value)}
               rows={8}
               placeholder="Signals, metrics, or evaluation criteria..."
-              className="nodrag nowheel min-h-[var(--min-height-hypothesis-textarea)] w-full resize-y rounded border border-border px-2.5 py-2 text-micro leading-relaxed text-fg-secondary placeholder:text-fg-faint input-focus"
+              className={`${RF_INTERACTIVE} min-h-[var(--min-height-hypothesis-textarea)] w-full resize-y rounded border border-border px-2.5 py-2 text-micro leading-relaxed text-fg-secondary placeholder:text-fg-faint input-focus`}
             />
           )}
         </div>
@@ -321,7 +322,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
       {/* Skeleton while generating */}
       {isGenerating && (
         <GeneratingSkeleton
-          label={agentMode === 'agentic' ? 'Agent running…' : 'Generating…'}
+          label={agentMode === GENERATION_MODE.AGENTIC ? 'Agent running…' : 'Generating…'}
           elapsed={elapsed}
         />
       )}
@@ -337,7 +338,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               type="button"
               onPointerDown={(e) => e.stopPropagation()}
               onClick={() => void navigator.clipboard?.writeText(generationError)}
-              className="nodrag nowheel mt-1 flex items-center gap-1 rounded px-0.5 py-0.5 text-nano font-medium text-error hover:bg-error-surface hover:text-error"
+              className={`${RF_INTERACTIVE} mt-1 flex items-center gap-1 rounded px-0.5 py-0.5 text-nano font-medium text-error hover:bg-error-surface hover:text-error`}
             >
               <ClipboardCopy size={10} className="shrink-0 opacity-90" aria-hidden />
               Copy message
@@ -345,16 +346,16 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
           </div>
         )}
 
-        <div className="nodrag nowheel mb-2 space-y-1.5">
+        <div className={`${RF_INTERACTIVE} mb-2 space-y-1.5`}>
           <div className="space-y-1">
             <span className="text-nano text-fg-muted">Run mode</span>
             <div className="flex gap-0.5 rounded border border-border bg-surface p-0.5">
               <button
                 type="button"
-                onPointerDown={() => setAgentMode('single')}
+                onPointerDown={() => setAgentMode(GENERATION_MODE.SINGLE)}
                 title="Direct: one shot"
-                className={`nodrag nowheel flex min-w-0 flex-1 items-center justify-center gap-1 rounded px-1.5 py-0.5 text-nano transition-colors ${
-                  agentMode === 'single' ? 'bg-fg text-bg' : 'text-fg-muted hover:text-fg-secondary'
+                className={`${RF_INTERACTIVE} flex min-w-0 flex-1 items-center justify-center gap-1 rounded px-1.5 py-0.5 text-nano transition-colors ${
+                  agentMode === GENERATION_MODE.SINGLE ? 'bg-fg text-bg' : 'text-fg-muted hover:text-fg-secondary'
                 }`}
               >
                 <Sparkles size={9} className="shrink-0 opacity-90" />
@@ -362,10 +363,10 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               </button>
               <button
                 type="button"
-                onPointerDown={() => setAgentMode('agentic')}
+                onPointerDown={() => setAgentMode(GENERATION_MODE.AGENTIC)}
                 title="Agentic: tools, eval, revise"
-                className={`nodrag nowheel flex min-w-0 flex-1 items-center justify-center gap-1 rounded px-1.5 py-0.5 text-nano transition-colors ${
-                  agentMode === 'agentic' ? 'bg-fg text-bg' : 'text-fg-muted hover:text-fg-secondary'
+                className={`${RF_INTERACTIVE} flex min-w-0 flex-1 items-center justify-center gap-1 rounded px-1.5 py-0.5 text-nano transition-colors ${
+                  agentMode === GENERATION_MODE.AGENTIC ? 'bg-fg text-bg' : 'text-fg-muted hover:text-fg-secondary'
                 }`}
               >
                 <Zap size={9} className="shrink-0 opacity-90" />
@@ -379,7 +380,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
           </p>
         </div>
 
-        <div className="nodrag nowheel">
+        <div className={RF_INTERACTIVE}>
           {hint && (
             <p className="mb-1.5 text-center text-nano text-fg-muted">{hint}</p>
           )}
@@ -396,17 +397,17 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
                     ? `Generating ${numberToWord(generationProgress.total)} variants…`
                     : generationProgress.total > 1
                       ? `${generationProgress.completed} of ${generationProgress.total} ready…`
-                      : agentMode === 'agentic'
+                      : agentMode === GENERATION_MODE.AGENTIC
                         ? 'Running agent…'
                         : 'Generating…'
-                  : agentMode === 'agentic'
+                  : agentMode === GENERATION_MODE.AGENTIC
                     ? 'Running agent…'
                     : 'Generating…'}
               </>
             ) : (
               <>
-                {agentMode === 'agentic' ? <Zap size={12} /> : <Sparkles size={12} />}
-                {agentMode === 'agentic' ? 'Run agent' : 'Generate'}
+                {agentMode === GENERATION_MODE.AGENTIC ? <Zap size={12} /> : <Sparkles size={12} />}
+                {agentMode === GENERATION_MODE.AGENTIC ? 'Run agent' : 'Generate'}
               </>
             )}
           </button>

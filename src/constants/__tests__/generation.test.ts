@@ -1,5 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import { GENERATION_STATUS, type GenerationStatus } from '../generation';
+import {
+  GENERATION_MODE,
+  GENERATION_STATUS,
+  type GenerationMode,
+  type GenerationStatus,
+} from '../generation';
+
+describe('GENERATION_MODE', () => {
+  it('pins hypothesis run mode literals', () => {
+    expect(GENERATION_MODE.SINGLE).toBe('single');
+    expect(GENERATION_MODE.AGENTIC).toBe('agentic');
+  });
+
+  it('GenerationMode type covers both values', () => {
+    const modes: GenerationMode[] = [GENERATION_MODE.SINGLE, GENERATION_MODE.AGENTIC];
+    expect(modes).toHaveLength(2);
+  });
+});
 
 describe('GENERATION_STATUS', () => {
   it('contains all 4 lifecycle states', () => {

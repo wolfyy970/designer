@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
     id: 'd1',
     specId: 's1',
     dimensions: [],
-    variants: [],
+    hypotheses: [],
     generatedAt: '2020-01-01T00:00:00.000Z',
     compilerModel: 'test-model',
   })),
@@ -68,7 +68,7 @@ describe('POST /api/compile validation', () => {
     expect(mocks.compileSpec).not.toHaveBeenCalled();
   });
 
-  it('returns 400 when promptOptions.existingStrategies has invalid variant shape', async () => {
+  it('returns 400 when promptOptions.existingStrategies has invalid strategy shape', async () => {
     const res = await app.request('http://localhost/api/compile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

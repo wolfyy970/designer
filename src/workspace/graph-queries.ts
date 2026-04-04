@@ -4,7 +4,21 @@
  */
 import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
 import { NODE_TYPES } from '../constants/canvas';
-import type { WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
+import type { CanvasNodeType, WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
+
+/** Coerce a persisted/snapshot node row into `WorkspaceNode` for graph helpers (dummy position). */
+export function snapshotNodeToWorkspace(n: {
+  id: string;
+  type: CanvasNodeType;
+  data: Record<string, unknown>;
+}): WorkspaceNode {
+  return {
+    id: n.id,
+    type: n.type,
+    position: { x: 0, y: 0 },
+    data: n.data as WorkspaceNode['data'],
+  };
+}
 
 export interface WorkspaceGraphSnapshot {
   readonly nodes: readonly WorkspaceNode[];
@@ -25,18 +39,23 @@ export function nodeById(
   return workspaceNodeById(snapshot.nodes, id);
 }
 
+/** Minimal graph snapshot for incubator lookup (avoids scattering nodes/edges arg order). */
+export type IncubatorLookupSnapshot = {
+  readonly nodes: readonly { id: string; type: string }[];
+  readonly edges: readonly Pick<WorkspaceEdge, 'source' | 'target'>[];
+};
+
 /**
  * First compiler node with an edge to this hypothesis (`source` → `target`).
  * Uses the same iteration order as legacy inline loops.
  */
 export function findIncubatorForHypothesis(
-  nodes: readonly { id: string; type: string }[],
-  edges: readonly Pick<WorkspaceEdge, 'source' | 'target'>[],
+  snapshot: IncubatorLookupSnapshot,
   hypothesisId: string,
 ): string | null {
-  for (const e of edges) {
+  for (const e of snapshot.edges) {
     if (e.target !== hypothesisId) continue;
-    const n = nodes.find((x) => x.id === e.source);
+    const n = snapshot.nodes.find((x) => x.id === e.source);
     if (n?.type === NODE_TYPES.COMPILER) return n.id;
   }
   return null;

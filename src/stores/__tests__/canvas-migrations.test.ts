@@ -99,8 +99,9 @@ describe('v6 → v7: add variantStrategyId', () => {
     const v1Data = nodes[0].data as Record<string, unknown>;
     const v2Data = nodes[1].data as Record<string, unknown>;
 
-    expect(v1Data.variantStrategyId).toBe('vs-abc');
-    expect(v2Data.variantStrategyId).toBeUndefined();
+    // v6→v7 adds variantStrategyId, then v19→v20 renames it to strategyId
+    expect(v1Data.strategyId).toBe('vs-abc');
+    expect(v2Data.strategyId).toBeUndefined();
   });
 
   it('skips variants that already have variantStrategyId', () => {
@@ -114,7 +115,8 @@ describe('v6 → v7: add variantStrategyId', () => {
     };
     const result = migrateCanvasState(state, 6);
     const nodes = result.nodes as Array<Record<string, unknown>>;
-    expect((nodes[0].data as Record<string, unknown>).variantStrategyId).toBe('vs-existing');
+    // v6→v7 keeps existing variantStrategyId, then v19→v20 renames it to strategyId
+    expect((nodes[0].data as Record<string, unknown>).strategyId).toBe('vs-existing');
   });
 });
 
@@ -521,5 +523,77 @@ describe('v18 → v19: sanitize dismissedSectionGhostSlots', () => {
     };
     const result = migrateCanvasState(state, 18);
     expect(result.dismissedSectionGhostSlots).toEqual([]);
+  });
+});
+
+// ── v19 → v20: rename variant → preview, variantStrategyId → strategyId ─
+
+describe('v19 → v20: rename variant to preview', () => {
+  it('renames variant node type to preview', () => {
+    const state = {
+      nodes: [
+        makeNode('v1', 'variant', { variantStrategyId: 'vs-1', refId: 'r1' }),
+        makeNode('h1', 'hypothesis', { refId: 'vs-1' }),
+      ],
+      edges: [makeEdge('e1', 'h1', 'v1')],
+    };
+    const result = migrateCanvasState(state, 19);
+    const nodes = result.nodes as Array<Record<string, unknown>>;
+
+    const v1 = nodes.find((n) => n.id === 'v1')!;
+    expect(v1.type).toBe('preview');
+    const v1Data = v1.data as Record<string, unknown>;
+    expect(v1Data.strategyId).toBe('vs-1');
+    expect(v1Data.variantStrategyId).toBeUndefined();
+    expect(v1Data.refId).toBe('r1');
+
+    const h1 = nodes.find((n) => n.id === 'h1')!;
+    expect(h1.type).toBe('hypothesis');
+  });
+
+  it('preserves edges unchanged', () => {
+    const state = {
+      nodes: [
+        makeNode('v1', 'variant', { variantStrategyId: 'vs-1' }),
+        makeNode('h1', 'hypothesis', { refId: 'vs-1' }),
+      ],
+      edges: [makeEdge('e1', 'h1', 'v1')],
+    };
+    const result = migrateCanvasState(state, 19);
+    const edges = result.edges as Array<Record<string, unknown>>;
+
+    expect(edges).toHaveLength(1);
+    expect(edges[0].source).toBe('h1');
+    expect(edges[0].target).toBe('v1');
+  });
+
+  it('handles variant nodes without variantStrategyId', () => {
+    const state = {
+      nodes: [makeNode('v1', 'variant', { refId: 'r1' })],
+      edges: [],
+    };
+    const result = migrateCanvasState(state, 19);
+    const nodes = result.nodes as Array<Record<string, unknown>>;
+
+    const v1 = nodes[0];
+    expect(v1.type).toBe('preview');
+    expect((v1.data as Record<string, unknown>).strategyId).toBeUndefined();
+  });
+
+  it('does not touch non-variant nodes', () => {
+    const state = {
+      nodes: [
+        makeNode('c1', 'compiler'),
+        makeNode('h1', 'hypothesis', { refId: 'vs-1' }),
+        makeNode('m1', 'model', { modelId: 'x' }),
+      ],
+      edges: [],
+    };
+    const result = migrateCanvasState(state, 19);
+    const nodes = result.nodes as Array<Record<string, unknown>>;
+
+    expect(nodes.find((n) => n.id === 'c1')!.type).toBe('compiler');
+    expect(nodes.find((n) => n.id === 'h1')!.type).toBe('hypothesis');
+    expect(nodes.find((n) => n.id === 'm1')!.type).toBe('model');
   });
 });

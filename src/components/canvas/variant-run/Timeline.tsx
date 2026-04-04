@@ -6,6 +6,7 @@ import {
   useState,
 } from 'react';
 import { Brain, Wrench } from 'lucide-react';
+import { RF_INTERACTIVE } from '../../../constants/canvas';
 import type { RunTraceEvent, StreamingToolLiveness, ThinkingTurnSlice } from '../../../types/provider';
 import { StreamdownTimeline } from './StreamdownTimeline.tsx';
 import { formatStreamArgSize } from '../../../lib/format-stream-arg-size';
@@ -395,7 +396,7 @@ export function Timeline({
         <div
           ref={scrollRef}
           onScroll={onScroll}
-          className="nodrag nowheel max-h-full min-h-0 overflow-y-auto px-3 py-1.5 text-fg-muted"
+          className={`${RF_INTERACTIVE} max-h-full min-h-0 overflow-y-auto px-3 py-1.5 text-fg-muted`}
         >
           <StreamdownTimeline
             mode={isStreaming ? 'streaming' : 'static'}
@@ -419,7 +420,7 @@ export function Timeline({
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="nodrag nowheel max-h-full min-h-0 overflow-y-auto px-3 py-1.5"
+        className={`${RF_INTERACTIVE} max-h-full min-h-0 overflow-y-auto px-3 py-1.5`}
       >
         {!hasSegments && hasTrace && (
           <>

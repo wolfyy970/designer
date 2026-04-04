@@ -5,7 +5,7 @@ import { normalizeError } from '../../../lib/error-utils';
 import { useSpecStore } from '../../../stores/spec-store';
 import {
   useCompilerStore,
-  findVariantStrategy,
+  findStrategy,
 } from '../../../stores/compiler-store';
 import { useGenerationStore } from '../../../stores/generation-store';
 import {
@@ -14,14 +14,14 @@ import {
   type CanvasNodeType,
 } from '../../../stores/canvas-store';
 import type { CompilerNodeData } from '../../../types/canvas-data';
-import type { VariantStrategy } from '../../../types/compiler';
+import type { HypothesisStrategy } from '../../../types/compiler';
 import { compile as apiCompile } from '../../../api/client';
 import { buildCompileInputs } from '../../../lib/canvas-graph';
 import { useWorkspaceDomainStore } from '../../../stores/workspace-domain-store';
 import { scheduleCanvasFitView } from '../../../lib/canvas-fit-view';
 import { processingOrFilled } from '../../../lib/node-status';
 import { isPlaceholderHypothesis } from '../../../lib/hypothesis-node-utils';
-import { EDGE_STATUS } from '../../../constants/canvas';
+import { EDGE_STATUS, RF_INTERACTIVE } from '../../../constants/canvas';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
 import { getActivePromptOverrides, usePromptOverridesStore } from '../../../stores/prompt-overrides-store';
 import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
@@ -42,7 +42,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
 
   const isCompiling = useCompilerStore((s) => s.isCompiling);
   const error = useCompilerStore((s) => s.error);
-  const appendVariantsToNode = useCompilerStore((s) => s.appendVariantsToNode);
+  const appendStrategiesToNode = useCompilerStore((s) => s.appendStrategiesToNode);
   const setCompiling = useCompilerStore((s) => s.setCompiling);
   const setError = useCompilerStore((s) => s.setError);
 
@@ -64,11 +64,11 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
   const connectedInputCount = useMemo(() => {
     if (
       domainWiring &&
-      (domainWiring.sectionNodeIds.length > 0 || domainWiring.variantNodeIds.length > 0)
+      (domainWiring.sectionNodeIds.length > 0 || domainWiring.previewNodeIds.length > 0)
     ) {
       return (
         domainWiring.sectionNodeIds.length +
-        domainWiring.variantNodeIds.length
+        domainWiring.previewNodeIds.length
       );
     }
     const incomingEdges = edges.filter((e) => e.target === id);
@@ -76,7 +76,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
       const sourceNode = nodes.find((n) => n.id === e.source);
       return sourceNode && (
         SECTION_NODE_TYPES.has(sourceNode.type as CanvasNodeType) ||
-        sourceNode.type === 'variant'
+        sourceNode.type === 'preview'
       );
     }).length;
   }, [domainWiring, edges, nodes, id]);
@@ -106,12 +106,12 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
     const { partialSpec, referenceDesigns } =
       await buildCompileInputs(nodes, edges, spec, id, results, wiring);
 
-    const dimensionMaps = useCompilerStore.getState().dimensionMaps;
-    const existingStrategies: VariantStrategy[] = [];
+    const incubationPlans = useCompilerStore.getState().incubationPlans;
+    const existingStrategies: HypothesisStrategy[] = [];
     const hypotheses = useWorkspaceDomainStore.getState().hypotheses;
     for (const h of Object.values(hypotheses)) {
       if (h.incubatorId !== id || h.placeholder) continue;
-      const strategy = findVariantStrategy(dimensionMaps, h.variantStrategyId);
+      const strategy = findStrategy(incubationPlans, h.strategyId);
       if (strategy) existingStrategies.push(strategy);
     }
 
@@ -133,8 +133,8 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
         ...(promptOverrides ? { promptOverrides } : {}),
       });
       removePlaceholders(placeholderIds);
-      appendVariantsToNode(id, map);
-      syncAfterCompile(map.variants, id);
+      appendStrategiesToNode(id, map);
+      syncAfterCompile(map.hypotheses, id);
       setEdgeStatusBySource(id, EDGE_STATUS.COMPLETE);
       scheduleCanvasFitView(fitView);
     } catch (err) {
@@ -155,7 +155,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
     hypothesisCount,
     setCompiling,
     setError,
-    appendVariantsToNode,
+    appendStrategiesToNode,
     syncAfterCompile,
     addPlaceholderHypotheses,
     removePlaceholders,
@@ -207,7 +207,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
           </div>
         )}
 
-        <div className="nodrag nowheel space-y-2">
+        <div className={`${RF_INTERACTIVE} space-y-2`}>
           {/* Hypothesis count selector */}
           <div className="flex items-center justify-between">
             <label className="text-nano text-fg-secondary">New hypotheses</label>

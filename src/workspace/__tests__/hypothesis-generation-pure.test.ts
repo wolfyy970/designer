@@ -5,12 +5,12 @@ import {
   normalizeModelProfilesForApi,
   workspaceSnapshotWireToGraph,
 } from '../hypothesis-generation-pure';
-import type { VariantStrategy } from '../../types/compiler';
+import type { HypothesisStrategy } from '../../types/compiler';
 import type { DesignSpec } from '../../types/spec';
 import { EDGE_STATUS, NODE_TYPES } from '../../constants/canvas';
 import { LOCKDOWN_MODEL_ID, LOCKDOWN_PROVIDER_ID } from '../../lib/lockdown-model';
 
-const strategy: VariantStrategy = {
+const strategy: HypothesisStrategy = {
   id: 'vs1',
   name: 'S',
   hypothesis: 'H',
@@ -132,13 +132,13 @@ describe('hypothesis-generation-pure', () => {
   it('buildHypothesisGenerationContextFromInputs uses domain records when provided', () => {
     const ctx = buildHypothesisGenerationContextFromInputs({
       hypothesisNodeId: 'hyp1',
-      variantStrategy: strategy,
+      hypothesisStrategy: strategy,
       spec: minimalSpec,
       snapshot: { nodes: [], edges: [] },
       domainHypothesis: {
         id: 'hyp1',
         incubatorId: 'c1',
-        variantStrategyId: 'vs1',
+        strategyId: 'vs1',
         modelNodeIds: ['mod1'],
         designSystemNodeIds: ['ds1'],
         agentMode: 'agentic',
@@ -188,13 +188,13 @@ describe('hypothesis-generation-pure', () => {
     };
     const ctx = buildHypothesisGenerationContextFromInputs({
       hypothesisNodeId: 'h1',
-      variantStrategy: strategy,
+      hypothesisStrategy: strategy,
       spec: minimalSpec,
       snapshot,
       domainHypothesis: {
         id: 'h1',
         incubatorId: 'c1',
-        variantStrategyId: 'vs1',
+        strategyId: 'vs1',
         modelNodeIds: [],
         designSystemNodeIds: [],
         placeholder: false,
@@ -207,6 +207,38 @@ describe('hypothesis-generation-pure', () => {
     expect(ctx!.agentMode).toBe('single');
     expect(ctx!.modelCredentials).toEqual([
       { providerId: 'lmstudio', modelId: 'lm', thinkingLevel: 'low' },
+    ]);
+  });
+
+  it('buildHypothesisGenerationContextFromInputs uses normalized modelProfiles matching API payload', () => {
+    const rawProfiles = {
+      mod1: {
+        nodeId: 'mod1',
+        providerId: '' as string,
+        modelId: 'vision-model',
+      },
+    };
+    const normalized = normalizeModelProfilesForApi(rawProfiles, 'openrouter');
+    const ctx = buildHypothesisGenerationContextFromInputs({
+      hypothesisNodeId: 'hyp1',
+      hypothesisStrategy: strategy,
+      spec: minimalSpec,
+      snapshot: { nodes: [], edges: [] },
+      domainHypothesis: {
+        id: 'hyp1',
+        incubatorId: 'c1',
+        strategyId: 'vs1',
+        modelNodeIds: ['mod1'],
+        designSystemNodeIds: [],
+        placeholder: false,
+      },
+      modelProfiles: normalized,
+      designSystems: {},
+      defaultCompilerProvider: 'openrouter',
+    });
+    expect(ctx).not.toBeNull();
+    expect(ctx!.modelCredentials).toEqual([
+      { providerId: 'openrouter', modelId: 'vision-model', thinkingLevel: 'minimal' },
     ]);
   });
 });

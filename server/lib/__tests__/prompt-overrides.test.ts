@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { PromptKey } from '../prompts/defaults.ts';
+import type { PromptKey } from '../../../src/lib/prompts/defaults.ts';
 
 vi.mock('../../db/prompts.ts', () => ({
   getPromptBody: vi.fn(async (key: PromptKey) => `REMOTE:${key}`),

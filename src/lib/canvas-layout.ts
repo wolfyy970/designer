@@ -1,12 +1,10 @@
 import type { SectionGhostData, SectionGhostTargetType } from '../types/canvas-data';
+import { SECTION_NODE_TYPES } from '../constants/canvas';
 import type { CanvasNodeType, WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 
 type CanvasNode = WorkspaceNode;
 
-export const SECTION_NODE_TYPES = new Set<CanvasNodeType>([
-  'designBrief', 'existingDesign', 'researchContext',
-  'objectivesMetrics', 'designConstraints',
-]);
+export { SECTION_NODE_TYPES };
 
 /**
  * Canonical vertical order for optional input sections (ghosts + real nodes in layer 0).
@@ -55,7 +53,7 @@ const FALLBACK_H: Record<string, number> = {
   compiler: 220,
   designSystem: 300,
   hypothesis: 440,
-  variant: 400,
+  preview: 400,
   model: 180,
 };
 export const DEFAULT_COL_GAP = 160;
@@ -80,7 +78,7 @@ const TYPE_ORDER_LAYER: Record<string, number> = {
   compiler: 6,
   designSystem: 7,
   hypothesis: 8,
-  variant: 9,
+  preview: 9,
 };
 
 /**
@@ -131,16 +129,16 @@ export function reconcileSectionGhostNodes(
 }
 
 function nodeWidth(node: CanvasNode): number {
-  return node.type === 'variant' ? NODE_W_VARIANT : NODE_W_DEFAULT;
+  return node.type === 'preview' ? NODE_W_VARIANT : NODE_W_DEFAULT;
 }
 
-/** Compute column X positions from a given gap (4 columns: sections → compiler → hypothesis → variant) */
+/** Compute column X positions from a given gap (4 columns: sections → compiler → hypothesis → preview) */
 export function columnX(gap: number) {
   const s = 0;
   const c = s + NODE_W_DEFAULT + gap;
   const h = c + NODE_W_DEFAULT + gap;
   const v = h + NODE_W_DEFAULT + gap;
-  return { sections: s, compiler: c, hypothesis: h, variant: v };
+  return { sections: s, compiler: c, hypothesis: h, preview: v };
 }
 
 /** Snap a position to the nearest grid point */
@@ -208,7 +206,7 @@ export function computeDefaultPosition(
     }
     return snap({ x: col.hypothesis, y });
   }
-  return snap({ x: col.variant, y: DEFAULT_CANVAS_Y });
+  return snap({ x: col.preview, y: DEFAULT_CANVAS_Y });
 }
 
 export function computeHypothesisPositions(
@@ -299,11 +297,11 @@ export function computeAutoLayout(
   // 2d. Force disconnected variant nodes (archived/pinned) to the variant column rank
   //     Without edges, DFS assigns rank 0 which places them in the leftmost column.
   const variantRank = Math.max(0, ...nodes
-    .filter((n) => n.type === 'variant' && (parents.get(n.id)?.length ?? 0) > 0)
+    .filter((n) => n.type === 'preview' && (parents.get(n.id)?.length ?? 0) > 0)
     .map((n) => rank.get(n.id) ?? 0));
   if (variantRank > 0) {
     for (const n of nodes) {
-      if (n.type === 'variant' && (parents.get(n.id)?.length ?? 0) === 0) {
+      if (n.type === 'preview' && (parents.get(n.id)?.length ?? 0) === 0) {
         rank.set(n.id, variantRank);
       }
     }

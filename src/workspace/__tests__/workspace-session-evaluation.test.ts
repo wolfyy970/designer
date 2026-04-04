@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { evaluationPayloadFromHypothesisContext } from '../workspace-session';
 import type { HypothesisGenerationContext } from '../workspace-session';
-import type { VariantStrategy } from '../../types/compiler';
+import type { HypothesisStrategy } from '../../types/compiler';
 import type { DesignSpec } from '../../types/spec';
 
-const baseStrategy = (dimensionValues: Record<string, string>): VariantStrategy => ({
+const baseStrategy = (dimensionValues: Record<string, string>): HypothesisStrategy => ({
   id: 'vs1',
   name: 'S',
   hypothesis: 'H',
@@ -38,7 +38,7 @@ const baseSpec: DesignSpec = {
 function ctx(overrides: Partial<HypothesisGenerationContext>): HypothesisGenerationContext {
   return {
     hypothesisNodeId: 'h1',
-    variantStrategy: baseStrategy({}),
+    hypothesisStrategy: baseStrategy({}),
     spec: baseSpec,
     agentMode: 'agentic',
     modelCredentials: [
@@ -55,7 +55,7 @@ describe('evaluationPayloadFromHypothesisContext', () => {
     expect(
       evaluationPayloadFromHypothesisContext(
         ctx({
-          variantStrategy: baseStrategy({ format: 'html' }),
+          hypothesisStrategy: baseStrategy({ format: 'html' }),
           agentMode: 'single',
         }),
       ),
@@ -64,7 +64,7 @@ describe('evaluationPayloadFromHypothesisContext', () => {
 
   it('maps format dimension to outputFormat', () => {
     const p = evaluationPayloadFromHypothesisContext(
-      ctx({ variantStrategy: baseStrategy({ format: 'html' }) }),
+      ctx({ hypothesisStrategy: baseStrategy({ format: 'html' }) }),
     );
     expect(p?.outputFormat).toBe('html');
     expect(p?.hypothesis).toBe('H');
@@ -75,12 +75,12 @@ describe('evaluationPayloadFromHypothesisContext', () => {
   it('accepts output_format and Output Format keys', () => {
     expect(
       evaluationPayloadFromHypothesisContext(
-        ctx({ variantStrategy: baseStrategy({ output_format: 'react' }) }),
+        ctx({ hypothesisStrategy: baseStrategy({ output_format: 'react' }) }),
       )?.outputFormat,
     ).toBe('react');
     expect(
       evaluationPayloadFromHypothesisContext(
-        ctx({ variantStrategy: baseStrategy({ 'Output Format': '  html  ' }) }),
+        ctx({ hypothesisStrategy: baseStrategy({ 'Output Format': '  html  ' }) }),
       )?.outputFormat,
     ).toBe('html');
   });

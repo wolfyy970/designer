@@ -2,22 +2,23 @@
  * Domain-first workspace model (client).
  * Canvas nodes/edges are a projection; semantic relations live here.
  */
+import type { GenerationMode } from '../constants/generation';
 import type { ReferenceImage } from './spec';
 
-export type AgentMode = 'single' | 'agentic';
+export type AgentMode = GenerationMode;
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high';
 
-/** Wired inputs for compile: section + variant node ids feeding an incubator. */
+/** Wired inputs for compile: section + preview node ids feeding an incubator. */
 export interface DomainIncubatorWiring {
   readonly sectionNodeIds: string[];
-  readonly variantNodeIds: string[];
+  readonly previewNodeIds: string[];
 }
 
 /** Hypothesis runtime settings and bindings (not graph topology). */
 export interface DomainHypothesis {
   id: string;
   incubatorId: string;
-  variantStrategyId: string;
+  strategyId: string;
   modelNodeIds: string[];
   designSystemNodeIds: string[];
   /** Direct vs agentic — one setting for all lanes on this hypothesis. */
@@ -43,11 +44,11 @@ export interface DomainDesignSystemContent {
   modelMigration?: string;
 }
 
-/** Variant preview slot per hypothesis + strategy (canvas node id is projection). */
-export interface DomainVariantSlot {
+/** Preview slot per hypothesis + strategy (canvas node id is projection). */
+export interface DomainPreviewSlot {
   readonly hypothesisId: string;
-  readonly variantStrategyId: string;
-  variantNodeId: string | null;
+  readonly strategyId: string;
+  previewNodeId: string | null;
   activeResultId: string | null;
   pinnedRunId: string | null;
 }
@@ -60,14 +61,14 @@ export interface WorkspaceDomainStateV1 {
   hypotheses: Record<string, DomainHypothesis>;
   modelProfiles: Record<string, DomainModelProfile>;
   designSystems: Record<string, DomainDesignSystemContent>;
-  variantSlots: Record<string, DomainVariantSlot>;
+  previewSlots: Record<string, DomainPreviewSlot>;
 }
 
 export function defaultIncubatorWiring(): DomainIncubatorWiring {
-  return { sectionNodeIds: [], variantNodeIds: [] };
+  return { sectionNodeIds: [], previewNodeIds: [] };
 }
 
-/** Slot key used in variantSlots map */
-export function variantSlotKey(hypothesisId: string, variantStrategyId: string): string {
-  return `${hypothesisId}::${variantStrategyId}`;
+/** Slot key used in previewSlots map */
+export function previewSlotKey(hypothesisId: string, strategyId: string): string {
+  return `${hypothesisId}::${strategyId}`;
 }

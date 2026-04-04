@@ -5,7 +5,7 @@
  * Pure logic lives in `hypothesis-generation-pure.ts` (server-importable).
  */
 import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
-import type { VariantStrategy } from '../types/compiler';
+import type { HypothesisStrategy } from '../types/compiler';
 import type { EvaluationContextPayload } from '../types/evaluation';
 import type { ProvenanceContext } from '../types/provenance-context';
 import type { DesignSpec } from '../types/spec';
@@ -22,7 +22,7 @@ export type { HypothesisGenerationContext };
 
 export function buildHypothesisGenerationContext(input: {
   hypothesisNodeId: string;
-  variantStrategy: VariantStrategy;
+  hypothesisStrategy: HypothesisStrategy;
   snapshot: WorkspaceGraphSnapshot;
   spec: DesignSpec;
 }): HypothesisGenerationContext | null {
@@ -30,7 +30,7 @@ export function buildHypothesisGenerationContext(input: {
   const domainHyp = s.hypotheses[input.hypothesisNodeId];
   return buildHypothesisGenerationContextFromInputs({
     hypothesisNodeId: input.hypothesisNodeId,
-    variantStrategy: input.variantStrategy,
+    hypothesisStrategy: input.hypothesisStrategy,
     spec: input.spec,
     snapshot: input.snapshot,
     domainHypothesis: domainHyp ?? null,

@@ -1,5 +1,5 @@
 import type { DesignSpec } from '../../types/spec';
-import type { VariantStrategy } from '../../types/compiler';
+import type { HypothesisStrategy } from '../../types/compiler';
 import { interpolate } from '../utils';
 import { getSectionContent, collectImageLines } from './helpers';
 
@@ -11,7 +11,7 @@ function imageBlock(spec: DesignSpec): string {
 
 export interface CompilerPromptOptions {
   count?: number;
-  existingStrategies?: VariantStrategy[];
+  existingStrategies?: HypothesisStrategy[];
 }
 
 export function buildCompilerUserPrompt(
@@ -33,7 +33,7 @@ export function buildCompilerUserPrompt(
   if (referenceDesigns && referenceDesigns.length > 0) {
     prompt += '\n\n## Reference Designs (from previous iterations)\n';
     prompt +=
-      'The following designs were generated in a previous iteration. Analyze their strengths and weaknesses, then propose new variant strategies that improve upon them.\n\n';
+      'The following designs were generated in a previous iteration. Analyze their strengths and weaknesses, then propose new hypothesis strategies that improve upon them.\n\n';
     for (const ref of referenceDesigns) {
       prompt += `### ${ref.name}\n\`\`\`\n${ref.code}\n\`\`\`\n\n`;
     }
@@ -60,7 +60,7 @@ export function buildCompilerUserPrompt(
 
   const count = options?.count;
   if (count != null) {
-    prompt += `\nProduce exactly ${count} new variant strategies.\n`;
+    prompt += `\nProduce exactly ${count} new hypothesis strategies.\n`;
   }
 
   return prompt;

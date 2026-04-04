@@ -9,7 +9,7 @@ import {
   workspaceSnapshotWireToGraph,
   type HypothesisGenerationContext,
 } from '../../src/workspace/hypothesis-generation-pure.ts';
-import { compileVariantPrompts } from '../services/compiler.ts';
+import { compileHypothesisPrompts } from '../services/compiler.ts';
 import { createResolvePromptBody, sanitizePromptOverrides } from './prompt-overrides.ts';
 import { generateId, now } from '../../src/lib/utils.ts';
 
@@ -31,7 +31,7 @@ export async function buildHypothesisWorkspaceBundle(
 ): Promise<HypothesisWorkspaceBundle | null> {
   const ctxRaw = buildHypothesisGenerationContextFromInputs({
     hypothesisNodeId: body.hypothesisNodeId,
-    variantStrategy: body.variantStrategy,
+    hypothesisStrategy: body.strategy,
     spec: body.spec,
     snapshot: workspaceSnapshotWireToGraph(body.snapshot),
     domainHypothesis: body.domainHypothesis ?? undefined,
@@ -43,20 +43,20 @@ export async function buildHypothesisWorkspaceBundle(
   const ctx = applyLockdownToHypothesisContext(ctxRaw);
 
   const resolvePrompt = createResolvePromptBody(sanitizePromptOverrides(body.promptOverrides));
-  const variantTemplate = await resolvePrompt('designer-hypothesis-inputs');
-  const filteredMap = {
+  const hypothesisTemplate = await resolvePrompt('designer-hypothesis-inputs');
+  const filteredPlan = {
     id: generateId(),
     specId: ctx.spec.id,
     dimensions: [],
-    variants: [ctx.variantStrategy],
+    hypotheses: [ctx.hypothesisStrategy],
     generatedAt: now(),
     compilerModel: HYPOTHESIS_COMPILER_MODEL,
   };
 
-  const prompts = compileVariantPrompts(
+  const prompts = compileHypothesisPrompts(
     ctx.spec,
-    filteredMap,
-    variantTemplate,
+    filteredPlan,
+    hypothesisTemplate,
     ctx.designSystemContent,
     [...ctx.designSystemImages],
   );

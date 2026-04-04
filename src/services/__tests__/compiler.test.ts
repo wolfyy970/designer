@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { compileVariantPrompts } from '../compiler';
 import { PROMPT_DEFAULTS } from '../../lib/prompts/shared-defaults';
 import type { DesignSpec, SpecSectionId, ReferenceImage } from '../../types/spec';
-import type { DimensionMap, VariantStrategy } from '../../types/compiler';
+import type { IncubationPlan, HypothesisStrategy } from '../../types/compiler';
 
 const VARIANT_TEMPLATE = PROMPT_DEFAULTS['designer-hypothesis-inputs'];
 
@@ -34,7 +34,7 @@ function makeSpec(overrides: Partial<DesignSpec> = {}): DesignSpec {
   };
 }
 
-function makeStrategy(overrides: Partial<VariantStrategy> = {}): VariantStrategy {
+function makeStrategy(overrides: Partial<HypothesisStrategy> = {}): HypothesisStrategy {
   return {
     id: 'strategy-1',
     name: 'Trust-Forward',
@@ -46,44 +46,44 @@ function makeStrategy(overrides: Partial<VariantStrategy> = {}): VariantStrategy
   };
 }
 
-function makeDimensionMap(variants: VariantStrategy[]): DimensionMap {
+function makeIncubationPlan(hypotheses: HypothesisStrategy[]): IncubationPlan {
   return {
     id: 'dm-1',
     specId: 'spec-1',
     dimensions: [{ name: 'layout', range: 'single to multi-column', isConstant: false }],
-    variants,
+    hypotheses,
     generatedAt: '2024-01-01T00:00:00Z',
     compilerModel: 'gpt-4',
   };
 }
 
 describe('compileVariantPrompts', () => {
-  it('returns one CompiledPrompt per variant strategy', () => {
+  it('returns one CompiledPrompt per hypothesis strategy', () => {
     const spec = makeSpec();
     const strategies = [makeStrategy({ id: 's-1' }), makeStrategy({ id: 's-2' })];
-    const dm = makeDimensionMap(strategies);
+    const plan = makeIncubationPlan(strategies);
 
-    const results = compileVariantPrompts(spec, dm, VARIANT_TEMPLATE);
+    const results = compileVariantPrompts(spec, plan, VARIANT_TEMPLATE);
 
     expect(results).toHaveLength(2);
   });
 
-  it('maps variantStrategyId correctly', () => {
+  it('maps strategyId correctly', () => {
     const spec = makeSpec();
     const strategy = makeStrategy({ id: 'strategy-abc' });
-    const dm = makeDimensionMap([strategy]);
+    const plan = makeIncubationPlan([strategy]);
 
-    const [result] = compileVariantPrompts(spec, dm, VARIANT_TEMPLATE);
+    const [result] = compileVariantPrompts(spec, plan, VARIANT_TEMPLATE);
 
-    expect(result.variantStrategyId).toBe('strategy-abc');
+    expect(result.strategyId).toBe('strategy-abc');
     expect(result.specId).toBe('spec-1');
   });
 
   it('each result has a unique id and a prompt string', () => {
     const spec = makeSpec();
-    const dm = makeDimensionMap([makeStrategy({ id: 's-1' }), makeStrategy({ id: 's-2' })]);
+    const plan = makeIncubationPlan([makeStrategy({ id: 's-1' }), makeStrategy({ id: 's-2' })]);
 
-    const results = compileVariantPrompts(spec, dm, VARIANT_TEMPLATE);
+    const results = compileVariantPrompts(spec, plan, VARIANT_TEMPLATE);
 
     expect(results[0].id).not.toBe(results[1].id);
     expect(typeof results[0].prompt).toBe('string');
@@ -105,9 +105,9 @@ describe('compileVariantPrompts', () => {
         'design-system': makeSection('design-system'),
       },
     });
-    const dm = makeDimensionMap([makeStrategy()]);
+    const plan = makeIncubationPlan([makeStrategy()]);
 
-    const [result] = compileVariantPrompts(spec, dm, VARIANT_TEMPLATE);
+    const [result] = compileVariantPrompts(spec, plan, VARIANT_TEMPLATE);
 
     expect(result.images).toHaveLength(1);
     expect(result.images[0].id).toBe('img-1');
@@ -130,9 +130,9 @@ describe('compileVariantPrompts', () => {
         'design-system': makeSection('design-system'),
       },
     });
-    const dm = makeDimensionMap([makeStrategy()]);
+    const plan = makeIncubationPlan([makeStrategy()]);
 
-    const [result] = compileVariantPrompts(spec, dm, VARIANT_TEMPLATE, undefined, [extraImg]);
+    const [result] = compileVariantPrompts(spec, plan, VARIANT_TEMPLATE, undefined, [extraImg]);
 
     expect(result.images).toHaveLength(2);
     const ids = result.images.map((i) => i.id);
@@ -140,20 +140,20 @@ describe('compileVariantPrompts', () => {
     expect(ids).toContain('extra-img');
   });
 
-  it('returns empty array when there are no variants', () => {
+  it('returns empty array when there are no hypotheses', () => {
     const spec = makeSpec();
-    const dm = makeDimensionMap([]);
+    const plan = makeIncubationPlan([]);
 
-    const results = compileVariantPrompts(spec, dm, VARIANT_TEMPLATE);
+    const results = compileVariantPrompts(spec, plan, VARIANT_TEMPLATE);
 
     expect(results).toHaveLength(0);
   });
 
   it('includes compiledAt timestamp string', () => {
     const spec = makeSpec();
-    const dm = makeDimensionMap([makeStrategy()]);
+    const plan = makeIncubationPlan([makeStrategy()]);
 
-    const [result] = compileVariantPrompts(spec, dm, VARIANT_TEMPLATE);
+    const [result] = compileVariantPrompts(spec, plan, VARIANT_TEMPLATE);
 
     expect(typeof result.compiledAt).toBe('string');
     expect(result.compiledAt.length).toBeGreaterThan(0);

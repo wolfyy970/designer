@@ -3,20 +3,20 @@ import { NODE_TYPES } from '../../constants/canvas';
 import { GENERATION_STATUS } from '../../constants/generation';
 import {
   collectOrphanNodeIds,
-  pruneDimensionMapsToLinkedRefIds,
+  pruneIncubationPlansToLinkedRefIds,
   staleGeneratingResultIds,
-} from '../canvas-orchestrator';
-import type { DimensionMap } from '../../types/compiler';
+} from '../canvas-graph-cleanup';
+import type { IncubationPlan } from '../../types/compiler';
 import type { GenerationResult } from '../../types/provider';
 import type { WorkspaceNode } from '../../types/workspace-graph';
 
-function mapWithVariants(ids: string[]): Record<string, DimensionMap> {
+function mapWithStrategies(ids: string[]): Record<string, IncubationPlan> {
   return {
     c1: {
       id: 'm1',
       specId: 's',
       dimensions: [],
-      variants: ids.map((id) => ({
+      hypotheses: ids.map((id) => ({
         id,
         name: id,
         hypothesis: '',
@@ -39,28 +39,28 @@ function hypo(id: string, refId: string, placeholder = false): WorkspaceNode {
   };
 }
 
-describe('canvas-orchestrator', () => {
-  it('collectOrphanNodeIds flags hypothesis when strategy missing from maps', () => {
+describe('canvas-graph-cleanup', () => {
+  it('collectOrphanNodeIds flags hypothesis when strategy missing from plans', () => {
     const nodes: WorkspaceNode[] = [hypo('h1', 'vs-missing')];
-    const maps = mapWithVariants(['vs-other']);
+    const plans = mapWithStrategies(['vs-other']);
     const results: GenerationResult[] = [];
-    const ids = collectOrphanNodeIds(nodes, maps, results, false);
+    const ids = collectOrphanNodeIds(nodes, plans, results, false);
     expect(ids.has('h1')).toBe(true);
   });
 
-  it('pruneDimensionMapsToLinkedRefIds drops unlinked strategies', () => {
+  it('pruneIncubationPlansToLinkedRefIds drops unlinked strategies', () => {
     const nodes: WorkspaceNode[] = [hypo('h1', 'vs-keep')];
-    const maps = mapWithVariants(['vs-keep', 'vs-orphan']);
-    const { nextMaps, changed } = pruneDimensionMapsToLinkedRefIds(nodes, maps);
+    const plans = mapWithStrategies(['vs-keep', 'vs-orphan']);
+    const { nextMaps, changed } = pruneIncubationPlansToLinkedRefIds(nodes, plans);
     expect(changed).toBe(true);
-    expect(nextMaps.c1?.variants.map((v) => v.id)).toEqual(['vs-keep']);
+    expect(nextMaps.c1?.hypotheses.map((v) => v.id)).toEqual(['vs-keep']);
   });
 
   it('staleGeneratingResultIds is empty while generating', () => {
     const results: GenerationResult[] = [
       {
         id: 'r1',
-        variantStrategyId: 'vs',
+        strategyId: 'vs',
         providerId: 'p',
         status: GENERATION_STATUS.GENERATING,
         runId: 'run',

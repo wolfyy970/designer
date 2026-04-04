@@ -17,7 +17,7 @@ import { getLangfuseAppClient, isLangfuseAppConfigured } from './langfuse-app-cl
 import { parseTextPromptGet, promptListIndicatesVersions } from './langfuse-prompt-dto.ts';
 import { loadLegacyPromptBodiesForSeed } from './legacy-sqlite-prompts.ts';
 import { LEGACY_PROMPT_KEY_ALIASES } from '../../src/lib/prompts/defaults.ts';
-import { PROMPT_KEYS } from './prompts/defaults.ts';
+import { PROMPT_KEYS } from '../../src/lib/prompts/defaults.ts';
 import { PROMPT_DEFAULTS } from '../../src/lib/prompts/shared-defaults.ts';
 
 async function promptHasAnyVersion(lf: LangfuseClient, name: string): Promise<boolean> {

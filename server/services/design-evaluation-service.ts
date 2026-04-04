@@ -14,7 +14,7 @@ import {
   type EvaluatorWorkerReport,
 } from '../../src/types/evaluation.ts';
 import { evaluatorRubricIdZodSchema } from '../../src/lib/evaluator-rubric-zod.ts';
-import type { PromptKey } from '../lib/prompts/defaults.ts';
+import type { PromptKey } from '../../src/lib/prompts/defaults.ts';
 import { env } from '../env.ts';
 import { getProvider } from './providers/registry.ts';
 import { loggedGenerateChat, type LlmLogContext } from '../lib/llm-call-logger.ts';
@@ -189,8 +189,12 @@ export function buildEvaluatorUserContent(
   let bundled = '';
   try {
     bundled = bundleVirtualFS(files);
-  } catch {
-    bundled = '[bundle error]';
+  } catch (err) {
+    const msg = normalizeError(err, 'bundle failed');
+    if (env.isDev) {
+      console.warn('[eval:bundle]', msg, err);
+    }
+    bundled = `<!-- bundleVirtualFS failed: ${msg} -->\n[bundle error]`;
   }
   if (bundled.length > MAX_BUNDLE_CHARS) {
     bundled = bundled.slice(0, MAX_BUNDLE_CHARS) + '\n…[truncated]';

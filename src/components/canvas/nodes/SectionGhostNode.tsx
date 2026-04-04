@@ -1,6 +1,7 @@
 import { memo, useCallback } from 'react';
 import { type Node, type NodeProps } from '@xyflow/react';
 import { Plus, X } from 'lucide-react';
+import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { SPEC_SECTIONS } from '../../../lib/constants';
 import { NODE_TYPE_TO_SECTION } from '../../../types/workspace-graph';
@@ -32,7 +33,7 @@ function SectionGhostNode({ data }: NodeProps<SectionGhostFlowNode>) {
   );
 
   return (
-    <div className="nodrag nowheel flex w-node flex-col rounded-lg border border-dashed border-border-dashed-ghost bg-surface-ghost-backdrop shadow-sm ring-1 ring-inset ring-border-inset-ring">
+    <div className={`${RF_INTERACTIVE} flex w-node flex-col rounded-lg border border-dashed border-border-dashed-ghost bg-surface-ghost-backdrop shadow-sm ring-1 ring-inset ring-border-inset-ring`}>
       <div className="relative border-b border-border-section-divider px-3 py-2">
         <div className="flex items-baseline justify-between gap-2 pr-6">
           <h3 className="text-xs font-semibold text-fg-muted">{meta.title}</h3>
@@ -43,7 +44,7 @@ function SectionGhostNode({ data }: NodeProps<SectionGhostFlowNode>) {
         <button
           type="button"
           onPointerDown={onDismiss}
-          className="nodrag nowheel absolute right-2 top-2 rounded p-0.5 text-fg-faint transition-colors hover:bg-surface hover:text-fg"
+          className={`${RF_INTERACTIVE} absolute right-2 top-2 rounded p-0.5 text-fg-faint transition-colors hover:bg-surface hover:text-fg`}
           aria-label={`Hide suggested card: ${meta.title}`}
         >
           <X size={14} aria-hidden />
@@ -56,7 +57,7 @@ function SectionGhostNode({ data }: NodeProps<SectionGhostFlowNode>) {
         <button
           type="button"
           onPointerDown={onAdd}
-          className="nodrag nowheel flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-surface-raised text-fg-secondary shadow-sm transition-colors hover:border-accent-border-medium hover:bg-surface hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className={`${RF_INTERACTIVE} flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-surface-raised text-fg-secondary shadow-sm transition-colors hover:border-accent-border-medium hover:bg-surface hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
           aria-label={`Add ${meta.title} to the canvas`}
         >
           <Plus size={22} strokeWidth={2.25} aria-hidden />

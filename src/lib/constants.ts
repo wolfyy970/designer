@@ -1,4 +1,5 @@
 import type { SpecSectionId, SpecSectionMeta } from '../types/spec';
+import { GENERATION_MODE } from '../constants/generation';
 import { LOCKDOWN_MODEL_ID } from './lockdown-model';
 
 export const SPEC_SECTIONS: SpecSectionMeta[] = [
@@ -58,7 +59,7 @@ export const DEFAULT_MODEL_ID = import.meta.env.VITE_DEFAULT_MODEL_ID || LOCKDOW
  */
 export const PREREQUISITE_DEFAULTS: Record<string, Record<string, unknown>> = {
   model: { providerId: DEFAULT_COMPILER_PROVIDER, modelId: DEFAULT_MODEL_ID, thinkingLevel: 'minimal' },
-  hypothesis: { agentMode: 'single' },
+  hypothesis: { agentMode: GENERATION_MODE.SINGLE },
 };
 
 
@@ -74,8 +75,8 @@ export const FEEDBACK_DISMISS_MS = 1500;
 /** Delay for iframe to fully render before screenshot capture (ms). */
 export const SCREENSHOT_LOAD_DELAY_MS = 3000;
 
-/** Vertical shift (px) when forking hypothesis variants so new stack does not overlap pins. */
-export const FORK_HYPOTHESIS_VARIANT_STACK_OFFSET_PX = 200;
+/** Vertical shift (px) when forking hypothesis previews so new stack does not overlap pins. */
+export const FORK_HYPOTHESIS_PREVIEW_STACK_OFFSET_PX = 200;
 
 function createEmptySection(id: SpecSectionId) {
   return {

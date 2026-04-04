@@ -9,21 +9,17 @@ const promptListItemSchema = z.object({
   lastUpdatedAt: z.string().optional(),
 });
 
-export const langfusePromptListPageSchema = z.object({
+const langfusePromptListPageSchema = z.object({
   data: z.array(promptListItemSchema).optional(),
 });
 
-export type LangfusePromptListPage = z.infer<typeof langfusePromptListPageSchema>;
-
-export const langfuseTextPromptSchema = z.object({
+const langfuseTextPromptSchema = z.object({
   type: z.literal('text'),
   prompt: z.string(),
   version: z.number().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });
-
-export type LangfuseTextPromptPayload = z.infer<typeof langfuseTextPromptSchema>;
 
 /** First list row’s versions + optional timestamp (for /status and history). */
 export function parsePromptListPage(raw: unknown):

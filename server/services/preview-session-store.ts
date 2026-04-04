@@ -97,14 +97,6 @@ export function getPreviewSessionFile(id: string, rawPath: string): string | und
   return undefined;
 }
 
-/** List paths for debugging / tests */
-export function previewSessionPaths(id: string): string[] | undefined {
-  prune();
-  const row = store.get(id);
-  if (!row || row.expiresAt <= Date.now()) return undefined;
-  return Object.keys(row.files);
-}
-
 function normalizeVirtualPath(raw: string): string {
   const trimmed = raw.replace(/\\/g, '/').replace(/^\/+/, '');
   const segments = trimmed.split('/').filter((s) => s.length > 0 && s !== '.');

@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useWorkspaceDomainStore } from '../../stores/workspace-domain-store';
 import { buildHypothesisGenerationContext } from '../workspace-session';
-import type { VariantStrategy } from '../../types/compiler';
+import type { HypothesisStrategy } from '../../types/compiler';
 import type { DesignSpec } from '../../types/spec';
 
-const strategy: VariantStrategy = {
+const strategy: HypothesisStrategy = {
   id: 'vs1',
   name: 'S',
   hypothesis: 'H',
@@ -24,7 +24,7 @@ describe('buildHypothesisGenerationContext (domain)', () => {
         hyp1: {
           id: 'hyp1',
           incubatorId: 'c1',
-          variantStrategyId: 'vs1',
+          strategyId: 'vs1',
           modelNodeIds: ['mod1'],
           designSystemNodeIds: ['ds1'],
           agentMode: 'agentic',
@@ -55,7 +55,7 @@ describe('buildHypothesisGenerationContext (domain)', () => {
 
     const ctx = buildHypothesisGenerationContext({
       hypothesisNodeId: 'hyp1',
-      variantStrategy: strategy,
+      hypothesisStrategy: strategy,
       snapshot: { nodes: [], edges: [] },
       spec,
     });

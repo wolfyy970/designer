@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  runAgenticWithEvaluation,
-  buildRevisionUserContext,
-} from '../agentic-orchestrator.ts';
+import { runAgenticWithEvaluation } from '../agentic-orchestrator.ts';
+import { buildRevisionUserContext } from '../../lib/agentic-revision-user.ts';
 import { EVALUATOR_RUBRIC_IDS, type EvaluatorWorkerReport } from '../../../src/types/evaluation.ts';
 import {
   buildDegradedReport,
@@ -396,5 +394,28 @@ describe('runAgenticWithEvaluation', () => {
     const callArgs = mocks.runEvaluationWorkers.mock.calls[0][0];
     expect(callArgs.evaluatorProviderId).toBe('openrouter');
     expect(callArgs.evaluatorModelId).toBe('anthropic/claude-3-haiku');
+  });
+
+  it('aborts cleanly when onStream throws during evaluation (SSE delivery failure)', async () => {
+    mocks.runDesignAgentSession.mockResolvedValueOnce({
+      files: { 'index.html': '<html></html>' },
+      todos: [],
+    });
+    mocks.runEvaluationWorkers.mockResolvedValue(allHealthy());
+
+    const ac = new AbortController();
+    const result = await runAgenticWithEvaluation({
+      ...baseOpts,
+      build: { ...baseOpts.build, signal: ac.signal },
+      onStream: async (e) => {
+        if (typeof e === 'object' && e && 'type' in e && e.type === 'evaluation_progress') {
+          throw new Error('sse write failed');
+        }
+      },
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.checkpoint.stopReason).toBe('aborted');
+    expect(ac.signal.aborted).toBe(false);
   });
 });

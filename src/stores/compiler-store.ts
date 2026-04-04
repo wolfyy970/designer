@@ -1,31 +1,31 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { CompiledPrompt, DimensionMap, VariantStrategy } from '../types/compiler';
+import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../types/compiler';
 import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 import { generateId, now } from '../lib/utils';
 
-// ── Selector helpers (for callers that need a single map) ──────────
+// ── Selector helpers (for callers that need a single plan) ──────────
 
-/** Find a variant strategy by ID across all dimension maps */
-export function findVariantStrategy(
-  dimensionMaps: Record<string, DimensionMap>,
-  variantId: string
-): VariantStrategy | undefined {
-  for (const map of Object.values(dimensionMaps)) {
-    const found = map.variants.find((v) => v.id === variantId);
+/** Find a hypothesis strategy by ID across all incubation plans */
+export function findStrategy(
+  incubationPlans: Record<string, IncubationPlan>,
+  strategyId: string
+): HypothesisStrategy | undefined {
+  for (const plan of Object.values(incubationPlans)) {
+    const found = plan.hypotheses.find((h) => h.id === strategyId);
     if (found) return found;
   }
   return undefined;
 }
 
-/** Get all variant strategy IDs across all dimension maps */
-export function allVariantStrategyIds(
-  dimensionMaps: Record<string, DimensionMap>
+/** Get all strategy IDs across all incubation plans */
+export function allStrategyIds(
+  incubationPlans: Record<string, IncubationPlan>
 ): Set<string> {
   const ids = new Set<string>();
-  for (const map of Object.values(dimensionMaps)) {
-    for (const v of map.variants) ids.add(v.id);
+  for (const plan of Object.values(incubationPlans)) {
+    for (const h of plan.hypotheses) ids.add(h.id);
   }
   return ids;
 }
@@ -34,10 +34,10 @@ export function allVariantStrategyIds(
 
 interface CompilerStore {
   /**
-   * Dimension maps keyed by incubator id (1:1 with compiler canvas node id).
+   * Incubation plans keyed by incubator id (1:1 with compiler canvas node id).
    * Domain / compile flows treat this as `incubatorId`, not graph layout.
    */
-  dimensionMaps: Record<string, DimensionMap>;
+  incubationPlans: Record<string, IncubationPlan>;
   compiledPrompts: CompiledPrompt[];
   isCompiling: boolean;
   error: string | null;
@@ -45,35 +45,33 @@ interface CompilerStore {
   selectedProvider: string;
   selectedModel: string;
 
-  setDimensionMapForNode: (incubatorId: string, map: DimensionMap) => void;
-  removeDimensionMapForNode: (incubatorId: string) => void;
+  setPlanForNode: (incubatorId: string, plan: IncubationPlan) => void;
+  removePlanForNode: (incubatorId: string) => void;
   setCompiledPrompts: (prompts: CompiledPrompt[]) => void;
   setCompiling: (isCompiling: boolean) => void;
   setError: (error: string | null) => void;
   setSelectedProvider: (provider: string) => void;
   setSelectedModel: (model: string) => void;
 
-  appendVariantsToNode: (incubatorId: string, newMap: DimensionMap) => void;
-  updateVariant: (variantId: string, updates: Partial<VariantStrategy>) => void;
-  removeVariant: (variantId: string) => void;
-  addVariantToNode: (incubatorId: string) => void;
+  appendStrategiesToNode: (incubatorId: string, newPlan: IncubationPlan) => void;
+  updateStrategy: (strategyId: string, updates: Partial<HypothesisStrategy>) => void;
+  removeStrategy: (strategyId: string) => void;
+  addStrategyToNode: (incubatorId: string) => void;
   approveMapForNode: (incubatorId: string) => void;
 
   reset: () => void;
 }
 
-// CompilerStore interface used internally only
-
-/** Find a variant in any dimension map and apply a transform to the variants array. */
-function mutateVariant(
-  dimensionMaps: Record<string, DimensionMap>,
-  variantId: string,
-  transform: (variants: VariantStrategy[]) => VariantStrategy[],
-): Record<string, DimensionMap> {
-  const updated = { ...dimensionMaps };
-  for (const [nodeId, map] of Object.entries(updated)) {
-    if (map.variants.some((v) => v.id === variantId)) {
-      updated[nodeId] = { ...map, variants: transform(map.variants) };
+/** Find a strategy in any incubation plan and apply a transform to the hypotheses array. */
+function mutateStrategy(
+  incubationPlans: Record<string, IncubationPlan>,
+  strategyId: string,
+  transform: (hypotheses: HypothesisStrategy[]) => HypothesisStrategy[],
+): Record<string, IncubationPlan> {
+  const updated = { ...incubationPlans };
+  for (const [nodeId, plan] of Object.entries(updated)) {
+    if (plan.hypotheses.some((h) => h.id === strategyId)) {
+      updated[nodeId] = { ...plan, hypotheses: transform(plan.hypotheses) };
       break;
     }
   }
@@ -85,47 +83,45 @@ function mutateVariant(
 export const useCompilerStore = create<CompilerStore>()(
   persist(
     (set) => ({
-      dimensionMaps: {},
+      incubationPlans: {},
       compiledPrompts: [],
       isCompiling: false,
       error: null,
       selectedProvider: DEFAULT_COMPILER_PROVIDER,
       selectedModel: '',
 
-      setDimensionMapForNode: (nodeId, map) =>
+      setPlanForNode: (nodeId, plan) =>
         set((state) => ({
-          dimensionMaps: { ...state.dimensionMaps, [nodeId]: map },
+          incubationPlans: { ...state.incubationPlans, [nodeId]: plan },
           error: null,
         })),
 
-      appendVariantsToNode: (nodeId, newMap) =>
+      appendStrategiesToNode: (nodeId, newPlan) =>
         set((state) => {
-          const existing = state.dimensionMaps[nodeId];
+          const existing = state.incubationPlans[nodeId];
           if (!existing) {
-            // First run — store the whole map
-            return { dimensionMaps: { ...state.dimensionMaps, [nodeId]: newMap }, error: null };
+            return { incubationPlans: { ...state.incubationPlans, [nodeId]: newPlan }, error: null };
           }
-          // Subsequent runs — update dimensions, append new variants
           return {
-            dimensionMaps: {
-              ...state.dimensionMaps,
+            incubationPlans: {
+              ...state.incubationPlans,
               [nodeId]: {
                 ...existing,
-                dimensions: newMap.dimensions,
-                variants: [...existing.variants, ...newMap.variants],
-                generatedAt: newMap.generatedAt,
-                compilerModel: newMap.compilerModel,
+                dimensions: newPlan.dimensions,
+                hypotheses: [...existing.hypotheses, ...newPlan.hypotheses],
+                generatedAt: newPlan.generatedAt,
+                compilerModel: newPlan.compilerModel,
               },
             },
             error: null,
           };
         }),
 
-      removeDimensionMapForNode: (nodeId) =>
+      removePlanForNode: (nodeId) =>
         set((state) => {
-          const rest = { ...state.dimensionMaps };
+          const rest = { ...state.incubationPlans };
           delete rest[nodeId];
-          return { dimensionMaps: rest };
+          return { incubationPlans: rest };
         }),
 
       setCompiledPrompts: (prompts) => set({ compiledPrompts: prompts }),
@@ -134,25 +130,25 @@ export const useCompilerStore = create<CompilerStore>()(
       setSelectedProvider: (provider) => set({ selectedProvider: provider }),
       setSelectedModel: (model) => set({ selectedModel: model }),
 
-      updateVariant: (variantId, updates) =>
+      updateStrategy: (strategyId, updates) =>
         set((state) => ({
-          dimensionMaps: mutateVariant(state.dimensionMaps, variantId, (vs) =>
-            vs.map((v) => (v.id === variantId ? { ...v, ...updates } : v)),
+          incubationPlans: mutateStrategy(state.incubationPlans, strategyId, (hs) =>
+            hs.map((h) => (h.id === strategyId ? { ...h, ...updates } : h)),
           ),
         })),
 
-      removeVariant: (variantId) =>
+      removeStrategy: (strategyId) =>
         set((state) => ({
-          dimensionMaps: mutateVariant(state.dimensionMaps, variantId, (vs) =>
-            vs.filter((v) => v.id !== variantId),
+          incubationPlans: mutateStrategy(state.incubationPlans, strategyId, (hs) =>
+            hs.filter((h) => h.id !== strategyId),
           ),
         })),
 
-      addVariantToNode: (nodeId) =>
+      addStrategyToNode: (nodeId) =>
         set((state) => {
-          const map = state.dimensionMaps[nodeId];
-          if (!map) return state;
-          const newVariant: VariantStrategy = {
+          const plan = state.incubationPlans[nodeId];
+          if (!plan) return state;
+          const newStrategy: HypothesisStrategy = {
             id: generateId(),
             name: 'New Hypothesis',
             hypothesis: '',
@@ -161,11 +157,11 @@ export const useCompilerStore = create<CompilerStore>()(
             dimensionValues: {},
           };
           return {
-            dimensionMaps: {
-              ...state.dimensionMaps,
+            incubationPlans: {
+              ...state.incubationPlans,
               [nodeId]: {
-                ...map,
-                variants: [...map.variants, newVariant],
+                ...plan,
+                hypotheses: [...plan.hypotheses, newStrategy],
               },
             },
           };
@@ -173,19 +169,19 @@ export const useCompilerStore = create<CompilerStore>()(
 
       approveMapForNode: (nodeId) =>
         set((state) => {
-          const map = state.dimensionMaps[nodeId];
-          if (!map) return state;
+          const plan = state.incubationPlans[nodeId];
+          if (!plan) return state;
           return {
-            dimensionMaps: {
-              ...state.dimensionMaps,
-              [nodeId]: { ...map, approvedAt: now() },
+            incubationPlans: {
+              ...state.incubationPlans,
+              [nodeId]: { ...plan, approvedAt: now() },
             },
           };
         }),
 
       reset: () =>
         set({
-          dimensionMaps: {},
+          incubationPlans: {},
           compiledPrompts: [],
           isCompiling: false,
           error: null,
@@ -193,27 +189,25 @@ export const useCompilerStore = create<CompilerStore>()(
     }),
     {
       name: STORAGE_KEYS.COMPILER,
-      version: 2,
+      version: 3,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Record<string, unknown>;
 
         if (version < 1) {
-          // v0→v1: Migrate from single dimensionMap to dimensionMaps record
-          const dimensionMaps: Record<string, DimensionMap> = {};
+          const incubationPlans: Record<string, IncubationPlan> = {};
           if (state.dimensionMap) {
-            dimensionMaps['compiler-node'] = state.dimensionMap as DimensionMap;
+            incubationPlans['compiler-node'] = state.dimensionMap as IncubationPlan;
           }
-          Object.assign(state, { dimensionMaps });
+          Object.assign(state, { incubationPlans });
         }
 
         if (version < 2) {
-          // v1→v2: Rename primaryEmphasis→hypothesis, add measurements, drop howItDiffers/coupledDecisions
-          const maps = state.dimensionMaps as Record<string, Record<string, unknown>> | undefined;
+          const maps = (state.dimensionMaps ?? state.incubationPlans) as Record<string, Record<string, unknown>> | undefined;
           if (maps) {
             for (const map of Object.values(maps)) {
-              const variants = map.variants as Record<string, unknown>[] | undefined;
-              if (!variants) continue;
-              for (const v of variants) {
+              const items = (map.variants ?? map.hypotheses) as Record<string, unknown>[] | undefined;
+              if (!items) continue;
+              for (const v of items) {
                 if ('primaryEmphasis' in v && !('hypothesis' in v)) {
                   v.hypothesis = v.primaryEmphasis;
                   delete v.primaryEmphasis;
@@ -226,11 +220,31 @@ export const useCompilerStore = create<CompilerStore>()(
           }
         }
 
+        if (version < 3) {
+          const oldMaps = state.dimensionMaps as Record<string, Record<string, unknown>> | undefined;
+          if (oldMaps && !state.incubationPlans) {
+            const incubationPlans: Record<string, unknown> = {};
+            for (const [k, map] of Object.entries(oldMaps)) {
+              const { variants, ...rest } = map;
+              incubationPlans[k] = { ...rest, hypotheses: variants ?? [] };
+            }
+            state.incubationPlans = incubationPlans;
+            delete state.dimensionMaps;
+          } else if (state.incubationPlans) {
+            const plans = state.incubationPlans as Record<string, Record<string, unknown>>;
+            for (const plan of Object.values(plans)) {
+              if (plan.variants && !plan.hypotheses) {
+                plan.hypotheses = plan.variants;
+                delete plan.variants;
+              }
+            }
+          }
+        }
+
         return state;
       },
       partialize: (state) => ({
-        dimensionMaps: state.dimensionMaps,
-        // compiledPrompts excluded — transient, regenerated each compile/generate
+        incubationPlans: state.incubationPlans,
         selectedProvider: state.selectedProvider,
         selectedModel: state.selectedModel,
       }),

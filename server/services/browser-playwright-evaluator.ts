@@ -6,6 +6,12 @@ import { chromium, type Page } from 'playwright';
 import { bundleVirtualFS } from '../../src/lib/bundle-virtual-fs.ts';
 import type { EvaluatorWorkerReport } from '../../src/types/evaluation.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
+import {
+  PLAYWRIGHT_EVAL_SCRIPT,
+  parsePlaywrightDomMetrics,
+  scoreBodyLayout,
+  scoreVisibleTextLength,
+} from './browser-playwright-eval-metrics.ts';
 
 export interface BrowserPlaywrightInput {
   files: Record<string, string>;
@@ -36,10 +42,13 @@ function skipReport(
 }
 
 async function settlePageForEval(page: Page): Promise<void> {
-  await page.waitForFunction(
-    `() => (document.body?.innerText ?? '').trim().length >= 10`,
-    { timeout: 4500 },
-  ).catch(() => {});
+  await page
+    .waitForFunction(`() => (document.body?.innerText ?? '').trim().length >= 10`, {
+      timeout: 4500,
+    })
+    .catch((err) => {
+      console.warn('[playwright-eval] settlePageForEval: minimal text timeout', normalizeError(err));
+    });
   await page.evaluate(`(() => new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(resolve));
   }))()`);
@@ -55,7 +64,11 @@ export async function runBrowserPlaywrightEval(
   let bundled: string;
   try {
     bundled = bundleVirtualFS(input.files);
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[playwright-eval] bundleVirtualFS failed; using fallback HTML slice',
+      normalizeError(err),
+    );
     bundled = Object.values(input.files).find((v) => /<html/i.test(v)) ?? '<html><body></body></html>';
   }
 
@@ -83,24 +96,7 @@ export async function runBrowserPlaywrightEval(
     }
     await settlePageForEval(page);
 
-    const metrics = (await page.evaluate(`(() => {
-      const body = document.body;
-      const text = (body?.innerText ?? '').trim();
-      const rect = body?.getBoundingClientRect();
-      const imgs = Array.from(document.images);
-      const broken = imgs.filter((i) => i.naturalWidth === 0 && i.naturalHeight === 0).length;
-      return {
-        textLen: text.length,
-        bodyW: rect ? rect.width : 0,
-        bodyH: rect ? rect.height : 0,
-        brokenImages: broken,
-      };
-    })()`)) as {
-      textLen: number;
-      bodyW: number;
-      bodyH: number;
-      brokenImages: number;
-    };
+    const metrics = parsePlaywrightDomMetrics(await page.evaluate(PLAYWRIGHT_EVAL_SCRIPT));
 
     let artifacts: EvaluatorWorkerReport['artifacts'];
     try {
@@ -131,23 +127,11 @@ export async function runBrowserPlaywrightEval(
             : consoleErrors.slice(0, 3).join('; '),
       },
       playwright_visible_text: {
-        score:
-          metrics.textLen >= 80
-            ? 5
-            : metrics.textLen >= 30
-              ? 3
-              : metrics.textLen >= 10
-                ? 2
-                : 1,
+        score: scoreVisibleTextLength(metrics.textLen),
         notes: `Visible text length ≈ ${metrics.textLen} chars`,
       },
       playwright_layout: {
-        score:
-          metrics.bodyW > 100 && metrics.bodyH > 40
-            ? 5
-            : metrics.bodyW > 0 && metrics.bodyH > 0
-              ? 3
-              : 1,
+        score: scoreBodyLayout(metrics.bodyW, metrics.bodyH),
         notes: `Body box ${Math.round(metrics.bodyW)}×${Math.round(metrics.bodyH)}`,
       },
       playwright_images: {

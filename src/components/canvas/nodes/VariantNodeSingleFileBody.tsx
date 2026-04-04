@@ -37,7 +37,7 @@ export function VariantNodeSingleFileBody({
         <iframe
           srcDoc={htmlContent}
           sandbox="allow-scripts"
-          title={`Variant: ${variantName}`}
+          title={`Preview: ${variantName}`}
           className="absolute left-0 top-0 border-0 bg-preview-canvas"
           style={{
             width: `${100 / zoom}%`,

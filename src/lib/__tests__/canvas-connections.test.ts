@@ -23,13 +23,13 @@ describe('isValidConnection', () => {
     expect(isValidConnection('compiler', 'hypothesis')).toBe(true);
   });
 
-  it('allows hypothesis to connect to variant', () => {
-    expect(isValidConnection('hypothesis', 'variant')).toBe(true);
+  it('allows hypothesis to connect to preview', () => {
+    expect(isValidConnection('hypothesis', 'preview')).toBe(true);
   });
 
-  it('allows variant to connect to compiler and existingDesign', () => {
-    expect(isValidConnection('variant', 'compiler')).toBe(true);
-    expect(isValidConnection('variant', 'existingDesign')).toBe(true);
+  it('allows preview to connect to compiler and existingDesign', () => {
+    expect(isValidConnection('preview', 'compiler')).toBe(true);
+    expect(isValidConnection('preview', 'existingDesign')).toBe(true);
   });
 
   it('rejects designSystem connecting to compiler', () => {
@@ -39,12 +39,12 @@ describe('isValidConnection', () => {
   it('rejects reverse connections', () => {
     expect(isValidConnection('compiler', 'designBrief')).toBe(false);
     expect(isValidConnection('hypothesis', 'compiler')).toBe(false);
-    expect(isValidConnection('variant', 'hypothesis')).toBe(false);
+    expect(isValidConnection('preview', 'hypothesis')).toBe(false);
   });
 
   it('rejects self-connections', () => {
     expect(isValidConnection('compiler', 'compiler')).toBe(false);
-    expect(isValidConnection('variant', 'variant')).toBe(false);
+    expect(isValidConnection('preview', 'preview')).toBe(false);
   });
 
   it('rejects unknown node types', () => {
@@ -58,9 +58,9 @@ describe('isValidConnection', () => {
     expect(isValidConnection('model', 'designSystem')).toBe(true);
   });
 
-  it('rejects model connecting to sections or variants', () => {
+  it('rejects model connecting to sections or previews', () => {
     expect(isValidConnection('model', 'designBrief')).toBe(false);
-    expect(isValidConnection('model', 'variant')).toBe(false);
+    expect(isValidConnection('model', 'preview')).toBe(false);
   });
 
   it('rejects connections TO model nodes', () => {

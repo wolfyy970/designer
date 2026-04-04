@@ -1,20 +1,23 @@
 /**
- * Cross-store reactions for canvas graph edits — keeps the graph slice focused on
- * nodes/edges while compiler, spec, and domain updates live here.
+ * Cross-store canvas orchestration: compiler, spec, and workspace-domain updates tied to graph edits.
+ *
+ * Dependencies are explicit: `useCompilerStore`, `useSpecStore`, `useWorkspaceDomainStore` via `.getState()`.
+ * The canvas graph slice calls these entry points; it does not mutate sibling stores directly.
  */
-import type { CanvasNodeType, WorkspaceEdge, WorkspaceNode } from '../../types/workspace-graph';
+import type { CanvasNodeType, WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
+import { NODE_TYPE_TO_SECTION } from '../types/workspace-graph';
+import { NODE_TYPES, SECTION_NODE_TYPES } from '../constants/canvas';
 import {
   getDesignSystemNodeData,
   getHypothesisNodeData,
   getModelNodeData,
-} from '../../lib/canvas-node-data';
-import { generateId, now } from '../../lib/utils';
-import { useCompilerStore } from '../compiler-store';
-import { useSpecStore } from '../spec-store';
-import { useWorkspaceDomainStore } from '../workspace-domain-store';
-import { NODE_TYPE_TO_SECTION } from '../../types/workspace-graph';
-import { SECTION_NODE_TYPES } from '../../lib/canvas-layout';
-import { hydrateDomainFromCanvasGraph } from '../workspace-domain-store';
+} from '../lib/canvas-node-data';
+import { generateId, now } from '../lib/utils';
+import { useCompilerStore } from '../stores/compiler-store';
+import { useSpecStore } from '../stores/spec-store';
+import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
+import { findIncubatorForHypothesis } from './graph-queries';
+import { hydrateDomainFromCanvasGraph } from './hydrate-domain-from-canvas-graph';
 
 /**
  * Compiler map + domain link when adding a hypothesis node (after node id exists).
@@ -23,25 +26,40 @@ import { hydrateDomainFromCanvasGraph } from '../workspace-domain-store';
 export function ensureCompilerVariantAndDomainForHypothesis(
   hypothesisNodeId: string,
   canvasNodes: WorkspaceNode[],
+  edges: Pick<WorkspaceEdge, 'source' | 'target'>[],
 ): string | undefined {
   const compilerStore = useCompilerStore.getState();
-  const compilerNodes = canvasNodes.filter((n) => n.type === 'compiler');
-  const targetCompilerId = compilerNodes[0]?.id ?? 'manual';
+  const compilerNodes = canvasNodes
+    .filter((n) => n.type === NODE_TYPES.COMPILER)
+    .slice()
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const fromGraph = findIncubatorForHypothesis(
+    {
+      nodes: canvasNodes.map((n) => ({ id: n.id, type: n.type })),
+      edges,
+    },
+    hypothesisNodeId,
+  );
+  const domainIncubator = useWorkspaceDomainStore.getState().hypotheses[hypothesisNodeId]?.incubatorId;
+  const domainIsValid =
+    domainIncubator != null && compilerNodes.some((c) => c.id === domainIncubator);
+  const targetCompilerId =
+    fromGraph ?? (domainIsValid ? domainIncubator : null) ?? compilerNodes[0]?.id ?? 'manual';
 
-  if (!compilerStore.dimensionMaps[targetCompilerId]) {
+  if (!compilerStore.incubationPlans[targetCompilerId]) {
     const spec = useSpecStore.getState().spec;
-    compilerStore.setDimensionMapForNode(targetCompilerId, {
+    compilerStore.setPlanForNode(targetCompilerId, {
       id: generateId(),
       specId: spec.id,
       dimensions: [],
-      variants: [],
+      hypotheses: [],
       generatedAt: now(),
       compilerModel: 'manual',
     });
   }
-  compilerStore.addVariantToNode(targetCompilerId);
-  const map = compilerStore.dimensionMaps[targetCompilerId];
-  const lastVariant = map?.variants[map.variants.length - 1];
+  compilerStore.addStrategyToNode(targetCompilerId);
+  const map = compilerStore.incubationPlans[targetCompilerId];
+  const lastVariant = map?.hypotheses[map.hypotheses.length - 1];
   if (lastVariant) {
     useWorkspaceDomainStore
       .getState()
@@ -61,12 +79,12 @@ export function resetSpecSectionForRemovedNode(node: WorkspaceNode): void {
   }
 }
 
-export function removeCompilerDimensionMapForNode(compilerNodeId: string): void {
-  useCompilerStore.getState().removeDimensionMapForNode(compilerNodeId);
+export function removeCompilerPlanForNode(compilerNodeId: string): void {
+  useCompilerStore.getState().removePlanForNode(compilerNodeId);
 }
 
-export function removeCompilerVariantByRefId(refId: string): void {
-  useCompilerStore.getState().removeVariant(refId);
+export function removeCompilerStrategyByRefId(refId: string): void {
+  useCompilerStore.getState().removeStrategy(refId);
 }
 
 /** Re-hydrate domain from full graph after optional sections materialize. */

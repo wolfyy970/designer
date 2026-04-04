@@ -15,7 +15,7 @@ function minimalValidSpec() {
 function minimalCore(overrides: Record<string, unknown> = {}) {
   return {
     hypothesisNodeId: 'hyp-1',
-    variantStrategy: {
+    strategy: {
       id: 'v1',
       name: 'V',
       hypothesis: 'h',

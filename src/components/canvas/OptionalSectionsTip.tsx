@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { X } from 'lucide-react';
+import { RF_INTERACTIVE } from '../../constants/canvas';
 import { STORAGE_KEYS, CANVAS_OPTIONAL_SECTIONS_TIP_DISMISSED_VALUE } from '../../lib/storage-keys';
 import { useCanvasStore } from '../../stores/canvas-store';
 
@@ -11,7 +12,7 @@ function TipDismissButton(props: { onClick: () => void; 'aria-label': string }) 
     <button
       type="button"
       onClick={props.onClick}
-      className="nodrag nowheel shrink-0 rounded p-1 text-fg-muted transition-colors hover:bg-surface hover:text-fg"
+      className={`${RF_INTERACTIVE} shrink-0 rounded p-1 text-fg-muted transition-colors hover:bg-surface hover:text-fg`}
       aria-label={props['aria-label']}
     >
       <X size={16} aria-hidden />

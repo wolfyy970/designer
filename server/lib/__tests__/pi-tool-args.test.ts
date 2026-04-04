@@ -1,5 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { parsePiToolExecutionArgs } from '../pi-tool-args.ts';
+import { extractPiToolPathFromArguments, parsePiToolExecutionArgs } from '../pi-tool-args.ts';
+
+describe('extractPiToolPathFromArguments', () => {
+  it('returns first matching string path field', () => {
+    expect(extractPiToolPathFromArguments({ path: 'a.css' })).toBe('a.css');
+    expect(extractPiToolPathFromArguments({ file: 'b.ts' })).toBe('b.ts');
+    expect(extractPiToolPathFromArguments({ filePath: 'c.js' })).toBe('c.js');
+    expect(extractPiToolPathFromArguments({ target_file: 'd.md' })).toBe('d.md');
+  });
+
+  it('returns undefined for invalid shapes', () => {
+    expect(extractPiToolPathFromArguments(null)).toBeUndefined();
+    expect(extractPiToolPathFromArguments([])).toBeUndefined();
+    expect(extractPiToolPathFromArguments({ path: '' })).toBeUndefined();
+  });
+});
 
 describe('parsePiToolExecutionArgs', () => {
   it('extracts path and pattern from a record', () => {

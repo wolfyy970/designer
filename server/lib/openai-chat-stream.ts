@@ -1,3 +1,4 @@
+import { normalizeError } from '../../src/lib/error-utils.ts';
 import type { ChatResponse, ChatResponseMetadata } from '../../src/types/provider.ts';
 
 function num(v: unknown): number | undefined {
@@ -112,8 +113,12 @@ export async function streamOpenAICompatibleChat(
       }
 
       const err = chunk.error as Record<string, unknown> | undefined;
-      if (err && typeof err.message === 'string') {
-        throw new Error(`${options.providerLabel}: ${err.message}`);
+      if (err != null) {
+        const msg =
+          typeof err === 'object' && typeof err.message === 'string'
+            ? err.message
+            : normalizeError(err, 'stream error');
+        throw new Error(`${options.providerLabel}: ${msg}`);
       }
 
       const usage = usageFromChunk(chunk);

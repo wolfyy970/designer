@@ -1,5 +1,5 @@
 import type { GenerationResult } from '../../types/provider';
-import type { VariantStrategy } from '../../types/compiler';
+import type { HypothesisStrategy } from '../../types/compiler';
 import type { Connection } from '../../workspace/reactflow-adapter';
 import {
   applyWorkspaceEdgeChanges,
@@ -26,11 +26,11 @@ export interface CanvasStore {
   showGrid: boolean;
   colGap: number;
   autoLayout: boolean;
-  expandedVariantId: string | null;
-  runInspectorVariantNodeId: string | null;
+  expandedPreviewId: string | null;
+  runInspectorPreviewNodeId: string | null;
   lineageNodeIds: Set<string>;
   lineageEdgeIds: Set<string>;
-  variantNodeIdMap: Map<string, string>;
+  previewNodeIdMap: Map<string, string>;
   connectingFrom: { nodeType: CanvasNodeType; handleType: 'source' | 'target' } | null;
   pendingFitViewAfterTemplate: boolean;
   /** Persisted: optional section ghost slots the user hid (re-add from + menu). */
@@ -60,18 +60,18 @@ export interface CanvasStore {
   onConnect: (connection: Connection) => void;
   isValidConnection: (connection: Connection | Pick<WorkspaceEdge, 'source' | 'target'>) => boolean;
 
-  setExpandedVariant: (id: string | null) => void;
-  setRunInspectorVariant: (variantNodeId: string | null) => void;
+  setExpandedPreview: (id: string | null) => void;
+  setRunInspectorPreview: (previewNodeId: string | null) => void;
   closeRunInspector: () => void;
   computeLineage: (selectedNodeId: string | null) => void;
 
   addPlaceholderHypotheses: (compilerNodeId: string, count: number) => string[];
   removePlaceholders: (placeholderIds: string[]) => void;
   initializeCanvas: () => void;
-  syncAfterCompile: (newVariants: VariantStrategy[], compilerNodeId: string) => void;
+  syncAfterCompile: (newVariants: HypothesisStrategy[], compilerNodeId: string) => void;
   syncAfterGenerate: (results: GenerationResult[], hypothesisNodeId: string) => void;
-  forkHypothesisVariants: (hypothesisNodeId: string) => void;
-  clearVariantNodeIdMap: () => void;
+  forkHypothesisPreviews: (hypothesisNodeId: string) => void;
+  clearPreviewNodeIdMap: () => void;
   setConnectingFrom: (from: CanvasStore['connectingFrom']) => void;
   setEdgeStatusBySource: (sourceId: string, status: EdgeStatus) => void;
   setEdgeStatusByTarget: (targetId: string, status: EdgeStatus) => void;

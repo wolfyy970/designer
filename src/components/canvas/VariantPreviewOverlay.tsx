@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, Columns2, ChevronLeft, ChevronRight, Loader2, AlertCircle, Star } from 'lucide-react';
-import { useCompilerStore, findVariantStrategy } from '../../stores/compiler-store';
+import { useCompilerStore, findStrategy } from '../../stores/compiler-store';
 import { useCanvasStore } from '../../stores/canvas-store';
 import { useGenerationStore } from '../../stores/generation-store';
 import { useWorkspaceDomainStore } from '../../stores/workspace-domain-store';
 import {
-  findHypothesisIdForVariantNode,
-  getVariantNodeIdsForHypothesis,
-} from '../../workspace/domain-variant-selectors';
+  findHypothesisIdForPreviewNode,
+  getPreviewNodeIdsForHypothesis,
+} from '../../workspace/domain-preview-selectors';
 import { prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
 import { normalizeError } from '../../lib/error-utils';
 import { useResultCode } from '../../hooks/useResultCode';
@@ -58,52 +58,52 @@ function ExpandedVariantIframe({
   );
 }
 
-/** All canvas variant nodes with results, sorted by position (fallback). */
-function useAllVariantNodeIdsWithResults(): string[] {
+/** All canvas preview nodes with results, sorted by position (fallback). */
+function useAllPreviewNodeIdsWithResults(): string[] {
   const nodes = useCanvasStore((s) => s.nodes);
   const results = useGenerationStore((s) => s.results);
   return useMemo(() => {
-    const variantNodes = nodes
-      .filter((n) => n.type === 'variant')
+    const previewNodes = nodes
+      .filter((n) => n.type === 'preview')
       .sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
-    const vsIdsWithResults = new Set(results.map((r) => r.variantStrategyId));
-    return variantNodes.filter((n) => {
-      const vsId = n.data.variantStrategyId as string | undefined;
+    const vsIdsWithResults = new Set(results.map((r) => r.strategyId));
+    return previewNodes.filter((n) => {
+      const vsId = n.data.strategyId as string | undefined;
       return vsId && vsIdsWithResults.has(vsId);
     }).map((n) => n.id);
   }, [nodes, results]);
 }
 
-/** Hypothesis-scoped variant node ids with results; falls back to canvas-wide when domain has no slot. */
-function useHypothesisScopedVariantNodeIds(expandedVariantId: string | null): string[] {
-  const variantSlots = useWorkspaceDomainStore((s) => s.variantSlots);
-  const fallback = useAllVariantNodeIdsWithResults();
+/** Hypothesis-scoped preview node ids with results; falls back to canvas-wide when domain has no slot. */
+function useHypothesisScopedPreviewNodeIds(expandedPreviewId: string | null): string[] {
+  const previewSlots = useWorkspaceDomainStore((s) => s.previewSlots);
+  const fallback = useAllPreviewNodeIdsWithResults();
   return useMemo(() => {
-    if (!expandedVariantId) return fallback;
-    const hypothesisId = findHypothesisIdForVariantNode(variantSlots, expandedVariantId);
+    if (!expandedPreviewId) return fallback;
+    const hypothesisId = findHypothesisIdForPreviewNode(previewSlots, expandedPreviewId);
     if (!hypothesisId) return fallback;
-    const candidateIds = getVariantNodeIdsForHypothesis(variantSlots, hypothesisId);
+    const candidateIds = getPreviewNodeIdsForHypothesis(previewSlots, hypothesisId);
     const allowed = new Set(candidateIds);
     const ordered = fallback.filter((id) => allowed.has(id));
     return ordered.length > 0 ? ordered : fallback;
-  }, [variantSlots, expandedVariantId, fallback]);
+  }, [previewSlots, expandedPreviewId, fallback]);
 }
 
 export default function VariantPreviewOverlay() {
-  const expandedVariantId = useCanvasStore((s) => s.expandedVariantId);
-  const setExpandedVariant = useCanvasStore((s) => s.setExpandedVariant);
-  const dimensionMaps = useCompilerStore((s) => s.dimensionMaps);
+  const expandedPreviewId = useCanvasStore((s) => s.expandedPreviewId);
+  const setExpandedPreview = useCanvasStore((s) => s.setExpandedPreview);
+  const incubationPlans = useCompilerStore((s) => s.incubationPlans);
 
-  const variantStrategyId = useCanvasStore(
+  const strategyId = useCanvasStore(
     (s) => {
-      if (!expandedVariantId) return undefined;
-      return s.nodes.find((n) => n.id === expandedVariantId)?.data.variantStrategyId as string | undefined;
+      if (!expandedPreviewId) return undefined;
+      return s.nodes.find((n) => n.id === expandedPreviewId)?.data.strategyId as string | undefined;
     },
   );
   const pinnedRunId = useCanvasStore(
     (s) => {
-      if (!expandedVariantId) return undefined;
-      return s.nodes.find((n) => n.id === expandedVariantId)?.data.pinnedRunId as string | undefined;
+      if (!expandedPreviewId) return undefined;
+      return s.nodes.find((n) => n.id === expandedPreviewId)?.data.pinnedRunId as string | undefined;
     },
   );
 
@@ -121,14 +121,14 @@ export default function VariantPreviewOverlay() {
     goOlder,
     setUserBest,
     userBestOverrides,
-  } = useVersionStack(variantStrategyId, pinnedRunId);
+  } = useVersionStack(strategyId, pinnedRunId);
 
   const legacyResult = useMemo(
     () =>
-      !activeResult && expandedVariantId
-        ? results.find((r) => r.id === expandedVariantId)
+      !activeResult && expandedPreviewId
+        ? results.find((r) => r.id === expandedPreviewId)
         : undefined,
-    [activeResult, expandedVariantId, results],
+    [activeResult, expandedPreviewId, results],
   );
   const result = activeResult ?? legacyResult;
 
@@ -146,48 +146,48 @@ export default function VariantPreviewOverlay() {
     [stack, result?.id],
   );
 
-  // Cross-variant (left/right) navigation — same hypothesis only when domain slot exists
-  const variantNodeIds = useHypothesisScopedVariantNodeIds(expandedVariantId);
+  // Cross-preview (left/right) navigation — same hypothesis only when domain slot exists
+  const previewNodeIds = useHypothesisScopedPreviewNodeIds(expandedPreviewId);
   const hasUserBestOverride = !!(
-    variantStrategyId && userBestOverrides[variantStrategyId]
+    strategyId && userBestOverrides[strategyId]
   );
-  const variantIdx = expandedVariantId ? variantNodeIds.indexOf(expandedVariantId) : -1;
-  const hasPrevVariant = variantIdx > 0;
-  const hasNextVariant = variantIdx >= 0 && variantIdx < variantNodeIds.length - 1;
+  const previewIdx = expandedPreviewId ? previewNodeIds.indexOf(expandedPreviewId) : -1;
+  const hasPrevPreview = previewIdx > 0;
+  const hasNextPreview = previewIdx >= 0 && previewIdx < previewNodeIds.length - 1;
 
-  const goToPrevVariant = useCallback(() => {
-    if (hasPrevVariant) {
+  const goToPrevPreview = useCallback(() => {
+    if (hasPrevPreview) {
       setCompareId(null);
-      setExpandedVariant(variantNodeIds[variantIdx - 1]);
+      setExpandedPreview(previewNodeIds[previewIdx - 1]);
     }
-  }, [hasPrevVariant, variantNodeIds, variantIdx, setExpandedVariant]);
+  }, [hasPrevPreview, previewNodeIds, previewIdx, setExpandedPreview]);
 
-  const goToNextVariant = useCallback(() => {
-    if (hasNextVariant) {
+  const goToNextPreview = useCallback(() => {
+    if (hasNextPreview) {
       setCompareId(null);
-      setExpandedVariant(variantNodeIds[variantIdx + 1]);
+      setExpandedPreview(previewNodeIds[previewIdx + 1]);
     }
-  }, [hasNextVariant, variantNodeIds, variantIdx, setExpandedVariant]);
+  }, [hasNextPreview, previewNodeIds, previewIdx, setExpandedPreview]);
 
   const close = useCallback(() => {
-    setExpandedVariant(null);
+    setExpandedPreview(null);
     setCompareId(null);
-  }, [setExpandedVariant]);
+  }, [setExpandedPreview]);
 
   useEffect(() => {
-    if (!expandedVariantId) return;
+    if (!expandedPreviewId) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close();
-      if (e.key === 'ArrowLeft' && !e.metaKey && !e.ctrlKey) goToPrevVariant();
-      if (e.key === 'ArrowRight' && !e.metaKey && !e.ctrlKey) goToNextVariant();
+      if (e.key === 'ArrowLeft' && !e.metaKey && !e.ctrlKey) goToPrevPreview();
+      if (e.key === 'ArrowRight' && !e.metaKey && !e.ctrlKey) goToNextPreview();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [expandedVariantId, close, goToPrevVariant, goToNextVariant]);
+  }, [expandedPreviewId, close, goToPrevPreview, goToNextPreview]);
 
-  if (!expandedVariantId || !result) return null;
+  if (!expandedPreviewId || !result) return null;
 
-  const strategy = findVariantStrategy(dimensionMaps, result.variantStrategyId);
+  const strategy = findStrategy(incubationPlans, result.strategyId);
 
   function renderPanel(
     r: GenerationResult,
@@ -196,8 +196,8 @@ export default function VariantPreviewOverlay() {
     panelFiles?: Record<string, string>,
     label?: string,
   ) {
-    const strat = findVariantStrategy(dimensionMaps, r.variantStrategyId);
-    const stratName = strat?.name ?? 'Variant';
+    const strat = findStrategy(incubationPlans, r.strategyId);
+    const stratName = strat?.name ?? 'Preview';
     const hasPayload =
       isLoading ||
       (panelFiles && Object.keys(panelFiles).length > 0) ||
@@ -246,22 +246,22 @@ export default function VariantPreviewOverlay() {
       <div className="flex shrink-0 items-center justify-between border-b border-preview-overlay-hairline px-5 py-2.5">
         <div className="flex items-center gap-4">
           {/* Cross-variant navigation */}
-          {variantNodeIds.length > 1 && (
+          {previewNodeIds.length > 1 && (
             <div className="flex items-center gap-1 text-preview-overlay-text-muted">
               <button
-                onClick={goToPrevVariant}
-                disabled={!hasPrevVariant}
+                onClick={goToPrevPreview}
+                disabled={!hasPrevPreview}
                 className="rounded p-1 transition-colors hover:bg-media-chrome-hover hover:text-white disabled:opacity-30"
                 title="Previous design (←)"
               >
                 <ChevronLeft size={18} />
               </button>
               <span className="text-xs tabular-nums">
-                {variantIdx + 1} / {variantNodeIds.length}
+                {previewIdx + 1} / {previewNodeIds.length}
               </span>
               <button
-                onClick={goToNextVariant}
-                disabled={!hasNextVariant}
+                onClick={goToNextPreview}
+                disabled={!hasNextPreview}
                 className="rounded p-1 transition-colors hover:bg-media-chrome-hover hover:text-white disabled:opacity-30"
                 title="Next design (→)"
               >
@@ -272,7 +272,7 @@ export default function VariantPreviewOverlay() {
 
           <div>
             <h2 className="text-sm font-semibold text-white">
-              {strategy?.name ?? 'Variant Preview'}
+              {strategy?.name ?? 'Design Preview'}
               {!pinnedRunId && isActiveBest && (
                 <span className="ml-2 rounded bg-success-highlight px-1.5 py-px text-badge font-medium text-success">
                   Best current
@@ -326,13 +326,13 @@ export default function VariantPreviewOverlay() {
 
         <div className="flex items-center gap-3">
           {!pinnedRunId &&
-            variantStrategyId &&
+            strategyId &&
             result.status === GENERATION_STATUS.COMPLETE && (
               <>
                 {hasUserBestOverride ? (
                   <button
                     type="button"
-                    onClick={() => setUserBest(variantStrategyId, null)}
+                    onClick={() => setUserBest(strategyId, null)}
                     className="flex items-center gap-1.5 rounded-md border border-preview-overlay-control-border px-3 py-1.5 text-xs text-warning transition-colors hover:border-preview-overlay-control-border-hover hover:text-fg"
                     title="Use evaluator ranking again"
                   >
@@ -343,7 +343,7 @@ export default function VariantPreviewOverlay() {
                 {result.id !== bestCompletedResult?.id ? (
                   <button
                     type="button"
-                    onClick={() => setUserBest(variantStrategyId, result.id)}
+                    onClick={() => setUserBest(strategyId, result.id)}
                     className="flex items-center gap-1.5 rounded-md border border-preview-overlay-control-border px-3 py-1.5 text-xs text-preview-overlay-text-soft transition-colors hover:border-preview-overlay-control-border-hover hover:text-white"
                     title="Prefer this version over evaluator ranking"
                   >
@@ -394,7 +394,7 @@ export default function VariantPreviewOverlay() {
                   className="rounded border border-preview-overlay-control-border bg-transparent px-2 py-0.5 text-micro text-preview-overlay-text-soft outline-none"
                 >
                   {otherResults.map((r) => {
-                    const s = findVariantStrategy(dimensionMaps, r.variantStrategyId);
+                    const s = findStrategy(incubationPlans, r.strategyId);
                     return (
                       <option key={r.id} value={r.id} className="bg-bg text-white">
                         {s?.name ?? r.metadata?.model ?? r.id}

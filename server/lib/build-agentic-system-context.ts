@@ -3,7 +3,7 @@
  * (`designer-agentic-system` + `agents-md-file`), plus repo-backed Agent Skills.
  * Call once per PI session boundary so Prompt Studio edits and skill picks apply to the next build or revision.
  */
-import type { PromptKey } from './prompts/defaults.ts';
+import type { PromptKey } from '../../src/lib/prompts/defaults.ts';
 import type { LoadedSkillSummary, SkillCatalogEntry } from './skill-schema.ts';
 import {
   buildSkillSandboxSeedMap,

@@ -1,10 +1,16 @@
-import { NODE_TYPES, EDGE_TYPES, EDGE_STATUS, buildEdgeId } from '../constants/canvas';
+import {
+  NODE_TYPES,
+  EDGE_TYPES,
+  EDGE_STATUS,
+  SECTION_NODE_TYPES,
+  buildEdgeId,
+} from '../constants/canvas';
 
 // Local mirror of CanvasNodeType (avoids circular import with canvas-store)
 type NodeType =
   | 'designBrief' | 'existingDesign' | 'researchContext'
   | 'objectivesMetrics' | 'designConstraints' | 'designSystem'
-  | 'compiler' | 'hypothesis' | 'variant'
+  | 'compiler' | 'hypothesis' | 'preview'
   | 'model';
 
 // ── Topology ────────────────────────────────────────────────────────
@@ -18,8 +24,8 @@ export const VALID_CONNECTIONS: Record<NodeType, Set<NodeType>> = {
   designConstraints: new Set(['compiler']),
   designSystem: new Set(['hypothesis']),
   compiler: new Set(['hypothesis']),
-  hypothesis: new Set(['variant']),
-  variant: new Set(['compiler', 'existingDesign']),
+  hypothesis: new Set(['preview']),
+  preview: new Set(['compiler', 'existingDesign']),
   model: new Set(['compiler', 'hypothesis', 'designSystem']),
 };
 
@@ -51,11 +57,6 @@ interface MinimalNode { id: string; type?: string }
 interface MinimalEdge { source: string; target: string }
 export interface AutoEdge { id: string; source: string; target: string; type: typeof EDGE_TYPES.DATA_FLOW; data: { status: typeof EDGE_STATUS.IDLE } }
 
-const SECTION_TYPES: Set<string> = new Set([
-  NODE_TYPES.DESIGN_BRIEF, NODE_TYPES.EXISTING_DESIGN, NODE_TYPES.RESEARCH_CONTEXT,
-  NODE_TYPES.OBJECTIVES_METRICS, NODE_TYPES.DESIGN_CONSTRAINTS,
-]);
-
 function makeEdge(source: string, target: string): AutoEdge {
   return { id: buildEdgeId(source, target), source, target, type: EDGE_TYPES.DATA_FLOW, data: { status: EDGE_STATUS.IDLE } };
 }
@@ -75,7 +76,7 @@ export function buildAutoConnectEdges(
 ): AutoEdge[] {
   const edges: AutoEdge[] = [];
 
-  if (SECTION_TYPES.has(type)) {
+  if (SECTION_NODE_TYPES.has(type)) {
     const compilers = existingNodes.filter((n) => n.type === NODE_TYPES.COMPILER);
     if (compilers.length === 1) {
       edges.push(makeEdge(newNodeId, compilers[0].id));
@@ -85,7 +86,7 @@ export function buildAutoConnectEdges(
   if (type === NODE_TYPES.COMPILER) {
     const existingCompilers = existingNodes.filter((n) => n.type === NODE_TYPES.COMPILER);
     if (existingCompilers.length === 0) {
-      for (const sn of existingNodes.filter((n) => SECTION_TYPES.has(n.type ?? ''))) {
+      for (const sn of existingNodes.filter((n) => SECTION_NODE_TYPES.has(n.type ?? ''))) {
         edges.push(makeEdge(sn.id, newNodeId));
       }
     }
@@ -100,6 +101,11 @@ export function buildAutoConnectEdges(
   if (type === NODE_TYPES.HYPOTHESIS) {
     for (const ds of existingNodes.filter((n) => n.type === NODE_TYPES.DESIGN_SYSTEM)) {
       edges.push(makeEdge(ds.id, newNodeId));
+    }
+    /** When only one incubator exists, wire it to the new hypothesis (multi-incubator canvases stay manual). */
+    const compilers = existingNodes.filter((n) => n.type === NODE_TYPES.COMPILER);
+    if (compilers.length === 1) {
+      edges.push(makeEdge(compilers[0].id, newNodeId));
     }
   }
 

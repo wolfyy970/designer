@@ -14,7 +14,8 @@ import { createUiSlice } from './canvas/canvas-store-ui-slice';
 import { createSyncSlice } from './canvas/canvas-store-sync-slice';
 import { createLayoutSlice } from './canvas/canvas-store-layout-slice';
 
-export { GRID_SIZE, SECTION_NODE_TYPES } from '../lib/canvas-layout';
+export { SECTION_NODE_TYPES } from '../constants/canvas';
+export { GRID_SIZE } from '../lib/canvas-layout';
 export type { CanvasNodeData, CanvasNodeType } from '../types/workspace-graph';
 export { NODE_TYPE_TO_SECTION } from '../types/workspace-graph';
 export type { EdgeStatus } from '../constants/canvas';
@@ -28,11 +29,11 @@ const initialCanvasState: Pick<
   | 'showGrid'
   | 'colGap'
   | 'autoLayout'
-  | 'expandedVariantId'
-  | 'runInspectorVariantNodeId'
+  | 'expandedPreviewId'
+  | 'runInspectorPreviewNodeId'
   | 'lineageNodeIds'
   | 'lineageEdgeIds'
-  | 'variantNodeIdMap'
+  | 'previewNodeIdMap'
   | 'connectingFrom'
   | 'pendingFitViewAfterTemplate'
   | 'dismissedSectionGhostSlots'
@@ -45,11 +46,11 @@ const initialCanvasState: Pick<
   showGrid: true,
   colGap: DEFAULT_COL_GAP,
   autoLayout: true,
-  expandedVariantId: null,
-  runInspectorVariantNodeId: null,
+  expandedPreviewId: null,
+  runInspectorPreviewNodeId: null,
   lineageNodeIds: new Set<string>(),
   lineageEdgeIds: new Set<string>(),
-  variantNodeIdMap: new Map<string, string>(),
+  previewNodeIdMap: new Map<string, string>(),
   connectingFrom: null,
   pendingFitViewAfterTemplate: false,
   dismissedSectionGhostSlots: [],
@@ -67,7 +68,7 @@ export const useCanvasStore = create<CanvasStore>()(
     }),
     {
       name: STORAGE_KEYS.CANVAS,
-      version: 19,
+      version: 20,
       migrate: (persistedState: unknown, version: number) => {
         try {
           if (typeof persistedState === 'string') {

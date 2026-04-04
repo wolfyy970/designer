@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Loader2, ChevronDown, AlertCircle, Eye, Brain } from 'lucide-react';
+import { RF_INTERACTIVE } from '../../constants/canvas';
 import { useProviderModels } from '../../hooks/useProviderModels';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -141,7 +142,7 @@ export default function ModelSelector({
   }, [disabled]);
 
   return (
-    <div className="nodrag nowheel" ref={containerRef}>
+    <div className={RF_INTERACTIVE} ref={containerRef}>
       <label className="mb-1 block text-xs font-medium text-fg-secondary">
         {label}
       </label>

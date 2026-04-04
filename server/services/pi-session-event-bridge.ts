@@ -1,10 +1,11 @@
 /**
  * Bridge Pi `AgentSession` events → app `AgentRunEvent` SSE payloads.
  */
+import { normalizeError } from '../../src/lib/error-utils.ts';
 import type { AgentSessionEvent, AgentSession, AssistantMessage } from './pi-sdk/types.ts';
 import { appendLlmCallResponse } from '../log-store.ts';
 import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
-import { parsePiToolExecutionArgs } from '../lib/pi-tool-args.ts';
+import { extractPiToolPathFromArguments, parsePiToolExecutionArgs } from '../lib/pi-tool-args.ts';
 import { stripProviderControlTokens } from '../lib/stream-sanitize.ts';
 import type { AgentRunEvent } from './pi-agent-run-types.ts';
 import type { RunTraceEvent } from '../../src/types/provider.ts';
@@ -23,14 +24,18 @@ export interface PiSessionBridgeContext {
   modelTurnId: { current: number };
   /** Mirror of in-flight Pi tool calls (for stall diagnostics). */
   pendingToolCallsRef?: { current: number };
+  /**
+   * When SSE / stream delivery fails, abort the agent so we do not keep burning tokens
+   * after the client can no longer receive events.
+   */
+  onStreamDeliveryFailure?: (err: unknown) => void;
 }
 
 /** Fire-and-forget async `onEvent` without unhandled rejections (e.g. SSE write failures). */
 function safeBridgeEmit(ctx: PiSessionBridgeContext, event: AgentRunEvent): void {
   void Promise.resolve(ctx.onEvent(event)).catch((e) => {
-    if (process.env.NODE_ENV !== 'production') {
-      console.error('[bridge] onEvent failed', e);
-    }
+    console.error('[bridge] onEvent failed', normalizeError(e), e);
+    ctx.onStreamDeliveryFailure?.(e);
   });
 }
 
@@ -89,18 +94,6 @@ interface StreamingToolAcc {
   lastEmitAt: number;
 }
 
-const TOOL_PATH_ARG_KEYS = ['path', 'file', 'filePath', 'target_file'] as const;
-
-/** Shared path resolution for Pi tool argument objects (partial + finalized tool calls). */
-export function toolPathFromArgsRecord(args: Record<string, unknown> | undefined): string | undefined {
-  if (!args || typeof args !== 'object') return undefined;
-  for (const key of TOOL_PATH_ARG_KEYS) {
-    const v = args[key];
-    if (typeof v === 'string' && v.length > 0) return v;
-  }
-  return undefined;
-}
-
 function toolMetaFromPartial(
   partial: AssistantMessage,
   contentIndex: number,
@@ -114,14 +107,14 @@ function toolMetaFromPartial(
   ) {
     const tc = slice as { name?: string; arguments?: Record<string, unknown> };
     const toolName = typeof tc.name === 'string' && tc.name.length > 0 ? tc.name : 'tool';
-    const toolPath = toolPathFromArgsRecord(tc.arguments);
+    const toolPath = extractPiToolPathFromArguments(tc.arguments);
     return { toolName, toolPath };
   }
   return { toolName: 'tool' };
 }
 
 function toolPathFromToolCall(toolCall: { name?: string; arguments?: Record<string, unknown> }): string | undefined {
-  return toolPathFromArgsRecord(toolCall.arguments);
+  return extractPiToolPathFromArguments(toolCall.arguments);
 }
 
 /** text_delta and thinking_delta share append + emit behavior; only SSE event shape differs. */

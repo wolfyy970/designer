@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { GENERATION_MODE } from '../../src/constants/generation.ts';
 import { ThinkingLevelSchema } from './hypothesis-schemas.ts';
 
 const EvaluationContextSchema = z
@@ -22,7 +23,10 @@ export const GenerateStreamBodySchema = z.object({
   /** Client-issued id to correlate LLM log rows with a UI run (optional). */
   correlationId: z.string().min(1).max(200).optional(),
   supportsVision: z.boolean().optional(),
-  mode: z.enum(['single', 'agentic']).optional().default('single'),
+  mode: z
+    .enum([GENERATION_MODE.SINGLE, GENERATION_MODE.AGENTIC])
+    .optional()
+    .default(GENERATION_MODE.SINGLE),
   thinkingLevel: ThinkingLevelSchema.optional(),
   evaluationContext: EvaluationContextSchema,
   evaluatorProviderId: z.string().optional(),

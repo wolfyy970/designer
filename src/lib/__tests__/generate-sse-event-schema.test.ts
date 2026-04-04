@@ -3,21 +3,19 @@ import { z } from 'zod';
 import {
   type GenerateSSEEvent,
   generateSSEEventSchema,
-  mergeSseEventPayload,
   safeParseGenerateSSEEvent,
 } from '../generate-sse-event-schema';
 
-describe('mergeSseEventPayload', () => {
-  it('forces SSE event name over body type', () => {
-    const merged = mergeSseEventPayload('progress', {
+describe('safeParseGenerateSSEEvent', () => {
+  it('forces SSE event name over conflicting body type', () => {
+    const r = safeParseGenerateSSEEvent('progress', {
       type: 'error',
       status: 'ok',
     } as Record<string, unknown>);
-    expect(merged).toEqual({ status: 'ok', type: 'progress' });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.event.type).toBe('progress');
   });
-});
 
-describe('safeParseGenerateSSEEvent', () => {
   it('accepts minimal progress', () => {
     const r = safeParseGenerateSSEEvent('progress', { status: 'x' });
     expect(r.ok).toBe(true);

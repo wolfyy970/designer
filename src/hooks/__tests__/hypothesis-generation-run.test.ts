@@ -7,13 +7,13 @@ import {
 import type { GenerationResult } from '../../types/provider';
 import type { HypothesisGenerationContext } from '../../workspace/hypothesis-generation-pure';
 import type { HypothesisGenerateApiPayload } from '../../api/types';
-import type { VariantStrategy } from '../../types/compiler';
+import type { HypothesisStrategy } from '../../types/compiler';
 
-const variantStrategy = { id: 'vs-1' } as VariantStrategy;
+const hypothesisStrategy = { id: 'vs-1' } as HypothesisStrategy;
 
 const minimalGenCtx = {
   hypothesisNodeId: 'hyp-1',
-  variantStrategy,
+  hypothesisStrategy,
   spec: { id: 's1' } as HypothesisGenerationContext['spec'],
   agentMode: 'single' as const,
   modelCredentials: [
@@ -28,7 +28,7 @@ describe('applyGenerationFailureToLanes', () => {
     const results: GenerationResult[] = [
       {
         id: 'a',
-        variantStrategyId: 'vs-1',
+        strategyId: 'vs-1',
         providerId: 'p',
         status: GENERATION_STATUS.GENERATING,
         runId: 'r',
@@ -37,7 +37,7 @@ describe('applyGenerationFailureToLanes', () => {
       },
       {
         id: 'b',
-        variantStrategyId: 'vs-1',
+        strategyId: 'vs-1',
         providerId: 'p',
         status: GENERATION_STATUS.COMPLETE,
         runId: 'r',
@@ -84,11 +84,11 @@ describe('executeHypothesisGenerationRun', () => {
         setCompiledPrompts,
         addResult: vi.fn(),
         updateResult: vi.fn(),
-        nextRunNumberForVariant: () => 1,
+        nextRunNumberForStrategy: () => 1,
         syncAfterGenerate: vi.fn(),
         getCanvasState: () => ({
-          variantNodeIdMap: new Map<string, string>(),
-          setRunInspectorVariant: vi.fn(),
+          previewNodeIdMap: new Map<string, string>(),
+          setRunInspectorPreview: vi.fn(),
         }),
         scheduleFitView: vi.fn(),
         fetchBundle: vi.fn().mockResolvedValue({
@@ -105,5 +105,58 @@ describe('executeHypothesisGenerationRun', () => {
     expect(result).toEqual({ ok: false, reason: 'no_prompt' });
     expect(setCompiledPrompts).toHaveBeenCalledWith([]);
     expect(result.ok === false || result.ok).toBe(true);
+  });
+
+  it('reports modelCredentialCount from bundle generationContext (lane source of truth)', async () => {
+    const prompt = {
+      id: 'cp1',
+      strategyId: 'vs-1',
+      specId: 's1',
+      prompt: 'p',
+      images: [],
+      compiledAt: 't',
+    };
+    const result = await executeHypothesisGenerationRun(
+      {
+        workspacePayload: {} as HypothesisGenerateApiPayload,
+        genCtx: {
+          ...minimalGenCtx,
+          modelCredentials: [{ providerId: 'p', modelId: 'm', thinkingLevel: 'minimal' }],
+        },
+        nodeId: 'hyp-1',
+        runId: 'run-1',
+        signal: new AbortController().signal,
+        setCompiledPrompts: vi.fn(),
+        addResult: vi.fn(),
+        updateResult: vi.fn(),
+        nextRunNumberForStrategy: () => 1,
+        syncAfterGenerate: vi.fn(),
+        getCanvasState: () => ({
+          previewNodeIdMap: new Map<string, string>(),
+          setRunInspectorPreview: vi.fn(),
+        }),
+        scheduleFitView: vi.fn(),
+        fetchBundle: vi.fn().mockResolvedValue({
+          prompts: [prompt],
+          evaluationContext: null,
+          provenance: { strategies: {}, designSystemSnapshot: undefined },
+          generationContext: {
+            agentMode: 'single',
+            modelCredentials: [
+              { providerId: 'a', modelId: '1', thinkingLevel: 'minimal' },
+              { providerId: 'b', modelId: '2', thinkingLevel: 'minimal' },
+            ],
+          },
+        }),
+        runStream: vi.fn().mockResolvedValue(undefined),
+        onLaneIdsReady: vi.fn(),
+      },
+      vi.fn(),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.modelCredentialCount).toBe(2);
+      expect(result.lanePlaceholderIds).toHaveLength(2);
+    }
   });
 });

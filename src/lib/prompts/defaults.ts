@@ -5,6 +5,7 @@ export type PromptKey =
   | 'incubator-user-inputs'
   | 'designer-direct-system'
   | 'designer-agentic-system'
+  | 'designer-agentic-revision-user'
   | 'designer-hypothesis-inputs'
   | 'design-system-extract-system'
   | 'design-system-extract-user-input'
@@ -26,7 +27,7 @@ export const PROMPT_META: PromptMeta[] = [
     key: 'hypotheses-generator-system',
     label: 'Incubator — Hypotheses generator (system)',
     description:
-      'System prompt for the Incubator compile step: read the five-section spec and return a JSON dimension map (dimensions, ranges, variant strategies).',
+      'System prompt for the Incubator compile step: read the five-section spec and return a JSON incubation plan (dimensions, ranges, hypothesis strategies).',
   },
   {
     key: 'incubator-user-inputs',
@@ -54,6 +55,12 @@ export const PROMPT_META: PromptMeta[] = [
     label: 'Designer — Agentic (system)',
     description:
       'System prompt for Agentic mode: mission, tools, workflow, self-critique, and design-quality bar for the multi-file agent.',
+  },
+  {
+    key: 'designer-agentic-revision-user',
+    label: 'Designer — Agentic revision (user)',
+    description:
+      'User instructions appended on post-evaluation revision rounds (after the compiled hypothesis context and before the revision brief).',
   },
   {
     key: 'designer-hypothesis-inputs',

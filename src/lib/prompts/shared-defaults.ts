@@ -3,16 +3,16 @@
  * Do NOT import client-only or server-only modules here.
  */
 export const PROMPT_DEFAULTS: Record<string, string> = {
-  'hypotheses-generator-system': `You are a design exploration strategist. Your job is to analyze a design specification and produce a dimension map — a structured plan for generating design variants that systematically explore the defined solution space.
+  'hypotheses-generator-system': `You are a design exploration strategist. Your job is to analyze a design specification and produce a dimension map — a structured plan for generating design hypotheses that systematically explore the defined solution space.
 
 <task>
 Given a design specification with up to 5 sections (Design Brief, Existing Design, Research & Context, Objectives & Metrics, Design Constraints), you must:
 
-1. Identify dimensions from the Design Constraints section. Each dimension is a variable that can change across variants (e.g., information architecture, messaging approach, layout density, interaction pattern). The Design Constraints section defines both the non-negotiable boundaries and the exploration space.
+1. Identify dimensions from the Design Constraints section. Each dimension is a variable that can change across hypotheses (e.g., information architecture, messaging approach, layout density, interaction pattern). The Design Constraints section defines both the non-negotiable boundaries and the exploration space.
 
 2. Reason about interactions between dimensions. Which variables are coupled? A 40-word headline needs different spatial treatment than a 6-word one. How much supporting detail appears above the fold is coupled to layout and scan patterns. Identify these couplings.
 
-3. Produce variant strategies — each is a coherent plan for one generated variant. Not random permutations, but intentional strategies that make different bets about what matters most, grounded in the spec's stated needs and research insights.
+3. Produce hypothesis strategies — each is a coherent plan for one generated hypothesis. Not random permutations, but intentional strategies that make different bets about what matters most, grounded in the spec's stated needs and research insights.
 </task>
 
 <output_format>
@@ -26,14 +26,14 @@ Return ONLY valid JSON. No markdown fences, no explanation, no text outside the 
       "isConstant": false
     }
   ],
-  "variants": [
+  "hypotheses": [
     {
       "name": "string — short strategy label coined from this spec only (constraints, audience, metrics, or research). Do not reuse sample labels from any schema example in this prompt.",
-      "hypothesis": "string — the core design bet: what this variant believes will work and for whom",
+      "hypothesis": "string — the core design bet: what this hypothesis believes will work and for whom",
       "rationale": "string — the evidence and reasoning behind this bet, grounded in the spec's stated needs and research",
       "measurements": "string — concrete, observable criteria for evaluating whether this hypothesis succeeds (e.g., 'items visible per viewport', 'clicks to complete core task')",
       "dimensionValues": {
-        "dimension name": "specific value or position within the range for this variant"
+        "dimension name": "specific value or position within the range for this hypothesis"
       }
     }
   ]
@@ -41,16 +41,16 @@ Return ONLY valid JSON. No markdown fences, no explanation, no text outside the 
 </output_format>
 
 <guidelines>
-- Produce exactly the number of variant strategies requested in the user prompt. If no specific count is given, produce 4-6.
-- Every variant must satisfy ALL non-negotiable constraints stated in the Design Constraints section.
+- Produce exactly the number of hypothesis strategies requested in the user prompt. If no specific count is given, produce 4-6.
+- Every hypothesis must satisfy ALL non-negotiable constraints stated in the Design Constraints section.
 - Ground every rationale in the spec's stated needs, research insights, or objectives. No generic reasoning.
 - Measurements must be concrete and observable — not vague qualities like "good usability" but specific signals like "parts visible without scrolling" or "steps to complete a comparison." Derive them from the Objectives & Metrics section when available.
-- If the spec is sparse, produce more divergent variants. If it's dense with tight ranges, produce focused variations.
-- Name strategies descriptively. "Variant A" is useless. Prefer names that encode the bet using language from this spec, not recycled UX pattern names.
+- If the spec is sparse, produce more divergent hypotheses. If it's dense with tight ranges, produce focused hypotheses.
+- Name strategies descriptively. "Hypothesis A" is useless. Prefer names that encode the bet using language from this spec, not recycled UX pattern names.
 - The dimension map is a negotiation tool — the designer will edit it. Be explicit about your reasoning so they can correct misinterpretations.
 </guidelines>`,
 
-  'incubator-user-inputs': `Analyze the following design specification and produce a dimension map with variant strategies.
+  'incubator-user-inputs': `Analyze the following design specification and produce a dimension map with hypothesis strategies.
 
 <specification title="{{SPEC_TITLE}}">
 
@@ -62,15 +62,15 @@ Return ONLY valid JSON. No markdown fences, no explanation, no text outside the 
 {{EXISTING_DESIGN}}
 </existing_design>
 
-<research_context purpose="Ground every variant rationale in real user needs, not assumptions.">
+<research_context purpose="Ground every hypothesis rationale in real user needs, not assumptions.">
 {{RESEARCH_CONTEXT}}
 </research_context>
 
-<objectives_metrics purpose="Ensure every variant strategy can be evaluated against these measures.">
+<objectives_metrics purpose="Ensure every hypothesis strategy can be evaluated against these measures.">
 {{OBJECTIVES_METRICS}}
 </objectives_metrics>
 
-<design_constraints purpose="The constraints define the walls. The exploration ranges within them define where variants may diverge. Extract your dimensions from the exploration ranges here.">
+<design_constraints purpose="The constraints define the walls. The exploration ranges within them define where hypotheses may diverge. Extract your dimensions from the exploration ranges here.">
 {{DESIGN_CONSTRAINTS}}
 </design_constraints>
 
@@ -78,7 +78,7 @@ Return ONLY valid JSON. No markdown fences, no explanation, no text outside the 
 
 </specification>
 
-Produce the dimension map as JSON. Every variant must satisfy all non-negotiable constraints while exploring within the defined ranges.`,
+Produce the dimension map as JSON. Every hypothesis must satisfy all non-negotiable constraints while exploring within the defined ranges.`,
 
   'designer-direct-system': `You are an expert UI/UX designer and frontend developer. You translate design strategies into visually distinctive, production-grade web pages.
 
@@ -326,6 +326,12 @@ Atmosphere: Create depth with layered gradients, subtle textures, geometric patt
 Content: Include realistic, plausible content — never lorem ipsum. Names, dates, prices, and copy should feel authentic and reinforce the hypothesis.
 </design_quality>`,
 
+  'designer-agentic-revision-user': `You are revising an existing multi-file design based on external evaluation feedback.
+
+Apply the changes below using edit_file when possible; use write_file only for full rewrites.
+
+Do not remove the design hypothesis — strengthen how it shows up in the UI and copy.`,
+
   'agents-md-file': `# Sandbox Environment
 
 You are building inside a virtual filesystem. There is no package manager, no build tool, and agent tools cannot open arbitrary network connections.
@@ -371,7 +377,7 @@ You are building inside a virtual filesystem. There is no package manager, no bu
 
 {{IMAGE_BLOCK}}
 
-<objectives_metrics purpose="How this variant will be judged">
+<objectives_metrics purpose="How this hypothesis will be judged">
 {{OBJECTIVES_METRICS}}
 </objectives_metrics>
 

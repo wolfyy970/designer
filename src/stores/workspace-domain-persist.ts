@@ -1,8 +1,10 @@
+import { GENERATION_MODE } from '../constants/generation';
 import type {
   AgentMode,
   DomainHypothesis,
   DomainIncubatorWiring,
   DomainModelProfile,
+  DomainPreviewSlot,
 } from '../types/workspace-domain';
 import type { WorkspaceDomainStore } from './workspace-domain-store-types';
 import { STORAGE_KEYS } from '../lib/storage-keys';
@@ -17,9 +19,9 @@ export const workspaceDomainPersistOptions = {
     hypotheses: state.hypotheses,
     modelProfiles: state.modelProfiles,
     designSystems: state.designSystems,
-    variantSlots: state.variantSlots,
+    previewSlots: state.previewSlots,
   }),
-  version: 5,
+  version: 6,
   migrate: (persisted: unknown, fromVersion: number) => {
     let p = persisted as Record<string, unknown>;
     if (fromVersion < 2) {
@@ -34,7 +36,7 @@ export const workspaceDomainPersistOptions = {
       const modelProfiles = { ...(p.modelProfiles as Record<string, ProfV3>) };
       const hypotheses: Record<string, DomainHypothesis> = {};
       for (const [hid, h] of Object.entries(rawHyp)) {
-        const am = h.agentMode ?? 'single';
+        const am = h.agentMode ?? GENERATION_MODE.SINGLE;
         for (const mid of h.modelNodeIds) {
           const cur = modelProfiles[mid];
           if (cur) {
@@ -51,6 +53,7 @@ export const workspaceDomainPersistOptions = {
       type LegacyHyp = DomainHypothesis & {
         thinkingLevel?: string;
         agentMode?: AgentMode;
+        variantStrategyId?: string;
       };
       type LegacyProf = DomainModelProfile & { agentMode?: AgentMode };
       const rawHyp = (p.hypotheses as Record<string, LegacyHyp>) ?? {};
@@ -58,10 +61,10 @@ export const workspaceDomainPersistOptions = {
       const hypotheses: Record<string, DomainHypothesis> = {};
 
       for (const [hid, h] of Object.entries(rawHyp)) {
-        let aggregated: AgentMode = 'single';
+        let aggregated: AgentMode = GENERATION_MODE.SINGLE;
         for (const mid of h.modelNodeIds) {
           const prof = modelProfiles[mid];
-          if (prof?.agentMode === 'agentic') aggregated = 'agentic';
+          if (prof?.agentMode === GENERATION_MODE.AGENTIC) aggregated = GENERATION_MODE.AGENTIC;
         }
         const laneThinking =
           (h as { thinkingLevel?: string }).thinkingLevel ?? 'minimal';
@@ -80,7 +83,7 @@ export const workspaceDomainPersistOptions = {
         hypotheses[hid] = {
           id: h.id,
           incubatorId: h.incubatorId,
-          variantStrategyId: h.variantStrategyId,
+          strategyId: h.strategyId ?? (h as unknown as Record<string, unknown>).variantStrategyId as string,
           modelNodeIds: h.modelNodeIds,
           designSystemNodeIds: h.designSystemNodeIds,
           placeholder: h.placeholder,
@@ -104,10 +107,48 @@ export const workspaceDomainPersistOptions = {
       for (const [k, w] of Object.entries(rawW)) {
         incubatorWirings[k] = {
           sectionNodeIds: (w.sectionNodeIds as string[]) ?? [],
-          variantNodeIds: (w.variantNodeIds as string[]) ?? [],
+          previewNodeIds: (w.previewNodeIds as string[] | undefined) ?? (w.variantNodeIds as string[] | undefined) ?? [],
         };
       }
       p = { ...rest, incubatorWirings };
+    }
+    if (fromVersion < 6) {
+      const rawSlots = (p.variantSlots ?? p.previewSlots) as Record<string, Record<string, unknown>> | undefined;
+      const previewSlots: Record<string, DomainPreviewSlot> = {};
+      if (rawSlots) {
+        for (const [k, slot] of Object.entries(rawSlots)) {
+          previewSlots[k] = {
+            hypothesisId: slot.hypothesisId as string,
+            strategyId: (slot.strategyId ?? slot.variantStrategyId) as string,
+            previewNodeId: (slot.previewNodeId ?? slot.variantNodeId ?? null) as string | null,
+            activeResultId: (slot.activeResultId ?? null) as string | null,
+            pinnedRunId: (slot.pinnedRunId ?? null) as string | null,
+          };
+        }
+      }
+      delete p.variantSlots;
+      p = { ...p, previewSlots };
+
+      const rawHyp = (p.hypotheses as Record<string, Record<string, unknown>>) ?? {};
+      const hypotheses: Record<string, DomainHypothesis> = {};
+      for (const [hid, h] of Object.entries(rawHyp)) {
+        hypotheses[hid] = {
+          ...h,
+          strategyId: (h.strategyId ?? h.variantStrategyId) as string,
+        } as DomainHypothesis;
+        delete (hypotheses[hid] as unknown as Record<string, unknown>).variantStrategyId;
+      }
+      p = { ...p, hypotheses };
+
+      const rawW = (p.incubatorWirings as Record<string, Record<string, unknown>>) ?? {};
+      const incubatorWirings: Record<string, DomainIncubatorWiring> = {};
+      for (const [k, w] of Object.entries(rawW)) {
+        incubatorWirings[k] = {
+          sectionNodeIds: (w.sectionNodeIds as string[]) ?? [],
+          previewNodeIds: (w.previewNodeIds as string[] | undefined) ?? (w.variantNodeIds as string[] | undefined) ?? [],
+        };
+      }
+      p = { ...p, incubatorWirings };
     }
     return p;
   },

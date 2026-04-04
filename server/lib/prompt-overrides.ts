@@ -3,7 +3,7 @@
  * non-empty strings. Used for per-request experimentation (not persisted server-side).
  */
 import { getPromptBody } from '../db/prompts.ts';
-import { PROMPT_KEYS, type PromptKey } from './prompts/defaults.ts';
+import { PROMPT_KEYS, type PromptKey } from '../../src/lib/prompts/defaults.ts';
 
 const KEY_SET = new Set<string>(PROMPT_KEYS);
 

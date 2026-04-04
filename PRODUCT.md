@@ -1,6 +1,6 @@
 # Product — What Exists Today
 
-**Status:** Canvas interface complete. Single-shot and agentic generation operational with post-build evaluation, bounded revision rounds, and optional headless browser QA. Vision support implemented. Repo **Agent Skills** under **`skills/`** are discovered per Pi session, pre-seeded into the virtual workspace (all non-`manual`), and surfaced in the variant run UI; the model reads relevant skills on demand.
+**Status:** Canvas interface complete. Single-shot and agentic generation operational with post-build evaluation, bounded revision rounds, and optional headless browser QA. Vision support implemented. Repo **Agent Skills** under **`skills/`** are discovered per Pi session, pre-seeded into the virtual workspace (all non-`manual`), and surfaced in the preview run UI; the model reads relevant skills on demand.
 
 ## Canvas Interface (`/canvas` — default route)
 
@@ -19,7 +19,7 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 | Design System | Processing | Self-contained design token definitions. Supports multiple instances (e.g., Material Design vs custom tokens). Content stored in node data, not spec store. Optional vision-based extraction from uploaded images. |
 | Incubator | Processing | Compiles connected inputs → hypothesis strategies via LLM |
 | Hypothesis | Processing | Editable strategy card with built-in generation controls. Mode **Direct** (one forward generation) vs **Agentic** (tool loop + evaluation). Connect a Model node, then **Generate** or **Run agent**. |
-| Variant | Output | Rendered design preview. Single-file results show an HTML iframe. Multi-file (agentic) results show a file explorer + preview/code tabs + zip download. Completed agentic runs show an **evaluation scorecard** (aggregate score, prioritized fixes, runtime QA) and, when available, a **headless browser thumbnail**. Version navigation across all results. |
+| Preview | Output | Rendered design preview. Single-file results show an HTML iframe. Multi-file (agentic) results show a file explorer + preview/code tabs + zip download. Completed agentic runs show an **evaluation scorecard** (aggregate score, prioritized fixes, runtime QA) and, when available, a **headless browser thumbnail**. Version navigation across all results. |
 
 ### Canvas Features
 
@@ -29,13 +29,13 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 - **Node palette** — Grouped picker (input/processing/output) in toolbar
 - **Lineage highlighting** — Select a node to highlight its full connected component (siblings, ancestors, descendants). Unconnected nodes dim to 40% opacity.
 - **Edge animations** — Custom DataFlowEdge with status indicators (idle/processing/complete/error)
-- **Full-screen preview** — Expand any variant to full-screen overlay: primary arrows step **other variant nodes on the same hypothesis** (domain `variantSlots`; falls back to canvas-wide if no slot). Inner control steps **version stack** (v1, v2, …) for that variant strategy. **Mark as best** / **Clear best pick** lets the user override evaluator-ranked “best” for that lane (persisted in `generation-store`).
+- **Full-screen preview** — Expand any preview to full-screen overlay: primary arrows step **other preview nodes on the same hypothesis** (domain `previewSlots`; falls back to canvas-wide if no slot). Inner control steps **version stack** (v1, v2, …) for that hypothesis strategy. **Mark as best** / **Clear best pick** lets the user override evaluator-ranked “best” for that lane (persisted in `generation-store`).
 - **Reset canvas** — Reset button in header clears all nodes and re-initializes with the default template (Design Brief + Model + Incubator)
-- **Stop generation** — Aborts the active SSE / agent session for a hypothesis strategy lane (hypothesis controls or variant run workspace).
+- **Stop generation** — Aborts the active SSE / agent session for a hypothesis strategy lane (hypothesis controls or preview run workspace).
 - **Permanent node delete** — Backspace/Delete with confirmation removes selected nodes from the canvas graph and keeps domain/compiler state consistent; not an “undo” stack.
-- **Screenshot capture** — Connect a variant to Existing Design to automatically capture a screenshot as a reference image for the next iteration
-- **Version stacking** — Results accumulate across generation runs. Each variant shows version badges (v1, v2, ...) with ChevronLeft/Right navigation to browse previous versions.
-- **Agentic eval rounds (workspace)** — When a run has multiple evaluation rounds (build + revisions), the **variant run workspace** (side panel) can show **Eval round** on **Design** and **Evaluation** tabs; per-round file trees are stored in IndexedDB (`{resultId}:round:{n}`) so earlier revisions remain viewable without bloating localStorage metadata.
+- **Screenshot capture** — Connect a preview to Existing Design to automatically capture a screenshot as a reference image for the next iteration
+- **Version stacking** — Results accumulate across generation runs. Each preview shows version badges (v1, v2, ...) with ChevronLeft/Right navigation to browse previous versions.
+- **Agentic eval rounds (workspace)** — When a run has multiple evaluation rounds (build + revisions), the **preview run workspace** (side panel) can show **Eval round** on **Design** and **Evaluation** tabs; per-round file trees are stored in IndexedDB (`{resultId}:round:{n}`) so earlier revisions remain viewable without bloating localStorage metadata.
 - **Observability (dev)** — Header modal listing **LLM** calls and **trace** events from the API session; optional NDJSON on disk when enabled (see [ARCHITECTURE.md](ARCHITECTURE.md)).
 - **Prompt Studio** — Settings → Prompts: edit prompts against the **server baseline**; **Save** / ⌘S persists drafts **in the browser** and sends **`promptOverrides`** on compile / generate / extract (no automatic save; does not create Langfuse versions from the UI).
 - **Optional section slots** — Fresh canvases can show **ghost** placeholders for inputs not in the minimal default. Loading a **Canvas Manager** entry **materializes** optional section nodes when the persisted spec has non-empty text or images for those sections (see `src/lib/spec-materialize-sections.ts`).
@@ -43,23 +43,23 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 
 ### Iteration Loop
 
-Variants can connect to **Existing Design** (screenshot reference) or **Incubator** (prior output as reference code). This creates a feedback loop:
-1. Generate variants
-2. Connect a strong variant → Existing Design and/or wire a variant → Incubator
+Previews can connect to **Existing Design** (screenshot reference) or **Incubator** (prior output as reference code). This creates a feedback loop:
+1. Generate designs
+2. Connect a strong preview → Existing Design and/or wire a preview → Incubator
 3. Re-incubate with the new context
-4. Generate improved variants
+4. Generate improved designs
 
 Structured critique during agentic runs comes from the **evaluator** (scorecard, fix list, revision rounds), not a separate canvas node.
 
 ## Generation Engine
 
-Each hypothesis-model pair produces a variant via one of two modes. Server routes, SSE events, and store boundaries are summarized in [ARCHITECTURE.md](ARCHITECTURE.md); this section is the product-facing behavior.
+Each hypothesis-model pair produces a design via one of two modes. Server routes, SSE events, and store boundaries are summarized in [ARCHITECTURE.md](ARCHITECTURE.md); this section is the product-facing behavior.
 
 ### Single-Shot Mode
 
-The server sends the compiled variant prompt (hypothesis + spec context) to the LLM with the `designer-direct-system` system prompt, in one call. The response is extracted as a complete, self-contained HTML document with inline CSS and JS. Code streams back via SSE and renders immediately.
+The server sends the compiled hypothesis prompt (hypothesis + spec context) to the LLM with the `designer-direct-system` system prompt, in one call. The response is extracted as a complete, self-contained HTML document with inline CSS and JS. Code streams back via SSE and renders immediately.
 
-**Parallel generation.** Multiple hypotheses generate simultaneously. Progress and completion update independently per variant.
+**Parallel generation.** Multiple hypotheses generate simultaneously. Progress and completion update independently per preview.
 
 ### Agentic Mode
 
@@ -72,23 +72,23 @@ Enabled by choosing **Agentic** in Mode on a Hypothesis node; use **Run agent** 
 
 **Tools:** Pi-native **`read`**, **`write`**, **`edit`** (search/replace), **`ls`**, **`find`**, **`grep`** against the **virtual** project tree (not the host disk); plus **`bash`** for shell utilities; **`todo_write`**, **`validate_js`**, **`validate_html`**.
 
-**Typical flow:** plan milestones → create or edit files with `write` / `edit` → validate → optional bash for edge cases. Live **`file`** events update the variant preview as design artifacts change.
+**Typical flow:** plan milestones → create or edit files with `write` / `edit` → validate → optional bash for edge cases. Live **`file`** events update the preview as design artifacts change.
 
 **Skills.** Agent Skills live under **`skills/<key>/SKILL.md`** (YAML frontmatter: `name`, `description`, `tags`, `when`: `auto` | `always` | `manual`). On each agentic **build** and **revision** round, the server walks the directory, puts the **`<available_skills>`** list in the Pi **`use_skill`** tool description (paths + descriptions for non-**`manual`** entries), and **pre-seeds** those packages into **`skills/<key>/…`** in the virtual workspace. The agent should call **`use_skill`** (or **`read_file`** on `SKILL.md`) when relevant. Streamed **`skills_loaded`** lists the catalog; **`skill_activated`** fires when **`use_skill`** succeeds. Optional reference files in the package copy with the skill (see server limits).
 
 **Preview uses the real file tree.** The UI **POSTs** the current map to **`/api/preview/sessions`** (debounced while files stream) and loads the canonical HTML entry in an iframe via **`src`** (relative links and multi-page navigation work). If registration fails, **`bundleVirtualFS()`** falls back to a single **`srcDoc`**. Original paths stay available in the code tab and zip export.
 
-**Live evaluation status.** While the server runs rubric workers, SSE **`evaluation_worker_done`** updates the variant run workspace **Evaluation** tab (and tab affordance) with per-worker progress before the merged report.
+**Live evaluation status.** While the server runs rubric workers, SSE **`evaluation_worker_done`** updates the preview run workspace **Evaluation** tab (and tab affordance) with per-worker progress before the merged report.
 
 **Headless eval URL** — Set **`PREVIEW_PUBLIC_URL`** if the API isn’t reachable at `http://127.0.0.1:$PORT` from the Playwright process (defaults assume same machine).
 
-**Multi-file output.** Agentic variants show a file explorer sidebar, Preview/Code tab bar, and a download button that produces a `.zip` file.
+**Multi-file output.** Agentic previews show a file explorer sidebar, Preview/Code tab bar, and a download button that produces a `.zip` file.
 
 **Context compaction.** For long agent runs (turn count threshold), the context is compacted: the first message (full hypothesis/spec context), a fresh **LLM summary** of the middle turns, and the most recent turns are kept, with file paths and todos surfaced in the summary so work is not lost.
 
 **Thinking** (Hypothesis node). When the connected model advertises reasoning support: **None / Light / Deep** map to API levels *off* / *minimal* / *medium*. Other levels exist in the stack but are not exposed in this UI.
 
-**Prompts.** **Production** text for compile, variant, single-shot, agentic, evaluators, design-system extract, and agent compaction templates lives in **Langfuse** (or shared defaults when Langfuse is off). **Prompt Studio** (**Settings → Prompts**) edits against that baseline but **saves local browser drafts** only, applied per request via **`promptOverrides`** — see **[LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)** for keys and **[USER_GUIDE.md](USER_GUIDE.md)** for workflow. Loop limits (e.g. max revision rounds) are server-configured unless overridden via API/env — there is no dedicated canvas control yet.
+**Prompts.** **Production** text for compile, hypothesis, single-shot, agentic, evaluators, design-system extract, and agent compaction templates lives in **Langfuse** (or shared defaults when Langfuse is off). **Prompt Studio** (**Settings → Prompts**) edits against that baseline but **saves local browser drafts** only, applied per request via **`promptOverrides`** — see **[LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)** for keys and **[USER_GUIDE.md](USER_GUIDE.md)** for workflow. Loop limits (e.g. max revision rounds) are server-configured unless overridden via API/env — there is no dedicated canvas control yet.
 
 ## Prompt keys (catalog)
 

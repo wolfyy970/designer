@@ -8,7 +8,7 @@ describe('pickValidatedGenerationPersistSlice', () => {
       results: [
         {
           id: 'a',
-          variantStrategyId: 'vs',
+          strategyId: 'vs',
           providerId: 'p',
           status: GENERATION_STATUS.COMPLETE,
           runId: 'r',
@@ -37,7 +37,7 @@ describe('pickValidatedGenerationPersistSlice', () => {
         results: [
           {
             id: 'a',
-            variantStrategyId: 'vs',
+            strategyId: 'vs',
             providerId: 'p',
             status: GENERATION_STATUS.COMPLETE,
             runId: 'r',
@@ -56,7 +56,7 @@ describe('pickValidatedGenerationPersistSlice', () => {
       results: [
         {
           id: 'a',
-          variantStrategyId: 'vs',
+          strategyId: 'vs',
           providerId: 'p',
           status: GENERATION_STATUS.COMPLETE,
           runId: 'r',

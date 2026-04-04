@@ -186,6 +186,24 @@ describe('subscribePiSessionBridge streaming_tool', () => {
     expect(doneEv[0].toolPath).toBe('a.css');
   });
 
+  it('calls onStreamDeliveryFailure when onEvent rejects', async () => {
+    const onStreamDeliveryFailure = vi.fn();
+    const ctx = makeCtx();
+    ctx.onStreamDeliveryFailure = onStreamDeliveryFailure;
+    let n = 0;
+    ctx.onEvent = () => {
+      n += 1;
+      if (n === 1) return Promise.reject(new Error('sse write failed'));
+      return Promise.resolve();
+    };
+    subscribePiSessionBridge(session, ctx);
+    emit({ type: 'turn_start' });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onStreamDeliveryFailure).toHaveBeenCalledTimes(1);
+    expect(onStreamDeliveryFailure.mock.calls[0][0]).toBeInstanceOf(Error);
+  });
+
   it('bumps streamActivityAt on toolcall_delta', () => {
     vi.useFakeTimers({ now: 10_000 });
     const ctx = makeCtx();

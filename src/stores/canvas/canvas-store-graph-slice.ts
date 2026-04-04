@@ -19,15 +19,14 @@ import {
   OPTIONAL_SECTION_SLOTS,
   SECTION_GHOST_ID_PREFIX,
   snap,
-  SECTION_NODE_TYPES,
 } from '../../lib/canvas-layout';
+import { NODE_TYPES, SECTION_NODE_TYPES, buildEdgeId, EDGE_TYPES, EDGE_STATUS } from '../../constants/canvas';
 import {
   isValidConnection as checkValidConnection,
   buildAutoConnectEdges,
   buildModelEdgeForNode,
   findMissingPrerequisite,
 } from '../../lib/canvas-connections';
-import { buildEdgeId, EDGE_TYPES, EDGE_STATUS } from '../../constants/canvas';
 import { getHypothesisRefId } from '../../lib/hypothesis-node-utils';
 import { PREREQUISITE_DEFAULTS } from '../../lib/constants';
 import {
@@ -38,11 +37,11 @@ import {
 import {
   ensureCompilerVariantAndDomainForHypothesis,
   hydrateDomainAfterSpecMaterialize,
-  removeCompilerDimensionMapForNode,
-  removeCompilerVariantByRefId,
+  removeCompilerPlanForNode,
+  removeCompilerStrategyByRefId,
   resetSpecSectionForRemovedNode,
   syncNodeDataToWorkspaceDomain,
-} from './canvas-graph-side-effects';
+} from '../../workspace/canvas-orchestration';
 import {
   scheduleDebouncedAutoLayout,
   shouldScheduleAutoLayoutOnDimensionChange,
@@ -136,7 +135,7 @@ export const createGraphSlice: StateCreator<
     const state = get();
 
     if (SECTION_NODE_TYPES.has(type) && state.nodes.some((n) => n.type === type)) return;
-    if (type === 'hypothesis' && !state.nodes.some((n) => n.type === 'compiler')) return;
+    if (type === NODE_TYPES.HYPOTHESIS && !state.nodes.some((n) => n.type === NODE_TYPES.COMPILER)) return;
 
     const dismissedSectionGhostSlots = (OPTIONAL_SECTION_SLOTS as readonly string[]).includes(type)
       ? state.dismissedSectionGhostSlots.filter((s) => s !== type)
@@ -166,15 +165,17 @@ export const createGraphSlice: StateCreator<
       intermediateNodes = [...intermediateNodes, prereqNode];
     }
 
-    if (type === 'hypothesis') {
-      const refId = ensureCompilerVariantAndDomainForHypothesis(id, intermediateNodes);
+    const structuralEdges = buildAutoConnectEdges(id, type, intermediateNodes);
+    const modelEdges = buildModelEdgeForNode(id, type, intermediateNodes);
+
+    if (type === NODE_TYPES.HYPOTHESIS) {
+      const pendingEdges = [...state.edges, ...structuralEdges, ...modelEdges];
+      const nodesWithNew: WorkspaceNode[] = [...intermediateNodes, newNode];
+      const refId = ensureCompilerVariantAndDomainForHypothesis(id, nodesWithNew, pendingEdges);
       if (refId) {
         newNode.data = { ...newNode.data, refId };
       }
     }
-
-    const structuralEdges = buildAutoConnectEdges(id, type, intermediateNodes);
-    const modelEdges = buildModelEdgeForNode(id, type, intermediateNodes);
 
     set({
       dismissedSectionGhostSlots,
@@ -208,30 +209,30 @@ export const createGraphSlice: StateCreator<
 
     syncDomainForRemovedNode(node);
 
-    if (node.type === 'compiler') {
-      removeCompilerDimensionMapForNode(nodeId);
+    if (node.type === NODE_TYPES.COMPILER) {
+      removeCompilerPlanForNode(nodeId);
     }
 
     const removeIds = new Set<string>([nodeId]);
-    if (node.type === 'hypothesis') {
+    if (node.type === NODE_TYPES.HYPOTHESIS) {
       const refId = getHypothesisRefId(node);
-      if (refId) removeCompilerVariantByRefId(refId);
+      if (refId) removeCompilerStrategyByRefId(refId);
       for (const e of state.edges) {
         if (e.source !== nodeId) continue;
-        const target = state.nodes.find((n) => n.id === e.target && n.type === 'variant');
+        const target = state.nodes.find((n) => n.id === e.target && n.type === NODE_TYPES.PREVIEW);
         if (target) removeIds.add(target.id);
       }
     }
 
-    const inspectorId = get().runInspectorVariantNodeId;
-    const expandedId = get().expandedVariantId;
+    const inspectorId = get().runInspectorPreviewNodeId;
+    const expandedId = get().expandedPreviewId;
     const clearInspector =
       inspectorId != null && [...removeIds].some((rid) => rid === inspectorId);
     const clearExpanded =
       expandedId != null && [...removeIds].some((rid) => rid === expandedId);
-    const nextVariantMap = new Map(get().variantNodeIdMap);
-    for (const [k, v] of nextVariantMap) {
-      if (removeIds.has(v)) nextVariantMap.delete(k);
+    const nextPreviewMap = new Map(get().previewNodeIdMap);
+    for (const [k, v] of nextPreviewMap) {
+      if (removeIds.has(v)) nextPreviewMap.delete(k);
     }
     set({
       nodes: reconcileSectionGhostNodes(
@@ -241,9 +242,9 @@ export const createGraphSlice: StateCreator<
       edges: state.edges.filter(
         (e) => !removeIds.has(e.source) && !removeIds.has(e.target),
       ),
-      variantNodeIdMap: nextVariantMap,
-      ...(clearInspector ? { runInspectorVariantNodeId: null as string | null } : {}),
-      ...(clearExpanded ? { expandedVariantId: null as string | null } : {}),
+      previewNodeIdMap: nextPreviewMap,
+      ...(clearInspector ? { runInspectorPreviewNodeId: null as string | null } : {}),
+      ...(clearExpanded ? { expandedPreviewId: null as string | null } : {}),
     });
     if (get().autoLayout) get().applyAutoLayout();
   },

@@ -14,14 +14,14 @@ export const createUiSlice: StateCreator<
     | 'toggleGrid'
     | 'setColGap'
     | 'toggleAutoLayout'
-    | 'setExpandedVariant'
-    | 'setRunInspectorVariant'
+    | 'setExpandedPreview'
+    | 'setRunInspectorPreview'
     | 'closeRunInspector'
     | 'computeLineage'
     | 'setConnectingFrom'
     | 'setEdgeStatusBySource'
     | 'setEdgeStatusByTarget'
-    | 'clearVariantNodeIdMap'
+    | 'clearPreviewNodeIdMap'
     | 'consumePendingFitView'
     | 'clearSectionGhostToolbarNudge'
   >
@@ -45,12 +45,12 @@ export const createUiSlice: StateCreator<
     if (next) get().applyAutoLayout();
   },
 
-  setExpandedVariant: (id) => set({ expandedVariantId: id }),
+  setExpandedPreview: (id) => set({ expandedPreviewId: id }),
 
-  setRunInspectorVariant: (variantNodeId: string | null) =>
-    set({ runInspectorVariantNodeId: variantNodeId }),
+  setRunInspectorPreview: (previewNodeId: string | null) =>
+    set({ runInspectorPreviewNodeId: previewNodeId }),
 
-  closeRunInspector: () => set({ runInspectorVariantNodeId: null }),
+  closeRunInspector: () => set({ runInspectorPreviewNodeId: null }),
 
   computeLineage: (selectedNodeId) => {
     if (!selectedNodeId) {
@@ -68,7 +68,7 @@ export const createUiSlice: StateCreator<
     }
   },
 
-  clearVariantNodeIdMap: () => set({ variantNodeIdMap: new Map() }),
+  clearPreviewNodeIdMap: () => set({ previewNodeIdMap: new Map() }),
   setConnectingFrom: (from) => set({ connectingFrom: from }),
 
   setEdgeStatusBySource: (sourceId, status) =>

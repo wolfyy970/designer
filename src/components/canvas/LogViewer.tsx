@@ -4,7 +4,7 @@ import { getLogs as apiGetLogs, clearLogs as apiClearLogs } from '../../api/clie
 import { useObservabilityLogStore } from '../../stores/observability-log-store';
 import Modal from '../shared/Modal';
 import { useGenerationStore } from '../../stores/generation-store';
-import { useCompilerStore, findVariantStrategy } from '../../stores/compiler-store';
+import { useCompilerStore, findStrategy } from '../../stores/compiler-store';
 import type { RunTraceEvent } from '../../types/provider';
 import { runTraceEventSchema } from '../../lib/run-trace-event-schema';
 import type { PromptKey } from '../../stores/prompt-store';
@@ -85,7 +85,7 @@ export default function LogViewer({ open, onClose, onOpenPromptStudio: _onOpenPr
   const setObservabilitySnapshot = useObservabilityLogStore((s) => s.setSnapshot);
   const [tab, setTab] = useState<'langfuse' | 'trace'>('trace');
   const results = useGenerationStore((s) => s.results);
-  const dimensionMaps = useCompilerStore((s) => s.dimensionMaps);
+  const incubationPlans = useCompilerStore((s) => s.incubationPlans);
 
   useEffect(() => {
     if (!open) return;
@@ -111,7 +111,7 @@ export default function LogViewer({ open, onClose, onOpenPromptStudio: _onOpenPr
         ? results.find((r) => r.id === row.payload.resultId)
         : undefined;
       const strategy = result
-        ? findVariantStrategy(dimensionMaps, result.variantStrategyId)
+        ? findStrategy(incubationPlans, result.strategyId)
         : undefined;
       rows.push({
         trace,
@@ -121,7 +121,7 @@ export default function LogViewer({ open, onClose, onOpenPromptStudio: _onOpenPr
       });
     }
     return rows.sort((a, b) => Date.parse(b.trace.at) - Date.parse(a.trace.at));
-  }, [snapshot.trace, results, dimensionMaps]);
+  }, [snapshot.trace, results, incubationPlans]);
 
   return (
     <Modal open={open} onClose={onClose} title="Observability" size="xl">

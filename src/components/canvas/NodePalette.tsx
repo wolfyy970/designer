@@ -118,7 +118,7 @@ export default function NodePalette({ onAdd, position }: NodePaletteProps) {
         );
       })}
       <p className="border-t border-border-subtle px-3 py-2 text-nano leading-snug text-fg-muted">
-        Variant previews appear after you generate from a hypothesis.
+        Previews appear after you generate from a hypothesis.
       </p>
     </div>
   );

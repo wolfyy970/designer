@@ -7,6 +7,7 @@ import { filledOrEmpty } from '../../../lib/node-status';
 import { useNodeProviderModel } from '../../../hooks/useNodeProviderModel';
 import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
 import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
+import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { getModelNodeData } from '../../../lib/canvas-node-data';
 import type { ModelNodeData } from '../../../types/canvas-data';
@@ -80,7 +81,7 @@ function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
         <h3 className="text-xs font-semibold text-fg">Model</h3>
       </NodeHeader>
 
-      <div className="nodrag nowheel space-y-2 px-3 py-2.5">
+      <div className={`${RF_INTERACTIVE} space-y-2 px-3 py-2.5`}>
         <ProviderSelector
           label="Provider"
           selectedId={providerId}
@@ -95,7 +96,7 @@ function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
           disabled={lockdown}
         />
         {supportsReasoning && (
-          <div className="nodrag nowheel space-y-1">
+          <div className={`${RF_INTERACTIVE} space-y-1`}>
             <span className="text-nano text-fg-muted">Thinking</span>
             <div className="flex gap-0.5 rounded border border-border bg-surface p-0.5">
               {(['off', 'minimal', 'medium'] as const).map((level) => {
@@ -105,7 +106,7 @@ function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
                     key={level}
                     type="button"
                     onPointerDown={() => setThinkingLevel(level)}
-                    className={`nodrag nowheel flex min-w-0 flex-1 items-center justify-center rounded px-1.5 py-0.5 text-nano transition-colors ${
+                    className={`${RF_INTERACTIVE} flex min-w-0 flex-1 items-center justify-center rounded px-1.5 py-0.5 text-nano transition-colors ${
                       thinkingLevel === level ? 'bg-fg text-bg' : 'text-fg-muted hover:text-fg-secondary'
                     }`}
                   >

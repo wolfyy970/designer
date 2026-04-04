@@ -1,3 +1,4 @@
+import { RF_INTERACTIVE } from '../../../constants/canvas';
 import FileExplorer from './FileExplorer';
 import { ArtifactPreviewFrame } from '../variant-run';
 
@@ -42,7 +43,7 @@ export function VariantNodeMultiFileBody({
         <div className="relative flex-1 overflow-hidden">
           <ArtifactPreviewFrame
             files={currentFiles}
-            title={`Variant: ${variantName}`}
+            title={`Preview: ${variantName}`}
             className="absolute left-0 top-0 border-0 bg-preview-canvas"
             style={{
               width: `${100 / zoom}%`,
@@ -70,7 +71,7 @@ export function VariantNodeMultiFileBody({
               className="flex-1"
             />
           </div>
-          <div className="nodrag nowheel flex-1 overflow-auto bg-bg">
+          <div className={`${RF_INTERACTIVE} flex-1 overflow-auto bg-bg`}>
             <pre className="min-h-full p-3 font-mono text-nano leading-relaxed text-fg-secondary whitespace-pre-wrap">
               {activeCodeFile && currentFiles[activeCodeFile]}
             </pre>

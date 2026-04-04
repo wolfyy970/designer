@@ -8,8 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { env } from '../env.ts';
 import { LEGACY_PROMPT_KEY_ALIASES } from '../../src/lib/prompts/defaults.ts';
-import type { PromptKey } from './prompts/defaults.ts';
-import { PROMPT_KEYS } from './prompts/defaults.ts';
+import { PROMPT_KEYS, type PromptKey } from '../../src/lib/prompts/defaults.ts';
 
 const KEY_SET = new Set<string>(PROMPT_KEYS);
 

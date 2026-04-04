@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PROMPT_KEYS } from '../prompts/defaults.ts';
+import { PROMPT_KEYS } from '../../../src/lib/prompts/defaults.ts';
 import { PROMPT_DEFAULTS } from '../../../src/lib/prompts/shared-defaults.ts';
 
 describe('PROMPT_KEYS vs PROMPT_DEFAULTS (seed parity)', () => {

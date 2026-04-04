@@ -3,12 +3,14 @@
  * No Zustand, no Vite env, no IndexedDB.
  */
 import { NODE_TYPES } from '../constants/canvas';
+import { GENERATION_MODE } from '../constants/generation';
 import { getDesignSystemNodeData, getModelNodeData } from '../lib/canvas-node-data';
-import type { VariantStrategy } from '../types/compiler';
+import type { HypothesisStrategy } from '../types/compiler';
 import type { EvaluationContextPayload } from '../types/evaluation';
 import type { ProvenanceContext } from '../types/provenance-context';
 import type { DesignSpec, ReferenceImage } from '../types/spec';
 import type {
+  AgentMode,
   DomainDesignSystemContent,
   DomainHypothesis,
   DomainModelProfile,
@@ -85,9 +87,9 @@ export interface ModelCredential {
 
 export interface HypothesisGenerationContext {
   readonly hypothesisNodeId: string;
-  readonly variantStrategy: VariantStrategy;
+  readonly hypothesisStrategy: HypothesisStrategy;
   readonly spec: DesignSpec;
-  readonly agentMode: 'single' | 'agentic';
+  readonly agentMode: AgentMode;
   readonly modelCredentials: readonly ModelCredential[];
   readonly designSystemContent: string | undefined;
   readonly designSystemImages: readonly ReferenceImage[];
@@ -190,7 +192,7 @@ function listModelCredentialsFromDomain(
 
 export function buildHypothesisGenerationContextFromInputs(input: {
   hypothesisNodeId: string;
-  variantStrategy: VariantStrategy;
+  hypothesisStrategy: HypothesisStrategy;
   spec: DesignSpec;
   snapshot: WorkspaceGraphSnapshot;
   domainHypothesis?: DomainHypothesis | null;
@@ -198,7 +200,7 @@ export function buildHypothesisGenerationContextFromInputs(input: {
   designSystems: Record<string, DomainDesignSystemContent>;
   defaultCompilerProvider: string;
 }): HypothesisGenerationContext | null {
-  const { hypothesisNodeId, variantStrategy, spec, snapshot, domainHypothesis } = input;
+  const { hypothesisNodeId, hypothesisStrategy, spec, snapshot, domainHypothesis } = input;
 
   let modelCredentials = listModelCredentialsFromDomain(
     domainHypothesis ?? undefined,
@@ -217,7 +219,7 @@ export function buildHypothesisGenerationContextFromInputs(input: {
   const node = nodeById(snapshot, hypothesisNodeId);
   const agentMode =
     domainHypothesis?.agentMode ??
-    ((node?.data?.agentMode as 'single' | 'agentic' | undefined) ?? 'single');
+    ((node?.data?.agentMode as AgentMode | undefined) ?? GENERATION_MODE.SINGLE);
 
   let designSystemContent: string | undefined;
   let designSystemImages: readonly ReferenceImage[] = [];
@@ -233,7 +235,7 @@ export function buildHypothesisGenerationContextFromInputs(input: {
 
   return {
     hypothesisNodeId,
-    variantStrategy,
+    hypothesisStrategy,
     spec,
     agentMode,
     modelCredentials,
@@ -245,7 +247,7 @@ export function buildHypothesisGenerationContextFromInputs(input: {
 export function provenanceFromHypothesisContext(
   ctx: HypothesisGenerationContext,
 ): ProvenanceContext {
-  const s = ctx.variantStrategy;
+  const s = ctx.hypothesisStrategy;
   return {
     strategies: {
       [s.id]: {
@@ -262,8 +264,8 @@ export function provenanceFromHypothesisContext(
 export function evaluationPayloadFromHypothesisContext(
   ctx: HypothesisGenerationContext,
 ): EvaluationContextPayload | undefined {
-  if (ctx.agentMode !== 'agentic') return undefined;
-  const s = ctx.variantStrategy;
+  if (ctx.agentMode !== GENERATION_MODE.AGENTIC) return undefined;
+  const s = ctx.hypothesisStrategy;
   const dv = s.dimensionValues;
   const outputFormat =
     dv['format'] ?? dv['output_format'] ?? dv['Output format'] ?? dv['Output Format'];

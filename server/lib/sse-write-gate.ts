@@ -1,5 +1,3 @@
-import { env } from '../env.ts';
-
 export interface WriteGate {
   enqueue: (fn: () => Promise<void>) => Promise<void>;
 }
@@ -11,7 +9,7 @@ export function createWriteGate(): WriteGate {
     enqueue(fn: () => Promise<void>): Promise<void> {
       const next = tail.then(fn);
       tail = next.catch((e: unknown) => {
-        if (env.isDev && e != null) {
+        if (e != null) {
           console.error('[write-gate]', e);
         }
       });

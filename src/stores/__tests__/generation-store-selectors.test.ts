@@ -14,7 +14,7 @@ function makeResult(
   overrides: Partial<GenerationResult> & { id: string },
 ): GenerationResult {
   return {
-    variantStrategyId: 'vs-1',
+    strategyId: 'vs-1',
     providerId: 'openrouter',
     status: 'complete',
     runId: 'run-1',
@@ -39,7 +39,7 @@ describe('getStack', () => {
     const state = mockState([
       makeResult({ id: 'r1', runNumber: 1 }),
       makeResult({ id: 'r2', runNumber: 3 }),
-      makeResult({ id: 'r3', variantStrategyId: 'vs-2', runNumber: 1 }),
+      makeResult({ id: 'r3', strategyId: 'vs-2', runNumber: 1 }),
       makeResult({ id: 'r4', runNumber: 2 }),
     ]);
 
@@ -215,7 +215,7 @@ describe('getBestCompleteResult', () => {
         makeResult({ id: 'r1', runNumber: 1, evaluationSummary: low }),
         makeResult({ id: 'r2', runNumber: 2, evaluationSummary: high }),
       ],
-      { variantStrategyId: 'vs-1', userBestOverrides: { 'vs-1': 'r1' } },
+      { strategyId: 'vs-1', userBestOverrides: { 'vs-1': 'r1' } },
     );
     expect(out?.id).toBe('r1');
   });
@@ -231,7 +231,7 @@ describe('getBestCompleteResult', () => {
     };
     const out = getBestCompleteResult(
       [makeResult({ id: 'r1', runNumber: 1, evaluationSummary: summary })],
-      { variantStrategyId: 'vs-1', userBestOverrides: { 'vs-1': 'ghost' } },
+      { strategyId: 'vs-1', userBestOverrides: { 'vs-1': 'ghost' } },
     );
     expect(out?.id).toBe('r1');
   });
@@ -262,12 +262,12 @@ describe('getActiveResult user best override', () => {
 // ─── getScopedStack ─────────────────────────────────────────────────
 
 describe('getScopedStack', () => {
-  it('filters by both variantStrategyId and runId', () => {
+  it('filters by both strategyId and runId', () => {
     const state = mockState([
       makeResult({ id: 'r1', runId: 'run-1', runNumber: 1 }),
       makeResult({ id: 'r2', runId: 'run-2', runNumber: 2 }),
       makeResult({ id: 'r3', runId: 'run-1', runNumber: 3 }),
-      makeResult({ id: 'r4', variantStrategyId: 'vs-2', runId: 'run-1', runNumber: 1 }),
+      makeResult({ id: 'r4', strategyId: 'vs-2', runId: 'run-1', runNumber: 1 }),
     ]);
     const stack = getScopedStack(state, 'vs-1', 'run-1');
     expect(stack).toHaveLength(2);
@@ -379,7 +379,7 @@ describe('nextRunNumber', () => {
   it('ignores other hypotheses', () => {
     const state = mockState([
       makeResult({ id: 'r1', runNumber: 1 }),
-      makeResult({ id: 'r2', variantStrategyId: 'vs-2', runNumber: 10 }),
+      makeResult({ id: 'r2', strategyId: 'vs-2', runNumber: 10 }),
     ]);
     expect(nextRunNumber(state, 'vs-1')).toBe(2);
   });

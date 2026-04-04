@@ -2,7 +2,7 @@
 
 A specification workspace that helps designers define design problem boundaries before AI generation. Specifications compile into hypothesis strategies that systematically explore the solution space. Each hypothesis generates as a complete design — either a single-shot HTML document or an agentic multi-file project with reasoning, self-critique, and revision passes.
 
-Designers write structured inputs. The compiler reasons about the exploration space. The generator produces renderable variants. Everything connects on a visual node-graph canvas.
+Designers write structured inputs. The incubator reasons about the exploration space. The generator produces renderable designs. Everything connects on a visual node-graph canvas.
 
 ## Quick Start
 
@@ -39,9 +39,9 @@ The primary interface is a visual node-graph canvas (`/canvas`, the default rout
 3. **Incubator** — Connect input nodes and a Model node, then click Generate to produce hypothesis strategies
 4. **Hypotheses** — Editable strategy cards. Connect a Model node, choose **Direct** (one-shot) or **Agentic**, then **Generate** or **Run agent**
 5. **Design System** (optional) — Connect to hypotheses to inject design tokens into generation
-6. **Variants** — Rendered design previews with zoom, version navigation, full-screen (hypothesis-scoped design stepping when domain slots exist), and optional **mark as best** vs evaluator ranking. Agentic results include a file explorer, zip download, run workspace with multi-round eval preview when applicable, and (when the run finishes) an evaluation scorecard plus optional headless-browser thumbnail.
+6. **Previews** — Rendered design previews with zoom, version navigation, full-screen (hypothesis-scoped design stepping when domain preview slots exist), and optional **mark as best** vs evaluator ranking. Agentic results include a file explorer, zip download, run workspace with multi-round eval preview when applicable, and (when the run finishes) an evaluation scorecard plus optional headless-browser thumbnail.
 
-Nodes connect left-to-right. Auto-layout arranges everything based on connections. Variants can connect back to Existing Design for iterative feedback loops.
+Nodes connect left-to-right. Auto-layout arranges everything based on connections. Previews can connect back to Existing Design for iterative feedback loops.
 
 The header also opens **Settings** (General preferences; **Prompt Studio** under Prompts — **Save** / ⌘S stores drafts in **this browser** and sends them as **per-request overrides** on compile / generate / extract; baseline text still comes from **Langfuse** via the API. In **development**, a **design tokens kitchen sink** modal is on the General tab) and **Observability** (LLM + trace logs — primarily for development). Details: [USER_GUIDE.md](USER_GUIDE.md) and [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 

@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand';
 import { generateId } from '../../lib/utils';
-import { getVariantNodeData } from '../../lib/canvas-node-data';
+import { getPreviewNodeData } from '../../lib/canvas-node-data';
 import { columnX, snap } from '../../lib/canvas-layout';
 import {
   buildAutoConnectEdges,
@@ -12,7 +12,7 @@ import {
   EDGE_TYPES,
   EDGE_STATUS,
 } from '../../constants/canvas';
-import { FORK_HYPOTHESIS_VARIANT_STACK_OFFSET_PX } from '../../lib/constants';
+import { FORK_HYPOTHESIS_PREVIEW_STACK_OFFSET_PX } from '../../lib/constants';
 import { GENERATION_STATUS } from '../../constants/generation';
 import { useGenerationStore } from '../generation-store';
 import { syncVariantSlotsAfterFork, syncVariantSlotsAfterGenerate } from './canvas-sync-side-effects';
@@ -35,7 +35,7 @@ export const createSyncSlice: StateCreator<
     | 'removePlaceholders'
     | 'syncAfterCompile'
     | 'syncAfterGenerate'
-    | 'forkHypothesisVariants'
+    | 'forkHypothesisPreviews'
   >
 > = (set, get) => ({
   addPlaceholderHypotheses: (compilerNodeId, count) => {
@@ -115,7 +115,7 @@ export const createSyncSlice: StateCreator<
     const addedEdges = [...state.edges];
     let placed = 0;
 
-    const compileLinkPairs: { hypothesisNodeId: string; variantStrategyId: string }[] = [];
+    const compileLinkPairs: { hypothesisNodeId: string; strategyId: string }[] = [];
 
     newVariants.forEach((variant) => {
       if (existingHypIds.has(variant.id)) return;
@@ -131,7 +131,7 @@ export const createSyncSlice: StateCreator<
         data: { refId: variant.id },
       });
       placed++;
-      compileLinkPairs.push({ hypothesisNodeId: nodeId, variantStrategyId: variant.id });
+      compileLinkPairs.push({ hypothesisNodeId: nodeId, strategyId: variant.id });
 
       addedEdges.push({
         id: buildEdgeId(compilerNodeId, nodeId),
@@ -182,11 +182,11 @@ export const createSyncSlice: StateCreator<
     for (const e of state.edges) {
       if (e.source === hypothesisNodeId) {
         const target = state.nodes.find(
-          (n) => n.id === e.target && n.type === 'variant',
+          (n) => n.id === e.target && n.type === 'preview',
         );
-        const variantData = target ? getVariantNodeData(target) : undefined;
-        if (variantData?.variantStrategyId) {
-          existingVariantByStrategy.set(variantData.variantStrategyId, target!.id);
+        const variantData = target ? getPreviewNodeData(target) : undefined;
+        if (variantData?.strategyId) {
+          existingVariantByStrategy.set(variantData.strategyId, target!.id);
         }
       }
     }
@@ -197,20 +197,20 @@ export const createSyncSlice: StateCreator<
 
     results.forEach((result) => {
       const existingNodeId = existingVariantByStrategy.get(
-        result.variantStrategyId,
+        result.strategyId,
       );
 
       if (existingNodeId) {
         const idx = newNodes.findIndex((n) => n.id === existingNodeId);
         if (idx !== -1) {
           const preferredRef =
-            firstRefByStrategy.get(result.variantStrategyId) ?? result.id;
+            firstRefByStrategy.get(result.strategyId) ?? result.id;
           newNodes[idx] = {
             ...newNodes[idx],
             data: {
               ...newNodes[idx].data,
               refId: preferredRef,
-              variantStrategyId: result.variantStrategyId,
+              strategyId: result.strategyId,
             },
           };
         }
@@ -223,19 +223,19 @@ export const createSyncSlice: StateCreator<
             data: { status: EDGE_STATUS.PROCESSING },
           };
         }
-        nodeIdMap.set(result.variantStrategyId, existingNodeId);
+        nodeIdMap.set(result.strategyId, existingNodeId);
       } else {
-        const nodeId = `variant-${generateId()}`;
+        const nodeId = `preview-${generateId()}`;
         newNodes.push({
           id: nodeId,
-          type: 'variant',
+          type: 'preview',
           position: snap({
-            x: col.variant,
+            x: col.preview,
             y: hypothesisNode?.position.y ?? 300,
           }),
           data: {
-            refId: firstRefByStrategy.get(result.variantStrategyId) ?? result.id,
-            variantStrategyId: result.variantStrategyId,
+            refId: firstRefByStrategy.get(result.strategyId) ?? result.id,
+            strategyId: result.strategyId,
           },
         });
 
@@ -246,42 +246,42 @@ export const createSyncSlice: StateCreator<
           type: EDGE_TYPES.DATA_FLOW,
           data: { status: EDGE_STATUS.PROCESSING },
         });
-        nodeIdMap.set(result.variantStrategyId, nodeId);
+        nodeIdMap.set(result.strategyId, nodeId);
       }
     });
 
-    set({ nodes: newNodes, edges: newEdges, variantNodeIdMap: nodeIdMap });
+    set({ nodes: newNodes, edges: newEdges, previewNodeIdMap: nodeIdMap });
 
     syncVariantSlotsAfterGenerate(hypothesisNodeId, results, nodeIdMap);
 
     if (get().autoLayout) get().applyAutoLayout();
   },
 
-  forkHypothesisVariants: (hypothesisNodeId) => {
+  forkHypothesisPreviews: (hypothesisNodeId) => {
     const state = get();
     const genState = useGenerationStore.getState();
 
-    const variantNodeIds: string[] = [];
+    const previewNodeIds: string[] = [];
     for (const e of state.edges) {
       if (e.source === hypothesisNodeId) {
         const target = state.nodes.find(
-          (n) => n.id === e.target && n.type === 'variant',
+          (n) => n.id === e.target && n.type === 'preview',
         );
-        if (target) variantNodeIds.push(target.id);
+        if (target) previewNodeIds.push(target.id);
       }
     }
 
-    if (variantNodeIds.length === 0) return;
+    if (previewNodeIds.length === 0) return;
 
-    const variantIdSet = new Set(variantNodeIds);
+    const previewIdSet = new Set(previewNodeIds);
 
     const newNodes = state.nodes.map((n) => {
-      if (!variantIdSet.has(n.id)) return n;
-      const vsId = getVariantNodeData(n)?.variantStrategyId;
+      if (!previewIdSet.has(n.id)) return n;
+      const vsId = getPreviewNodeData(n)?.strategyId;
       if (!vsId) return n;
 
       const stack = genState.results
-        .filter((r) => r.variantStrategyId === vsId)
+        .filter((r) => r.strategyId === vsId)
         .sort((a, b) => b.runNumber - a.runNumber);
       const selectedId = genState.selectedVersions[vsId];
       const active = selectedId
@@ -290,7 +290,7 @@ export const createSyncSlice: StateCreator<
 
       return {
         ...n,
-        position: { x: n.position.x, y: n.position.y + FORK_HYPOTHESIS_VARIANT_STACK_OFFSET_PX },
+        position: { x: n.position.x, y: n.position.y + FORK_HYPOTHESIS_PREVIEW_STACK_OFFSET_PX },
         data: {
           ...n.data,
           pinnedRunId: active?.runId ?? UNKNOWN_PINNED_RUN_ID,
@@ -299,11 +299,11 @@ export const createSyncSlice: StateCreator<
     });
 
     const newEdges = state.edges.filter(
-      (e) => !(e.source === hypothesisNodeId && variantIdSet.has(e.target)),
+      (e) => !(e.source === hypothesisNodeId && previewIdSet.has(e.target)),
     );
 
     set({ nodes: newNodes, edges: newEdges });
 
-    syncVariantSlotsAfterFork(hypothesisNodeId, newNodes, variantIdSet);
+    syncVariantSlotsAfterFork(hypothesisNodeId, newNodes, previewIdSet);
   },
 });

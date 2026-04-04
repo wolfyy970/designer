@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { RF_INTERACTIVE } from '../../../constants/canvas';
 import type { GenerationResult } from '../../../types/provider';
 import Modal from '../../shared/Modal';
 import {
@@ -307,7 +308,7 @@ export function DesignDebugExportDialog({
           </div>
         </div>
 
-        <div className="nodrag nowheel min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch]">
+        <div className={`${RF_INTERACTIVE} min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch]`}>
           <div className="space-y-5 pb-1">
             <section>
               <h3 className="mb-2 text-nano font-semibold uppercase tracking-wider text-fg-faint">Include in the file</h3>

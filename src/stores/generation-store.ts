@@ -66,7 +66,7 @@ const persistedMetadataSchema = z.object({
 
 const persistedGenerationResultSchema = z.object({
   id: z.string(),
-  variantStrategyId: z.string(),
+  strategyId: z.string(),
   providerId: z.string(),
   status: generationStatusSchema,
   runId: z.string(),
@@ -86,7 +86,7 @@ function persistedRowToGenerationResult(
 ): GenerationResult {
   const out: GenerationResult = {
     id: r.id,
-    variantStrategyId: r.variantStrategyId,
+    strategyId: r.strategyId,
     providerId: r.providerId,
     status: r.status,
     runId: r.runId,
@@ -134,16 +134,16 @@ export function pickValidatedGenerationPersistSlice(state: Record<string, unknow
 interface GenerationStore {
   results: GenerationResult[];
   isGenerating: boolean;
-  /** Which version is currently displayed per hypothesis (variantStrategyId → resultId) */
+  /** Which version is currently displayed per hypothesis (strategyId → resultId) */
   selectedVersions: Record<string, string>;
-  /** User override: prefer this complete result as “best” for a variant strategy lane. */
+  /** User override: prefer this complete result as “best” for a strategy lane. */
   userBestOverrides: Record<string, string>;
 
   addResult: (result: GenerationResult) => void;
   updateResult: (id: string, updates: Partial<GenerationResult>) => void;
   setGenerating: (isGenerating: boolean) => void;
-  setSelectedVersion: (variantStrategyId: string, resultId: string) => void;
-  setUserBest: (variantStrategyId: string, resultId: string | null) => void;
+  setSelectedVersion: (strategyId: string, resultId: string) => void;
+  setUserBest: (strategyId: string, resultId: string | null) => void;
   deleteResult: (resultId: string) => void;
   deleteRun: (runId: string) => void;
   reset: () => void;
@@ -177,7 +177,7 @@ export const useGenerationStore = create<GenerationStore>()(
               updates.status === GENERATION_STATUS.ERROR) &&
             updates.status !== undefined
           ) {
-            const vsId = merged.variantStrategyId;
+            const vsId = merged.strategyId;
             const runId = merged.runId;
             selectedVersions = {
               ...state.selectedVersions,
@@ -190,21 +190,21 @@ export const useGenerationStore = create<GenerationStore>()(
 
       setGenerating: (isGenerating) => set({ isGenerating }),
 
-      setSelectedVersion: (variantStrategyId, resultId) =>
+      setSelectedVersion: (strategyId, resultId) =>
         set((state) => ({
           selectedVersions: {
             ...state.selectedVersions,
-            [variantStrategyId]: resultId,
+            [strategyId]: resultId,
           },
         })),
 
-      setUserBest: (variantStrategyId, resultId) =>
+      setUserBest: (strategyId, resultId) =>
         set((state) => {
           const userBestOverrides = { ...state.userBestOverrides };
           if (resultId == null) {
-            delete userBestOverrides[variantStrategyId];
+            delete userBestOverrides[strategyId];
           } else {
-            userBestOverrides[variantStrategyId] = resultId;
+            userBestOverrides[strategyId] = resultId;
           }
           return { userBestOverrides };
         }),
@@ -266,7 +266,7 @@ export const useGenerationStore = create<GenerationStore>()(
     }),
     {
       name: STORAGE_KEYS.GENERATION,
-      version: 4,
+      version: 5,
       partialize: (state) => ({
         // Strip `code`, `liveCode`, and `liveFiles` from persisted results — code lives in IndexedDB
         results: state.results.map((r) => {
@@ -328,6 +328,16 @@ export const useGenerationStore = create<GenerationStore>()(
           (state as Record<string, unknown>).userBestOverrides =
             (state as Record<string, unknown>).userBestOverrides ?? {};
         }
+        if (version < 5) {
+          const results = (state.results as Record<string, unknown>[]) ?? [];
+          state.results = results.map((r) => {
+            if ('variantStrategyId' in r && !('strategyId' in r)) {
+              const { variantStrategyId, ...rest } = r;
+              return { ...rest, strategyId: variantStrategyId };
+            }
+            return r;
+          });
+        }
         const validated = pickValidatedGenerationPersistSlice(state);
         if (!validated) {
           if (import.meta.env.DEV) {
@@ -364,12 +374,12 @@ function getEvaluationRank(result: GenerationResult): number {
 
 export function getBestCompleteResult(
   results: GenerationResult[],
-  options?: { variantStrategyId?: string; userBestOverrides?: Record<string, string> },
+  options?: { strategyId?: string; userBestOverrides?: Record<string, string> },
 ): GenerationResult | undefined {
   const completed = results.filter((r) => r.status === GENERATION_STATUS.COMPLETE);
   if (completed.length === 0) return undefined;
 
-  const vsId = options?.variantStrategyId;
+  const vsId = options?.strategyId;
   const overrides = options?.userBestOverrides;
   if (vsId && overrides?.[vsId]) {
     const preferred = completed.find((r) => r.id === overrides[vsId]);
@@ -391,31 +401,30 @@ export function getBestCompleteResult(
 /** Get all results for a hypothesis, newest first */
 export function getStack(
   state: GenerationState,
-  variantStrategyId: string,
+  strategyId: string,
 ): GenerationResult[] {
   return state.results
-    .filter((r) => r.variantStrategyId === variantStrategyId)
+    .filter((r) => r.strategyId === strategyId)
     .sort((a, b) => b.runNumber - a.runNumber);
 }
 
 /** Get the active result for a hypothesis (selected, generating, or best complete) */
 export function getActiveResult(
   state: GenerationState,
-  variantStrategyId: string,
+  strategyId: string,
 ): GenerationResult | undefined {
-  const stack = getStack(state, variantStrategyId);
-  // In-flight generation must win over a stale selection so the new run is visible.
+  const stack = getStack(state, strategyId);
   const generating = stack.find((r) => r.status === GENERATION_STATUS.GENERATING);
   if (generating) return generating;
 
-  const selectedId = state.selectedVersions[variantStrategyId];
+  const selectedId = state.selectedVersions[strategyId];
   if (selectedId) {
     const selected = state.results.find((r) => r.id === selectedId);
     if (selected) return selected;
   }
   return (
     getBestCompleteResult(stack, {
-      variantStrategyId,
+      strategyId,
       userBestOverrides: state.userBestOverrides,
     }) ?? stack[0]
   );
@@ -424,26 +433,25 @@ export function getActiveResult(
 /** Get all results for a hypothesis scoped to a specific run, newest first */
 export function getScopedStack(
   state: GenerationState,
-  variantStrategyId: string,
+  strategyId: string,
   runId: string,
 ): GenerationResult[] {
   return state.results
-    .filter((r) => r.variantStrategyId === variantStrategyId && r.runId === runId)
+    .filter((r) => r.strategyId === strategyId && r.runId === runId)
     .sort((a, b) => b.runNumber - a.runNumber);
 }
 
 /** Get the active result for a hypothesis scoped to a specific run */
 export function getScopedActiveResult(
   state: GenerationState,
-  variantStrategyId: string,
+  strategyId: string,
   runId: string,
 ): GenerationResult | undefined {
-  const stack = getScopedStack(state, variantStrategyId, runId);
+  const stack = getScopedStack(state, strategyId, runId);
   const generating = stack.find((r) => r.status === GENERATION_STATUS.GENERATING);
   if (generating) return generating;
 
-  // Scoped key: "vsId:runId" to avoid collision with live variants
-  const scopedKey = `${variantStrategyId}:${runId}`;
+  const scopedKey = `${strategyId}:${runId}`;
   const selectedId = state.selectedVersions[scopedKey];
   if (selectedId) {
     const selected = state.results.find((r) => r.id === selectedId);
@@ -451,7 +459,7 @@ export function getScopedActiveResult(
   }
   return (
     getBestCompleteResult(stack, {
-      variantStrategyId,
+      strategyId,
       userBestOverrides: state.userBestOverrides,
     }) ?? stack[0]
   );
@@ -460,10 +468,10 @@ export function getScopedActiveResult(
 /** Next run number for a hypothesis */
 export function nextRunNumber(
   state: Pick<GenerationState, 'results'>,
-  variantStrategyId: string,
+  strategyId: string,
 ): number {
   const existing = state.results.filter(
-    (r) => r.variantStrategyId === variantStrategyId,
+    (r) => r.strategyId === strategyId,
   );
   if (existing.length === 0) return 1;
   return Math.max(...existing.map((r) => r.runNumber)) + 1;

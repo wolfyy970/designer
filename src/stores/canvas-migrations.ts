@@ -431,6 +431,26 @@ function migrateV18ToV19(s: Record<string, unknown>): Record<string, unknown> {
   return { ...s, dismissedSectionGhostSlots };
 }
 
+/** v19 → v20: rename node type 'variant' → 'preview', node data variantStrategyId → strategyId */
+function migrateV19ToV20(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
+  return {
+    ...s,
+    nodes: nodes.map((n) => {
+      if (n.type === 'variant') {
+        const data = (n.data as Record<string, unknown>) || {};
+        const { variantStrategyId, ...rest } = data;
+        return {
+          ...n,
+          type: 'preview',
+          data: { ...rest, ...(variantStrategyId != null ? { strategyId: variantStrategyId } : {}) },
+        };
+      }
+      return n;
+    }),
+  };
+}
+
 // ── Top-level migration runner ────────────────────────────────────────
 
 /**
@@ -464,6 +484,7 @@ export function migrateCanvasState(
   if (fromVersion < 17) s = migrateV16ToV17(s);
   if (fromVersion < 18) s = migrateV17ToV18(s);
   if (fromVersion < 19) s = migrateV18ToV19(s);
+  if (fromVersion < 20) s = migrateV19ToV20(s);
 
   return s;
 }

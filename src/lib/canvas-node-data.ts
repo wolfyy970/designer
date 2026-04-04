@@ -2,13 +2,7 @@
  * Type-narrowing accessors for workspace node `data` — prefer over bare `as` casts.
  */
 import { NODE_TYPES } from '../constants/canvas';
-import type {
-  CompilerNodeData,
-  DesignSystemNodeData,
-  HypothesisNodeData,
-  ModelNodeData,
-  VariantNodeData,
-} from '../types/canvas-data';
+import type { DesignSystemNodeData, HypothesisNodeData, ModelNodeData, PreviewNodeData } from '../types/canvas-data';
 import type { WorkspaceNode } from '../types/workspace-graph';
 
 export function getModelNodeData(node: WorkspaceNode | undefined): ModelNodeData | undefined {
@@ -23,9 +17,9 @@ export function getDesignSystemNodeData(
   return node.data as DesignSystemNodeData;
 }
 
-export function getVariantNodeData(node: WorkspaceNode | undefined): VariantNodeData | undefined {
-  if (!node || node.type !== NODE_TYPES.VARIANT) return undefined;
-  return node.data as VariantNodeData;
+export function getPreviewNodeData(node: WorkspaceNode | undefined): PreviewNodeData | undefined {
+  if (!node || node.type !== NODE_TYPES.PREVIEW) return undefined;
+  return node.data as PreviewNodeData;
 }
 
 export function getHypothesisNodeData(
@@ -33,9 +27,4 @@ export function getHypothesisNodeData(
 ): HypothesisNodeData | undefined {
   if (!node || node.type !== NODE_TYPES.HYPOTHESIS) return undefined;
   return node.data as HypothesisNodeData;
-}
-
-export function getCompilerNodeData(node: WorkspaceNode | undefined): CompilerNodeData | undefined {
-  if (!node || node.type !== NODE_TYPES.COMPILER) return undefined;
-  return node.data as CompilerNodeData;
 }

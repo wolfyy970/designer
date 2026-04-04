@@ -7,12 +7,12 @@ import {
 } from '../response-schemas';
 
 describe('CompileResponseSchema', () => {
-  it('accepts minimal dimension map', () => {
+  it('accepts minimal incubation plan', () => {
     const r = CompileResponseSchema.safeParse({
       id: 'd1',
       specId: 's1',
       dimensions: [{ name: 'a', range: '1', isConstant: false }],
-      variants: [
+      hypotheses: [
         {
           id: 'v1',
           name: 'V',

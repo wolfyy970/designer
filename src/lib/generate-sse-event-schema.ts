@@ -113,7 +113,7 @@ export const generateSSEEventSchema = z.union([
 export type GenerateSSEEvent = z.infer<typeof generateSSEEventSchema>;
 
 /** Drop `type` from body so the SSE event line always wins. */
-export function mergeSseEventPayload(
+function mergeSseEventPayload(
   eventName: string,
   data: Record<string, unknown>,
 ): Record<string, unknown> {

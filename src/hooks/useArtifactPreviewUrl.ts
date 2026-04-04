@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { encodeVirtualPathForUrl } from '../lib/preview-entry';
 import { bundleVirtualFS } from '../lib/iframe-utils';
+import { normalizeError } from '../lib/error-utils';
 
 type PreviewState = {
   previewSrc: string | null;
@@ -59,7 +60,11 @@ export function useArtifactPreviewUrl(
             fallbackSrcDoc: null,
             isPending: false,
           });
-        } catch {
+        } catch (registerErr) {
+          console.warn(
+            '[preview] session registration failed, using srcDoc fallback:',
+            normalizeError(registerErr),
+          );
           try {
             const bundled = bundleVirtualFS(files);
             if (!cancelled) {
@@ -69,7 +74,11 @@ export function useArtifactPreviewUrl(
                 isPending: false,
               });
             }
-          } catch {
+          } catch (bundleErr) {
+            console.warn(
+              '[preview] bundleVirtualFS fallback failed:',
+              normalizeError(bundleErr),
+            );
             if (!cancelled) {
               setState({ previewSrc: null, fallbackSrcDoc: null, isPending: false });
             }

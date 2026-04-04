@@ -65,21 +65,21 @@ describe('buildAutoConnectEdges', () => {
     expect(edges.map((e) => e.target).sort()).toEqual(['h1', 'h2']);
   });
 
-  it('connects all existing designSystems to new hypothesis', () => {
+  it('connects all existing designSystems to new hypothesis and sole compiler', () => {
     const existing = [
       makeNode('ds1', 'designSystem'),
       makeNode('ds2', 'designSystem'),
       makeNode('c1', 'compiler'),
     ];
     const edges = buildAutoConnectEdges('h1', 'hypothesis', existing);
-    expect(edges).toHaveLength(2);
-    expect(edges.every((e) => e.target === 'h1')).toBe(true);
-    expect(edges.map((e) => e.source).sort()).toEqual(['ds1', 'ds2']);
+    expect(edges).toHaveLength(3);
+    const intoH1 = edges.filter((e) => e.target === 'h1');
+    expect(intoH1.map((e) => e.source).sort()).toEqual(['c1', 'ds1', 'ds2']);
   });
 
   it('returns empty for types with no structural auto-connect rules', () => {
     const existing = [makeNode('c1', 'compiler'), makeNode('h1', 'hypothesis')];
-    expect(buildAutoConnectEdges('v1', 'variant', existing)).toHaveLength(0);
+    expect(buildAutoConnectEdges('v1', 'preview', existing)).toHaveLength(0);
   });
 
   it('does NOT wire models (model wiring is separate)', () => {
@@ -140,7 +140,7 @@ describe('buildModelEdgeForNode', () => {
 
   it('returns empty for types that do not need a model', () => {
     const existing = [makeNode('m1', 'model')];
-    expect(buildModelEdgeForNode('v1', 'variant', existing)).toHaveLength(0);
+    expect(buildModelEdgeForNode('v1', 'preview', existing)).toHaveLength(0);
     expect(buildModelEdgeForNode('s1', 'designBrief', existing)).toHaveLength(0);
     expect(buildModelEdgeForNode('m2', 'model', existing)).toHaveLength(0);
   });
@@ -213,7 +213,7 @@ describe('findMissingPrerequisite', () => {
 
   it('returns null for types with no prerequisite', () => {
     expect(findMissingPrerequisite('designBrief', [])).toBeNull();
-    expect(findMissingPrerequisite('variant', [])).toBeNull();
+    expect(findMissingPrerequisite('preview', [])).toBeNull();
     expect(findMissingPrerequisite('model', [])).toBeNull();
   });
 });

@@ -1,3 +1,5 @@
+import { RF_INTERACTIVE } from '../../../constants/canvas';
+
 /** User-facing step title — avoid raw enum + ALL CAPS (“REVISING” reads noisy next to “Revision round”). */
 const PHASE_HEADLINE: Record<string, string> = {
   building: 'Building',
@@ -44,7 +46,7 @@ export function AgenticHarnessStripe({
       ) : null}
       {subtitle ? (
         <div
-          className="text-badge font-normal leading-snug text-fg-muted truncate nodrag nowheel"
+          className={`${RF_INTERACTIVE} text-badge font-normal leading-snug text-fg-muted truncate`}
           title={subtitle}
         >
           {subtitle}

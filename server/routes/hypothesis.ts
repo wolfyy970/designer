@@ -13,6 +13,7 @@ import {
   HypothesisGenerateRequestSchema,
   PromptBundleRequestSchema,
 } from '../lib/hypothesis-schemas.ts';
+import { GENERATION_MODE } from '../../src/constants/generation.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { apiJsonError } from '../lib/api-json-error.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
@@ -93,7 +94,7 @@ hypothesis.post('/generate', async (c) => {
         ...base,
         thinkingLevel: cred.thinkingLevel,
         mode: ctx.agentMode,
-        evaluationContext: ctx.agentMode === 'agentic' ? evaluationContext : undefined,
+        evaluationContext: ctx.agentMode === GENERATION_MODE.AGENTIC ? evaluationContext : undefined,
         providerId: cred.providerId,
         modelId: cred.modelId,
         correlationId: `${baseCorrelation}:lane-${laneIndex}`,

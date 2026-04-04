@@ -51,7 +51,12 @@ export const PROMPT_GROUPS: { label: string; keys: PromptKey[] }[] = [
   { label: 'Incubator', keys: ['hypotheses-generator-system', 'incubator-user-inputs'] },
   {
     label: 'Designer',
-    keys: ['designer-hypothesis-inputs', 'designer-direct-system', 'designer-agentic-system'],
+    keys: [
+      'designer-hypothesis-inputs',
+      'designer-direct-system',
+      'designer-agentic-system',
+      'designer-agentic-revision-user',
+    ],
   },
   {
     label: 'Design System',

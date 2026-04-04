@@ -7,6 +7,7 @@ import { useCanvasStore } from '../../../stores/canvas-store';
 import type { DesignSystemNodeData } from '../../../types/canvas-data';
 import { extractDesignSystem } from '../../../api/client';
 import { getActivePromptOverrides, usePromptOverridesStore } from '../../../stores/prompt-overrides-store';
+import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { readFileAsReferenceImage } from '../../../lib/image-utils';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
 import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
@@ -120,7 +121,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
           value={title}
           onChange={(e) => update('title', e.target.value)}
           placeholder="Design System"
-          className="nodrag nowheel min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 text-xs font-semibold text-fg placeholder:text-fg-faint outline-none hover:border-border focus:border-accent"
+          className={`${RF_INTERACTIVE} min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 text-xs font-semibold text-fg placeholder:text-fg-faint outline-none hover:border-border focus:border-accent`}
         />
       </NodeHeader>
 
@@ -131,11 +132,11 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
           onChange={(e) => update('content', e.target.value)}
           placeholder="Paste design system tokens, or drop images below and click Extract..."
           rows={4}
-          className="nodrag nowheel w-full resize-none rounded border border-border px-2.5 py-2 text-xs text-fg-secondary placeholder:text-fg-faint outline-none input-focus"
+          className={`${RF_INTERACTIVE} w-full resize-none rounded border border-border px-2.5 py-2 text-xs text-fg-secondary placeholder:text-fg-faint outline-none input-focus`}
         />
 
         {/* Image upload */}
-        <div className="nodrag nowheel mt-2">
+        <div className={`${RF_INTERACTIVE} mt-2`}>
           {images.length > 0 && (
             <div className="mb-2 grid gap-2">
               {images.map((img) => (
@@ -190,7 +191,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
 
         {/* Extraction controls */}
         {images.length > 0 && (
-          <div className="nodrag nowheel mt-2.5 space-y-2 border-t border-border-subtle pt-2.5">
+          <div className={`${RF_INTERACTIVE} mt-2.5 space-y-2 border-t border-border-subtle pt-2.5`}>
             {!extracting && !modelId && (
               <p className="text-center text-nano text-fg-muted">Connect a Model node</p>
             )}

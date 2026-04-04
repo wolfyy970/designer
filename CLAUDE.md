@@ -54,11 +54,11 @@ A single-page app with one route: `/canvas`. Everything else redirects there.
 **Design tokens** — [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md); implementation `src/index.css` `@theme`. Use status colors for eval severity, not `accent`.
 
 **State management** — Zustand stores with `persist` middleware:
-- `workspace-domain-store` — canonical workflow relations (incubator wiring, hypotheses, model assignments, variant slots, mirrored DS/model payloads)
+- `workspace-domain-store` — canonical workflow relations (incubator wiring, hypotheses, model assignments, preview slots, mirrored DS/model payloads)
 - `canvas-store` — React Flow nodes, edges, viewport, layout (persist v16); kept in sync with domain via `workspace/domain-commands.ts`. Prefer `removeNode` for deletions so domain + compiler maps stay consistent; orchestrator-only graph filters must pair with `syncDomainForRemovedNode`.
-- `generation-store` — result metadata only; code is in IndexedDB (persist v2)
+- `generation-store` — result metadata only; code is in IndexedDB (persist v5)
 - `spec-store` — 8-section spec document
-- `compiler-store` — `DimensionMap` per incubator id + compiled prompts
+- `compiler-store` — `IncubationPlan` per incubator id + compiled prompts
 - `prompt-store` — Prompt Studio **metadata** / types (`PROMPT_META`, `PromptKey` re-exports)
 - `prompt-overrides-store` — local-only prompt draft bodies (`persist` → `STORAGE_KEYS.PROMPTS`); **`getActivePromptOverrides()`** for API payloads
 
@@ -69,22 +69,22 @@ Uses `@xyflow/react` v12. The canvas has 10 node types in a 4-column layout:
 1. **Section nodes** (col 0) — `designBrief`, `existingDesign`, `researchContext`, `objectivesMetrics`, `designConstraints` — all rendered by the shared `SectionNode.tsx` component
 2. **Processing nodes** (col 1–2) — `compiler` (labeled "Incubator"), `designSystem`, `model`
 3. **Hypothesis nodes** (col 2) — strategy + format + **Generate** / **Run agent**; Mode **Direct** vs **Agentic**; reads provider/model from connected ModelNode
-4. **Variant nodes** (col 3) — sandboxed iframe previews of generated code; accumulate across runs (version stacking)
+4. **Preview nodes** (col 3) — sandboxed iframe previews of generated code; accumulate across runs (version stacking)
 
 **Model config** — Domain store records models per incubator and per hypothesis; `useConnectedModel(nodeId)` prefers that, then incoming model edges. There is no inline provider/model on processing nodes.
 
-**Canvas migrations** (`src/stores/canvas-migrations.ts`) run on every hydration via Zustand's `migrate` option. Current version: 19 (see `version` in `canvas-store.ts`). Any schema change to canvas node data requires a new migration function.
+**Canvas migrations** (`src/stores/canvas-migrations.ts`) run on every hydration via Zustand's `migrate` option. Current version: 20 (see `version` in `canvas-store.ts`). Any schema change to canvas node data requires a new migration function.
 
 ### Generation flow
-**Hypothesis (Direct and Agentic):** User clicks **Generate** on a hypothesis → [`useHypothesisGeneration`](src/hooks/useHypothesisGeneration.ts) POSTs `/api/hypothesis/prompt-bundle` then `/api/hypothesis/generate` (multiplexed SSE). [`executeHypothesisGenerationRun`](src/hooks/hypothesis-generation-run.ts) wires lanes; [`createPlaceholderGenerationSession`](src/hooks/placeholder-generation-session.ts) handles deltas, files, traces, and finalize → IndexedDB + variant iframe. Direct mode streams single-shot code; agentic mode runs the Pi pipeline below through the same SSE contract.
+**Hypothesis (Direct and Agentic):** User clicks **Generate** on a hypothesis → [`useHypothesisGeneration`](src/hooks/useHypothesisGeneration.ts) POSTs `/api/hypothesis/prompt-bundle` then `/api/hypothesis/generate` (multiplexed SSE). [`executeHypothesisGenerationRun`](src/hooks/hypothesis-generation-run.ts) wires lanes; [`createPlaceholderGenerationSession`](src/hooks/placeholder-generation-session.ts) handles deltas, files, traces, and finalize → IndexedDB + preview iframe. Direct mode streams single-shot code; agentic mode runs the Pi pipeline below through the same SSE contract.
 
-**Legacy `/api/generate`:** Still available on the server for non-canvas tools/tests; the canvas UI does **not** import a `useGenerate` hook — all canvas generation goes through the hypothesis routes above.
+**Legacy `/api/generate`:** Still available on the server for non-canvas tools/tests; the canvas UI uses **only** the hypothesis routes (`/api/hypothesis/*`) above — not legacy generate client helpers.
 
 **Agentic (server):** With `mode: 'agentic'` → `runAgenticWithEvaluation` runs a Pi coding-agent session: **`server/services/pi-agent-service.ts`** uses `createAgentSession` with **`tools: []`** (no host-FS Pi tools) and **`customTools`** from **`server/services/pi-sdk/virtual-tools.ts`** (Pi `read` / `write` / `edit` / `ls` / `find` / `grep` mapped to **`just-bash`**) plus `pi-bash-tool`, `pi-app-tools` (`todo_write`, **`use_skill`** — skill catalog in tool description, **`validate_js`**, **`validate_html`**), then parallel evaluator workers (`design-evaluation-service.ts`): LLM rubrics + browser preflight (`browser-qa-evaluator.ts`), merged with optional Playwright when configured and Chromium is installed. Bounded revision rounds re-seed the agent with eval feedback. Repo-root **`skills/`** holds Agent Skills (`SKILL.md` per package); **`server/lib/skill-discovery.ts`** walks them at each Pi session boundary, **`buildAgenticSystemContext`** returns **`skillCatalog`** and **pre-seeds all non-`manual`** packages into **`skills/<key>/…`**. The orchestrator emits **`skills_loaded`** and **`skill_activated`** (after **`use_skill`**) for the UI. **Only `server/services/pi-sdk/`** should import `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent` directly.
 
 **Multi-file persistence:** Agentic file maps go to IndexedDB via `saveFiles()`; provenance can include evaluation rounds + checkpoint.
 
-**Provider concurrency:** OpenRouter runs variants in parallel; LM Studio runs sequentially (returns 500 on concurrent requests).
+**Provider concurrency:** OpenRouter runs hypothesis lanes in parallel; LM Studio runs sequentially (returns 500 on concurrent requests).
 
 ### Iframe rendering
 **Agentic multi-file previews** register the virtual tree with **`POST /api/preview/sessions`** and load **`iframe src=/api/preview/sessions/{id}/…`** (Vite proxies `/api` to the Hono server). URL-backed preview uses `sandbox="allow-scripts allow-same-origin"` so relative asset and multi-page links resolve. **`bundleVirtualFS()`** remains a **`srcDoc` fallback** if registration fails. Server-side Playwright eval uses the same preview URL; set **`PREVIEW_PUBLIC_URL`** if the browser process cannot reach `http://127.0.0.1:$PORT`.
@@ -124,4 +124,4 @@ All diagnostics are tree-shaken in production or gated behind `import.meta.env.D
 ### Errors and optional telemetry
 User-visible failures should use [`normalizeError`](src/lib/error-utils.ts) (and related helpers) so messages stay consistent. Optional debug POSTs to a local ingest URL must go through [`debugAgentIngest`](server/lib/debug-agent-ingest.ts) (server: `DEBUG_AGENT_INGEST=1`) or [`src/lib/debug-agent-ingest.ts`](src/lib/debug-agent-ingest.ts) (browser: dev + `VITE_DEBUG_AGENT_INGEST=1`) — they no-op by default. Avoid bare `.catch(() => {})` on real work; swallowing is only acceptable inside that guarded ingest or similarly optional side channels.
 
-**Experiment forking** — Changing provider/model/format on a HypothesisNode and clicking Generate pins old variants (`data.pinnedRunId`), disconnects them, shifts them 200px down, and creates new variant nodes. Pinned variants use scoped IndexedDB lookups keyed by `${vsId}:${runId}`.
+**Experiment forking** — Changing provider/model/format on a HypothesisNode and clicking Generate pins old previews (`data.pinnedRunId`), disconnects them, shifts them 200px down, and creates new preview nodes. Pinned previews use scoped IndexedDB lookups keyed by `${sId}:${runId}`.

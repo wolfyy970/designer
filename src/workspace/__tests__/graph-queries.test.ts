@@ -37,7 +37,7 @@ describe('graph-queries', () => {
       node('h1', NODE_TYPES.HYPOTHESIS),
       node('m1', NODE_TYPES.MODEL, { providerId: 'openrouter', modelId: 'gpt' }),
       node('m2', NODE_TYPES.MODEL, { providerId: 'lmstudio', modelId: 'local' }),
-      node('v1', NODE_TYPES.VARIANT),
+      node('v1', NODE_TYPES.PREVIEW),
     ],
     edges: [edge('e1', 'm1', 'h1'), edge('e2', 'm2', 'h1'), edge('e3', 'h1', 'v1')],
   };
@@ -88,7 +88,7 @@ describe('graph-queries', () => {
 
   it('countOutgoingNodesOfType counts variants from hypothesis', () => {
     expect(
-      countOutgoingNodesOfType('h1', NODE_TYPES.VARIANT, snapshot),
+      countOutgoingNodesOfType('h1', NODE_TYPES.PREVIEW, snapshot),
     ).toBe(1);
   });
 });

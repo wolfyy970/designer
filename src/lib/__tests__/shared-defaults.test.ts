@@ -6,6 +6,7 @@ const EXPECTED_KEYS = [
   'incubator-user-inputs',
   'designer-direct-system',
   'designer-agentic-system',
+  'designer-agentic-revision-user',
   'designer-hypothesis-inputs',
   'design-system-extract-system',
   'design-system-extract-user-input',

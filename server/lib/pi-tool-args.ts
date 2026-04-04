@@ -3,15 +3,30 @@ import { z } from 'zod';
 /** Tool call `arguments` objects from Pi are JSON-like records; extract common fields safely. */
 const toolArgsRecordSchema = z.record(z.string(), z.unknown());
 
-export interface PiToolProgressFields {
-  path?: string;
-  pattern?: string;
+const TOOL_PATH_ARG_KEYS = ['path', 'file', 'filePath', 'target_file'] as const;
+
+/**
+ * Resolve a filesystem path from Pi tool `arguments` (partial or finalized tool calls).
+ * Validated via Zod record parse; unknown shapes return `undefined`.
+ */
+export function extractPiToolPathFromArguments(raw: unknown): string | undefined {
+  const parsed = toolArgsRecordSchema.safeParse(raw);
+  if (!parsed.success) return undefined;
+  const o = parsed.data;
+  for (const key of TOOL_PATH_ARG_KEYS) {
+    const v = o[key];
+    if (typeof v === 'string' && v.length > 0) return v;
+  }
+  return undefined;
 }
 
 /**
  * Parse execution args for progress/trace labels. Returns empty fields when shape is not an object record.
  */
-export function parsePiToolExecutionArgs(_toolName: string, raw: unknown): PiToolProgressFields {
+export function parsePiToolExecutionArgs(
+  _toolName: string,
+  raw: unknown,
+): { path?: string; pattern?: string } {
   void _toolName; // reserved for per-tool stricter validation
   const parsed = toolArgsRecordSchema.safeParse(raw);
   if (!parsed.success) {

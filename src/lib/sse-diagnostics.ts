@@ -3,7 +3,7 @@
  * Production: callers use `createSseStreamDiagnostics()` which returns a no-op stub.
  */
 
-export interface SseStreamDiagnosticsSnapshot {
+interface SseStreamDiagnosticsSnapshot {
   durationMs: number;
   byEvent: Record<string, number>;
   drops: number;

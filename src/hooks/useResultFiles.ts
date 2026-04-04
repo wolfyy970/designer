@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { normalizeError } from '../lib/error-utils';
 import { loadFiles } from '../services/idb-storage';
 import { GENERATION_STATUS } from '../constants/generation';
 import type { GenerationStatus } from '../types/provider';
@@ -36,7 +37,11 @@ export function useResultFiles(
       })
       .catch((err) => {
         if (!cancelled) {
-          console.error(`[useResultFiles] Error loading files for ${resultId.slice(0, 8)}...`, err);
+          console.error(
+            `[useResultFiles] Error loading files for ${resultId.slice(0, 8)}...`,
+            normalizeError(err),
+            err,
+          );
           setFiles(undefined);
           setIsLoading(false);
         }

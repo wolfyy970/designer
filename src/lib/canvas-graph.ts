@@ -1,8 +1,8 @@
 import type { DesignSpec } from '../types/spec';
 import type { GenerationResult } from '../types/provider';
-import { getVariantNodeData } from './canvas-node-data';
+import { getPreviewNodeData } from './canvas-node-data';
 import { loadCode } from '../services/idb-storage';
-import { SECTION_NODE_TYPES } from '../lib/canvas-layout';
+import { SECTION_NODE_TYPES } from '../constants/canvas';
 import {
   NODE_TYPE_TO_SECTION,
   type CanvasNodeType,
@@ -67,7 +67,7 @@ export interface CompileInputs {
 /**
  * Walk the graph from a compiler node to build all inputs
  * needed for compilation — spec sections wired to this compiler **or** non-empty in the shared
- * spec store, and reference designs (from connected variant nodes).
+ * spec store, and reference designs (from connected preview nodes).
  *
  * Async because generated code is now stored in IndexedDB.
  */
@@ -82,11 +82,11 @@ export async function buildCompileInputs(
   let connectedNodes: AnyNode[];
   if (
     wiring &&
-    (wiring.sectionNodeIds.length > 0 || wiring.variantNodeIds.length > 0)
+    (wiring.sectionNodeIds.length > 0 || wiring.previewNodeIds.length > 0)
   ) {
     const idSet = new Set<string>([
       ...wiring.sectionNodeIds,
-      ...wiring.variantNodeIds,
+      ...wiring.previewNodeIds,
     ]);
     connectedNodes = nodes.filter((n) => idSet.has(n.id));
   } else {
@@ -127,12 +127,12 @@ export async function buildCompileInputs(
     ) as DesignSpec['sections'],
   };
 
-  // Collect reference designs from connected variant nodes
+  // Collect reference designs from connected preview nodes
   const referenceDesigns: { name: string; code: string }[] = [];
-  const collectVariantCode = async (variantNode: AnyNode) => {
-    const variantData = getVariantNodeData(variantNode);
-    if (variantNode.type === 'variant' && variantData?.refId) {
-      const result = results.find((r) => r.id === variantData.refId);
+  const collectPreviewCode = async (previewNode: AnyNode) => {
+    const previewData = getPreviewNodeData(previewNode);
+    if (previewNode.type === 'preview' && previewData?.refId) {
+      const result = results.find((r) => r.id === previewData.refId);
       if (result) {
         // Try in-memory code first (during active generation), then IndexedDB
         const code = result.code ?? (await loadCode(result.id));
@@ -148,15 +148,15 @@ export async function buildCompileInputs(
 
   const codePromises: Promise<void>[] = [];
   for (const node of connectedNodes) {
-    // Direct variant → compiler
-    codePromises.push(collectVariantCode(node));
+    // Direct preview → compiler
+    codePromises.push(collectPreviewCode(node));
 
-    // Indirect variant → section → compiler (follow edges into section nodes)
+    // Indirect preview → section → compiler (follow edges into section nodes)
     if (SECTION_NODE_TYPES.has(node.type as CanvasNodeType)) {
       const sectionInputEdges = edges.filter((e) => e.target === node.id);
       for (const e of sectionInputEdges) {
         const sourceNode = nodes.find((n) => n.id === e.source);
-        if (sourceNode) codePromises.push(collectVariantCode(sourceNode));
+        if (sourceNode) codePromises.push(collectPreviewCode(sourceNode));
       }
     }
   }

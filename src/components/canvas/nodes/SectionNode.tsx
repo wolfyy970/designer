@@ -7,6 +7,7 @@ import {
   type CanvasNodeType,
 } from '../../../stores/canvas-store';
 import type { SectionNodeData } from '../../../types/canvas-data';
+import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { SPEC_SECTIONS } from '../../../lib/constants';
 import { filledOrEmpty } from '../../../lib/node-status';
 import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
@@ -61,12 +62,12 @@ function SectionNode({ id, type, selected }: NodeProps<SectionNodeType>) {
               : `Describe the ${meta.title.toLowerCase()}...`
           }
           rows={10}
-          className="nodrag nowheel min-h-[var(--min-height-section-textarea)] w-full resize-y rounded border border-border px-2.5 py-2 text-xs leading-relaxed text-fg-secondary placeholder:text-fg-faint outline-none input-focus"
+          className={`${RF_INTERACTIVE} min-h-[var(--min-height-section-textarea)] w-full resize-y rounded border border-border px-2.5 py-2 text-xs leading-relaxed text-fg-secondary placeholder:text-fg-faint outline-none input-focus`}
         />
 
         {/* Reference images for existing design */}
         {hasImages && (
-          <div className="nodrag nowheel mt-2">
+          <div className={`${RF_INTERACTIVE} mt-2`}>
             <ReferenceImageUpload sectionId={sectionId} />
             {isCapturing && (
               <div className="mt-2 flex items-center gap-2 rounded-md border border-dashed border-accent bg-info-subtle px-3 py-2.5">

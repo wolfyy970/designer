@@ -4,7 +4,7 @@ import { generateId } from '../../lib/utils';
 import { columnX, computeAutoLayout, reconcileSectionGhostNodes, snap } from '../../lib/canvas-layout';
 import { buildEdgeId, EDGE_TYPES, EDGE_STATUS } from '../../constants/canvas';
 import { PREREQUISITE_DEFAULTS } from '../../lib/constants';
-import { hydrateDomainFromCanvasGraph } from '../workspace-domain-store';
+import { hydrateDomainFromCanvasGraph } from '../../workspace/hydrate-domain-from-canvas-graph';
 import type { CanvasStore } from './canvas-store-types';
 
 export const createLayoutSlice: StateCreator<
@@ -90,8 +90,8 @@ export const createLayoutSlice: StateCreator<
       nodes: [],
       edges: [],
       viewport: { x: 0, y: 0, zoom: 0.85 },
-      expandedVariantId: null,
-      runInspectorVariantNodeId: null,
+      expandedPreviewId: null,
+      runInspectorPreviewNodeId: null,
       lineageNodeIds: new Set(),
       lineageEdgeIds: new Set(),
       pendingFitViewAfterTemplate: false,
@@ -106,8 +106,8 @@ export const createLayoutSlice: StateCreator<
       nodes: [],
       edges: [],
       viewport: { x: 0, y: 0, zoom: 0.85 },
-      expandedVariantId: null,
-      runInspectorVariantNodeId: null,
+      expandedPreviewId: null,
+      runInspectorPreviewNodeId: null,
       lineageNodeIds: new Set(),
       lineageEdgeIds: new Set(),
       pendingFitViewAfterTemplate: false,

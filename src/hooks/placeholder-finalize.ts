@@ -1,5 +1,5 @@
 import { debugAgentIngest } from '../lib/debug-agent-ingest';
-import { GENERATION_STATUS } from '../constants/generation';
+import { GENERATION_MODE, GENERATION_STATUS } from '../constants/generation';
 import { storage } from '../storage';
 import type { CompiledPrompt } from '../types/compiler';
 import type { AgentMode } from '../types/workspace-domain';
@@ -8,6 +8,7 @@ import type { ProvenanceContext } from '../types/provenance-context';
 import { useGenerationStore } from '../stores/generation-store';
 import type { PlaceholderGenerationSessionState, PlaceholderRafBatchers } from './placeholder-session-state';
 import { clearTransientResultFields } from './placeholder-session-state';
+import { normalizeError } from '../lib/error-utils';
 
 export function createPlaceholderFinalizeAfterStream(options: {
   placeholderId: string;
@@ -60,22 +61,50 @@ export function createPlaceholderFinalizeAfterStream(options: {
         status: GENERATION_STATUS.ERROR,
         error: 'Server returned no code.',
       });
+      onResultComplete?.(placeholderId);
       return;
     }
 
-    if (state.generatedCode) await storage.saveCode(placeholderId, state.generatedCode);
+    const failPersistence = (step: string, err: unknown): void => {
+      updateResult(placeholderId, {
+        status: GENERATION_STATUS.ERROR,
+        error: `${step}: ${normalizeError(err)}`,
+      });
+    };
+
+    if (state.generatedCode) {
+      try {
+        await storage.saveCode(placeholderId, state.generatedCode);
+      } catch (err) {
+        failPersistence('saveCode', err);
+        onResultComplete?.(placeholderId);
+        return;
+      }
+    }
     if (Object.keys(state.liveFiles).length > 0) {
-      await storage.saveFiles(placeholderId, state.liveFiles);
+      try {
+        await storage.saveFiles(placeholderId, state.liveFiles);
+      } catch (err) {
+        failPersistence('saveFiles', err);
+        onResultComplete?.(placeholderId);
+        return;
+      }
     }
 
     for (const er of state.evaluationRounds) {
       if (er.files && Object.keys(er.files).length > 0) {
-        await storage.saveRoundFiles(placeholderId, er.round, er.files);
+        try {
+          await storage.saveRoundFiles(placeholderId, er.round, er.files);
+        } catch (err) {
+          failPersistence(`saveRoundFiles(round ${er.round})`, err);
+          onResultComplete?.(placeholderId);
+          return;
+        }
       }
     }
 
     if (provenanceCtx) {
-      const strategySnapshot = provenanceCtx.strategies[prompt.variantStrategyId];
+      const strategySnapshot = provenanceCtx.strategies[prompt.strategyId];
       if (strategySnapshot) {
         const roundsWithoutFileBodies =
           state.evaluationRounds.length > 0
@@ -101,7 +130,13 @@ export function createPlaceholderFinalizeAfterStream(options: {
               : undefined,
           checkpoint: state.agenticCheckpoint,
         };
-        await storage.saveProvenance(placeholderId, provenance);
+        try {
+          await storage.saveProvenance(placeholderId, provenance);
+        } catch (err) {
+          failPersistence('saveProvenance', err);
+          onResultComplete?.(placeholderId);
+          return;
+        }
       }
     }
 
@@ -133,7 +168,7 @@ export function createPlaceholderFinalizeAfterStream(options: {
     updateResult(placeholderId, {
       id: placeholderId,
       status: GENERATION_STATUS.COMPLETE,
-      agenticPhase: mode === 'agentic' ? 'complete' : undefined,
+      agenticPhase: mode === GENERATION_MODE.AGENTIC ? 'complete' : undefined,
       evaluationStatus: undefined,
       ...(roundsMetaOnly ? { evaluationRounds: roundsMetaOnly } : {}),
       ...(lastEvalAggregate ? { evaluationSummary: lastEvalAggregate } : {}),

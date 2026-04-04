@@ -47,7 +47,7 @@ export type LlmLogContext = Pick<LlmLogEntry, 'source' | 'phase' | 'correlationI
   signal?: AbortSignal;
 };
 
-export type LlmCallLifecycleHandles = {
+type LlmCallLifecycleHandles = {
   logId: string;
   t0: number;
   sig: AbortSignal | undefined;
@@ -164,7 +164,7 @@ export async function withLlmCallLifecycle(
   }
 }
 
-export function chatMessagesToLogFields(messages: ChatMessage[]): {
+function chatMessagesToLogFields(messages: ChatMessage[]): {
   systemPrompt: string;
   userPrompt: string;
 } {

@@ -75,7 +75,7 @@ describe('generateHypothesisStream error surfacing', () => {
     expect(onError).toHaveBeenCalledWith('boom');
   });
 
-  it('calls onError for invalid JSON data line on lane 0', async () => {
+  it('calls onError for invalid JSON (single lane)', async () => {
     const onError = vi.fn();
     const encoder = new TextEncoder();
     vi.stubGlobal(
@@ -101,5 +101,61 @@ describe('generateHypothesisStream error surfacing', () => {
 
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0][0]).toMatch(/Invalid JSON/);
+  });
+
+  it('notifies every lane on invalid JSON when multiplexed', async () => {
+    const onError0 = vi.fn();
+    const onError1 = vi.fn();
+    const encoder = new TextEncoder();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode(`event: ${SSE_EVENT_NAMES.progress}\ndata: not-json\n\n`),
+              );
+              controller.close();
+            },
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    await generateHypothesisStream(dummyBody, [
+      { callbacks: { onError: onError0 }, finalizeAfterStream: vi.fn().mockResolvedValue(undefined) },
+      { callbacks: { onError: onError1 }, finalizeAfterStream: vi.fn().mockResolvedValue(undefined) },
+    ]);
+
+    expect(onError0).toHaveBeenCalledTimes(1);
+    expect(onError1).toHaveBeenCalledTimes(1);
+    expect(onError0.mock.calls[0][0]).toMatch(/Invalid JSON/);
+  });
+
+  it('notifies every lane when laneIndex is missing under multiplex', async () => {
+    const onError0 = vi.fn();
+    const onError1 = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        sseResponse([
+          {
+            name: SSE_EVENT_NAMES.progress,
+            data: { status: 'ok' },
+          },
+        ]),
+      ),
+    );
+
+    await generateHypothesisStream(dummyBody, [
+      { callbacks: { onError: onError0 }, finalizeAfterStream: vi.fn().mockResolvedValue(undefined) },
+      { callbacks: { onError: onError1 }, finalizeAfterStream: vi.fn().mockResolvedValue(undefined) },
+    ]);
+
+    expect(onError0).toHaveBeenCalledTimes(1);
+    expect(onError1).toHaveBeenCalledTimes(1);
+    expect(onError0.mock.calls[0][0]).toMatch(/missing laneIndex/);
   });
 });

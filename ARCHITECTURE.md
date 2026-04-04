@@ -120,11 +120,11 @@ flowchart TB
 
 ## Domain model, canvas projection, and session DTOs
 
-**Canonical client model** — `src/stores/workspace-domain-store.ts` (persisted) holds workflow semantics without requiring a graph: incubator input wiring (section / variant node ids), model assignments per incubator and per hypothesis, design-system attachments, hypothesis ↔ incubator ↔ variant-strategy links, variant slots (active result / pins), and mirrors for model/design-system payloads synced from the canvas. `src/types/workspace-domain.ts` defines the shapes.
+**Canonical client model** — `src/stores/workspace-domain-store.ts` (persisted) holds workflow semantics without requiring a graph: incubator input wiring (section / preview node ids), model assignments per incubator and per hypothesis, design-system attachments, hypothesis ↔ incubator ↔ hypothesis-strategy links, preview slots (active result / pins), and mirrors for model/design-system payloads synced from the canvas. `src/types/workspace-domain.ts` defines the shapes.
 
 **Canvas as projection** — `src/stores/canvas-store.ts` still persists React Flow–backed **nodes and edges** for layout and interaction. Graph edits call `src/workspace/domain-commands.ts` so domain relations stay the source of truth for compile/generate. Pure graph helpers live in `src/workspace/graph-queries.ts`.
 
-**Node removal** — Prefer `canvas-store.removeNode` for deletes so domain cleanup (`syncDomainForRemovedNode`), compiler variant pruning, and cascade removal of attached variant nodes stay consistent. Orchestrator paths that filter nodes out of Zustand directly must still call `syncDomainForRemovedNode` for each removed id (see `useCanvasOrchestrator`).
+**Node removal** — Prefer `canvas-store.removeNode` for deletes so domain cleanup (`syncDomainForRemovedNode`), compiler strategy pruning, and cascade removal of attached preview nodes stay consistent. Orchestrator paths that filter nodes out of Zustand directly must still call `syncDomainForRemovedNode` for each removed id (see `useCanvasOrchestrator`).
 
 **Compile inputs** — `buildCompileInputs()` in `src/lib/canvas-graph.ts` accepts optional `DomainIncubatorWiring`; when present, structural inputs come from the domain list instead of only incoming edges to the compiler node.
 
@@ -141,12 +141,12 @@ The **server** LLM engine stays UI-agnostic; client-only modules under `src/work
 ```mermaid
 flowchart TB
   designSpec[DesignSpec text and images]
-  dimensionMap[DimensionMap dimensions and variant strategies]
-  compiledPrompt["CompiledPrompt[] one per variant"]
+  incubationPlan[IncubationPlan dimensions and hypothesis strategies]
+  compiledPrompt["CompiledPrompt[] one per hypothesis"]
   generate[POST /api/generate SSE stream]
 
-  designSpec -->|POST /api/compile| dimensionMap
-  dimensionMap -->|user edits on canvas| compiledPrompt
+  designSpec -->|POST /api/compile| incubationPlan
+  incubationPlan -->|user edits on canvas| compiledPrompt
   compiledPrompt -->|compileVariantPrompts client-side| generate
 
   generate --> singleMode
@@ -174,8 +174,8 @@ flowchart TB
 | Endpoint | Method | Purpose | Response |
 |---|---|---|---|
 | `/api/config` | GET | App flags (`lockdown` + pinned models when locked) and **agentic evaluator defaults** (`agenticMaxRevisionRounds`, `agenticMinOverallScore` from env) for Settings → Evaluator seeding | JSON |
-| `/api/compile` | POST | Compile spec into dimension map; optional body **`promptOverrides`** (known prompt keys only, sanitized server-side) | JSON: `DimensionMap` |
-| `/api/generate` | POST | Generate one variant (single-shot or agentic) | SSE stream |
+| `/api/compile` | POST | Compile spec into incubation plan; optional body **`promptOverrides`** (known prompt keys only, sanitized server-side) | JSON: `IncubationPlan` |
+| `/api/generate` | POST | Generate one design (single-shot or agentic) | SSE stream |
 | `/api/hypothesis/prompt-bundle` | POST | Build compiled prompts + eval/provenance from workspace slice; optional **`promptOverrides`** | JSON |
 | `/api/hypothesis/generate` | POST | Run all models for one hypothesis; multiplexed SSE (`laneIndex` on events, `lane_done` per lane); optional **`promptOverrides`** threaded into stream + agentic eval | SSE stream |
 | `/api/models/:provider` | GET | List available models | JSON: `ProviderModel[]` |
@@ -297,15 +297,15 @@ The primary interface is a node-graph canvas built on `@xyflow/react` v12.
 
 ### Node Types
 
-10 node types in 3 categories: 5 input nodes rendered by shared `SectionNode.tsx`, plus `ModelNode`, `DesignSystemNode`, `CompilerNode`, `HypothesisNode`, and `VariantNode`. `ModelNode` centralizes provider/model selection. Design System is self-contained (data in `node.data`, not spec store). Each node uses a typed data interface from `types/canvas-data.ts`.
+10 node types in 3 categories: 5 input nodes rendered by shared `SectionNode.tsx`, plus `ModelNode`, `DesignSystemNode`, `CompilerNode`, `HypothesisNode`, and `PreviewNode` (`VariantNode.tsx`). `ModelNode` centralizes provider/model selection. Design System is self-contained (data in `node.data`, not spec store). Each node uses a typed data interface from `types/canvas-data.ts`.
 
 ### HypothesisNode — Generation Controls
 
 `HypothesisNode` stores `agentMode` (`single` | `agentic`) and `thinkingLevel` in canvas node data. The **Direct** / **Agentic** mode control and **Thinking** segmented control are inline on the node. At generation time, [`useHypothesisGeneration`](src/hooks/useHypothesisGeneration.ts) reads these from canvas state and drives the multiplexed hypothesis SSE stream (`/api/hypothesis/prompt-bundle` + `/api/hypothesis/generate` via [`src/api/client.ts`](src/api/client.ts)). Lane orchestration lives in [`hypothesis-generation-run.ts`](src/hooks/hypothesis-generation-run.ts); per-lane SSE callbacks and post-stream persistence are in [`placeholder-generation-session.ts`](src/hooks/placeholder-generation-session.ts) and [`placeholder-*`](src/hooks/placeholder-stream-handlers.ts) helpers.
 
-### Variant Node — Multi-File Display
+### Preview Node — Multi-File Display
 
-When a result has files (agentic output), `VariantNode` shows:
+When a result has files (agentic output), `VariantNode` (renders the `preview` canvas node type) shows:
 - **Generating state:** file explorer sidebar (planned + written files with status dots) + activity log + progress bar
 - **Complete state:** Preview/Code tab bar. **Preview** registers the file map with **`/api/preview/sessions`** and loads the default entry in a sandboxed iframe via **`src`** (real relative URLs between HTML/CSS/JS). If the API is unreachable, **`bundleVirtualFS()`** inlines linked assets into **`srcDoc`** as a fallback. Code tab shows the file explorer + raw file content.
 - **Download:** produces a `.zip` via `fflate`.
@@ -328,7 +328,7 @@ Model connections are column-scoped: a Model node connects only to adjacent-colu
 
 ### Version Stacking
 
-Results accumulate across generation runs. Each result has a `runId` (UUID) and `runNumber` (sequential per hypothesis). Variant nodes reuse the same canvas node across runs, with version navigation. **`userBestOverrides`** in `generation-store` pins which complete `GenerationResult` is treated as “best” for a `variantStrategyId` ahead of evaluator scores; see `getBestCompleteResult` / `setUserBest`. **`domain-variant-selectors.ts`** maps a variant node id → hypothesis and lists sibling variant node ids for **hypothesis-scoped** full-screen stepping.
+Results accumulate across generation runs. Each result has a `runId` (UUID) and `runNumber` (sequential per hypothesis). Preview nodes reuse the same canvas node across runs, with version navigation. **`userBestOverrides`** in `generation-store` pins which complete `GenerationResult` is treated as “best” for a `strategyId` ahead of evaluator scores; see `getBestCompleteResult` / `setUserBest`. **`domain-preview-selectors.ts`** maps a preview node id → hypothesis and lists sibling preview node ids for **hypothesis-scoped** full-screen stepping.
 
 **Agentic eval-round files:** Each `EvaluationRoundSnapshot` may carry a `files` map; the orchestrator attaches the tree that was scored that round. The client persists those blobs under IndexedDB keys `{resultId}:round:{round}` and strips `files` from persisted `evaluationRounds` / provenance to save space (`StoragePort.saveRoundFiles` / `loadRoundFiles`).
 
@@ -343,7 +343,7 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 | File | Key types |
 |------|-----------|
 | `spec.ts` | `DesignSpec`, `SpecSection`, `ReferenceImage` (Zod schemas) |
-| `compiler.ts` | `DimensionMap`, `VariantStrategy`, `CompiledPrompt` |
+| `compiler.ts` | `IncubationPlan`, `HypothesisStrategy`, `CompiledPrompt` |
 | `provider.ts` | `GenerationProvider`, `GenerationResult`, `ChatMessage`, `ProviderOptions`, `ChatResponse`, `ContentPart`, `ProviderModel` |
 | `canvas-data.ts` | Per-node typed data interfaces |
 
@@ -367,10 +367,10 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 | Store | Persistence | What it owns |
 |-------|-------------|--------------|
 | `spec-store` | localStorage | Active `DesignSpec`, section/image CRUD |
-| `compiler-store` | localStorage | `DimensionMap` per **incubator id** (same id as the Incubator canvas node today), `CompiledPrompt[]`, variant editing |
-| `generation-store` | localStorage + StoragePort | `GenerationResult[]` metadata in localStorage (persist v4 adds `userBestOverrides`; `evaluationRounds[].files` stripped in `partialize`), code in IndexedDB (`code` store), multi-file in IndexedDB (`files` store), optional per-eval-round file snapshots (`{resultId}:round:{n}` in the same files DB). `liveCode`, `liveFiles`, `liveFilesPlan` are in-memory only, stripped by `partialize`. |
-| `workspace-domain-store` | localStorage | Domain-first relations and payloads (hypotheses, incubator wiring, model assignments, variant slots, mirrored node content). Prefer this for workflow semantics. |
-| `canvas-store` | localStorage | React Flow nodes/edges, viewport, auto-layout, transient UI (lineage, edge status, `variantNodeIdMap`). Kept in sync with domain on connect/disconnect and compile/generate lifecycle. |
+| `compiler-store` | localStorage | `IncubationPlan` per **incubator id** (same id as the Incubator canvas node today), `CompiledPrompt[]`, hypothesis editing |
+| `generation-store` | localStorage + StoragePort | `GenerationResult[]` metadata in localStorage (persist v5; v4 adds `userBestOverrides`, v5 renames `variantStrategyId` → `strategyId`; `evaluationRounds[].files` stripped in `partialize`), code in IndexedDB (`code` store), multi-file in IndexedDB (`files` store), optional per-eval-round file snapshots (`{resultId}:round:{n}` in the same files DB). `liveCode`, `liveFiles`, `liveFilesPlan` are in-memory only, stripped by `partialize`. |
+| `workspace-domain-store` | localStorage | Domain-first relations and payloads (hypotheses, incubator wiring, model assignments, preview slots, mirrored node content). Prefer this for workflow semantics. |
+| `canvas-store` | localStorage | React Flow nodes/edges, viewport, auto-layout, transient UI (lineage, edge status, `previewNodeIdMap`). Kept in sync with domain on connect/disconnect and compile/generate lifecycle. |
 | `prompt-store` | localStorage | Prompt template overrides (sent as per-request overrides to server). Includes `designer-agentic-system`. |
 
 ### Hooks (`src/hooks/`)
@@ -417,7 +417,7 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 **Why prompts are sent per-request.** The prompt store lives in the browser (localStorage). The server is stateless — it carries defaults and applies client-provided overrides. No shared state between server and client beyond the request payload.
 
-**Why `src/lib/prompts/shared-defaults.ts`.** Prompt text is the same on client and server. A single shared module is the one source of truth. Both `src/lib/prompts/defaults.ts` (client) and `server/lib/prompts/defaults.ts` (server) import from it. `tsconfig.server.json` explicitly includes the file.
+**Why `src/lib/prompts/shared-defaults.ts`.** Prompt text is the same on client and server. `src/lib/prompts/defaults.ts` defines `PromptKey`, `PROMPT_KEYS`, and `PROMPT_META`; **`tsconfig.server.json` includes that file** so the API uses the same keys as the SPA (no duplicate server copy).
 
 **Why `pi-sdk/` exists.** `@mariozechner/pi-coding-agent` / `pi-ai` can ship breaking changes. All direct imports live in [`server/services/pi-sdk/types.ts`](server/services/pi-sdk/types.ts) (and `stream-budget.ts` for Pi context heuristics). Upgrades start there; app code imports only from `pi-sdk/` + orchestration modules.
 
@@ -427,7 +427,7 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 **Why `src/constants/`.** String literals for node types, edge types, and generation statuses appear across stores, hooks, components, and edge/node definitions. A dedicated constants layer eliminates magic strings and ensures TypeScript narrows to exact union types at every call site.
 
-**Why SSE for generation.** Each variant is a separate SSE stream. Single-shot events: `progress`, `code`, `done`. Agentic events additionally include `activity`, `plan`, and `file`. The client manages sequencing across variants. **Dev diagnostics:** `SseStreamDiagnostics` (client, `src/lib/sse-diagnostics.ts`) tracks event counts, drops, and timing per stream — inspect via `window.__SSE_DIAG` in the browser console. Server-side `generate-execution` logs a write-count summary at stream close. `pi-session-event-bridge` uses `safeBridgeEmit` so async failures are logged instead of silently swallowed, and unknown Pi event types print in dev.
+**Why SSE for generation.** Each hypothesis lane is a separate SSE stream. Single-shot events: `progress`, `code`, `done`. Agentic events additionally include `activity`, `plan`, and `file`. The client manages sequencing across lanes. **Dev diagnostics:** `SseStreamDiagnostics` (client, `src/lib/sse-diagnostics.ts`) tracks event counts, drops, and timing per stream — inspect via `window.__SSE_DIAG` in the browser console. Server-side `generate-execution` logs a write-count summary at stream close. `pi-session-event-bridge` uses `safeBridgeEmit` so async failures are logged instead of silently swallowed, and unknown Pi event types print in dev.
 
 **Why URL-backed preview.** Agentic runs produce a **virtual file tree**. The API serves it at **`/api/preview/sessions/:id/...`** so iframe **`src`** uses real relative URLs (multi-page `a href` works). Sessions are ephemeral (TTL), not durable storage.
 

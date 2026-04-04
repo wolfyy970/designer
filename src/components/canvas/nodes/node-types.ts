@@ -16,6 +16,6 @@ export const nodeTypes = {
   designSystem: DesignSystemNode,
   compiler: CompilerNode,
   hypothesis: HypothesisNode,
-  variant: VariantNode,
+  preview: VariantNode,
   model: ModelNode,
 };

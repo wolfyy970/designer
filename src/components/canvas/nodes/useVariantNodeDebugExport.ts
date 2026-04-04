@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { GenerationResult } from '../../../types/provider';
-import type { VariantStrategy } from '../../../types/compiler';
+import type { HypothesisStrategy } from '../../../types/compiler';
 import {
   type DesignDebugExportOptions,
   buildDesignRunDebugMarkdown,
@@ -11,13 +11,13 @@ import { loadProvenance, loadCode, loadFiles } from '../../../services/idb-stora
 export function useVariantNodeDebugExport(options: {
   result: GenerationResult | undefined;
   nodeId: string;
-  variantName: string;
-  strategy: VariantStrategy | undefined;
+  previewName: string;
+  strategy: HypothesisStrategy | undefined;
   slug: string;
   code: string | undefined;
   files: Record<string, string> | undefined;
 }) {
-  const { result, nodeId, variantName, strategy, slug, code, files } = options;
+  const { result, nodeId, previewName, strategy, slug, code, files } = options;
   const [debugExportOpen, setDebugExportOpen] = useState(false);
 
   const debugExportPreviewInput = useMemo(
@@ -25,8 +25,8 @@ export function useVariantNodeDebugExport(options: {
       result
         ? {
             exportedAt: new Date().toISOString(),
-            variantNodeId: nodeId,
-            variantName,
+            previewNodeId: nodeId,
+            previewName,
             strategyName: strategy?.name,
             strategy,
             result,
@@ -34,7 +34,7 @@ export function useVariantNodeDebugExport(options: {
             files: files ?? result.liveFiles ?? undefined,
           }
         : null,
-    [nodeId, variantName, strategy, result, code, files],
+    [nodeId, previewName, strategy, result, code, files],
   );
 
   const handleConfirmDebugExport = useCallback(
@@ -57,8 +57,8 @@ export function useVariantNodeDebugExport(options: {
       const md = buildDesignRunDebugMarkdown(
         {
           exportedAt: new Date().toISOString(),
-          variantNodeId: nodeId,
-          variantName,
+          previewNodeId: nodeId,
+          previewName,
           strategyName: strategy?.name,
           strategy,
           result,
@@ -72,7 +72,7 @@ export function useVariantNodeDebugExport(options: {
       downloadTextFile(`${slug}-run-v${result.runNumber}-debug-${stamp}.md`, md);
       setDebugExportOpen(false);
     },
-    [nodeId, result, variantName, strategy, slug, code, files],
+    [nodeId, result, previewName, strategy, slug, code, files],
   );
 
   return {

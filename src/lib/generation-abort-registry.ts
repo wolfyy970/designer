@@ -8,28 +8,28 @@ const controllers = new Map<string, AbortController>();
 /** User-visible error text for client-aborted runs (must stay in sync with catch handling). */
 export const GENERATION_STOPPED_MESSAGE = 'Generation stopped.';
 
-export function swapGenerationAbortController(variantStrategyId: string): AbortController {
-  const prev = controllers.get(variantStrategyId);
+export function swapGenerationAbortController(strategyId: string): AbortController {
+  const prev = controllers.get(strategyId);
   prev?.abort();
   const next = new AbortController();
-  controllers.set(variantStrategyId, next);
+  controllers.set(strategyId, next);
   return next;
 }
 
 export function clearGenerationAbortController(
-  variantStrategyId: string,
+  strategyId: string,
   controller: AbortController,
 ): void {
-  if (controllers.get(variantStrategyId) === controller) {
-    controllers.delete(variantStrategyId);
+  if (controllers.get(strategyId) === controller) {
+    controllers.delete(strategyId);
   }
 }
 
 /** Stop the in-flight SSE / agent session for this hypothesis lane (same as browser closing the stream). */
-export function abortGenerationForStrategy(variantStrategyId: string): void {
-  const c = controllers.get(variantStrategyId);
+export function abortGenerationForStrategy(strategyId: string): void {
+  const c = controllers.get(strategyId);
   c?.abort();
-  controllers.delete(variantStrategyId);
+  controllers.delete(strategyId);
 }
 
 export function isAbortError(err: unknown): boolean {

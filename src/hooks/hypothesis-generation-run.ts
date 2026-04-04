@@ -5,7 +5,7 @@ import type {
 import type { CompiledPrompt } from '../types/compiler';
 import type { GenerationResult } from '../types/provider';
 import type { HypothesisGenerationContext } from '../workspace/hypothesis-generation-pure';
-import { GENERATION_STATUS } from '../constants/generation';
+import { GENERATION_MODE, GENERATION_STATUS } from '../constants/generation';
 import {
   createPlaceholderGenerationSession,
   runFinalizeWithCatch,
@@ -40,11 +40,11 @@ export interface HypothesisGenerationRunDeps {
   setCompiledPrompts: (prompts: CompiledPrompt[]) => void;
   addResult: (r: GenerationResult) => void;
   updateResult: (id: string, patch: Partial<GenerationResult>) => void;
-  nextRunNumberForVariant: (variantStrategyId: string) => number;
+  nextRunNumberForStrategy: (strategyId: string) => number;
   syncAfterGenerate: (results: GenerationResult[], hypothesisNodeId: string) => void;
   getCanvasState: () => {
-    variantNodeIdMap: Map<string, string>;
-    setRunInspectorVariant: (id: string | null) => void;
+    previewNodeIdMap: Map<string, string>;
+    setRunInspectorPreview: (id: string | null) => void;
   };
   scheduleFitView: () => void;
   fetchBundle: (
@@ -82,10 +82,10 @@ export async function executeHypothesisGenerationRun(
 
   for (const cred of bundle.generationContext.modelCredentials) {
     const placeholderId = crypto.randomUUID();
-    const currentRunNumber = deps.nextRunNumberForVariant(prompt.variantStrategyId);
+    const currentRunNumber = deps.nextRunNumberForStrategy(prompt.strategyId);
     const result: GenerationResult = {
       id: placeholderId,
-      variantStrategyId: prompt.variantStrategyId,
+      strategyId: prompt.strategyId,
       providerId: cred.providerId,
       status: GENERATION_STATUS.GENERATING,
       runId: deps.runId,
@@ -101,7 +101,7 @@ export async function executeHypothesisGenerationRun(
       prompt,
       providerId: cred.providerId,
       model: cred.modelId,
-      mode: deps.genCtx.agentMode,
+      mode: bundle.generationContext.agentMode,
       provenanceCtx,
       updateResult: deps.updateResult,
       correlationId: deps.runId,
@@ -116,10 +116,10 @@ export async function executeHypothesisGenerationRun(
   }
 
   deps.syncAfterGenerate(placeholderResults, deps.nodeId);
-  if (bundle.generationContext.agentMode === 'agentic') {
+  if (bundle.generationContext.agentMode === GENERATION_MODE.AGENTIC) {
     const canvas = deps.getCanvasState();
-    const variantNodeId = canvas.variantNodeIdMap.get(prompt.variantStrategyId);
-    if (variantNodeId) canvas.setRunInspectorVariant(variantNodeId);
+    const previewNodeId = canvas.previewNodeIdMap.get(prompt.strategyId);
+    if (previewNodeId) canvas.setRunInspectorPreview(previewNodeId);
   }
   deps.scheduleFitView();
 
@@ -128,6 +128,6 @@ export async function executeHypothesisGenerationRun(
   return {
     ok: true,
     lanePlaceholderIds,
-    modelCredentialCount: deps.genCtx.modelCredentials.length,
+    modelCredentialCount: bundle.generationContext.modelCredentials.length,
   };
 }

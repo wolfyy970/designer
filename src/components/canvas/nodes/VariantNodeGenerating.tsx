@@ -1,3 +1,4 @@
+import { RF_INTERACTIVE } from '../../../constants/canvas';
 import type { GenerationResult } from '../../../types/provider';
 import { AgenticHarnessStripe, GeneratingFooter } from '../variant-run';
 import { pickLivenessSlice } from '../../../types/provider';
@@ -41,7 +42,7 @@ export function VariantNodeGenerating({
         {!isWorkspaceOpen ? (
           <button
             type="button"
-            className="nodrag nowheel rounded-md border border-accent-border-muted bg-accent-surface px-3 py-1.5 text-micro font-medium text-accent transition-colors hover:bg-accent-surface-hover"
+            className={`${RF_INTERACTIVE} rounded-md border border-accent-border-muted bg-accent-surface px-3 py-1.5 text-micro font-medium text-accent transition-colors hover:bg-accent-surface-hover`}
             onPointerDown={(e) => {
               e.preventDefault();
               e.stopPropagation();

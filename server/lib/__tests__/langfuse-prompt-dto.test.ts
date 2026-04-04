@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  langfusePromptListPageSchema,
-  langfuseTextPromptSchema,
   parsePromptListPage,
   parseTextPromptGet,
   promptListIndicatesVersions,
@@ -12,7 +10,6 @@ describe('langfuse-prompt-dto', () => {
     const raw = {
       data: [{ versions: [1, 2], lastUpdatedAt: '2026-01-01T00:00:00.000Z' }],
     };
-    expect(langfusePromptListPageSchema.safeParse(raw).success).toBe(true);
     const p = parsePromptListPage(raw);
     expect(p.ok && p.first?.versions).toEqual([1, 2]);
     expect(p.ok && p.first?.lastUpdatedAt).toBe('2026-01-01T00:00:00.000Z');
@@ -39,7 +36,6 @@ describe('langfuse-prompt-dto', () => {
       createdAt: 'a',
       updatedAt: 'b',
     };
-    expect(langfuseTextPromptSchema.safeParse(raw).success).toBe(true);
     const p = parseTextPromptGet(raw);
     expect(p.ok && p.prompt).toBe('hello');
     expect(p.ok && 'version' in p && p.version).toBe(3);

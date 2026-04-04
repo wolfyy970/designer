@@ -3,12 +3,13 @@ import { Loader2, X } from 'lucide-react';
 import { EVALUATOR_RUBRIC_IDS, EVALUATOR_WORKER_COUNT } from '../../types/evaluation';
 import { storage } from '../../storage';
 import { useCanvasStore } from '../../stores/canvas-store';
-import { useCompilerStore, findVariantStrategy } from '../../stores/compiler-store';
-import { getVariantNodeData } from '../../lib/canvas-node-data';
+import { useCompilerStore, findStrategy } from '../../stores/compiler-store';
+import { getPreviewNodeData } from '../../lib/canvas-node-data';
 import { useVersionStack } from '../../hooks/useVersionStack';
 import { useResultCode } from '../../hooks/useResultCode';
 import { useResultFiles } from '../../hooks/useResultFiles';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
+import { RF_INTERACTIVE } from '../../constants/canvas';
 import { GENERATION_STATUS } from '../../constants/generation';
 import { abortGenerationForStrategy } from '../../lib/generation-abort-registry';
 import { prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
@@ -44,31 +45,31 @@ function StatusDot({ status }: { status: string }) {
 }
 
 export default function VariantRunInspector() {
-  const runInspectorVariantNodeId = useCanvasStore((s) => s.runInspectorVariantNodeId);
+  const runInspectorPreviewNodeId = useCanvasStore((s) => s.runInspectorPreviewNodeId);
   const closeRunInspector = useCanvasStore((s) => s.closeRunInspector);
   const nodes = useCanvasStore((s) => s.nodes);
 
   const node = useMemo(
     () =>
-      runInspectorVariantNodeId
-        ? nodes.find((n) => n.id === runInspectorVariantNodeId)
+      runInspectorPreviewNodeId
+        ? nodes.find((n) => n.id === runInspectorPreviewNodeId)
         : undefined,
-    [nodes, runInspectorVariantNodeId],
+    [nodes, runInspectorPreviewNodeId],
   );
 
   useEffect(() => {
-    if (!runInspectorVariantNodeId) return;
-    if (!node || node.type !== 'variant') closeRunInspector();
-  }, [runInspectorVariantNodeId, node, closeRunInspector]);
+    if (!runInspectorPreviewNodeId) return;
+    if (!node || node.type !== 'preview') closeRunInspector();
+  }, [runInspectorPreviewNodeId, node, closeRunInspector]);
 
   useEffect(() => {
-    if (!runInspectorVariantNodeId) return;
+    if (!runInspectorPreviewNodeId) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeRunInspector();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [runInspectorVariantNodeId, closeRunInspector]);
+  }, [runInspectorPreviewNodeId, closeRunInspector]);
 
   const [tab, setTab] = useState<TabId>('monitor');
   const [filesTabPath, setFilesTabPath] = useState<string | undefined>(undefined);
@@ -76,27 +77,27 @@ export default function VariantRunInspector() {
   useEffect(() => {
     setTab('monitor');
     setFilesTabPath(undefined);
-  }, [runInspectorVariantNodeId]);
+  }, [runInspectorPreviewNodeId]);
 
-  const data = getVariantNodeData(node ?? undefined);
-  const variantStrategyId = data?.variantStrategyId;
+  const data = getPreviewNodeData(node ?? undefined);
+  const strategyId = data?.strategyId;
   const pinnedRunId = data?.pinnedRunId;
 
-  const { results, activeResult, versionKey } = useVersionStack(variantStrategyId, pinnedRunId);
+  const { results, activeResult, versionKey } = useVersionStack(strategyId, pinnedRunId);
 
   const legacyResult =
-    !variantStrategyId && data?.refId
+    !strategyId && data?.refId
       ? results.find((r) => r.id === data.refId)
       : undefined;
   const result = activeResult ?? legacyResult;
-  const laneStrategyIdForAbort = variantStrategyId ?? result?.variantStrategyId;
+  const laneStrategyIdForAbort = strategyId ?? result?.strategyId;
 
   const strategy = useCompilerStore((s) => {
-    const vsId = variantStrategyId ?? result?.variantStrategyId;
+    const vsId = strategyId ?? result?.strategyId;
     if (!vsId) return undefined;
-    return findVariantStrategy(s.dimensionMaps, vsId);
+    return findStrategy(s.incubationPlans, vsId);
   });
-  const variantName = strategy?.name ?? 'Variant';
+  const variantName = strategy?.name ?? 'Preview';
 
   const { code, isLoading: codeLoading } = useResultCode(result?.id, result?.status);
   const { files, isLoading: filesLoading } = useResultFiles(result?.id, result?.status);
@@ -216,7 +217,7 @@ export default function VariantRunInspector() {
     isGenerating &&
     (result?.agenticPhase === 'evaluating' || evalWorkersDoneCount > 0);
 
-  if (!runInspectorVariantNodeId || !node || node.type !== 'variant') return null;
+  if (!runInspectorPreviewNodeId || !node || node.type !== 'preview') return null;
 
   const statusLabel = result?.status ?? 'pending';
   const model = result?.metadata?.model;
@@ -227,7 +228,7 @@ export default function VariantRunInspector() {
   return (
     <aside
       className="flex min-h-0 w-[var(--width-variant-inspector)] shrink-0 flex-col border-l border-border-subtle bg-surface pt-[var(--height-header)]"
-      aria-label="Variant run workspace"
+      aria-label="Preview run workspace"
     >
       {/* ── Identity header ──────────────────────────────────── */}
       <div className="shrink-0 border-b border-border-subtle px-3 py-1.5">
@@ -418,7 +419,7 @@ export default function VariantRunInspector() {
                       className="flex-1 min-h-0"
                     />
                   </div>
-                  <div className="nodrag nowheel min-h-0 min-w-0 flex-1 overflow-y-auto">
+                  <div className={`${RF_INTERACTIVE} min-h-0 min-w-0 flex-1 overflow-y-auto`}>
                     {filesTabSnippet != null ? (
                       <pre className="min-h-full p-3 font-mono text-nano leading-relaxed text-fg-secondary whitespace-pre-wrap">
                         {filesTabSnippet}

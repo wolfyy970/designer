@@ -1,5 +1,5 @@
 import { getPromptBody } from '../db/prompts.ts';
-import type { PromptKey } from '../lib/prompts/defaults.ts';
+import type { PromptKey } from '../../src/lib/prompts/defaults.ts';
 import { extractCode, extractCodeStreaming } from '../../src/lib/extract-code.ts';
 import { loggedGenerateChatStream } from '../lib/llm-call-logger.ts';
 import type { ChatMessage } from '../../src/types/provider.ts';

@@ -167,7 +167,7 @@ export function pickStreamingToolLiveness(result: GenerationResult): StreamingTo
 
 export interface GenerationResult {
   id: string;
-  variantStrategyId: string;
+  strategyId: string;
   providerId: string;
   status: GenerationStatus;
   code?: string;

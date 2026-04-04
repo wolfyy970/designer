@@ -172,6 +172,7 @@ export async function runDesignAgentSession(
     streamActivityAt,
     modelTurnId: { current: 0 },
     pendingToolCallsRef,
+    onStreamDeliveryFailure: () => session.agent.abort(),
   };
   const unsubscribe = subscribePiSessionBridge(session, subscribeCtx);
 

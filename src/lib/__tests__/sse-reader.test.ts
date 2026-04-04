@@ -54,4 +54,12 @@ describe('readSseEventStream', () => {
     await readSseEventStream(reader, fn);
     expect(fn).toHaveBeenCalledWith('done', '{}');
   });
+
+  it('stops reading when handler returns false', async () => {
+    const fn = vi.fn().mockImplementationOnce(() => false);
+    const reader = chunksReader(['event: a\ndata: 1\n', 'event: b\ndata: 2\n']);
+    await readSseEventStream(reader, fn);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenCalledWith('a', '1');
+  });
 });

@@ -47,7 +47,7 @@ describe('columnX', () => {
     // NODE_W_DEFAULT is 320
     expect(col.compiler).toBe(420);  // 0 + 320 + 100
     expect(col.hypothesis).toBe(840); // 420 + 320 + 100
-    expect(col.variant).toBe(1260);  // 840 + 320 + 100
+    expect(col.preview).toBe(1260);  // 840 + 320 + 100
   });
 
   it('handles minimum gap', () => {
@@ -109,9 +109,9 @@ describe('computeDefaultPosition', () => {
     expect(pos.x).toBe(col.hypothesis);
   });
 
-  it('places variant at variant column by default', () => {
-    const pos = computeDefaultPosition('variant', [], col);
-    expect(pos.x).toBe(col.variant);
+  it('places preview at preview column by default', () => {
+    const pos = computeDefaultPosition('preview', [], col);
+    expect(pos.x).toBe(col.preview);
   });
 
   it('returns snapped positions', () => {
@@ -240,13 +240,13 @@ describe('computeAutoLayout', () => {
     }
   });
 
-  it('handles disconnected variant nodes', () => {
+  it('handles disconnected preview nodes', () => {
     const nodes = [
       makeNode('brief', 'designBrief'),
       makeNode('comp', 'compiler'),
       makeNode('hyp', 'hypothesis'),
-      makeNode('v1', 'variant'),       // connected
-      makeNode('v2', 'variant'),       // disconnected (archived)
+      makeNode('v1', 'preview'),       // connected
+      makeNode('v2', 'preview'),       // disconnected (archived)
     ];
     const edges = [
       makeEdge('brief', 'comp'),
@@ -256,7 +256,7 @@ describe('computeAutoLayout', () => {
     const result = computeAutoLayout(nodes, edges, DEFAULT_COL_GAP);
     const v1X = result.find((n) => n.id === 'v1')!.position.x;
     const v2X = result.find((n) => n.id === 'v2')!.position.x;
-    // Disconnected variant should be forced to same rank as connected variant
+    // Disconnected preview should be forced to same rank as connected preview
     expect(v2X).toBe(v1X);
   });
 

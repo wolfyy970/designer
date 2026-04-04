@@ -269,7 +269,7 @@ export default function VariantToolbar({
         title={
           versionStackLength > 1
             ? 'Delete this generation version (others stay on the card)'
-            : 'Delete variant from canvas'
+            : 'Delete preview from canvas'
         }
       >
         <X size={10} />

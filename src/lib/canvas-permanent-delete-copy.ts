@@ -106,10 +106,10 @@ export function keyboardMultiDeleteCopy(
     const t = n.type;
     if (t === NODE_TYPES.HYPOTHESIS) {
       return hypothesisDeleteCopy(
-        countOutgoingNodesOfType(n.id, NODE_TYPES.VARIANT, { nodes: allNodes, edges }),
+        countOutgoingNodesOfType(n.id, NODE_TYPES.PREVIEW, { nodes: allNodes, edges }),
       );
     }
-    if (t === NODE_TYPES.VARIANT) {
+    if (t === NODE_TYPES.PREVIEW) {
       return variantNodeDeleteCopy('Variant');
     }
     if (t === NODE_TYPES.MODEL) return modelNodeDeleteCopy();

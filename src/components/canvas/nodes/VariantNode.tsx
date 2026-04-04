@@ -2,11 +2,11 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
 import { useGenerationStore } from '../../../stores/generation-store';
 import { normalizeError } from '../../../lib/error-utils';
-import { useCompilerStore, findVariantStrategy } from '../../../stores/compiler-store';
+import { useCompilerStore, findStrategy } from '../../../stores/compiler-store';
 import { prepareIframeContent, renderErrorHtml } from '../../../lib/iframe-utils';
 import { preferredArtifactFileOrder } from '../../../lib/preview-entry';
 import { useCanvasStore } from '../../../stores/canvas-store';
-import type { VariantNodeData } from '../../../types/canvas-data';
+import type { PreviewNodeData } from '../../../types/canvas-data';
 import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
 import { useRequestPermanentDelete } from '../../../hooks/useRequestPermanentDelete';
 import {
@@ -33,10 +33,10 @@ import { VariantNodeSingleFileBody } from './VariantNodeSingleFileBody';
 import { VariantNodeMultiFileBody } from './VariantNodeMultiFileBody';
 import { useVariantNodeDebugExport } from './useVariantNodeDebugExport';
 
-type VariantNodeType = Node<VariantNodeData, 'variant'>;
+type VariantNodeType = Node<PreviewNodeData, 'preview'>;
 
 function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
-  const variantStrategyId = data.variantStrategyId;
+  const strategyId = data.strategyId;
   const pinnedRunId = data.pinnedRunId;
   const isArchived = !!pinnedRunId;
 
@@ -55,17 +55,17 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
     setSelectedVersion,
     setUserBest,
     userBestOverrides,
-  } = useVersionStack(variantStrategyId, pinnedRunId);
+  } = useVersionStack(strategyId, pinnedRunId);
 
-  const hasUserBestOverride = !!(variantStrategyId && userBestOverrides[variantStrategyId]);
+  const hasUserBestOverride = !!(strategyId && userBestOverrides[strategyId]);
 
   const legacyResult = useMemo(
     () =>
-      !variantStrategyId && data.refId ? results.find((r) => r.id === data.refId) : undefined,
-    [variantStrategyId, data.refId, results],
+      !strategyId && data.refId ? results.find((r) => r.id === data.refId) : undefined,
+    [strategyId, data.refId, results],
   );
   const result = activeResult ?? legacyResult;
-  const laneStrategyIdForAbort = variantStrategyId ?? result?.variantStrategyId;
+  const laneStrategyIdForAbort = strategyId ?? result?.strategyId;
 
   const deleteResult = useGenerationStore((s) => s.deleteResult);
 
@@ -73,17 +73,17 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
   const { files } = useResultFiles(result?.id, result?.status);
 
   const strategy = useCompilerStore((s) => {
-    const vsId = variantStrategyId ?? result?.variantStrategyId;
+    const vsId = strategyId ?? result?.strategyId;
     if (!vsId) return undefined;
-    return findVariantStrategy(s.dimensionMaps, vsId);
+    return findStrategy(s.incubationPlans, vsId);
   });
 
-  const setExpandedVariant = useCanvasStore((s) => s.setExpandedVariant);
-  const setRunInspectorVariant = useCanvasStore((s) => s.setRunInspectorVariant);
+  const setExpandedPreview = useCanvasStore((s) => s.setExpandedPreview);
+  const setRunInspectorPreview = useCanvasStore((s) => s.setRunInspectorPreview);
   const closeRunInspector = useCanvasStore((s) => s.closeRunInspector);
-  const isWorkspaceOpen = useCanvasStore((s) => s.runInspectorVariantNodeId === id);
+  const isWorkspaceOpen = useCanvasStore((s) => s.runInspectorPreviewNodeId === id);
 
-  const variantName = strategy?.name ?? 'Variant';
+  const variantName = strategy?.name ?? 'Preview';
 
   const removeFromCanvas = useNodeRemoval(id);
   const { requestPermanentDelete } = useRequestPermanentDelete();
@@ -167,7 +167,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
   } = useVariantNodeDebugExport({
     result,
     nodeId: id,
-    variantName,
+    previewName: variantName,
     strategy,
     slug,
     code,
@@ -203,7 +203,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
   return (
     <NodeShell
       nodeId={id}
-      nodeType="variant"
+      nodeType="preview"
       selected={!!selected}
       width="w-node-variant"
       status={status}
@@ -236,26 +236,26 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
         onDownload={handleDownload}
         onDownloadDebug={result ? () => setDebugExportOpen(true) : undefined}
         onDeleteVersion={confirmDeleteVersion}
-        onExpand={() => setExpandedVariant(id)}
+        onExpand={() => setExpandedPreview(id)}
         onToggleWorkspace={() =>
-          isWorkspaceOpen ? closeRunInspector() : setRunInspectorVariant(id)
+          isWorkspaceOpen ? closeRunInspector() : setRunInspectorPreview(id)
         }
         isWorkspaceOpen={isWorkspaceOpen}
         onRemove={onRemove}
         showClearUserBest={!isArchived && hasUserBestOverride}
         showMarkUserBest={
           !isArchived &&
-          !!variantStrategyId &&
+          !!strategyId &&
           result?.status === GENERATION_STATUS.COMPLETE &&
           !!result &&
           result.id !== bestCompletedResult?.id
         }
         onClearUserBest={
-          variantStrategyId ? () => setUserBest(variantStrategyId, null) : undefined
+          strategyId ? () => setUserBest(strategyId, null) : undefined
         }
         onMarkUserBest={
-          variantStrategyId && result
-            ? () => setUserBest(variantStrategyId, result.id)
+          strategyId && result
+            ? () => setUserBest(strategyId, result.id)
             : undefined
         }
       />
@@ -266,7 +266,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
             result={result}
             elapsed={elapsed}
             isWorkspaceOpen={isWorkspaceOpen}
-            onOpenWorkspace={() => setRunInspectorVariant(id)}
+            onOpenWorkspace={() => setRunInspectorPreview(id)}
           />
         )}
 

@@ -48,7 +48,7 @@ describe('domain-commands', () => {
     syncDomainForNewEdge(e('m1', 'h1'), nodes, [e('c1', 'h1'), e('m1', 'h1')]);
     const s = useWorkspaceDomainStore.getState();
     expect(s.hypotheses.h1?.incubatorId).toBe('c1');
-    expect(s.hypotheses.h1?.variantStrategyId).toBe('vs1');
+    expect(s.hypotheses.h1?.strategyId).toBe('vs1');
     expect(s.hypotheses.h1?.modelNodeIds).toContain('m1');
   });
 
@@ -67,7 +67,7 @@ describe('domain-commands', () => {
         h1: {
           id: 'h1',
           incubatorId: 'c1',
-          variantStrategyId: 'vs1',
+          strategyId: 'vs1',
           modelNodeIds: [],
           designSystemNodeIds: [],
           placeholder: false,

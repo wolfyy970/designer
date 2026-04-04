@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { GENERATION_MODE } from '../constants/generation';
 import { ReferenceImageSchema } from '../types/spec';
 
 const DimensionSchema = z.object({
@@ -7,7 +8,7 @@ const DimensionSchema = z.object({
   isConstant: z.boolean(),
 });
 
-const VariantStrategyWireSchema = z.object({
+const HypothesisStrategyWireSchema = z.object({
   id: z.string(),
   name: z.string(),
   hypothesis: z.string(),
@@ -16,12 +17,12 @@ const VariantStrategyWireSchema = z.object({
   dimensionValues: z.record(z.string(), z.string()),
 });
 
-/** POST /api/compile response (`DimensionMap`). */
+/** POST /api/compile response (`IncubationPlan`). */
 export const CompileResponseSchema = z.object({
   id: z.string(),
   specId: z.string(),
   dimensions: z.array(DimensionSchema),
-  variants: z.array(VariantStrategyWireSchema),
+  hypotheses: z.array(HypothesisStrategyWireSchema),
   generatedAt: z.string(),
   approvedAt: z.string().optional(),
   compilerModel: z.string(),
@@ -29,7 +30,7 @@ export const CompileResponseSchema = z.object({
 
 const CompiledPromptSchema = z.object({
   id: z.string(),
-  variantStrategyId: z.string(),
+  strategyId: z.string(),
   specId: z.string(),
   prompt: z.string(),
   images: z.array(ReferenceImageSchema),
@@ -69,7 +70,7 @@ export const HypothesisPromptBundleResponseSchema = z.object({
   evaluationContext: EvaluationContextPayloadSchema.nullable(),
   provenance: ProvenanceContextSchema,
   generationContext: z.object({
-    agentMode: z.enum(['single', 'agentic']),
+    agentMode: z.enum([GENERATION_MODE.SINGLE, GENERATION_MODE.AGENTIC]),
     modelCredentials: z.array(
       z.object({
         providerId: z.string(),
@@ -147,22 +148,6 @@ export const ObservabilityLineTraceSchema = z.object({
 export const ObservabilityLogsResponseSchema = z.object({
   llm: z.array(LlmLogEntrySchema),
   trace: z.array(ObservabilityLineTraceSchema),
-});
-
-/** GET /api/prompts/:key/history */
-export const PromptHistoryListSchema = z.array(
-  z.object({
-    version: z.number(),
-    createdAt: z.string(),
-  }),
-);
-
-/** GET /api/prompts/:key/versions/:v */
-export const PromptVersionBodySchema = z.object({
-  key: z.string(),
-  version: z.number(),
-  body: z.string(),
-  createdAt: z.string(),
 });
 
 /** POST /api/design-system/extract */

@@ -5,6 +5,7 @@ import { isLangfuseTracingEnabled } from '../lib/langfuse-tracing-enabled.ts';
 import { createTraceId, startActiveObservation } from '@langfuse/tracing';
 import { runAgenticWithEvaluation } from './agentic-orchestrator.ts';
 import type { GenerateStreamBody } from '../lib/generate-stream-schema.ts';
+import { GENERATION_MODE } from '../../src/constants/generation.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { agenticOrchestratorEventToSse } from '../lib/agentic-sse-map.ts';
 import { createResolvePromptBody, sanitizePromptOverrides } from '../lib/prompt-overrides.ts';
@@ -47,7 +48,7 @@ async function executeGenerateStream(
     laneIndex !== undefined ? { ...data, laneIndex } : data;
 
   const sseWriteAudit =
-    env.isDev && body.mode === 'agentic'
+    env.isDev && body.mode === GENERATION_MODE.AGENTIC
       ? { byType: {} as Record<string, number>, skippedAbort: 0, t0: Date.now() }
       : null;
 
@@ -59,7 +60,7 @@ async function executeGenerateStream(
     });
   };
 
-  if (body.mode === 'agentic') {
+  if (body.mode === GENERATION_MODE.AGENTIC) {
     const writeAgentic = async (event: Parameters<typeof agenticOrchestratorEventToSse>[0]) => {
       if (abortSignal.aborted) {
         if (sseWriteAudit) sseWriteAudit.skippedAbort += 1;
@@ -142,13 +143,58 @@ async function executeGenerateStream(
     async (span) => {
       span.update({
         metadata: { correlationId, providerId: body.providerId, modelId: body.modelId },
-        input: { mode: 'single', promptPreview: body.prompt.slice(0, 400) },
+        input: { mode: GENERATION_MODE.SINGLE, promptPreview: body.prompt.slice(0, 400) },
       });
       await runSingleShot();
       span.update({ output: { done: true } });
     },
     { parentSpanContext },
   );
+}
+
+async function tryWriteSseErrorTail(
+  stream: SseStreamWriter,
+  gate: WriteGate | { enqueue: (fn: () => Promise<void>) => Promise<void> },
+  options: {
+    allocId: () => string;
+    laneIndex?: number;
+    laneEndMode?: LaneEndMode;
+  },
+  primaryErr: unknown,
+): Promise<void> {
+  const payload = JSON.stringify(
+    options.laneIndex !== undefined
+      ? { error: normalizeError(primaryErr), laneIndex: options.laneIndex }
+      : { error: normalizeError(primaryErr) },
+  );
+  try {
+    await gate.enqueue(async () => {
+      await stream.writeSSE({
+        data: payload,
+        event: SSE_EVENT_NAMES.error,
+        id: options.allocId(),
+      });
+    });
+  } catch (writeErr) {
+    if (env.isDev) {
+      console.error('[generate:SSE] failed to write error event (client likely disconnected)', writeErr);
+    }
+  }
+  if (options.laneEndMode === 'lane_done' && options.laneIndex !== undefined) {
+    try {
+      await gate.enqueue(async () => {
+        await stream.writeSSE({
+          data: JSON.stringify({ laneIndex: options.laneIndex }),
+          event: SSE_EVENT_NAMES.lane_done,
+          id: options.allocId(),
+        });
+      });
+    } catch (writeErr) {
+      if (env.isDev) {
+        console.error('[generate:SSE] failed to write lane_done after error', writeErr);
+      }
+    }
+  }
 }
 
 export async function executeGenerateStreamSafe(
@@ -167,26 +213,6 @@ export async function executeGenerateStreamSafe(
     await executeGenerateStream(stream, body, abortSignal, options);
   } catch (err) {
     const gate = options.writeGate ?? { enqueue: (fn) => fn() };
-    const payload = JSON.stringify(
-      options.laneIndex !== undefined
-        ? { error: normalizeError(err), laneIndex: options.laneIndex }
-        : { error: normalizeError(err) },
-    );
-    await gate.enqueue(async () => {
-      await stream.writeSSE({
-        data: payload,
-        event: SSE_EVENT_NAMES.error,
-        id: options.allocId(),
-      });
-    });
-    if (options.laneEndMode === 'lane_done' && options.laneIndex !== undefined) {
-      await gate.enqueue(async () => {
-        await stream.writeSSE({
-          data: JSON.stringify({ laneIndex: options.laneIndex }),
-          event: SSE_EVENT_NAMES.lane_done,
-          id: options.allocId(),
-        });
-      });
-    }
+    await tryWriteSseErrorTail(stream, gate, options, err);
   }
 }

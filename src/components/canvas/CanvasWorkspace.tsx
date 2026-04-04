@@ -14,8 +14,8 @@ import '@xyflow/react/dist/base.css';
 import { useCanvasStore, SECTION_NODE_TYPES, GRID_SIZE, type CanvasNodeType } from '../../stores/canvas-store';
 import { useGenerationStore } from '../../stores/generation-store';
 import { GENERATION_STATUS } from '../../constants/generation';
-import { VARIANT_NODE_GENERATING_Z_INDEX } from '../../constants/canvas';
-import { getVariantNodeData } from '../../lib/canvas-node-data';
+import { PREVIEW_NODE_GENERATING_Z_INDEX } from '../../constants/canvas';
+import { getPreviewNodeData } from '../../lib/canvas-node-data';
 import { scheduleCanvasFitView } from '../../lib/canvas-fit-view';
 import type { WorkspaceNode } from '../../types/workspace-graph';
 import { toReactFlowEdges, toReactFlowNodes } from '../../workspace/reactflow-adapter';
@@ -77,7 +77,7 @@ function CanvasInner() {
     const generatingByStrategy = new Set(
       genResults
         .filter((r) => r.status === GENERATION_STATUS.GENERATING)
-        .map((r) => r.variantStrategyId),
+        .map((r) => r.strategyId),
     );
     const generatingIds = new Set(
       genResults
@@ -85,15 +85,15 @@ function CanvasInner() {
         .map((r) => r.id),
     );
     return toReactFlowNodes(nodes).map((n) => {
-      if (n.type !== 'variant') return n;
-      const data = getVariantNodeData(n as unknown as WorkspaceNode);
-      const vsId = data?.variantStrategyId;
+      if (n.type !== 'preview') return n;
+      const data = getPreviewNodeData(n as unknown as WorkspaceNode);
+      const vsId = data?.strategyId;
       const refId = data?.refId;
       const bumpZ =
         (vsId != null && generatingByStrategy.has(vsId)) ||
         (!!refId && generatingIds.has(refId));
       if (bumpZ) {
-        return { ...n, zIndex: VARIANT_NODE_GENERATING_Z_INDEX };
+        return { ...n, zIndex: PREVIEW_NODE_GENERATING_Z_INDEX };
       }
       return n;
     });
@@ -198,7 +198,7 @@ function CanvasInner() {
       case 'model':
         return 'var(--color-accent)'; // processing
       case 'hypothesis':
-      case 'variant':
+      case 'preview':
         return 'var(--color-info)'; // output
       default:
         return 'var(--color-border)';

@@ -1,6 +1,6 @@
 import type { ReferenceImage } from './spec';
 
-export interface VariantStrategy {
+export interface HypothesisStrategy {
   id: string;
   name: string;
   hypothesis: string;
@@ -15,11 +15,11 @@ interface Dimension {
   isConstant: boolean;
 }
 
-export interface DimensionMap {
+export interface IncubationPlan {
   id: string;
   specId: string;
   dimensions: Dimension[];
-  variants: VariantStrategy[];
+  hypotheses: HypothesisStrategy[];
   generatedAt: string;
   approvedAt?: string;
   compilerModel: string;
@@ -27,7 +27,7 @@ export interface DimensionMap {
 
 export interface CompiledPrompt {
   id: string;
-  variantStrategyId: string;
+  strategyId: string;
   specId: string;
   prompt: string;
   images: ReferenceImage[];

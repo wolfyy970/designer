@@ -24,7 +24,7 @@ vi.mock('../legacy-sqlite-prompts.ts', () => ({
 }));
 
 import { seedLangfusePromptsFromDefaults } from '../langfuse-seed-prompts.ts';
-import { PROMPT_KEYS } from '../prompts/defaults.ts';
+import { PROMPT_KEYS } from '../../../src/lib/prompts/defaults.ts';
 
 describe('seedLangfusePromptsFromDefaults', () => {
   beforeEach(() => {

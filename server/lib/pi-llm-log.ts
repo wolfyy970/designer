@@ -27,6 +27,7 @@ import {
 import { providerLogFields } from './llm-log-metadata.ts';
 import { stripProviderControlTokens } from './stream-sanitize.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
+import { mergeStreamedAndFormattedAssistantResponse } from './merge-streamed-formatted-assistant.ts';
 
 /** `phase` on LLM log rows for Pi agent turns (see `wrapPiStreamWithLogging`). */
 export const PI_LLM_LOG_PHASE = {
@@ -98,13 +99,6 @@ function formatAssistantForLog(m: AssistantMessage): string {
     }
   }
   return parts.join('\n');
-}
-
-export function mergeStreamedAndFormattedAssistantResponse(streamed: string, formatted: string): string {
-  const s = streamed.length;
-  const f = formatted.length;
-  if (s > f) return streamed;
-  return formatted;
 }
 
 function toolCallsForLog(m: AssistantMessage): { name: string; path?: string }[] {

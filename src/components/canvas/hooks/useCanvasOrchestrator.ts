@@ -7,9 +7,9 @@ import { syncDomainForRemovedNode } from '../../../workspace/domain-commands';
 import {
   applyOrphanRemovalToGraph,
   collectOrphanNodeIds,
-  pruneDimensionMapsToLinkedRefIds,
+  pruneIncubationPlansToLinkedRefIds,
   staleGeneratingResultIds,
-} from '../../../workspace/canvas-orchestrator';
+} from '../../../workspace/canvas-graph-cleanup';
 
 /**
  * Lightweight orchestrator: cleans up orphaned canvas nodes
@@ -23,14 +23,14 @@ import {
  * pruning run when only the canvas graph changes, not only when compiler/generation slices change.
  */
 export function useCanvasOrchestrator() {
-  const dimensionMaps = useCompilerStore((s) => s.dimensionMaps);
+  const incubationPlans = useCompilerStore((s) => s.incubationPlans);
   const results = useGenerationStore((s) => s.results);
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
 
   useEffect(() => {
     const isCompiling = useCompilerStore.getState().isCompiling;
-    const orphanIds = collectOrphanNodeIds(nodes, dimensionMaps, results, isCompiling);
+    const orphanIds = collectOrphanNodeIds(nodes, incubationPlans, results, isCompiling);
 
     let graphNodes = nodes;
     let graphEdges = edges;
@@ -47,9 +47,9 @@ export function useCanvasOrchestrator() {
 
     // Drop dimension-map strategies with no hypothesis card (fixes stale counts after non–removeNode deletes)
     if (!isCompiling) {
-      const maps = useCompilerStore.getState().dimensionMaps;
-      const { nextMaps, changed } = pruneDimensionMapsToLinkedRefIds(graphNodes, maps);
-      if (changed) useCompilerStore.setState({ dimensionMaps: nextMaps });
+      const maps = useCompilerStore.getState().incubationPlans;
+      const { nextMaps, changed } = pruneIncubationPlansToLinkedRefIds(graphNodes, maps);
+      if (changed) useCompilerStore.setState({ incubationPlans: nextMaps });
     }
 
     // Clean stale "generating" results left over from a previous session.
@@ -63,5 +63,5 @@ export function useCanvasOrchestrator() {
         error: 'Generation interrupted by page reload',
       });
     }
-  }, [dimensionMaps, results, nodes, edges]);
+  }, [incubationPlans, results, nodes, edges]);
 }

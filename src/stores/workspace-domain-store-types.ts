@@ -4,7 +4,7 @@ import type {
   DomainHypothesis,
   DomainIncubatorWiring,
   DomainModelProfile,
-  DomainVariantSlot,
+  DomainPreviewSlot,
 } from '../types/workspace-domain';
 import type { CanvasNodeType } from '../types/workspace-graph';
 
@@ -14,7 +14,7 @@ export interface WorkspaceDomainStore {
   hypotheses: Record<string, DomainHypothesis>;
   modelProfiles: Record<string, DomainModelProfile>;
   designSystems: Record<string, DomainDesignSystemContent>;
-  variantSlots: Record<string, DomainVariantSlot>;
+  previewSlots: Record<string, DomainPreviewSlot>;
 
   ensureIncubatorWiring: (incubatorId: string) => void;
   attachModelToTarget: (modelNodeId: string, targetId: string, targetType: CanvasNodeType) => void;
@@ -38,7 +38,7 @@ export interface WorkspaceDomainStore {
   linkHypothesisToIncubator: (
     hypothesisId: string,
     incubatorId: string,
-    variantStrategyId: string,
+    strategyId: string,
   ) => void;
   setHypothesisGenerationSettings: (
     hypothesisId: string,
@@ -54,12 +54,12 @@ export interface WorkspaceDomainStore {
   upsertDesignSystem: (nodeId: string, partial: Partial<DomainDesignSystemContent>) => void;
   removeDesignSystem: (nodeId: string) => void;
 
-  setVariantSlot: (
+  setPreviewSlot: (
     hypothesisId: string,
-    variantStrategyId: string,
-    partial: Partial<DomainVariantSlot>,
+    strategyId: string,
+    partial: Partial<DomainPreviewSlot>,
   ) => void;
-  removeVariantSlot: (hypothesisId: string, variantStrategyId: string) => void;
+  removePreviewSlot: (hypothesisId: string, strategyId: string) => void;
 
   reset: () => void;
 }

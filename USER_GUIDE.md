@@ -82,7 +82,7 @@ Connect input nodes to the **Incubator** (edges auto-connect on add). With a Mod
 
 ### 4. Edit Hypotheses
 
-Hypothesis nodes appear to the right of the Incubator. Each represents a variant strategy with:
+Hypothesis nodes appear to the right of the Incubator. Each represents a hypothesis strategy with:
 - **Name** — Editable label (double-click or pencil icon)
 - **Hypothesis** — The core design bet
 - **Details** (expandable) — Rationale, measurements
@@ -96,29 +96,29 @@ Add a **Design System** node from the toolbar (Processing group). It auto-connec
 - Type or paste design tokens directly into the content area
 - Drag-and-drop screenshots of existing design systems, then click **Extract from Images** to have an LLM read the tokens from the images
 
-### 6. Generate Variants
+### 6. Generate Designs
 
 Each hypothesis has built-in generation controls at the bottom. Connect a Model node, then choose your mode:
 
 **Direct (default):** Choose **Direct** in Mode, then **Generate**. The server makes one LLM call and returns a complete self-contained HTML document. Fast — typically 10–30 seconds.
 
-**Agentic:** Switch Mode to **Agentic**, choose a thinking level (None / Light / Deep), then **Run agent**. The agent plans files, writes/edits/validates them, and streams progress to the variant. The **server** then runs **evaluation** (LLM rubrics plus browser QA), and may run **additional revision passes** until scores settle or limits are hit — see **[PRODUCT.md](PRODUCT.md)** for the full pipeline.
+**Agentic:** Switch Mode to **Agentic**, choose a thinking level (None / Light / Deep), then **Run agent**. The agent plans files, writes/edits/validates them, and streams progress to the preview. The **server** then runs **evaluation** (LLM rubrics plus browser QA), and may run **additional revision passes** until scores settle or limits are hit — see **[PRODUCT.md](PRODUCT.md)** for the full pipeline.
 
-Agentic runs take longer (often several minutes) but produce more considered designs. When a run completes, the variant shows an **evaluation summary** and, if Playwright is installed, a small **browser capture** under Runtime QA. Generated HTML may use **Google Fonts** only via `fonts.googleapis.com` / `fonts.gstatic.com` (needs network in your browser for preview); other CDNs stay disallowed — see [ARCHITECTURE.md](ARCHITECTURE.md).
+Agentic runs take longer (often several minutes) but produce more considered designs. When a run completes, the preview shows an **evaluation summary** and, if Playwright is installed, a small **browser capture** under Runtime QA. Generated HTML may use **Google Fonts** only via `fonts.googleapis.com` / `fonts.gstatic.com` (needs network in your browser for preview); other CDNs stay disallowed — see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 **Output format hint:** If your compiled strategy dimensions include a value for **format** (or `output_format`), it is sent as evaluation context so the server can pick matching **skills** for the agent. Details live in PRODUCT / ARCHITECTURE — you do not need to set this unless you use those dimensions.
 
-Running generation again adds new versions — use the version navigation arrows on the variant card to browse previous results.
+Running generation again adds new versions — use the version navigation arrows on the preview card to browse previous results.
 
-**While a run is in flight:** Use **Stop** on the hypothesis or in the variant run workspace to abort the in-flight request for that strategy lane (same as ending the SSE stream).
+**While a run is in flight:** Use **Stop** on the hypothesis or in the preview run workspace to abort the in-flight request for that strategy lane (same as ending the SSE stream).
 
-**Removing nodes from the canvas:** Use **Backspace** or **Delete** with one or more nodes selected. A confirmation explains that removal is **permanent for the canvas** (edges and attached variant nodes may be removed with a hypothesis). The shared spec document is separate; text in section cards may still exist there until you edit it elsewhere.
+**Removing nodes from the canvas:** Use **Backspace** or **Delete** with one or more nodes selected. A confirmation explains that removal is **permanent for the canvas** (edges and attached preview nodes may be removed with a hypothesis). The shared spec document is separate; text in section cards may still exist there until you edit it elsewhere.
 
-### 7. Review Variants
+### 7. Review Designs
 
-Variant nodes render the generated code in sandboxed iframes. Open the **run workspace** (panel icon on the toolbar) for the full timeline, tasks, **Design**/**Evaluation** tabs, and—when an agentic run had several evaluator rounds—a shared **Eval round** control on Design and Evaluation to preview that round’s files and scores.
+Preview nodes render the generated code in sandboxed iframes. Open the **run workspace** (panel icon on the toolbar) for the full timeline, tasks, **Design**/**Evaluation** tabs, and—when an agentic run had several evaluator rounds—a shared **Eval round** control on Design and Evaluation to preview that round’s files and scores.
 
-**Best pick:** If you disagree with the evaluator’s ranking, use **Mark as best** (star on the variant toolbar or “Mark as best” in full-screen). **Clear best pick** restores score-based default for that strategy lane. Full-screen **prev/next design** moves between variant nodes **for the same hypothesis** when domain slots are present.
+**Best pick:** If you disagree with the evaluator’s ranking, use **Mark as best** (star on the preview toolbar or “Mark as best” in full-screen). **Clear best pick** restores score-based default for that strategy lane. Full-screen **prev/next design** moves between preview nodes **for the same hypothesis** when domain slots are present.
 
 **Single-file results:**
 - **Zoom** — +/- buttons or auto-fit
@@ -137,9 +137,9 @@ Variant nodes render the generated code in sandboxed iframes. Open the **run wor
 ### 8. Iterate
 
 To iterate on results:
-- **Screenshot feedback** — Drag a connection from a variant's right handle to the Existing Design node. This captures a screenshot and adds it as a reference image.
-- **Reference code** — Connect a variant to an Incubator to pass the prior design into the next compile as a **reference design** in the prompt.
-- **Re-incubate** — The Incubator reads **reference designs** (and section inputs) from its connected nodes, producing improved hypotheses. In **agentic** mode, evaluator feedback and revision passes are built into the generation run (see the variant run workspace scorecard).
+- **Screenshot feedback** — Drag a connection from a preview's right handle to the Existing Design node. This captures a screenshot and adds it as a reference image.
+- **Reference code** — Connect a preview to an Incubator to pass the prior design into the next compile as a **reference design** in the prompt.
+- **Re-incubate** — The Incubator reads **reference designs** (and section inputs) from its connected nodes, producing improved hypotheses. In **agentic** mode, evaluator feedback and revision passes are built into the generation run (see the preview run workspace scorecard).
 
 ### Auto-Layout
 

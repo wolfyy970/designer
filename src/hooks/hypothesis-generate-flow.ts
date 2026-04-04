@@ -1,17 +1,20 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { FitViewOptions } from '@xyflow/react';
 import type { DesignSpec } from '../types/spec';
-import type { VariantStrategy } from '../types/compiler';
+import type { HypothesisStrategy } from '../types/compiler';
 import { useCanvasStore } from '../stores/canvas-store';
 import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
 import { useGenerationStore, nextRunNumber } from '../stores/generation-store';
 import { scheduleCanvasFitView } from '../lib/canvas-fit-view';
 import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
 import { warnIfWorkspaceSnapshotInvalid } from '../lib/workspace-snapshot-warn';
-import { buildHypothesisGenerationContext } from '../workspace/workspace-session';
 import { normalizeError } from '../lib/error-utils';
 import { pinModelCredentialsIfLockdown } from '../lib/lockdown-model';
-import { normalizeModelProfilesForApi } from '../workspace/hypothesis-generation-pure';
+import {
+  buildHypothesisGenerationContextFromInputs,
+  normalizeModelProfilesForApi,
+  workspaceSnapshotWireToGraph,
+} from '../workspace/hypothesis-generation-pure';
 import { GENERATION_STATUS } from '../constants/generation';
 import { EDGE_STATUS } from '../constants/canvas';
 import {
@@ -43,9 +46,11 @@ export interface GenerationProgress {
 export interface HypothesisGenerateFlowParams {
   nodeId: string;
   strategyId: string;
-  strategy: VariantStrategy;
+  strategy: HypothesisStrategy;
   spec: DesignSpec;
   lockdown: boolean;
+  /** Vision capability of the connected model(s), same as compile — forwarded to hypothesis API. */
+  supportsVision?: boolean;
   fitView: (options?: FitViewOptions) => void;
   setCompiledPrompts: (prompts: CompiledPrompt[]) => void;
   setGenerating: (isGenerating: boolean) => void;
@@ -54,7 +59,7 @@ export interface HypothesisGenerateFlowParams {
   syncAfterGenerate: CanvasStore['syncAfterGenerate'];
   setEdgeStatusBySource: CanvasStore['setEdgeStatusBySource'];
   setEdgeStatusByTarget: CanvasStore['setEdgeStatusByTarget'];
-  clearVariantNodeIdMap: CanvasStore['clearVariantNodeIdMap'];
+  clearPreviewNodeIdMap: CanvasStore['clearPreviewNodeIdMap'];
   setGenerationProgress: Dispatch<SetStateAction<GenerationProgress | null>>;
   setGenerationError: Dispatch<SetStateAction<string | null>>;
 }
@@ -68,6 +73,7 @@ export async function runHypothesisGenerateFlow({
   strategy,
   spec,
   lockdown,
+  supportsVision,
   fitView,
   setCompiledPrompts,
   setGenerating,
@@ -76,22 +82,11 @@ export async function runHypothesisGenerateFlow({
   syncAfterGenerate,
   setEdgeStatusBySource,
   setEdgeStatusByTarget,
-  clearVariantNodeIdMap,
+  clearPreviewNodeIdMap,
   setGenerationProgress,
   setGenerationError,
 }: HypothesisGenerateFlowParams): Promise<void> {
   const snapshot = useCanvasStore.getState();
-  const genCtxRaw = buildHypothesisGenerationContext({
-    hypothesisNodeId: nodeId,
-    variantStrategy: strategy,
-    snapshot: { nodes: snapshot.nodes, edges: snapshot.edges },
-    spec,
-  });
-  if (!genCtxRaw) return;
-  const genCtx = {
-    ...genCtxRaw,
-    modelCredentials: pinModelCredentialsIfLockdown(genCtxRaw.modelCredentials, lockdown),
-  };
 
   const runId = crypto.randomUUID();
 
@@ -100,7 +95,7 @@ export async function runHypothesisGenerateFlow({
   const promptOverrides = getActivePromptOverrides(usePromptOverridesStore.getState().overrides);
   const workspacePayload: HypothesisGenerateApiPayload = {
     hypothesisNodeId: nodeId,
-    variantStrategy: strategy,
+    hypothesisStrategy: strategy,
     spec,
     snapshot: { nodes: snapshot.nodes, edges: snapshot.edges },
     domainHypothesis: domain.hypotheses[nodeId] ?? null,
@@ -114,9 +109,26 @@ export async function runHypothesisGenerateFlow({
     correlationId: runId,
     agenticMaxRevisionRounds: evalSettings.maxRevisionRounds,
     agenticMinOverallScore: evalSettings.minOverallScore ?? undefined,
+    ...(supportsVision != null ? { supportsVision } : {}),
     ...(promptOverrides ? { promptOverrides } : {}),
   };
   warnIfWorkspaceSnapshotInvalid(workspacePayload.snapshot, 'useHypothesisGeneration');
+
+  const genCtxRaw = buildHypothesisGenerationContextFromInputs({
+    hypothesisNodeId: workspacePayload.hypothesisNodeId,
+    hypothesisStrategy: workspacePayload.hypothesisStrategy,
+    spec: workspacePayload.spec,
+    snapshot: workspaceSnapshotWireToGraph(workspacePayload.snapshot),
+    domainHypothesis: workspacePayload.domainHypothesis ?? undefined,
+    modelProfiles: workspacePayload.modelProfiles,
+    designSystems: workspacePayload.designSystems,
+    defaultCompilerProvider: workspacePayload.defaultCompilerProvider,
+  });
+  if (!genCtxRaw) return;
+  const genCtx = {
+    ...genCtxRaw,
+    modelCredentials: pinModelCredentialsIfLockdown(genCtxRaw.modelCredentials, lockdown),
+  };
 
   setEdgeStatusBySource(nodeId, EDGE_STATUS.PROCESSING);
   setGenerationError(null);
@@ -136,9 +148,9 @@ export async function runHypothesisGenerateFlow({
       setGenerationProgress((prev) => (prev ? { ...prev, completed: prev.completed + 1 } : null));
       const r = useGenerationStore.getState().results.find((x) => x.id === id);
       if (r) {
-        const variantNodeId = useCanvasStore.getState().variantNodeIdMap.get(r.variantStrategyId);
-        if (variantNodeId) {
-          setEdgeStatusByTarget(variantNodeId, EDGE_STATUS.COMPLETE);
+        const previewNodeId = useCanvasStore.getState().previewNodeIdMap.get(r.strategyId);
+        if (previewNodeId) {
+          setEdgeStatusByTarget(previewNodeId, EDGE_STATUS.COMPLETE);
         }
       }
     };
@@ -153,8 +165,8 @@ export async function runHypothesisGenerateFlow({
         setCompiledPrompts,
         addResult,
         updateResult,
-        nextRunNumberForVariant: (variantStrategyId) =>
-          nextRunNumber(useGenerationStore.getState(), variantStrategyId),
+        nextRunNumberForStrategy: (strategyId) =>
+          nextRunNumber(useGenerationStore.getState(), strategyId),
         syncAfterGenerate,
         getCanvasState: () => useCanvasStore.getState(),
         scheduleFitView: () => {
@@ -195,7 +207,7 @@ export async function runHypothesisGenerateFlow({
     }
   } finally {
     clearGenerationAbortController(strategyId, abortController);
-    clearVariantNodeIdMap();
+    clearPreviewNodeIdMap();
     if (!hypothesisSourceEdgeTerminalError) {
       setEdgeStatusBySource(nodeId, EDGE_STATUS.COMPLETE);
     }
@@ -211,7 +223,7 @@ export async function runHypothesisGenerateFlow({
       .results.filter(
         (r) =>
           idSet.has(r.id) &&
-          r.variantStrategyId === strategyId &&
+          r.strategyId === strategyId &&
           r.status === GENERATION_STATUS.ERROR &&
           r.error !== GENERATION_STOPPED_MESSAGE,
       ).length;

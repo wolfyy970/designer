@@ -1,6 +1,33 @@
 import { describe, expect, it } from 'vitest';
-import { parsePromptKey, promptKeyFromLlmLogEntry } from '../prompt-log-mapping';
+import { parsePromptKey } from '../prompt-log-mapping';
 import type { LlmLogEntry } from '../../api/types';
+import type { PromptKey } from '../../stores/prompt-store';
+
+/** Mirrors historical `prompt-log-mapping` helper — logic kept in tests only (no production call sites). */
+function promptKeyFromLlmLogEntry(entry: LlmLogEntry): PromptKey | null {
+  const { source, phase = '' } = entry;
+
+  if (source === 'compiler') return 'hypotheses-generator-system';
+
+  if (source === 'designSystem') return 'design-system-extract-system';
+
+  if (source === 'agentCompaction') return 'agent-context-compaction';
+
+  if (source === 'evaluator') {
+    if (phase.includes('design')) return 'evaluator-design-quality';
+    if (phase.includes('strategy')) return 'evaluator-strategy-fidelity';
+    if (phase.includes('implementation')) return 'evaluator-implementation';
+    return null;
+  }
+
+  if (source === 'builder') {
+    if (phase === 'Single-shot generate') return 'designer-direct-system';
+    if (phase === 'agentic_turn' || phase === 'revision') return 'designer-agentic-system';
+    return null;
+  }
+
+  return null;
+}
 
 function baseEntry(overrides: Partial<LlmLogEntry>): LlmLogEntry {
   return {

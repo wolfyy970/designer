@@ -1,7 +1,7 @@
 /**
  * Agentic design build + parallel evaluators + bounded multi-round revision loop.
  */
-import type { PromptKey } from '../lib/prompts/defaults.ts';
+import type { PromptKey } from '../../src/lib/prompts/defaults.ts';
 import type {
   AgenticCheckpoint,
   AgenticPhase,
@@ -31,6 +31,10 @@ import {
 } from './pi-agent-service.ts';
 import type { LoadedSkillSummary } from '../lib/skill-schema.ts';
 import { makeRunTraceEvent } from '../lib/run-trace.ts';
+import { buildRevisionUserContext } from '../lib/agentic-revision-user.ts';
+import { GENERATION_MODE } from '../../src/constants/generation.ts';
+import { normalizeError } from '../../src/lib/error-utils.ts';
+import { env } from '../env.ts';
 
 const AGENTIC_ROOT_SPAN_ID = '0000000000000001';
 
@@ -73,17 +77,25 @@ interface AgenticOrchestratorResult {
   checkpoint: AgenticCheckpoint;
 }
 
-async function emit(
-  onStream: AgenticOrchestratorOptions['onStream'],
-  e: AgenticOrchestratorEvent,
-): Promise<void> {
-  await onStream(e);
+/** Mirrors Pi bridge: SSE delivery failures abort the run instead of unhandled rejections. */
+type StreamEmissionContext = {
+  onStream: AgenticOrchestratorOptions['onStream'];
+  onDeliveryFailure?: () => void;
+};
+
+async function emit(ctx: StreamEmissionContext, e: AgenticOrchestratorEvent): Promise<void> {
+  try {
+    await ctx.onStream(e);
+  } catch (err) {
+    if (env.isDev) {
+      console.error('[agentic-orchestrator] onStream failed', normalizeError(err), err);
+    }
+    ctx.onDeliveryFailure?.();
+  }
 }
 
-const REVISION_COMPILED_PROMPT_MAX = 4000;
-
 async function emitSkillsLoaded(
-  onStream: AgenticOrchestratorOptions['onStream'],
+  streamCtx: StreamEmissionContext,
   skills: LoadedSkillSummary[],
   tracePhase: AgenticPhase,
 ): Promise<void> {
@@ -91,7 +103,7 @@ async function emitSkillsLoaded(
     skills.length === 0
       ? 'No agent skills in catalog for this session'
       : `Skills catalog (${skills.length}): ${skills.map((s) => s.name).join(', ')}`;
-  await emit(onStream, {
+  await emit(streamCtx, {
     type: 'trace',
     trace: makeRunTraceEvent({
       kind: 'skills_loaded',
@@ -100,37 +112,17 @@ async function emitSkillsLoaded(
       status: skills.length === 0 ? 'info' : 'success',
     }),
   });
-  await emit(onStream, { type: 'skills_loaded', skills });
-}
-
-/** Original intent for the revision agent (truncated compiled prompt + KPI/hypothesis context). */
-export function buildRevisionUserContext(
-  compiledPrompt: string,
-  evaluationContext?: EvaluationContextPayload,
-): string {
-  const truncated =
-    compiledPrompt.length > REVISION_COMPILED_PROMPT_MAX
-      ? `${compiledPrompt.slice(0, REVISION_COMPILED_PROMPT_MAX)}\n…[truncated]`
-      : compiledPrompt;
-  const parts: string[] = ['## Original design request (preserve intent)', '', truncated, ''];
-  const ctx = evaluationContext;
-  if (ctx?.strategyName) parts.push(`**Strategy:** ${ctx.strategyName}`);
-  if (ctx?.hypothesis) parts.push(`**Hypothesis:** ${ctx.hypothesis}`);
-  if (ctx?.rationale) parts.push(`**Rationale:** ${ctx.rationale}`);
-  if (ctx?.measurements) parts.push(`**KPIs / measurements:** ${ctx.measurements}`);
-  if (ctx?.objectivesMetrics) parts.push(`**Objectives & metrics:** ${ctx.objectivesMetrics}`);
-  if (ctx?.designConstraints) parts.push(`**Design constraints:** ${ctx.designConstraints}`);
-  if (parts.length > 4) parts.push('');
-  return parts.join('\n');
+  await emit(streamCtx, { type: 'skills_loaded', skills });
 }
 
 async function runEvaluationRound(
   options: AgenticOrchestratorOptions,
+  streamCtx: StreamEmissionContext,
   round: number,
   files: Record<string, string>,
   parallel: boolean,
 ): Promise<EvaluationRoundSnapshot> {
-  await emit(options.onStream, {
+  await emit(streamCtx, {
     type: 'evaluation_progress',
     round,
     phase: 'parallel_start',
@@ -152,7 +144,7 @@ async function runEvaluationRound(
     correlationId: options.build.correlationId,
     signal: options.build.signal,
     onWorkerDone: async (rubric, report) => {
-      await emit(options.onStream, { type: 'evaluation_worker_done', round, rubric, report });
+      await emit(streamCtx, { type: 'evaluation_worker_done', round, rubric, report });
     },
   });
 
@@ -169,7 +161,7 @@ async function runEvaluationRound(
     aggregate,
   };
 
-  await emit(options.onStream, { type: 'evaluation_report', round, snapshot });
+  await emit(streamCtx, { type: 'evaluation_report', round, snapshot });
   return snapshot;
 }
 
@@ -232,6 +224,7 @@ type AgenticSystemContextBundle = Awaited<ReturnType<typeof buildAgenticSystemCo
 /** Refresh Langfuse agentic context, emit skills_loaded, run one Pi design session. */
 async function runAgenticPiSessionRound(
   options: AgenticOrchestratorOptions,
+  streamCtx: StreamEmissionContext,
   forward: (e: AgentRunEvent) => Promise<void>,
   tracePhase: AgenticPhase,
   setPiTracePhase: (p: AgenticPhase) => void,
@@ -242,7 +235,7 @@ async function runAgenticPiSessionRound(
   const ctx = await buildAgenticSystemContext({
     getPromptBody: options.getPromptBody,
   });
-  await emitSkillsLoaded(options.onStream, ctx.loadedSkills, tracePhase);
+  await emitSkillsLoaded(streamCtx, ctx.loadedSkills, tracePhase);
   setPiTracePhase(tracePhase);
   const extras = typeof sessionExtras === 'function' ? sessionExtras(ctx) : sessionExtras;
   return runDesignAgentSession(
@@ -280,7 +273,7 @@ export async function runAgenticWithEvaluation(
           providerId: options.build.providerId,
           modelId: options.build.modelId,
         },
-        input: { mode: 'agentic' },
+        input: { mode: GENERATION_MODE.AGENTIC },
       });
       const result = await runAgenticWithEvaluationImpl(options);
       if (result) {
@@ -302,7 +295,20 @@ async function runAgenticWithEvaluationImpl(
 ): Promise<AgenticOrchestratorResult | null> {
   const provider = getProvider(options.build.providerId);
   const parallel = provider?.supportsParallel ?? false;
-  const signal = options.build.signal;
+  const streamFailureCtrl = new AbortController();
+  const upstreamSignal = options.build.signal;
+  const effectiveSignal =
+    upstreamSignal != null
+      ? AbortSignal.any([upstreamSignal, streamFailureCtrl.signal])
+      : streamFailureCtrl.signal;
+  const mergedOptions: AgenticOrchestratorOptions = {
+    ...options,
+    build: { ...options.build, signal: effectiveSignal },
+  };
+  const streamCtx: StreamEmissionContext = {
+    onStream: options.onStream,
+    onDeliveryFailure: () => streamFailureCtrl.abort(),
+  };
   const maxRevisions = Math.max(0, Math.min(20, options.maxRevisionRounds));
   const satisfactionOpts =
     options.minOverallScore != null && Number.isFinite(options.minOverallScore)
@@ -312,7 +318,7 @@ async function runAgenticWithEvaluationImpl(
   let piTracePhase: AgenticPhase = 'building';
   const forward = async (e: AgentRunEvent) => {
     if (e.type === 'skill_activated') {
-      await emit(options.onStream, {
+      await emit(streamCtx, {
         type: 'trace',
         trace: makeRunTraceEvent({
           kind: 'skill_activated',
@@ -322,42 +328,43 @@ async function runAgenticWithEvaluationImpl(
         }),
       });
     }
-    await options.onStream(e);
+    await emit(streamCtx, e);
   };
 
-  await emit(options.onStream, { type: 'phase', phase: 'building' });
+  await emit(streamCtx, { type: 'phase', phase: 'building' });
 
   const setPiTrace = (p: AgenticPhase) => {
     piTracePhase = p;
   };
   const buildResult = await runAgenticPiSessionRound(
-    options,
+    mergedOptions,
+    streamCtx,
     forward,
     'building',
     setPiTrace,
     (ctx) => {
       const initialSeedFiles = {
         ...ctx.sandboxSeedFiles,
-        ...(options.build.seedFiles ?? {}),
+        ...(mergedOptions.build.seedFiles ?? {}),
       };
       const seedFilesForBuild =
         Object.keys(initialSeedFiles).length > 0 ? initialSeedFiles : undefined;
       return { seedFiles: seedFilesForBuild };
     },
   );
-  if (!buildResult || signal?.aborted) return null;
+  if (!buildResult || effectiveSignal.aborted) return null;
 
   let files = buildResult.files;
   const rounds: EvaluationRoundSnapshot[] = [];
   let revisionAttempts = 0;
   let lastRevisionBrief: string | undefined;
 
-  await emit(options.onStream, { type: 'phase', phase: 'evaluating' });
+  await emit(streamCtx, { type: 'phase', phase: 'evaluating' });
   let evalRound = 1;
-  let snapshot = await runEvaluationRound(options, evalRound, files, parallel);
+  let snapshot = await runEvaluationRound(mergedOptions, streamCtx, evalRound, files, parallel);
   rounds.push(snapshot);
 
-  if (signal?.aborted) {
+  if (effectiveSignal.aborted) {
     return agenticResult(files, rounds, snapshot, {
       stopReason: 'aborted',
       revisionAttempts,
@@ -365,16 +372,18 @@ async function runAgenticWithEvaluationImpl(
     });
   }
 
+  const revisionUserInstructions = (await options.getPromptBody('designer-agentic-revision-user')).trim();
+
   while (
     !isEvalSatisfied(snapshot.aggregate, satisfactionOpts) &&
     revisionAttempts < maxRevisions &&
-    !signal?.aborted
+    !effectiveSignal.aborted
   ) {
-    await emit(options.onStream, { type: 'phase', phase: 'revising' });
+    await emit(streamCtx, { type: 'phase', phase: 'revising' });
     const brief = snapshot.aggregate.revisionBrief;
     lastRevisionBrief = brief;
 
-    await emit(options.onStream, {
+    await emit(streamCtx, {
       type: 'revision_round',
       round: revisionAttempts + 1,
       brief,
@@ -382,9 +391,7 @@ async function runAgenticWithEvaluationImpl(
 
     const revisionUser = [
       buildRevisionUserContext(options.compiledPrompt, options.evaluationContext),
-      'You are revising an existing multi-file design based on external evaluation feedback.',
-      'Apply the changes below using edit_file when possible; use write_file only for full rewrites.',
-      'Do not remove the design hypothesis — strengthen how it shows up in the UI and copy.',
+      revisionUserInstructions,
       '',
       '## Revision brief',
       brief,
@@ -405,20 +412,20 @@ async function runAgenticWithEvaluationImpl(
       },
     });
 
-    const revised = await runAgenticPiSessionRound(options, forward, 'revising', setPiTrace, (ctx) => ({
+    const revised = await runAgenticPiSessionRound(mergedOptions, streamCtx, forward, 'revising', setPiTrace, (ctx) => ({
       userPrompt: revisionUser,
       seedFiles: mergeSeedWithDesign(files, ctx.sandboxSeedFiles),
       compactionNote: `Post-evaluation revision requested. Overall ${snapshot.aggregate.overallScore.toFixed(2)}. Hard fails: ${snapshot.aggregate.hardFails.length}.`,
       initialProgressMessage: 'Revising design from evaluation feedback…',
     }));
 
-    if (!revised || signal?.aborted) {
-      const stopReason: AgenticStopReason = signal?.aborted ? 'aborted' : 'revision_failed';
+    if (!revised || effectiveSignal.aborted) {
+      const stopReason: AgenticStopReason = effectiveSignal.aborted ? 'aborted' : 'revision_failed';
       debugAgentIngest({
         hypothesisId: 'H7',
         location: 'agentic-orchestrator.ts:revision_end',
         message: 'runDesignAgentSession (revision) aborted or null',
-        data: { revisionAttempt: revisionAttempts + 1, aborted: !!signal?.aborted },
+        data: { revisionAttempt: revisionAttempts + 1, aborted: !!effectiveSignal.aborted },
       });
       return agenticResult(files, rounds, snapshot, {
         stopReason,
@@ -441,11 +448,11 @@ async function runAgenticWithEvaluationImpl(
     revisionAttempts += 1;
     evalRound += 1;
 
-    await emit(options.onStream, { type: 'phase', phase: 'evaluating' });
-    snapshot = await runEvaluationRound(options, evalRound, files, parallel);
+    await emit(streamCtx, { type: 'phase', phase: 'evaluating' });
+    snapshot = await runEvaluationRound(mergedOptions, streamCtx, evalRound, files, parallel);
     rounds.push(snapshot);
 
-    if (signal?.aborted) {
+    if (effectiveSignal.aborted) {
       return agenticResult(files, rounds, snapshot, {
         stopReason: 'aborted',
         revisionAttempts,
@@ -455,13 +462,13 @@ async function runAgenticWithEvaluationImpl(
   }
 
   const satisfied = isEvalSatisfied(snapshot.aggregate, satisfactionOpts);
-  const stopReason: AgenticStopReason = signal?.aborted
+  const stopReason: AgenticStopReason = effectiveSignal.aborted
     ? 'aborted'
     : satisfied
       ? 'satisfied'
       : 'max_revisions';
 
-  await emit(options.onStream, { type: 'phase', phase: 'complete' });
+  await emit(streamCtx, { type: 'phase', phase: 'complete' });
   return agenticResult(files, rounds, snapshot, {
     stopReason,
     revisionAttempts,

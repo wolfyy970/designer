@@ -13,10 +13,10 @@ import { generateId, now } from '../../../lib/utils';
  * capture a screenshot and add it as a reference image.
  * The edge persists as a visible feedback-loop connection.
  */
-async function captureVariantIntoExistingDesign(variantNodeId: string) {
+async function capturePreviewIntoExistingDesign(previewNodeId: string) {
   const snap = useCanvasStore.getState();
-  const node = nodeById(snap, variantNodeId);
-  const vsId = node?.data.variantStrategyId as string | undefined;
+  const node = nodeById(snap, previewNodeId);
+  const vsId = node?.data.strategyId as string | undefined;
   if (!vsId) return;
 
   const result = getActiveResult(useGenerationStore.getState(), vsId);
@@ -32,16 +32,16 @@ async function captureVariantIntoExistingDesign(variantNodeId: string) {
     const dataUrl = await captureScreenshot(htmlContent);
     useSpecStore.getState().addImage('existing-design', {
       id: generateId(),
-      filename: `variant-${result.metadata?.model ?? 'design'}.png`,
+      filename: `preview-${result.metadata?.model ?? 'design'}.png`,
       dataUrl,
       description: result.metadata?.model
-        ? `Generated variant (${result.metadata.model})`
-        : 'Generated design variant',
+        ? `Generated preview (${result.metadata.model})`
+        : 'Generated design preview',
       createdAt: now(),
     });
   } catch (err) {
     if (import.meta.env.DEV) {
-      console.warn('Failed to capture variant screenshot:', err);
+      console.warn('Failed to capture preview screenshot:', err);
     }
   } finally {
     useSpecStore.getState().setCapturingImage(null);
@@ -65,12 +65,12 @@ export function useFeedbackLoopConnection() {
       const targetNode = connection.target ? nodeById(snap, connection.target) : undefined;
       
       if (
-        sourceNode?.type === 'variant' &&
+        sourceNode?.type === 'preview' &&
         targetNode?.type === 'existingDesign' &&
         connection.source &&
         connection.target
       ) {
-        captureVariantIntoExistingDesign(connection.source);
+        capturePreviewIntoExistingDesign(connection.source);
       }
 
       // Re-layout after new edge

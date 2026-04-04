@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { DesignSpecSchema } from '../../src/types/spec.ts';
 import type { CompilerPromptOptions } from '../../src/lib/prompts/compiler-user.ts';
-import { VariantStrategySchema } from '../lib/hypothesis-schemas.ts';
+import { HypothesisStrategySchema } from '../lib/hypothesis-schemas.ts';
 import { compileSpec } from '../services/compiler.ts';
 import { createResolvePromptBody, sanitizePromptOverrides } from '../lib/prompt-overrides.ts';
 import { apiJsonError } from '../lib/api-json-error.ts';
@@ -14,7 +14,7 @@ const compile = new Hono();
 
 const CompilerPromptOptionsSchema = z.object({
   count: z.number().int().positive().optional(),
-  existingStrategies: z.array(VariantStrategySchema).optional(),
+  existingStrategies: z.array(HypothesisStrategySchema).optional(),
 }) satisfies z.ZodType<CompilerPromptOptions>;
 
 const CompileRequestSchema = z.object({

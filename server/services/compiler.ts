@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import type { DesignSpec, ReferenceImage } from '../../src/types/spec.ts';
-import type { CompiledPrompt, DimensionMap, VariantStrategy } from '../../src/types/compiler.ts';
+import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../../src/types/compiler.ts';
 import type { ChatMessage } from '../../src/types/provider.ts';
 import {
   buildCompilerUserPrompt,
   type CompilerPromptOptions,
 } from '../../src/lib/prompts/compiler-user.ts';
-import { buildVariantPrompt } from '../../src/lib/prompts/variant-prompt.ts';
+import { buildHypothesisPrompt } from '../../src/lib/prompts/hypothesis-prompt.ts';
 import { generateId, now } from '../../src/lib/utils.ts';
 import { env } from '../env.ts';
 import { logLlmCall } from '../log-store.ts';
@@ -22,8 +22,8 @@ const DimensionSchema = z.object({
   isConstant: z.boolean().default(false),
 });
 
-const VariantStrategySchema = z.object({
-  name: z.string().default('Unnamed Variant'),
+const HypothesisStrategySchema = z.object({
+  name: z.string().default('Unnamed Hypothesis'),
   hypothesis: z.string().optional().default(''),
   primaryEmphasis: z.string().optional(),
   rationale: z.string().default(''),
@@ -44,20 +44,24 @@ const LLMResponseSchema = z.object({
   dimensions: z.array(z.unknown()).default([]).transform((arr) =>
     arr.map((d) => DimensionSchema.parse(typeof d === 'object' && d !== null ? d : {}))
   ),
-  variants: z.array(z.unknown()).default([]).transform((arr) =>
-    arr.map((v) => VariantStrategySchema.parse(typeof v === 'object' && v !== null ? v : {}))
+  hypotheses: z.array(z.unknown()).optional(),
+  variants: z.array(z.unknown()).optional(),
+}).transform((obj) => ({
+  dimensions: obj.dimensions,
+  hypotheses: (obj.hypotheses ?? obj.variants ?? []).map(
+    (v) => HypothesisStrategySchema.parse(typeof v === 'object' && v !== null ? v : {})
   ),
-});
+}));
 
-function parseDimensionMap(raw: unknown, specId: string, model: string): DimensionMap {
-  const { dimensions, variants } = LLMResponseSchema.parse(
+function parseIncubationPlan(raw: unknown, specId: string, model: string): IncubationPlan {
+  const { dimensions, hypotheses } = LLMResponseSchema.parse(
     typeof raw === 'object' && raw !== null ? raw : {}
   );
   return {
     id: generateId(),
     specId,
     dimensions,
-    variants,
+    hypotheses,
     generatedAt: now(),
     compilerModel: model,
   };
@@ -76,7 +80,7 @@ export async function compileSpec(
   model: string,
   providerId: string,
   options: CompileOptions,
-): Promise<DimensionMap> {
+): Promise<IncubationPlan> {
   const userPrompt = buildCompilerUserPrompt(
     spec,
     options.userPromptTemplate,
@@ -133,15 +137,15 @@ export async function compileSpec(
     );
   }
 
-  const map = parseDimensionMap(raw, spec.id, model);
+  const map = parseIncubationPlan(raw, spec.id, model);
   const asked = options.promptOptions?.count;
   if (
     asked != null &&
-    map.variants.length < asked &&
+    map.hypotheses.length < asked &&
     process.env.NODE_ENV !== 'production'
   ) {
     console.warn(
-      `[compile] Received ${map.variants.length} variant(s) but ${asked} were requested — often output truncation or the model stopping early. max_tokens=${
+      `[compile] Received ${map.hypotheses.length} hypothesis(es) but ${asked} were requested — often output truncation or the model stopping early. max_tokens=${
         env.MAX_OUTPUT_TOKENS ?? 'omitted (provider / model default)'
       }`,
     );
@@ -149,10 +153,10 @@ export async function compileSpec(
   return map;
 }
 
-export function compileVariantPrompts(
+export function compileHypothesisPrompts(
   spec: DesignSpec,
-  dimensionMap: DimensionMap,
-  variantTemplate: string,
+  incubationPlan: IncubationPlan,
+  hypothesisTemplate: string,
   designSystemOverride?: string,
   extraImages?: ReferenceImage[],
 ): CompiledPrompt[] {
@@ -161,11 +165,11 @@ export function compileVariantPrompts(
     ...(extraImages ?? []),
   ];
 
-  return dimensionMap.variants.map((strategy: VariantStrategy) => ({
+  return incubationPlan.hypotheses.map((strategy: HypothesisStrategy) => ({
     id: generateId(),
-    variantStrategyId: strategy.id,
+    strategyId: strategy.id,
     specId: spec.id,
-    prompt: buildVariantPrompt(spec, strategy, variantTemplate, designSystemOverride),
+    prompt: buildHypothesisPrompt(spec, strategy, hypothesisTemplate, designSystemOverride),
     images: allImages,
     compiledAt: now(),
   }));

@@ -1,5 +1,5 @@
 import type { DesignSpec, ReferenceImage } from '../types/spec';
-import type { CompiledPrompt, DimensionMap, VariantStrategy } from '../types/compiler';
+import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../types/compiler';
 import type {
   AgentMode,
   DomainDesignSystemContent,
@@ -21,18 +21,18 @@ export interface CompileRequest {
   supportsVision?: boolean;
   promptOptions?: {
     count?: number;
-    existingStrategies?: VariantStrategy[];
+    existingStrategies?: HypothesisStrategy[];
   };
   /** Local Prompt Studio drafts — applied only for this request on the server. */
   promptOverrides?: Record<string, string>;
 }
 
-export type CompileResponse = DimensionMap;
+export type CompileResponse = IncubationPlan;
 
 /** Workspace slice sent to `/api/hypothesis/*` (mirrors client domain + graph). */
 export interface HypothesisWorkspaceApiPayload {
   hypothesisNodeId: string;
-  variantStrategy: VariantStrategy;
+  hypothesisStrategy: HypothesisStrategy;
   spec: DesignSpec;
   snapshot: WorkspaceSnapshotWire;
   domainHypothesis: DomainHypothesis | null;

@@ -3,7 +3,7 @@
  */
 import { z } from 'zod';
 
-export const skillWhenSchema = z.enum(['auto', 'always', 'manual']);
+const skillWhenSchema = z.enum(['auto', 'always', 'manual']);
 
 export const skillFrontmatterSchema = z.object({
   name: z.string().min(1),
@@ -12,9 +12,7 @@ export const skillFrontmatterSchema = z.object({
   when: skillWhenSchema.optional().default('auto'),
 });
 
-export type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;
-
-export type SkillCatalogEntry = SkillFrontmatter & {
+export type SkillCatalogEntry = z.infer<typeof skillFrontmatterSchema> & {
   /** Directory name under `skills/` (e.g. `design-quality`). */
   key: string;
   /** Absolute path to the skill package directory. */

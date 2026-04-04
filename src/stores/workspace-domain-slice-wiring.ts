@@ -1,12 +1,7 @@
-import { NODE_TYPES } from '../constants/canvas';
+import { NODE_TYPES, SECTION_NODE_TYPES } from '../constants/canvas';
 import type { CanvasNodeType } from '../types/workspace-graph';
 import { defaultIncubatorWiring } from '../types/workspace-domain';
-import {
-  ensureWiring,
-  SECTION_NODE_TYPES_FOR_DOMAIN,
-  uniqPush,
-  removeId,
-} from './workspace-domain-helpers';
+import { ensureWiring, uniqPush, removeId } from './workspace-domain-helpers';
 import type { WorkspaceDomainStore } from './workspace-domain-store-types';
 
 type DomainSet = (
@@ -93,10 +88,10 @@ export function createWorkspaceDomainWiringSlice(set: DomainSet): Pick<
     attachIncubatorInput: (incubatorId, sourceId, sourceType) =>
       set((s) => {
         const w = { ...ensureWiring(s.incubatorWirings, incubatorId) };
-        if (SECTION_NODE_TYPES_FOR_DOMAIN.has(sourceType)) {
+        if (SECTION_NODE_TYPES.has(sourceType)) {
           w.sectionNodeIds = uniqPush(w.sectionNodeIds, sourceId);
-        } else if (sourceType === NODE_TYPES.VARIANT) {
-          w.variantNodeIds = uniqPush(w.variantNodeIds, sourceId);
+        } else if (sourceType === NODE_TYPES.PREVIEW) {
+          w.previewNodeIds = uniqPush(w.previewNodeIds, sourceId);
         } else return s;
         return {
           incubatorWirings: { ...s.incubatorWirings, [incubatorId]: w },
@@ -108,10 +103,10 @@ export function createWorkspaceDomainWiringSlice(set: DomainSet): Pick<
         const cur = s.incubatorWirings[incubatorId];
         if (!cur) return s;
         const w = { ...cur };
-        if (SECTION_NODE_TYPES_FOR_DOMAIN.has(sourceType)) {
+        if (SECTION_NODE_TYPES.has(sourceType)) {
           w.sectionNodeIds = removeId(w.sectionNodeIds, sourceId);
-        } else if (sourceType === NODE_TYPES.VARIANT) {
-          w.variantNodeIds = removeId(w.variantNodeIds, sourceId);
+        } else if (sourceType === NODE_TYPES.PREVIEW) {
+          w.previewNodeIds = removeId(w.previewNodeIds, sourceId);
         } else return s;
         return {
           incubatorWirings: { ...s.incubatorWirings, [incubatorId]: w },

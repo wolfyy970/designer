@@ -1,12 +1,12 @@
 import type { DesignSpec } from '../../types/spec';
-import type { VariantStrategy } from '../../types/compiler';
+import type { HypothesisStrategy } from '../../types/compiler';
 import { interpolate } from '../utils';
 import { getSectionContent, collectImageLines } from './helpers';
 
-export function buildVariantPrompt(
+export function buildHypothesisPrompt(
   spec: DesignSpec,
-  strategy: VariantStrategy,
-  variantTemplate: string,
+  strategy: HypothesisStrategy,
+  hypothesisTemplate: string,
   designSystemOverride?: string,
 ): string {
   const imageDescriptions = collectImageLines(spec).join('\n');
@@ -19,7 +19,7 @@ export function buildVariantPrompt(
     ? `### Existing Design Reference\n${getSectionContent(spec, 'existing-design')}\n\nReference images:\n${imageDescriptions}`
     : '';
 
-  return interpolate(variantTemplate, {
+  return interpolate(hypothesisTemplate, {
     STRATEGY_NAME: strategy.name,
     HYPOTHESIS: strategy.hypothesis,
     RATIONALE: strategy.rationale,

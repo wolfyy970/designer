@@ -11,11 +11,11 @@ import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
 import { saveSpecToLibrary, getSavedSpec, importCanvas } from './persistence';
 import { generateId, now } from '../lib/utils';
 
-export function checkpointCurrentSpec(): void {
+function checkpointCurrentSpec(): void {
   saveSpecToLibrary(useSpecStore.getState().spec);
 }
 
-export function resetSessionStores(): void {
+function resetSessionStores(): void {
   useWorkspaceDomainStore.getState().reset();
   useCompilerStore.getState().reset();
   useGenerationStore.getState().reset();
@@ -27,7 +27,7 @@ export type ActivateSavedSpecResult =
   | { ok: false; reason: 'not_found' };
 
 /** Apply a DesignSpec to the active session (normalizes sections in spec-store). */
-export function applySpecToActiveSession(spec: DesignSpec): void {
+function applySpecToActiveSession(spec: DesignSpec): void {
   useSpecStore.getState().loadCanvas(spec);
   useCanvasStore.getState().materializeOptionalSectionNodesFromSpec(spec);
 }

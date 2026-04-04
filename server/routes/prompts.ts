@@ -13,7 +13,7 @@ import {
 import { env } from '../env.ts';
 import { apiJsonError } from '../lib/api-json-error.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
-import { PROMPT_KEYS, type PromptKey } from '../lib/prompts/defaults.ts';
+import { PROMPT_KEYS, type PromptKey } from '../../src/lib/prompts/defaults.ts';
 
 const prompts = new Hono();
 

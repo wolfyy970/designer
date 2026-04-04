@@ -41,8 +41,6 @@ import {
   HypothesisPromptBundleResponseSchema,
   ObservabilityLogsResponseSchema,
   ModelsResponseSchema,
-  PromptHistoryListSchema,
-  PromptVersionBodySchema,
   ProvidersListResponseSchema,
   AppConfigResponseSchema,
   type AppConfigResponse,
@@ -293,12 +291,13 @@ function dispatchParsedGenerateStreamEvent(
   }
 }
 
+/** @returns `false` when the stream should not process further events (fatal parse / contract break). */
 function dispatchGenerateStreamEvent(
   currentEvent: string,
   data: Record<string, unknown>,
   callbacks: GenerateStreamCallbacks,
   diag?: SseStreamDiagnostics,
-): void {
+): boolean {
   const result = safeParseGenerateSSEEvent(currentEvent, data);
   if (!result.ok) {
     diag?.recordDrop('zod', currentEvent);
@@ -312,10 +311,11 @@ function dispatchGenerateStreamEvent(
     if (import.meta.env.DEV) {
       console.warn('[generate SSE] invalid payload', currentEvent, result.error.flatten(), data);
     }
-    return;
+    return false;
   }
   dispatchParsedGenerateStreamEvent(result.event, callbacks);
   diag?.recordReceived(currentEvent);
+  return true;
 }
 
 export async function fetchHypothesisPromptBundle(
@@ -328,6 +328,17 @@ export async function fetchHypothesisPromptBundle(
 export interface HypothesisLaneSession {
   callbacks: GenerateStreamCallbacks;
   finalizeAfterStream: () => Promise<void>;
+}
+
+/** Stream-level SSE failure: every active lane gets the same error (avoids mis-attributing to lane 0). */
+function notifyAllHypothesisLanesError(
+  lanes: HypothesisLaneSession[],
+  err: unknown,
+): void {
+  const msg = normalizeError(err);
+  for (const lane of lanes) {
+    lane.callbacks.onError?.(msg);
+  }
 }
 
 /**
@@ -372,10 +383,11 @@ export async function generateHypothesisStream(
           if (import.meta.env.DEV) {
             console.warn('[generate SSE] non-object or invalid JSON line', currentEvent);
           }
-          lanes[0]?.callbacks.onError?.(
-            normalizeError(new Error(`Invalid JSON in SSE event "${currentEvent}"`)),
+          notifyAllHypothesisLanesError(
+            lanes,
+            new Error(`Invalid JSON in SSE event "${currentEvent}"`),
           );
-          return;
+          return false;
         }
         if (currentEvent === SSE_EVENT_NAMES.lane_done) {
           diag.recordReceived(SSE_EVENT_NAMES.lane_done);
@@ -392,12 +404,18 @@ export async function generateHypothesisStream(
         }
         const { laneIndex, rest } = stripLaneIndex(parsed);
         if (
-          import.meta.env.DEV &&
           typeof laneIndex !== 'number' &&
           lanes.length > 1 &&
           currentEvent !== SSE_EVENT_NAMES.done
         ) {
-          console.debug('[sse:diag] laneIndex missing; using lane 0 fallback', currentEvent);
+          if (import.meta.env.DEV) {
+            console.debug('[sse:diag] laneIndex missing; notifying all lanes', currentEvent);
+          }
+          notifyAllHypothesisLanesError(
+            lanes,
+            new Error(`SSE event "${currentEvent}" missing laneIndex (multiplexed stream)`),
+          );
+          return false;
         }
         const cbs =
           typeof laneIndex === 'number' && lanes[laneIndex]
@@ -405,17 +423,24 @@ export async function generateHypothesisStream(
             : lanes[0]?.callbacks;
         if (cbs) {
           notifyError = cbs;
-          dispatchGenerateStreamEvent(currentEvent, rest, cbs, diag);
+          const ok = dispatchGenerateStreamEvent(currentEvent, rest, cbs, diag);
+          if (!ok) return false;
         } else {
           diag.recordDrop('no_callbacks', currentEvent);
         }
       } catch (err) {
         diag.recordDrop('handler_throw', currentEvent);
-        const fallback = lanes[0]?.callbacks;
-        (notifyError ?? fallback)?.onError?.(normalizeError(err));
         if (import.meta.env.DEV) {
           console.warn('[generate SSE] handler error', currentEvent, err);
         }
+        if (notifyError) {
+          notifyError.onError?.(normalizeError(err));
+        } else if (lanes.length > 1) {
+          notifyAllHypothesisLanesError(lanes, err);
+        } else {
+          lanes[0]?.callbacks.onError?.(normalizeError(err));
+        }
+        return false;
       }
     });
   } finally {
@@ -459,31 +484,6 @@ export async function postTraceEvents(body: {
   } catch {
     return false;
   }
-}
-
-/** GET /api/prompts/:key/history — version metadata only */
-export async function fetchPromptHistory(key: string): Promise<{ version: number; createdAt: string }[]> {
-  return getParsedList(
-    `/prompts/${encodeURIComponent(key)}/history`,
-    PromptHistoryListSchema,
-    [],
-  );
-}
-
-/** GET /api/prompts/:key/versions/:version — body for Prompt Studio compare */
-export async function fetchPromptVersionBody(
-  key: string,
-  version: number,
-): Promise<{ key: string; version: number; body: string; createdAt: string }> {
-  const response = await fetch(
-    `${API_BASE}/prompts/${encodeURIComponent(key)}/versions/${version}`,
-  );
-  const json: unknown = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const err = json as { error?: string };
-    throw new Error(err.error ?? `Failed to load prompt version ${version}`);
-  }
-  return PromptVersionBodySchema.parse(json);
 }
 
 // ── Design System ───────────────────────────────────────────────────

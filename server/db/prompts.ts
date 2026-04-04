@@ -3,8 +3,7 @@ import { env } from '../env.ts';
 import { getLangfuseAppClient, isLangfuseAppConfigured } from '../lib/langfuse-app-client.ts';
 import { parsePromptListPage, parseTextPromptGet } from '../lib/langfuse-prompt-dto.ts';
 import { logUnexpectedLangfusePromptDev } from '../lib/langfuse-prompt-errors.ts';
-import type { PromptKey } from '../lib/prompts/defaults.ts';
-import { LEGACY_PROMPT_KEY_ALIASES } from '../../src/lib/prompts/defaults.ts';
+import { LEGACY_PROMPT_KEY_ALIASES, type PromptKey } from '../../src/lib/prompts/defaults.ts';
 import { PROMPT_DEFAULTS } from '../../src/lib/prompts/shared-defaults.ts';
 
 const LEGACY_NAME_BY_CANONICAL: Partial<Record<PromptKey, string>> = {};

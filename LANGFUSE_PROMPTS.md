@@ -2,7 +2,7 @@
 
 In **Langfuse** and **Prompt Studio**, templates are keyed by **kebab-case** identifiers (stable API names). This page maps each name to **what it’s for** and **when the app uses it**.
 
-**Backward compatibility:** Pre-rename **camelCase** names (e.g. `compilerSystem`, `variant` as a **prompt** key) are still accepted when opening Prompt Studio from deep links — see `LEGACY_PROMPT_KEY_ALIASES` in `[src/lib/prompts/defaults.ts](src/lib/prompts/defaults.ts)`. Canvas **node** type `variant` is unrelated.
+**Backward compatibility:** Pre-rename **camelCase** names (e.g. `compilerSystem`, `variant` as a **prompt** key) are still accepted when opening Prompt Studio from deep links — see `LEGACY_PROMPT_KEY_ALIASES` in `[src/lib/prompts/defaults.ts](src/lib/prompts/defaults.ts)`. Canvas **node** type is now `preview` (renamed from `variant`).
 
 The API’s `**getPromptBody`** (when Langfuse is configured) tries the **new** Langfuse name first, then the **legacy** name, so runs keep working until `pnpm db:seed` / `pnpm langfuse:sync-prompts` has created the kebab-case prompts.
 
@@ -12,12 +12,12 @@ The API’s `**getPromptBody`** (when Langfuse is configured) tries the **new** 
 
 ---
 
-## Incubator (dimension map compile)
+## Incubator (incubation plan compile)
 
 
 | Langfuse name                     | Plain-language goal                                                                                                                                                   |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `**hypotheses-generator-system`** | Tells the LLM how to think as the **Incubator**: read your spec, infer **dimensions** and **variant strategies**, and return structured **JSON** (the dimension map). |
+| `**hypotheses-generator-system`** | Tells the LLM how to think as the **Incubator**: read your spec, infer **dimensions** and **hypothesis strategies**, and return structured **JSON** (the incubation plan). |
 | `**incubator-user-inputs`**       | The **filled-in spec package** sent with `hypotheses-generator-system`: brief, constraints, research, metrics, images — the concrete inputs for that compile call.    |
 
 
@@ -25,17 +25,18 @@ The API’s `**getPromptBody`** (when Langfuse is configured) tries the **new** 
 
 ---
 
-## Designer (generate a variant)
+## Designer (generate for a hypothesis)
 
 
 | Langfuse name                    | Plain-language goal                                                                                                                                                            |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `**designer-direct-system`**     | **Direct / single-shot** generation: system rules for outputting one self-contained **HTML** page from the hypothesis + context.                                               |
 | `**designer-agentic-system`**    | **Agentic** generation: system rules for the **tool-using agent** (virtual files, milestones, self-critique) before the static artifact is finalized.                          |
+| `**designer-agentic-revision-user`** | **Agentic revision rounds only**: user instructions merged after the compiled hypothesis context and before the evaluator **revision brief** (post-evaluation Pi passes).   |
 | `**designer-hypothesis-inputs`** | The **per-hypothesis user prompt**: strategy name, hypothesis, dimensions, design brief, optional design-system block — what tells the model *which* design to build this run. |
 
 
-**Runs when:** you **Generate** or **Run agent** on a hypothesis (`/api/generate`, agentic path includes tools + eval).
+**Runs when:** you **Generate** or **Run agent** on a hypothesis (`/api/hypothesis/generate`; agentic path includes tools + eval).
 
 ---
 
