@@ -55,7 +55,9 @@ type WorkspaceCoreRaw = z.infer<typeof HypothesisWorkspaceCoreObjectSchema>;
 function coerceStrategy<T extends WorkspaceCoreRaw>(obj: T) {
   const strategy = obj.strategy ?? obj.hypothesisStrategy ?? obj.variantStrategy;
   if (!strategy) throw new Error('strategy is required');
-  const { hypothesisStrategy: _hs, variantStrategy: _legacy, ...rest } = obj;
+  const { hypothesisStrategy, variantStrategy, ...rest } = obj;
+  void hypothesisStrategy;
+  void variantStrategy;
   return { ...rest, strategy };
 }
 

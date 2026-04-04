@@ -49,7 +49,7 @@ Hono app under `/api`: compile, generate (SSE), models, design-system extract, *
 Provider implementations are in `server/services/providers/` (OpenRouter + LM Studio). Both implement `generateChat()` and `listModels()`. **LM Studio runs on a remote machine at `192.168.252.213:1234`, not localhost.**
 
 ### Frontend (`src/`)
-A single-page app with one route: `/canvas`. Everything else redirects there.
+A single-page app with one route: `/canvas`. Everything else redirects there. **`ViewportGate`** in `App.tsx` wraps the app: below **1024px** CSS viewport width, users see a full-screen desktop-only message (`src/components/shared/ViewportGate.tsx`, breakpoint in `src/lib/viewport-gate.ts`).
 
 **Design tokens** — [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md); implementation `src/index.css` `@theme`. Use status colors for eval severity, not `accent`.
 

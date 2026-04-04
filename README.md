@@ -17,6 +17,8 @@ pnpm dev:all                 # recommended: API + Vite (API waits until /api/hea
 
 Both processes are required for local development. The Vite dev server proxies `/api/*` to the Hono server on port **3001**. If Vite starts before the API is listening, the first requests can fail with `ECONNREFUSED` — use `dev:all` or hard-refresh after you see `API server running`.
 
+**Screen width:** The canvas workspace needs a **desktop-class** layout. Browser viewports **narrower than 1024px** (typical phones and many tablets) show a full-screen message asking you to open the app on a laptop or desktop instead.
+
 **`EADDRINUSE` on port 3001:** Something is still bound to the API port — often a **background** `pnpm dev:server` left over from `pnpm dev:server & pnpm dev` after `Ctrl+C` (check `jobs` / `fg`; or free the port: `lsof -nP -iTCP:3001 -sTCP:LISTEN` then `kill <pid>`). Prefer **`pnpm dev:all`** or **two terminals** so you don’t stack servers.
 
 ### API Configuration

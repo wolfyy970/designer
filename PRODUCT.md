@@ -23,6 +23,7 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 
 ### Canvas Features
 
+- **Desktop viewport gate** — Viewports under **1024px** width show a full-screen fallback (design-system styled) explaining the canvas workspace requires a larger display.
 - **Auto-layout** — Edge-driven Sugiyama-style layout. Toggleable checkbox in header. Positions all nodes based on connections, prevents overlap, centers layers vertically.
 - **Auto-connect** — Adding a node auto-connects structural edges (sections→incubator, design systems→hypotheses). Model connections are scoped: when hypotheses are generated from an Incubator, they inherit that Incubator's model — not every model on the canvas.
 - **Context menu** — Right-click canvas to add nodes at click position

@@ -56,7 +56,7 @@ Prompt keys are **kebab-case** (e.g. `hypotheses-generator-system`, `designer-hy
 
 ## Canvas Workflow
 
-The canvas (`/canvas`) is the default interface. Nodes connect left-to-right. The **build stamp** in the header (version · Eastern time) and Husky **patch** bumps are documented in [CLAUDE.md](CLAUDE.md) — including restarting Vite to refresh the stamp after commits.
+The canvas (`/canvas`) is the default interface. Nodes connect left-to-right. You need a **viewport at least 1024px wide**; narrower screens show a desktop-only message instead of the canvas (see [README.md](README.md)). The **build stamp** in the header (version · Eastern time) and Husky **patch** bumps are documented in [CLAUDE.md](CLAUDE.md) — including restarting Vite to refresh the stamp after commits.
 
 ### 1. Fill in Input Nodes
 
