@@ -9,13 +9,6 @@ export function now(): string {
 }
 
 /**
- * Convert literal `\n` sequences from .env values into real newlines.
- */
-export function envNewlines(value: string): string {
-  return value.replace(/\\n/g, '\n');
-}
-
-/**
  * Interpolate `{{KEY}}` placeholders in a template string.
  * Any `{{KEY}}` not found in `vars` is left as-is.
  */

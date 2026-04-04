@@ -67,21 +67,24 @@ export const useSpecStore = create<SpecStore>()(
         }),
 
       resetSectionContent: (sectionId) =>
-        set((state) => ({
-          spec: {
-            ...state.spec,
-            lastModified: now(),
-            sections: {
-              ...state.spec.sections,
-              [sectionId]: {
-                id: sectionId,
-                content: '',
-                images: [],
-                lastModified: now(),
+        set((state) => {
+          const touched = now();
+          return {
+            spec: {
+              ...state.spec,
+              lastModified: touched,
+              sections: {
+                ...state.spec.sections,
+                [sectionId]: {
+                  id: sectionId,
+                  content: '',
+                  images: [],
+                  lastModified: touched,
+                },
               },
             },
-          },
-        })),
+          };
+        }),
 
       addImage: (sectionId, image) =>
         set((state) => {

@@ -27,6 +27,7 @@
     "api",
     "src/types",
     "src/constants/canvas.ts",
+    "src/constants/sse-events.ts",
     "src/types/workspace-graph.ts",
     "src/types/canvas-data.ts",
     "src/workspace/hypothesis-generation-pure.ts",
@@ -36,6 +37,7 @@
     "src/lib/prompts/helpers.ts",
     "src/lib/prompts/compiler-user.ts",
     "src/lib/prompts/variant-prompt.ts",
-    "src/lib/extract-code.ts"
+    "src/lib/extract-code.ts",
+    "src/lib/debug-agent-ingest-shared.ts"
   ]
 }

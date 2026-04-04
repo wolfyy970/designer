@@ -11,7 +11,8 @@ import {
 } from '../../src/workspace/hypothesis-generation-pure.ts';
 import { getPromptBody } from '../db/prompts.ts';
 import { compileVariantPrompts } from '../services/compiler.ts';
-import { generateId, now } from './utils.ts';
+import { generateId, now } from '../../src/lib/utils.ts';
+
 import { applyLockdownToHypothesisContext } from './lockdown-model.ts';
 import type { HypothesisWorkspaceCoreInput } from './hypothesis-schemas.ts';
 

@@ -6,31 +6,29 @@ import {
   executeGenerateStreamSafe,
 } from '../services/generate-execution.ts';
 import { GenerateStreamBodySchema } from '../lib/generate-stream-schema.ts';
-import { normalizeError } from '../lib/error-utils.ts';
+import { normalizeError } from '../../src/lib/error-utils.ts';
 import { clampEvaluatorOptional } from '../lib/lockdown-model.ts';
 import { buildHypothesisWorkspaceBundle } from '../lib/hypothesis-workspace.ts';
 import {
   HypothesisGenerateRequestSchema,
   PromptBundleRequestSchema,
 } from '../lib/hypothesis-schemas.ts';
+import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
+import { apiJsonError } from '../lib/api-json-error.ts';
+import { parseRequestJson } from '../lib/parse-request.ts';
 
 const hypothesis = new Hono();
 
 hypothesis.post('/prompt-bundle', async (c) => {
-  const raw = await c.req.json();
-  const parsed = PromptBundleRequestSchema.safeParse(raw);
-  if (!parsed.success) {
-    const details = parsed.error.flatten();
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('[hypothesis] POST /prompt-bundle validation failed', details);
-    }
-    return c.json({ error: 'Invalid request', details }, 400);
-  }
+  const parsed = await parseRequestJson(c, PromptBundleRequestSchema, {
+    devWarnLabel: '[hypothesis] POST /prompt-bundle',
+  });
+  if (!parsed.ok) return parsed.response;
   const body = parsed.data;
 
   const bundle = await buildHypothesisWorkspaceBundle(body);
   if (!bundle) {
-    return c.json({ error: 'No model credentials for this hypothesis' }, 400);
+    return apiJsonError(c, 400, 'No model credentials for this hypothesis');
   }
   const { ctx, prompts, evaluationContext, provenance } = bundle;
 
@@ -50,24 +48,19 @@ hypothesis.post('/prompt-bundle', async (c) => {
 });
 
 hypothesis.post('/generate', async (c) => {
-  const raw = await c.req.json();
-  const parsed = HypothesisGenerateRequestSchema.safeParse(raw);
-  if (!parsed.success) {
-    const details = parsed.error.flatten();
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('[hypothesis] POST /generate validation failed', details);
-    }
-    return c.json({ error: 'Invalid request', details }, 400);
-  }
+  const parsed = await parseRequestJson(c, HypothesisGenerateRequestSchema, {
+    devWarnLabel: '[hypothesis] POST /generate',
+  });
+  if (!parsed.ok) return parsed.response;
   const body = parsed.data;
 
   const bundle = await buildHypothesisWorkspaceBundle(body);
   if (!bundle) {
-    return c.json({ error: 'No model credentials for this hypothesis' }, 400);
+    return apiJsonError(c, 400, 'No model credentials for this hypothesis');
   }
   const { ctx, prompts, evaluationContext } = bundle;
   if (prompts.length === 0) {
-    return c.json({ error: 'No prompts to generate' }, 400);
+    return apiJsonError(c, 400, 'No prompts to generate');
   }
   const prompt = prompts[0]!;
   const modelCredentials = [...ctx.modelCredentials];
@@ -126,13 +119,13 @@ hypothesis.post('/generate', async (c) => {
         }
       }
       await gate.enqueue(async () => {
-        await stream.writeSSE({ data: '{}', event: 'done', id: allocId() });
+        await stream.writeSSE({ data: '{}', event: SSE_EVENT_NAMES.done, id: allocId() });
       });
     } catch (err) {
       await gate.enqueue(async () => {
         await stream.writeSSE({
           data: JSON.stringify({ error: normalizeError(err) }),
-          event: 'error',
+          event: SSE_EVENT_NAMES.error,
           id: allocId(),
         });
       });

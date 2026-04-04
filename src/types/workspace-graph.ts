@@ -21,10 +21,14 @@ export type CanvasNodeType =
   | 'variant'
   | 'model';
 
-export type CanvasNodeData = Record<string, unknown> & {
+/** Well-known keys mirrored on many node `data` blobs; use canvas-node-data readers for typed access. */
+export type CanvasNodeDataKnown = {
   refId?: string;
   variantStrategyId?: string;
 };
+
+/** React Flow / workspace node data bag — index signature allows node-type-specific fields. */
+export type CanvasNodeData = CanvasNodeDataKnown & Record<string, unknown>;
 
 /** Node in the experiment graph — no dependency on a specific renderer library. */
 export interface WorkspaceNode {

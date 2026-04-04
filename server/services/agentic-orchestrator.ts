@@ -23,13 +23,19 @@ import { buildAgenticSystemContext } from '../lib/build-agentic-system-context.t
 import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
 import { isLangfuseTracingEnabled } from '../lib/langfuse-tracing-enabled.ts';
 import { createTraceId, startActiveObservation } from '@langfuse/tracing';
-import { runDesignAgentSession, type AgentRunEvent, type AgentSessionParams } from './pi-agent-service.ts';
+import {
+  runDesignAgentSession,
+  type AgentRunEvent,
+  type AgentSessionParams,
+  type DesignAgentSessionResult,
+} from './pi-agent-service.ts';
 import type { LoadedSkillSummary } from '../lib/skill-schema.ts';
+import { makeRunTraceEvent } from '../lib/run-trace.ts';
 
 const AGENTIC_ROOT_SPAN_ID = '0000000000000001';
 
 /** PI session fields supplied by the caller; system prompt comes from Langfuse per session. */
-export type AgenticOrchestratorBuildInput = Omit<AgentSessionParams, 'systemPrompt'>;
+type AgenticOrchestratorBuildInput = Omit<AgentSessionParams, 'systemPrompt'>;
 
 export type AgenticOrchestratorEvent =
   | AgentRunEvent
@@ -45,7 +51,7 @@ export type AgenticOrchestratorEvent =
   | { type: 'evaluation_report'; round: number; snapshot: EvaluationRoundSnapshot }
   | { type: 'revision_round'; round: number; brief: string };
 
-export interface AgenticOrchestratorOptions {
+interface AgenticOrchestratorOptions {
   build: AgenticOrchestratorBuildInput;
   compiledPrompt: string;
   evaluationContext?: EvaluationContextPayload;
@@ -60,7 +66,7 @@ export interface AgenticOrchestratorOptions {
   onStream: (e: AgenticOrchestratorEvent) => void | Promise<void>;
 }
 
-export interface AgenticOrchestratorResult {
+interface AgenticOrchestratorResult {
   files: Record<string, string>;
   rounds: EvaluationRoundSnapshot[];
   finalAggregate: AggregatedEvaluationReport;
@@ -87,14 +93,12 @@ async function emitSkillsLoaded(
       : `Skills catalog (${skills.length}): ${skills.map((s) => s.name).join(', ')}`;
   await emit(onStream, {
     type: 'trace',
-    trace: {
-      id: crypto.randomUUID(),
-      at: new Date().toISOString(),
+    trace: makeRunTraceEvent({
       kind: 'skills_loaded',
       label,
       phase: tracePhase,
       status: skills.length === 0 ? 'info' : 'success',
-    },
+    }),
   });
   await emit(onStream, { type: 'skills_loaded', skills });
 }
@@ -201,6 +205,57 @@ function mergeSeedWithDesign(
   return { ...sand, ...designFiles };
 }
 
+function agenticResult(
+  files: Record<string, string>,
+  rounds: EvaluationRoundSnapshot[],
+  snapshot: EvaluationRoundSnapshot,
+  checkpointOpts: {
+    stopReason: AgenticStopReason;
+    revisionAttempts: number;
+    revisionBriefApplied?: string;
+  },
+): AgenticOrchestratorResult {
+  return {
+    files,
+    rounds,
+    finalAggregate: snapshot.aggregate,
+    checkpoint: buildCheckpoint(files, rounds, checkpointOpts),
+  };
+}
+
+type PiSessionExtras = Partial<
+  Pick<AgentSessionParams, 'userPrompt' | 'seedFiles' | 'compactionNote' | 'initialProgressMessage'>
+>;
+
+type AgenticSystemContextBundle = Awaited<ReturnType<typeof buildAgenticSystemContext>>;
+
+/** Refresh Langfuse agentic context, emit skills_loaded, run one Pi design session. */
+async function runAgenticPiSessionRound(
+  options: AgenticOrchestratorOptions,
+  forward: (e: AgentRunEvent) => Promise<void>,
+  tracePhase: AgenticPhase,
+  setPiTracePhase: (p: AgenticPhase) => void,
+  sessionExtras:
+    | PiSessionExtras
+    | ((ctx: AgenticSystemContextBundle) => PiSessionExtras),
+): Promise<DesignAgentSessionResult | null> {
+  const ctx = await buildAgenticSystemContext({
+    getPromptBody: options.getPromptBody,
+  });
+  await emitSkillsLoaded(options.onStream, ctx.loadedSkills, tracePhase);
+  setPiTracePhase(tracePhase);
+  const extras = typeof sessionExtras === 'function' ? sessionExtras(ctx) : sessionExtras;
+  return runDesignAgentSession(
+    {
+      ...options.build,
+      ...extras,
+      systemPrompt: ctx.systemPrompt,
+      skillCatalog: ctx.skillCatalog,
+    },
+    forward,
+  );
+}
+
 /**
  * Full pipeline: PI build → eval rounds → bounded revision loop until satisfied or cap.
  */
@@ -259,14 +314,12 @@ async function runAgenticWithEvaluationImpl(
     if (e.type === 'skill_activated') {
       await emit(options.onStream, {
         type: 'trace',
-        trace: {
-          id: crypto.randomUUID(),
-          at: new Date().toISOString(),
+        trace: makeRunTraceEvent({
           kind: 'skill_activated',
           label: `Skill activated: ${e.name} (${e.key})`,
           phase: piTracePhase,
           status: 'success',
-        },
+        }),
       });
     }
     await options.onStream(e);
@@ -274,26 +327,23 @@ async function runAgenticWithEvaluationImpl(
 
   await emit(options.onStream, { type: 'phase', phase: 'building' });
 
-  const initialCtx = await buildAgenticSystemContext({
-    getPromptBody: options.getPromptBody,
-  });
-  await emitSkillsLoaded(options.onStream, initialCtx.loadedSkills, 'building');
-  const initialSeedFiles = {
-    ...initialCtx.sandboxSeedFiles,
-    ...(options.build.seedFiles ?? {}),
+  const setPiTrace = (p: AgenticPhase) => {
+    piTracePhase = p;
   };
-  const seedFilesForBuild =
-    Object.keys(initialSeedFiles).length > 0 ? initialSeedFiles : undefined;
-
-  piTracePhase = 'building';
-  const buildResult = await runDesignAgentSession(
-    {
-      ...options.build,
-      systemPrompt: initialCtx.systemPrompt,
-      seedFiles: seedFilesForBuild,
-      skillCatalog: initialCtx.skillCatalog,
-    },
+  const buildResult = await runAgenticPiSessionRound(
+    options,
     forward,
+    'building',
+    setPiTrace,
+    (ctx) => {
+      const initialSeedFiles = {
+        ...ctx.sandboxSeedFiles,
+        ...(options.build.seedFiles ?? {}),
+      };
+      const seedFilesForBuild =
+        Object.keys(initialSeedFiles).length > 0 ? initialSeedFiles : undefined;
+      return { seedFiles: seedFilesForBuild };
+    },
   );
   if (!buildResult || signal?.aborted) return null;
 
@@ -308,16 +358,11 @@ async function runAgenticWithEvaluationImpl(
   rounds.push(snapshot);
 
   if (signal?.aborted) {
-    return {
-      files,
-      rounds,
-      finalAggregate: snapshot.aggregate,
-      checkpoint: buildCheckpoint(files, rounds, {
-        stopReason: 'aborted',
-        revisionAttempts,
-        revisionBriefApplied: lastRevisionBrief,
-      }),
-    };
+    return agenticResult(files, rounds, snapshot, {
+      stopReason: 'aborted',
+      revisionAttempts,
+      revisionBriefApplied: lastRevisionBrief,
+    });
   }
 
   while (
@@ -360,24 +405,12 @@ async function runAgenticWithEvaluationImpl(
       },
     });
 
-    const revisionCtx = await buildAgenticSystemContext({
-      getPromptBody: options.getPromptBody,
-    });
-    await emitSkillsLoaded(options.onStream, revisionCtx.loadedSkills, 'revising');
-
-    piTracePhase = 'revising';
-    const revised = await runDesignAgentSession(
-      {
-        ...options.build,
-        systemPrompt: revisionCtx.systemPrompt,
-        userPrompt: revisionUser,
-        seedFiles: mergeSeedWithDesign(files, revisionCtx.sandboxSeedFiles),
-        compactionNote: `Post-evaluation revision requested. Overall ${snapshot.aggregate.overallScore.toFixed(2)}. Hard fails: ${snapshot.aggregate.hardFails.length}.`,
-        initialProgressMessage: 'Revising design from evaluation feedback…',
-        skillCatalog: revisionCtx.skillCatalog,
-      },
-      forward,
-    );
+    const revised = await runAgenticPiSessionRound(options, forward, 'revising', setPiTrace, (ctx) => ({
+      userPrompt: revisionUser,
+      seedFiles: mergeSeedWithDesign(files, ctx.sandboxSeedFiles),
+      compactionNote: `Post-evaluation revision requested. Overall ${snapshot.aggregate.overallScore.toFixed(2)}. Hard fails: ${snapshot.aggregate.hardFails.length}.`,
+      initialProgressMessage: 'Revising design from evaluation feedback…',
+    }));
 
     if (!revised || signal?.aborted) {
       const stopReason: AgenticStopReason = signal?.aborted ? 'aborted' : 'revision_failed';
@@ -387,16 +420,11 @@ async function runAgenticWithEvaluationImpl(
         message: 'runDesignAgentSession (revision) aborted or null',
         data: { revisionAttempt: revisionAttempts + 1, aborted: !!signal?.aborted },
       });
-      return {
-        files,
-        rounds,
-        finalAggregate: snapshot.aggregate,
-        checkpoint: buildCheckpoint(files, rounds, {
-          stopReason,
-          revisionAttempts,
-          revisionBriefApplied: lastRevisionBrief,
-        }),
-      };
+      return agenticResult(files, rounds, snapshot, {
+        stopReason,
+        revisionAttempts,
+        revisionBriefApplied: lastRevisionBrief,
+      });
     }
 
     debugAgentIngest({
@@ -418,16 +446,11 @@ async function runAgenticWithEvaluationImpl(
     rounds.push(snapshot);
 
     if (signal?.aborted) {
-      return {
-        files,
-        rounds,
-        finalAggregate: snapshot.aggregate,
-        checkpoint: buildCheckpoint(files, rounds, {
-          stopReason: 'aborted',
-          revisionAttempts,
-          revisionBriefApplied: lastRevisionBrief,
-        }),
-      };
+      return agenticResult(files, rounds, snapshot, {
+        stopReason: 'aborted',
+        revisionAttempts,
+        revisionBriefApplied: lastRevisionBrief,
+      });
     }
   }
 
@@ -439,14 +462,9 @@ async function runAgenticWithEvaluationImpl(
       : 'max_revisions';
 
   await emit(options.onStream, { type: 'phase', phase: 'complete' });
-  return {
-    files,
-    rounds,
-    finalAggregate: snapshot.aggregate,
-    checkpoint: buildCheckpoint(files, rounds, {
-      stopReason,
-      revisionAttempts,
-      revisionBriefApplied: lastRevisionBrief,
-    }),
-  };
+  return agenticResult(files, rounds, snapshot, {
+    stopReason,
+    revisionAttempts,
+    revisionBriefApplied: lastRevisionBrief,
+  });
 }

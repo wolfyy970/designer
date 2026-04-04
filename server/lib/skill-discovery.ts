@@ -171,7 +171,7 @@ export function catalogEntriesToSummaries(entries: SkillCatalogEntry[]): LoadedS
   }));
 }
 
-export type CatalogSkillXmlRow = {
+type CatalogSkillXmlRow = {
   key: string;
   name: string;
   description: string;

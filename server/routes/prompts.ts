@@ -11,7 +11,8 @@ import {
   sharedDefaultForKey,
 } from '../db/prompts.ts';
 import { env } from '../env.ts';
-import { normalizeError } from '../lib/error-utils.ts';
+import { apiJsonError } from '../lib/api-json-error.ts';
+import { normalizeError } from '../../src/lib/error-utils.ts';
 import { PROMPT_KEYS, type PromptKey } from '../lib/prompts/defaults.ts';
 
 const prompts = new Hono();
@@ -33,7 +34,7 @@ prompts.get('/', async (c) => {
     );
     return c.json(all);
   } catch (err) {
-    return c.json({ error: normalizeError(err) }, 500);
+    return apiJsonError(c, 500, normalizeError(err));
   }
 });
 
@@ -96,7 +97,7 @@ prompts.get('/status', async (c) => {
       })),
     });
   } catch (err) {
-    return c.json({ error: normalizeError(err), ok: false }, 500);
+    return apiJsonError(c, 500, normalizeError(err));
   }
 });
 
@@ -105,13 +106,13 @@ prompts.get('/:key/versions/:versionNum', async (c) => {
   const key = c.req.param('key') as PromptKey;
   const raw = c.req.param('versionNum');
   const version = Number.parseInt(raw, 10);
-  if (!PROMPT_KEYS.includes(key)) return c.json({ error: 'Unknown prompt key' }, 404);
+  if (!PROMPT_KEYS.includes(key)) return apiJsonError(c, 404, 'Unknown prompt key');
   if (!Number.isInteger(version) || version < 1) {
-    return c.json({ error: 'Invalid version' }, 400);
+    return apiJsonError(c, 400, 'Invalid version');
   }
   const row = await getPromptVersionBody(key, version);
   if (!row) {
-    return c.json({ error: 'Version not found' }, 404);
+    return apiJsonError(c, 404, 'Version not found');
   }
   return c.json({
     key,
@@ -124,23 +125,20 @@ prompts.get('/:key/versions/:versionNum', async (c) => {
 // POST /api/prompts/:key/revert-baseline — new version restoring version 1 body
 prompts.post('/:key/revert-baseline', async (c) => {
   const key = c.req.param('key') as PromptKey;
-  if (!PROMPT_KEYS.includes(key)) return c.json({ error: 'Unknown prompt key' }, 404);
+  if (!PROMPT_KEYS.includes(key)) return apiJsonError(c, 404, 'Unknown prompt key');
   if (!isLangfuseAppConfigured()) {
-    return c.json(
-      {
-        error:
-          'Langfuse is not configured. Set LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL to use Prompt Studio.',
-      },
+    return apiJsonError(
+      c,
       503,
+      'Langfuse is not configured. Set LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL to use Prompt Studio.',
     );
   }
   const baseline = await getBaselinePromptBody(key);
   if (baseline === null) {
-    return c.json(
-      {
-        error: `Prompt "${key}" has no baseline (version 1) in Langfuse. Run \`pnpm db:seed\` or \`pnpm langfuse:sync-prompts\` to create prompts.`,
-      },
+    return apiJsonError(
+      c,
       500,
+      `Prompt "${key}" has no baseline (version 1) in Langfuse. Run \`pnpm db:seed\` or \`pnpm langfuse:sync-prompts\` to create prompts.`,
     );
   }
   const lf = getLangfuseAppClient();
@@ -165,7 +163,7 @@ prompts.post('/:key/revert-baseline', async (c) => {
 // GET /api/prompts/:key — single prompt
 prompts.get('/:key', async (c) => {
   const key = c.req.param('key') as PromptKey;
-  if (!PROMPT_KEYS.includes(key)) return c.json({ error: 'Unknown prompt key' }, 404);
+  if (!PROMPT_KEYS.includes(key)) return apiJsonError(c, 404, 'Unknown prompt key');
   try {
     const { body, version, baselineBody } = await getLatestPromptRow(key);
     const sharedDefault = sharedDefaultForKey(key);
@@ -178,21 +176,19 @@ prompts.get('/:key', async (c) => {
       isSharedDefault: body === sharedDefault,
     });
   } catch (err) {
-    return c.json({ error: normalizeError(err) }, 500);
+    return apiJsonError(c, 500, normalizeError(err));
   }
 });
 
 // PUT /api/prompts/:key — create new version (promotes label)
 prompts.put('/:key', async (c) => {
   const key = c.req.param('key') as PromptKey;
-  if (!PROMPT_KEYS.includes(key)) return c.json({ error: 'Unknown prompt key' }, 404);
+  if (!PROMPT_KEYS.includes(key)) return apiJsonError(c, 404, 'Unknown prompt key');
   if (!isLangfuseAppConfigured()) {
-    return c.json(
-      {
-        error:
-          'Langfuse is not configured. Set LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL to save prompts.',
-      },
+    return apiJsonError(
+      c,
       503,
+      'Langfuse is not configured. Set LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL to save prompts.',
     );
   }
   const { body } = z.object({ body: z.string().min(1) }).parse(await c.req.json());
@@ -218,12 +214,12 @@ prompts.put('/:key', async (c) => {
 // GET /api/prompts/:key/history — all versions
 prompts.get('/:key/history', async (c) => {
   const key = c.req.param('key') as PromptKey;
-  if (!PROMPT_KEYS.includes(key)) return c.json({ error: 'Unknown prompt key' }, 404);
+  if (!PROMPT_KEYS.includes(key)) return apiJsonError(c, 404, 'Unknown prompt key');
   try {
     const versions = await listPromptHistoryRows(key);
     return c.json(versions);
   } catch (err) {
-    return c.json({ error: normalizeError(err) }, 500);
+    return apiJsonError(c, 500, normalizeError(err));
   }
 });
 

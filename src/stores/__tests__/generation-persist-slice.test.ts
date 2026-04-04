@@ -31,6 +31,26 @@ describe('pickValidatedGenerationPersistSlice', () => {
     ).toBeNull();
   });
 
+  it('returns null when evaluationSummary shape is invalid', () => {
+    expect(
+      pickValidatedGenerationPersistSlice({
+        results: [
+          {
+            id: 'a',
+            variantStrategyId: 'vs',
+            providerId: 'p',
+            status: GENERATION_STATUS.COMPLETE,
+            runId: 'r',
+            runNumber: 1,
+            metadata: { model: 'm' },
+            evaluationSummary: { overallScore: 3 },
+          },
+        ],
+        selectedVersions: {},
+      }),
+    ).toBeNull();
+  });
+
   it('accepts userBestOverrides when present', () => {
     const v = pickValidatedGenerationPersistSlice({
       results: [

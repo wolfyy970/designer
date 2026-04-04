@@ -1,13 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { SectionGhostTargetType } from '../../types/canvas-data';
-import {
-  getDesignSystemNodeData,
-  getHypothesisNodeData,
-  getModelNodeData,
-} from '../../lib/canvas-node-data';
 import type { DesignSpec } from '../../types/spec';
 import {
-  NODE_TYPE_TO_SECTION,
   type CanvasNodeType,
   type WorkspaceEdge,
   type WorkspaceNode,
@@ -16,9 +10,7 @@ import {
   applyWorkspaceEdgeChanges,
   applyWorkspaceNodeChanges,
 } from '../../workspace/reactflow-adapter';
-import { useCompilerStore } from '../compiler-store';
-import { useSpecStore } from '../spec-store';
-import { generateId, now } from '../../lib/utils';
+import { generateId } from '../../lib/utils';
 import {
   columnX,
   computeAdjacentPosition,
@@ -38,18 +30,24 @@ import {
 import { buildEdgeId, EDGE_TYPES, EDGE_STATUS } from '../../constants/canvas';
 import { getHypothesisRefId } from '../../lib/hypothesis-node-utils';
 import { PREREQUISITE_DEFAULTS } from '../../lib/constants';
-import { useWorkspaceDomainStore } from '../workspace-domain-store';
 import {
   syncDomainForNewEdge,
   syncDomainForRemovedEdge,
   syncDomainForRemovedNode,
 } from '../../workspace/domain-commands';
 import {
+  ensureCompilerVariantAndDomainForHypothesis,
+  hydrateDomainAfterSpecMaterialize,
+  removeCompilerDimensionMapForNode,
+  removeCompilerVariantByRefId,
+  resetSpecSectionForRemovedNode,
+  syncNodeDataToWorkspaceDomain,
+} from './canvas-graph-side-effects';
+import {
   scheduleDebouncedAutoLayout,
   shouldScheduleAutoLayoutOnDimensionChange,
 } from '../canvas/dimension-layout-debounce';
 import { optionalSectionSlotsWithSpecMaterial } from '../../lib/spec-materialize-sections';
-import { hydrateDomainFromCanvasGraph } from '../workspace-domain-store';
 import type { CanvasStore } from './canvas-store-types';
 
 export const createGraphSlice: StateCreator<
@@ -169,29 +167,9 @@ export const createGraphSlice: StateCreator<
     }
 
     if (type === 'hypothesis') {
-      const compilerStore = useCompilerStore.getState();
-      const compilerNodes = state.nodes.filter((n) => n.type === 'compiler');
-      const targetCompilerId = compilerNodes[0]?.id ?? 'manual';
-
-      if (!compilerStore.dimensionMaps[targetCompilerId]) {
-        const spec = useSpecStore.getState().spec;
-        compilerStore.setDimensionMapForNode(targetCompilerId, {
-          id: generateId(),
-          specId: spec.id,
-          dimensions: [],
-          variants: [],
-          generatedAt: now(),
-          compilerModel: 'manual',
-        });
-      }
-      compilerStore.addVariantToNode(targetCompilerId);
-      const map = compilerStore.dimensionMaps[targetCompilerId];
-      const lastVariant = map?.variants[map.variants.length - 1];
-      if (lastVariant) {
-        newNode.data = { ...newNode.data, refId: lastVariant.id };
-        useWorkspaceDomainStore
-          .getState()
-          .linkHypothesisToIncubator(id, targetCompilerId, lastVariant.id);
+      const refId = ensureCompilerVariantAndDomainForHypothesis(id, intermediateNodes);
+      if (refId) {
+        newNode.data = { ...newNode.data, refId };
       }
     }
 
@@ -216,10 +194,7 @@ export const createGraphSlice: StateCreator<
     }
     const nodes = get().nodes;
     const edges = get().edges;
-    hydrateDomainFromCanvasGraph({
-      nodes: nodes as { id: string; type: CanvasNodeType; data: Record<string, unknown> }[],
-      edges,
-    });
+    hydrateDomainAfterSpecMaterialize(nodes, edges);
     if (get().autoLayout) get().applyAutoLayout();
   },
 
@@ -229,24 +204,18 @@ export const createGraphSlice: StateCreator<
     if (!node) return;
     if (node.type === 'sectionGhost') return;
 
-    const removedType = node.type as CanvasNodeType;
-    if (SECTION_NODE_TYPES.has(removedType)) {
-      const sectionId = NODE_TYPE_TO_SECTION[removedType];
-      if (sectionId) {
-        useSpecStore.getState().resetSectionContent(sectionId);
-      }
-    }
+    resetSpecSectionForRemovedNode(node);
 
     syncDomainForRemovedNode(node);
 
     if (node.type === 'compiler') {
-      useCompilerStore.getState().removeDimensionMapForNode(nodeId);
+      removeCompilerDimensionMapForNode(nodeId);
     }
 
     const removeIds = new Set<string>([nodeId]);
     if (node.type === 'hypothesis') {
       const refId = getHypothesisRefId(node);
-      if (refId) useCompilerStore.getState().removeVariant(refId);
+      if (refId) removeCompilerVariantByRefId(refId);
       for (const e of state.edges) {
         if (e.source !== nodeId) continue;
         const target = state.nodes.find((n) => n.id === e.target && n.type === 'variant');
@@ -291,40 +260,9 @@ export const createGraphSlice: StateCreator<
     });
     const n = get().nodes.find((x) => x.id === nodeId);
     if (!n) return;
-    const dom = useWorkspaceDomainStore.getState();
     const merged = { ...n.data, ...data };
     const mergedNode = { ...n, data: merged } as WorkspaceNode;
-    if (n.type === 'hypothesis') {
-      if ('agentMode' in data) {
-        const h = getHypothesisNodeData(mergedNode);
-        if (h?.agentMode != null) {
-          dom.setHypothesisGenerationSettings(nodeId, { agentMode: h.agentMode });
-        }
-      }
-    }
-    if (n.type === 'model') {
-      const m = getModelNodeData(mergedNode);
-      if (m) {
-        dom.upsertModelProfile(nodeId, {
-          providerId: m.providerId,
-          modelId: m.modelId,
-          title: m.title,
-          thinkingLevel: m.thinkingLevel ?? 'minimal',
-        });
-      }
-    }
-    if (n.type === 'designSystem') {
-      const ds = getDesignSystemNodeData(mergedNode);
-      if (ds) {
-        dom.upsertDesignSystem(nodeId, {
-          title: ds.title ?? '',
-          content: ds.content ?? '',
-          images: ds.images ?? [],
-          providerMigration: ds.providerId,
-          modelMigration: ds.modelId,
-        });
-      }
-    }
+    syncNodeDataToWorkspaceDomain(n, mergedNode, data);
   },
 
   disconnectOutputs: (nodeId) => {

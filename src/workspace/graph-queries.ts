@@ -11,11 +11,35 @@ export interface WorkspaceGraphSnapshot {
   readonly edges: readonly WorkspaceEdge[];
 }
 
+export function workspaceNodeById(
+  nodes: readonly WorkspaceNode[],
+  id: string,
+): WorkspaceNode | undefined {
+  return nodes.find((n) => n.id === id);
+}
+
 export function nodeById(
   snapshot: WorkspaceGraphSnapshot,
   id: string,
 ): WorkspaceNode | undefined {
-  return snapshot.nodes.find((n) => n.id === id);
+  return workspaceNodeById(snapshot.nodes, id);
+}
+
+/**
+ * First compiler node with an edge to this hypothesis (`source` → `target`).
+ * Uses the same iteration order as legacy inline loops.
+ */
+export function findIncubatorForHypothesis(
+  nodes: readonly { id: string; type: string }[],
+  edges: readonly Pick<WorkspaceEdge, 'source' | 'target'>[],
+  hypothesisId: string,
+): string | null {
+  for (const e of edges) {
+    if (e.target !== hypothesisId) continue;
+    const n = nodes.find((x) => x.id === e.source);
+    if (n?.type === NODE_TYPES.COMPILER) return n.id;
+  }
+  return null;
 }
 
 export function listIncomingSourceNodes(
@@ -25,7 +49,7 @@ export function listIncomingSourceNodes(
   const out: WorkspaceNode[] = [];
   for (const e of snapshot.edges) {
     if (e.target !== targetNodeId) continue;
-    const n = nodeById(snapshot, e.source);
+    const n = workspaceNodeById(snapshot.nodes, e.source);
     if (n) out.push(n);
   }
   return out;
@@ -38,7 +62,7 @@ export function listOutgoingTargetNodes(
   const out: WorkspaceNode[] = [];
   for (const e of snapshot.edges) {
     if (e.source !== sourceNodeId) continue;
-    const n = nodeById(snapshot, e.target);
+    const n = workspaceNodeById(snapshot.nodes, e.target);
     if (n) out.push(n);
   }
   return out;
@@ -53,24 +77,10 @@ export function findFirstUpstreamModelNodeId(
 ): string | null {
   for (const e of snapshot.edges) {
     if (e.target !== targetNodeId) continue;
-    const source = nodeById(snapshot, e.source);
+    const source = workspaceNodeById(snapshot.nodes, e.source);
     if (source?.type === NODE_TYPES.MODEL) return source.id;
   }
   return null;
-}
-
-/** All model nodes with an edge into `targetNodeId` (order = edge iteration). */
-export function listIncomingModelNodeIds(
-  targetNodeId: string,
-  snapshot: WorkspaceGraphSnapshot,
-): string[] {
-  const ids: string[] = [];
-  for (const e of snapshot.edges) {
-    if (e.target !== targetNodeId) continue;
-    const source = nodeById(snapshot, e.source);
-    if (source?.type === NODE_TYPES.MODEL) ids.push(source.id);
-  }
-  return ids;
 }
 
 export interface ModelCredential {

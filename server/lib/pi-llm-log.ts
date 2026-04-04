@@ -26,6 +26,7 @@ import {
 } from '../log-store.ts';
 import { providerLogFields } from './llm-log-metadata.ts';
 import { stripProviderControlTokens } from './stream-sanitize.ts';
+import { normalizeError } from '../../src/lib/error-utils.ts';
 
 /** `phase` on LLM log rows for Pi agent turns (see `wrapPiStreamWithLogging`). */
 export const PI_LLM_LOG_PHASE = {
@@ -175,7 +176,7 @@ export function wrapPiStreamWithLogging(
                 : undefined,
           });
         } catch (err) {
-          failLlmCall(logId, String(err), Math.round(performance.now() - t0));
+          failLlmCall(logId, normalizeError(err), Math.round(performance.now() - t0));
         } finally {
           if (params.turnLogRef.current === logId) {
             params.turnLogRef.current = undefined;

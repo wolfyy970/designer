@@ -1,16 +1,14 @@
 import type { DesignSpec, ReferenceImage } from '../types/spec';
 import type { CompiledPrompt, DimensionMap, VariantStrategy } from '../types/compiler';
-import type { DomainDesignSystemContent, DomainHypothesis, DomainModelProfile } from '../types/workspace-domain';
-import type { ProvenanceContext } from '../types/provenance-context';
-import type { ProviderModel, RunTraceEvent, TodoItem } from '../types/provider';
 import type {
-  AgenticCheckpoint,
-  AgenticPhase,
-  EvaluationContextPayload,
-  EvaluationRoundSnapshot,
-  EvaluatorRubricId,
-  EvaluatorWorkerReport,
-} from '../types/evaluation';
+  AgentMode,
+  DomainDesignSystemContent,
+  DomainHypothesis,
+  DomainModelProfile,
+} from '../types/workspace-domain';
+import type { ProvenanceContext } from '../types/provenance-context';
+import type { ProviderModel } from '../types/provider';
+import type { EvaluationContextPayload } from '../types/evaluation';
 import type { WorkspaceSnapshotWire } from '../lib/workspace-snapshot-schema';
 
 // ── Compile ─────────────────────────────────────────────────────────
@@ -47,7 +45,7 @@ export interface HypothesisPromptBundleResponse {
   provenance: ProvenanceContext;
   generationContext: {
     /** Hypothesis-level direct vs agentic (all lanes share this mode). */
-    agentMode: 'single' | 'agentic';
+    agentMode: AgentMode;
     modelCredentials: {
       providerId: string;
       modelId: string;
@@ -65,46 +63,7 @@ export interface HypothesisGenerateApiPayload extends HypothesisWorkspaceApiPayl
   agenticMinOverallScore?: number;
 }
 
-export type GenerateSSEEvent =
-  | { type: 'progress'; status: string }
-  | { type: 'activity'; entry: string }
-  | { type: 'thinking'; delta: string; turnId: number }
-  | {
-      type: 'streaming_tool';
-      toolName: string;
-      streamedChars: number;
-      done: boolean;
-      toolPath?: string;
-    }
-  | { type: 'trace'; trace: RunTraceEvent }
-  | { type: 'code'; code: string }
-  | { type: 'error'; error: string }
-  | { type: 'file'; path: string; content: string }
-  | { type: 'plan'; files: string[] }
-  | { type: 'todos'; todos: TodoItem[] }
-  | { type: 'phase'; phase: AgenticPhase }
-  | { type: 'evaluation_progress'; round: number; phase: string; message?: string }
-  | {
-      type: 'evaluation_worker_done';
-      round: number;
-      rubric: EvaluatorRubricId;
-      report: EvaluatorWorkerReport;
-    }
-  | { type: 'evaluation_report'; round: number; snapshot: EvaluationRoundSnapshot }
-  | { type: 'revision_round'; round: number; brief: string }
-  | {
-      type: 'skills_loaded';
-      skills: { key: string; name: string; description: string }[];
-    }
-  | {
-      type: 'skill_activated';
-      key: string;
-      name: string;
-      description: string;
-    }
-  | { type: 'checkpoint'; checkpoint: AgenticCheckpoint }
-  | { type: 'lane_done'; laneIndex: number }
-  | { type: 'done' };
+export type { GenerateSSEEvent } from '../lib/generate-sse-event-schema';
 
 // ── Models ──────────────────────────────────────────────────────────
 

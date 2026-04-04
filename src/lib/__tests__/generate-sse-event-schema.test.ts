@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import {
+  type GenerateSSEEvent,
   generateSSEEventSchema,
   mergeSseEventPayload,
   safeParseGenerateSSEEvent,
@@ -174,5 +176,13 @@ describe('generateSSEEventSchema', () => {
   it('parses lane_done', () => {
     const r = generateSSEEventSchema.safeParse({ type: 'lane_done', laneIndex: 0 });
     expect(r.success).toBe(true);
+  });
+
+  it('GenerateSSEEvent alias matches z.infer<typeof generateSSEEventSchema> (compile-time)', () => {
+    type Inferred = z.infer<typeof generateSSEEventSchema>;
+    const _roundTrip: GenerateSSEEvent = {} as Inferred;
+    const _back: Inferred = {} as GenerateSSEEvent;
+    expect(_roundTrip).toBeDefined();
+    expect(_back).toBeDefined();
   });
 });

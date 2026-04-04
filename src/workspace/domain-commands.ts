@@ -8,19 +8,7 @@ import type { WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
 import { SECTION_NODE_TYPES } from '../lib/canvas-layout';
 import { getHypothesisRefId, isPlaceholderHypothesis } from '../lib/hypothesis-node-utils';
-
-function nodeById(nodes: WorkspaceNode[], id: string): WorkspaceNode | undefined {
-  return nodes.find((n) => n.id === id);
-}
-
-function findIncubatorForHypothesis(edges: WorkspaceEdge[], nodes: WorkspaceNode[], hypothesisId: string): string | null {
-  for (const e of edges) {
-    if (e.target !== hypothesisId) continue;
-    const n = nodeById(nodes, e.source);
-    if (n?.type === NODE_TYPES.COMPILER) return n.id;
-  }
-  return null;
-}
+import { findIncubatorForHypothesis, workspaceNodeById } from './graph-queries';
 
 /** After the canvas adds an edge, update domain bindings. */
 export function syncDomainForNewEdge(
@@ -28,15 +16,15 @@ export function syncDomainForNewEdge(
   nodes: WorkspaceNode[],
   allEdges: WorkspaceEdge[],
 ): void {
-  const src = nodeById(nodes, edge.source);
-  const tgt = nodeById(nodes, edge.target);
+  const src = workspaceNodeById(nodes, edge.source);
+  const tgt = workspaceNodeById(nodes, edge.target);
   if (!src || !tgt) return;
 
   const d = useWorkspaceDomainStore.getState();
 
   if (src.type === NODE_TYPES.MODEL && tgt.type === NODE_TYPES.HYPOTHESIS) {
     const refId = getHypothesisRefId(tgt);
-    const inc = findIncubatorForHypothesis(allEdges, nodes, tgt.id);
+    const inc = findIncubatorForHypothesis(nodes, allEdges, tgt.id);
     if (refId && inc) d.linkHypothesisToIncubator(tgt.id, inc, refId);
     d.setHypothesisPlaceholder(tgt.id, isPlaceholderHypothesis(tgt.data));
     d.attachModelToTarget(src.id, tgt.id, NODE_TYPES.HYPOTHESIS);
@@ -71,14 +59,14 @@ export function syncDomainForNewEdge(
   if (src.type === NODE_TYPES.DESIGN_SYSTEM && tgt.type === NODE_TYPES.HYPOTHESIS) {
     d.attachDesignSystemToHypothesis(src.id, tgt.id);
     const refId = getHypothesisRefId(tgt);
-    const inc = findIncubatorForHypothesis(allEdges, nodes, tgt.id);
+    const inc = findIncubatorForHypothesis(nodes, allEdges, tgt.id);
     if (refId && inc) d.linkHypothesisToIncubator(tgt.id, inc, refId);
   }
 }
 
 export function syncDomainForRemovedEdge(edge: Pick<WorkspaceEdge, 'source' | 'target'>, nodes: WorkspaceNode[]): void {
-  const src = nodeById(nodes, edge.source);
-  const tgt = nodeById(nodes, edge.target);
+  const src = workspaceNodeById(nodes, edge.source);
+  const tgt = workspaceNodeById(nodes, edge.target);
   if (!src || !tgt) return;
 
   const d = useWorkspaceDomainStore.getState();

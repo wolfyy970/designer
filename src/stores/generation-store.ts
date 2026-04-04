@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { z } from 'zod';
 import type { GenerationResult } from '../types/provider';
+import type { EvaluationRoundSnapshot } from '../types/evaluation';
 import { GENERATION_STATUS } from '../constants/generation';
 import { storage } from '../storage';
 import { STORAGE_KEYS } from '../lib/storage-keys';
@@ -17,17 +18,92 @@ const generationStatusSchema = z.enum([
   GENERATION_STATUS.ERROR,
 ]);
 
-const persistedGenerationResultSchema = z
+const aggregatedHardFailSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  source: z.enum(['design', 'strategy', 'implementation', 'browser']),
+});
+
+const aggregatedEvaluationReportSchema = z.object({
+  overallScore: z.number(),
+  normalizedScores: z.record(z.string(), z.number()),
+  hardFails: z.array(aggregatedHardFailSchema),
+  prioritizedFixes: z.array(z.string()),
+  shouldRevise: z.boolean(),
+  revisionBrief: z.string(),
+});
+
+/** Persisted rounds omit `files` (stored in IndexedDB); worker slots stay loose for version tolerance. */
+const evaluatorWorkerReportPersistedSchema = z
   .object({
-    id: z.string(),
-    variantStrategyId: z.string(),
-    providerId: z.string(),
-    status: generationStatusSchema,
-    runId: z.string(),
-    runNumber: z.number(),
-    metadata: z.object({ model: z.string() }).passthrough().optional(),
+    rubric: z.enum(['design', 'strategy', 'implementation', 'browser']),
   })
   .passthrough();
+
+const evaluationRoundSnapshotPersistedSchema = z.object({
+  round: z.number(),
+  aggregate: aggregatedEvaluationReportSchema,
+  design: evaluatorWorkerReportPersistedSchema.optional(),
+  strategy: evaluatorWorkerReportPersistedSchema.optional(),
+  implementation: evaluatorWorkerReportPersistedSchema.optional(),
+  browser: evaluatorWorkerReportPersistedSchema.optional(),
+});
+
+const thinkingTurnSliceSchema = z.object({
+  turnId: z.number(),
+  text: z.string(),
+  startedAt: z.number(),
+  endedAt: z.number().optional(),
+});
+
+const persistedMetadataSchema = z.object({
+  model: z.string(),
+  tokensUsed: z.number().optional(),
+  durationMs: z.number().optional(),
+  completedAt: z.string().optional(),
+  truncated: z.boolean().optional(),
+});
+
+const persistedGenerationResultSchema = z.object({
+  id: z.string(),
+  variantStrategyId: z.string(),
+  providerId: z.string(),
+  status: generationStatusSchema,
+  runId: z.string(),
+  runNumber: z.number(),
+  metadata: persistedMetadataSchema.optional(),
+  error: z.string().optional(),
+  progressMessage: z.string().optional(),
+  activityLog: z.array(z.string()).optional(),
+  activityByTurn: z.record(z.string(), z.string()).optional(),
+  thinkingTurns: z.array(thinkingTurnSliceSchema).optional(),
+  evaluationSummary: aggregatedEvaluationReportSchema.optional(),
+  evaluationRounds: z.array(evaluationRoundSnapshotPersistedSchema).optional(),
+});
+
+function persistedRowToGenerationResult(
+  r: z.infer<typeof persistedGenerationResultSchema>,
+): GenerationResult {
+  const out: GenerationResult = {
+    id: r.id,
+    variantStrategyId: r.variantStrategyId,
+    providerId: r.providerId,
+    status: r.status,
+    runId: r.runId,
+    runNumber: r.runNumber,
+    metadata: r.metadata ?? { model: '' },
+  };
+  if (r.error !== undefined) out.error = r.error;
+  if (r.progressMessage !== undefined) out.progressMessage = r.progressMessage;
+  if (r.activityLog !== undefined) out.activityLog = r.activityLog;
+  if (r.activityByTurn !== undefined) out.activityByTurn = r.activityByTurn;
+  if (r.thinkingTurns !== undefined) out.thinkingTurns = r.thinkingTurns;
+  if (r.evaluationSummary !== undefined) out.evaluationSummary = r.evaluationSummary;
+  if (r.evaluationRounds !== undefined) {
+    out.evaluationRounds = r.evaluationRounds as EvaluationRoundSnapshot[];
+  }
+  return out;
+}
 
 const generationPersistSliceSchema = z.object({
   results: z.array(persistedGenerationResultSchema),
@@ -47,13 +123,7 @@ export function pickValidatedGenerationPersistSlice(state: Record<string, unknow
     userBestOverrides: state.userBestOverrides,
   });
   if (!parsed.success) return null;
-  const results = parsed.data.results.map(
-    (r) =>
-      ({
-        ...r,
-        metadata: r.metadata ?? { model: '' },
-      }) as GenerationResult,
-  );
+  const results = parsed.data.results.map(persistedRowToGenerationResult);
   return {
     results,
     selectedVersions: parsed.data.selectedVersions ?? {},

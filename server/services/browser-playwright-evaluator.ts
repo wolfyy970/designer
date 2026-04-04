@@ -5,7 +5,7 @@
 import { chromium, type Page } from 'playwright';
 import { bundleVirtualFS } from '../../src/lib/bundle-virtual-fs.ts';
 import type { EvaluatorWorkerReport } from '../../src/types/evaluation.ts';
-import { normalizeError } from '../lib/error-utils.ts';
+import { normalizeError } from '../../src/lib/error-utils.ts';
 
 export interface BrowserPlaywrightInput {
   files: Record<string, string>;

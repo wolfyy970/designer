@@ -1,42 +1,23 @@
 import { getProvider } from './providers/registry.ts';
-import { getPromptBody } from '../db/prompts.ts';
-import { extractCode, extractCodeStreaming } from '../lib/extract-code.ts';
-import { loggedGenerateChatStream } from '../lib/llm-call-logger.ts';
-import { normalizeError } from '../lib/error-utils.ts';
+import { normalizeError } from '../../src/lib/error-utils.ts';
 import { env } from '../env.ts';
 import { isLangfuseTracingEnabled } from '../lib/langfuse-tracing-enabled.ts';
 import { createTraceId, startActiveObservation } from '@langfuse/tracing';
-import {
-  runAgenticWithEvaluation,
-  type AgenticOrchestratorEvent,
-} from './agentic-orchestrator.ts';
-import type { ChatMessage } from '../../src/types/provider.ts';
+import { runAgenticWithEvaluation } from './agentic-orchestrator.ts';
 import type { GenerateStreamBody } from '../lib/generate-stream-schema.ts';
+import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
+import { agenticOrchestratorEventToSse } from '../lib/agentic-sse-map.ts';
+import { getPromptBody } from '../db/prompts.ts';
+import { createWriteGate, type WriteGate } from '../lib/sse-write-gate.ts';
+import { executeSingleShotGenerateStream } from './single-shot-generate-stream.ts';
+
+export { createWriteGate };
 
 export interface SseStreamWriter {
   writeSSE: (opts: { data: string; event: string; id: string }) => void | Promise<void>;
 }
 
-export interface WriteGate {
-  enqueue: (fn: () => Promise<void>) => Promise<void>;
-}
-
-export function createWriteGate(): WriteGate {
-  let tail = Promise.resolve();
-  return {
-    enqueue(fn: () => Promise<void>): Promise<void> {
-      const next = tail.then(fn);
-      tail = next.catch((e: unknown) => {
-        if (env.isDev && e != null) {
-          console.error('[write-gate]', e);
-        }
-      });
-      return next;
-    },
-  };
-}
-
-export type LaneEndMode = 'done' | 'lane_done';
+type LaneEndMode = 'done' | 'lane_done';
 
 const GENERATE_ROOT_SPAN_ID = '0000000000000002';
 
@@ -78,83 +59,13 @@ async function executeGenerateStream(
   };
 
   if (body.mode === 'agentic') {
-    const writeAgentic = async (event: AgenticOrchestratorEvent) => {
+    const writeAgentic = async (event: Parameters<typeof agenticOrchestratorEventToSse>[0]) => {
       if (abortSignal.aborted) {
         if (sseWriteAudit) sseWriteAudit.skippedAbort += 1;
         return;
       }
-      if (event.type === 'phase') {
-        await write('phase', { phase: event.phase });
-        return;
-      }
-      if (event.type === 'evaluation_progress') {
-        await write('evaluation_progress', {
-          round: event.round,
-          phase: event.phase,
-          message: event.message,
-        });
-        return;
-      }
-      if (event.type === 'evaluation_worker_done') {
-        await write('evaluation_worker_done', {
-          round: event.round,
-          rubric: event.rubric,
-          report: event.report,
-        });
-        return;
-      }
-      if (event.type === 'evaluation_report') {
-        await write('evaluation_report', { round: event.round, snapshot: event.snapshot });
-        return;
-      }
-      if (event.type === 'revision_round') {
-        await write('revision_round', { round: event.round, brief: event.brief });
-        return;
-      }
-      if (event.type === 'streaming_tool') {
-        await write('streaming_tool', {
-          toolName: event.toolName,
-          streamedChars: event.streamedChars,
-          done: event.done,
-          ...(event.toolPath != null ? { toolPath: event.toolPath } : {}),
-        });
-        return;
-      }
-      if (event.type === 'skills_loaded') {
-        await write('skills_loaded', { skills: event.skills });
-        return;
-      }
-      if (event.type === 'skill_activated') {
-        await write('skill_activated', {
-          key: event.key,
-          name: event.name,
-          description: event.description,
-        });
-        return;
-      }
-      if (event.type === 'trace') {
-        await write('trace', { trace: event.trace });
-        return;
-      }
-      if (event.type === 'thinking') {
-        await write('thinking', { delta: event.payload, turnId: event.turnId });
-        return;
-      }
-      if (event.type === 'activity') {
-        await write('activity', { entry: event.payload });
-      } else if (event.type === 'code') {
-        await write('code', { code: event.payload });
-      } else if (event.type === 'error') {
-        await write('error', { error: event.payload });
-      } else if (event.type === 'file') {
-        await write('file', { path: event.path, content: event.content });
-      } else if (event.type === 'plan') {
-        await write('plan', { files: event.files });
-      } else if (event.type === 'todos') {
-        await write('todos', { todos: event.todos });
-      } else {
-        await write('progress', { status: event.payload });
-      }
+      const { sseEvent, data } = agenticOrchestratorEventToSse(event);
+      await write(sseEvent, data);
     };
 
     const agenticResult = await runAgenticWithEvaluation({
@@ -176,12 +87,12 @@ async function executeGenerateStream(
       onStream: writeAgentic,
     });
     if (agenticResult?.checkpoint) {
-      await write('checkpoint', { checkpoint: agenticResult.checkpoint });
+      await write(SSE_EVENT_NAMES.checkpoint, { checkpoint: agenticResult.checkpoint });
     }
     if (laneEndMode === 'lane_done' && laneIndex !== undefined) {
-      await write('lane_done', { laneIndex });
+      await write(SSE_EVENT_NAMES.lane_done, { laneIndex });
     } else {
-      await write('done', {});
+      await write(SSE_EVENT_NAMES.done, {});
     }
     if (sseWriteAudit) {
       console.debug('[generate:SSE] agentic write summary', {
@@ -195,84 +106,23 @@ async function executeGenerateStream(
 
   const provider = getProvider(body.providerId);
   if (!provider) {
-    await write('error', { error: `Unknown provider: ${body.providerId}` });
+    await write(SSE_EVENT_NAMES.error, { error: `Unknown provider: ${body.providerId}` });
     return;
   }
 
   const runSingleShot = async () => {
-    const systemPrompt = await getPromptBody('genSystemHtml');
-    await write('progress', { status: 'Generating design…' });
-
-    const messages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: body.prompt },
-    ];
-
-    const streamStart = Date.now();
-    let lastChunkAt = streamStart;
-    const stallHeartbeatMs = 12_000;
-    const stallTimer = setInterval(() => {
-      const totalSec = Math.floor((Date.now() - streamStart) / 1000);
-      const idleSec = Math.floor((Date.now() - lastChunkAt) / 1000);
-      const status =
-        lastChunkAt === streamStart
-          ? `Waiting for model… ${totalSec}s`
-          : `Receiving response… idle ${idleSec}s · ${totalSec}s total`;
-      void write('progress', { status });
-    }, stallHeartbeatMs);
-
-    let lastCodeEmitAt = 0;
-    let lastEmittedPreviewLen = 0;
-    const emitStreamCode = async (raw: string, force: boolean) => {
-      const preview = extractCodeStreaming(raw);
-      const now = Date.now();
-      if (
-        !force &&
-        preview.length - lastEmittedPreviewLen < 160 &&
-        now - lastCodeEmitAt < 100
-      ) {
-        return;
-      }
-      lastCodeEmitAt = now;
-      lastEmittedPreviewLen = preview.length;
-      await write('code', { code: preview });
-    };
-
-    try {
-      const response = await loggedGenerateChatStream(
-        provider,
-        body.providerId,
-        messages,
-        {
-          model: body.modelId,
-          supportsVision: body.supportsVision,
-          signal: abortSignal,
-        },
-        {
-          source: 'builder',
-          phase: 'Single-shot generate',
-          ...(correlationId ? { correlationId } : {}),
-          signal: abortSignal,
-        },
-        async (accumulated) => {
-          lastChunkAt = Date.now();
-          await emitStreamCode(accumulated, false);
-        },
-      );
-
-      if (abortSignal.aborted) return;
-
-      const code = extractCode(response.raw);
-      await write('code', { code });
-    } finally {
-      clearInterval(stallTimer);
-    }
-
-    if (laneEndMode === 'lane_done' && laneIndex !== undefined) {
-      await write('lane_done', { laneIndex });
-    } else {
-      await write('done', {});
-    }
+    await executeSingleShotGenerateStream({
+      write,
+      provider,
+      prompt: body.prompt,
+      providerId: body.providerId,
+      modelId: body.modelId,
+      supportsVision: body.supportsVision,
+      abortSignal,
+      correlationId,
+      laneIndex,
+      laneEndMode,
+    });
   };
 
   if (!isLangfuseTracingEnabled() || !correlationId) {
@@ -323,7 +173,7 @@ export async function executeGenerateStreamSafe(
     await gate.enqueue(async () => {
       await stream.writeSSE({
         data: payload,
-        event: 'error',
+        event: SSE_EVENT_NAMES.error,
         id: options.allocId(),
       });
     });
@@ -331,7 +181,7 @@ export async function executeGenerateStreamSafe(
       await gate.enqueue(async () => {
         await stream.writeSSE({
           data: JSON.stringify({ laneIndex: options.laneIndex }),
-          event: 'lane_done',
+          event: SSE_EVENT_NAMES.lane_done,
           id: options.allocId(),
         });
       });

@@ -12,9 +12,10 @@ import {
   EDGE_TYPES,
   EDGE_STATUS,
 } from '../../constants/canvas';
+import { FORK_HYPOTHESIS_VARIANT_STACK_OFFSET_PX } from '../../lib/constants';
 import { GENERATION_STATUS } from '../../constants/generation';
-import { useWorkspaceDomainStore } from '../workspace-domain-store';
 import { useGenerationStore } from '../generation-store';
+import { syncVariantSlotsAfterFork, syncVariantSlotsAfterGenerate } from './canvas-sync-side-effects';
 import { linkHypothesesAfterCompile, syncDomainForNewEdge } from '../../workspace/domain-commands';
 import {
   HYPOTHESIS_STACK_GAP,
@@ -251,14 +252,7 @@ export const createSyncSlice: StateCreator<
 
     set({ nodes: newNodes, edges: newEdges, variantNodeIdMap: nodeIdMap });
 
-    const dom = useWorkspaceDomainStore.getState();
-    for (const result of results) {
-      const variantNodeId = nodeIdMap.get(result.variantStrategyId) ?? null;
-      dom.setVariantSlot(hypothesisNodeId, result.variantStrategyId, {
-        variantNodeId,
-        activeResultId: result.id,
-      });
-    }
+    syncVariantSlotsAfterGenerate(hypothesisNodeId, results, nodeIdMap);
 
     if (get().autoLayout) get().applyAutoLayout();
   },
@@ -296,7 +290,7 @@ export const createSyncSlice: StateCreator<
 
       return {
         ...n,
-        position: { x: n.position.x, y: n.position.y + 200 },
+        position: { x: n.position.x, y: n.position.y + FORK_HYPOTHESIS_VARIANT_STACK_OFFSET_PX },
         data: {
           ...n.data,
           pinnedRunId: active?.runId ?? UNKNOWN_PINNED_RUN_ID,
@@ -310,15 +304,6 @@ export const createSyncSlice: StateCreator<
 
     set({ nodes: newNodes, edges: newEdges });
 
-    const dom = useWorkspaceDomainStore.getState();
-    for (const n of newNodes) {
-      if (!variantIdSet.has(n.id)) continue;
-      const variantD = getVariantNodeData(n);
-      const vsId = variantD?.variantStrategyId;
-      const pin = variantD?.pinnedRunId;
-      if (vsId && pin) {
-        dom.setVariantSlot(hypothesisNodeId, vsId, { pinnedRunId: pin });
-      }
-    }
+    syncVariantSlotsAfterFork(hypothesisNodeId, newNodes, variantIdSet);
   },
 });

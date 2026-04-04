@@ -22,7 +22,14 @@ const minimalCompileBody = {
   spec: {
     id: 's1',
     title: 't',
-    sections: {},
+    sections: {
+      'design-brief': {
+        id: 'design-brief' as const,
+        content: '',
+        images: [],
+        lastModified: '',
+      },
+    },
     version: 1,
     createdAt: '',
     lastModified: '',
@@ -30,6 +37,57 @@ const minimalCompileBody = {
   providerId: 'lmstudio',
   modelId: 'local-llm',
 };
+
+const validSection = {
+  id: 'design-brief' as const,
+  content: '',
+  images: [] as [],
+  lastModified: '',
+};
+
+function bodyWithSpec(overrides: Record<string, unknown> = {}) {
+  return {
+    ...minimalCompileBody,
+    ...overrides,
+    spec: { ...minimalCompileBody.spec, ...(overrides.spec as object) },
+  };
+}
+
+describe('POST /api/compile validation', () => {
+  it('returns 400 when spec omits required DesignSpec fields', async () => {
+    const res = await app.request('http://localhost/api/compile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        spec: { id: 's1' },
+        providerId: 'openrouter',
+        modelId: 'm',
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(mocks.compileSpec).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when promptOptions.existingStrategies has invalid variant shape', async () => {
+    const res = await app.request('http://localhost/api/compile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(
+        bodyWithSpec({
+          spec: {
+            ...minimalCompileBody.spec,
+            sections: { 'design-brief': validSection },
+          },
+          promptOptions: {
+            existingStrategies: [{ name: 'only-name' }],
+          },
+        }),
+      ),
+    });
+    expect(res.status).toBe(400);
+    expect(mocks.compileSpec).not.toHaveBeenCalled();
+  });
+});
 
 describe('POST /api/compile lockdown', () => {
   afterEach(() => {

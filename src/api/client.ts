@@ -19,8 +19,9 @@ import type {
   EvaluatorRubricId,
   EvaluatorWorkerReport,
 } from '../types/evaluation';
-import { normalizeError, parseApiErrorBody } from '../lib/error-utils';
+import { formatZodFlattenDetails, normalizeError, parseApiErrorBody } from '../lib/error-utils';
 import { safeParseGenerateSSEEvent } from '../lib/generate-sse-event-schema';
+import { SSE_EVENT_NAMES } from '../constants/sse-events';
 import { readSseEventStream } from '../lib/sse-reader';
 import {
   attachSseDiagWindow,
@@ -211,16 +212,16 @@ function dispatchParsedGenerateStreamEvent(
   callbacks: GenerateStreamCallbacks,
 ): void {
   switch (event.type) {
-    case 'progress':
+    case SSE_EVENT_NAMES.progress:
       callbacks.onProgress?.(event.status);
       break;
-    case 'activity':
+    case SSE_EVENT_NAMES.activity:
       callbacks.onActivity?.(event.entry);
       break;
-    case 'thinking':
+    case SSE_EVENT_NAMES.thinking:
       callbacks.onThinking?.(event.turnId, event.delta);
       break;
-    case 'streaming_tool':
+    case SSE_EVENT_NAMES.streaming_tool:
       callbacks.onStreamingTool?.(
         event.toolName,
         event.streamedChars,
@@ -228,55 +229,62 @@ function dispatchParsedGenerateStreamEvent(
         event.toolPath,
       );
       break;
-    case 'trace':
-      callbacks.onTrace?.(event.trace);
+    case SSE_EVENT_NAMES.trace:
+      callbacks.onTrace?.(event.trace as RunTraceEvent);
       break;
-    case 'code':
+    case SSE_EVENT_NAMES.code:
       callbacks.onCode?.(event.code);
       break;
-    case 'error':
+    case SSE_EVENT_NAMES.error:
       callbacks.onError?.(event.error);
       break;
-    case 'file':
+    case SSE_EVENT_NAMES.file:
       callbacks.onFile?.(event.path, event.content);
       break;
-    case 'plan':
+    case SSE_EVENT_NAMES.plan:
       callbacks.onPlan?.(event.files);
       break;
-    case 'todos':
+    case SSE_EVENT_NAMES.todos:
       callbacks.onTodos?.(event.todos);
       break;
-    case 'phase':
+    case SSE_EVENT_NAMES.phase:
       callbacks.onPhase?.(event.phase);
       break;
-    case 'evaluation_progress':
+    case SSE_EVENT_NAMES.evaluation_progress:
       callbacks.onEvaluationProgress?.(event.round, event.phase, event.message);
       break;
-    case 'evaluation_worker_done':
-      callbacks.onEvaluationWorkerDone?.(event.round, event.rubric, event.report);
+    case SSE_EVENT_NAMES.evaluation_worker_done:
+      callbacks.onEvaluationWorkerDone?.(
+        event.round,
+        event.rubric,
+        event.report as unknown as EvaluatorWorkerReport,
+      );
       break;
-    case 'evaluation_report':
-      callbacks.onEvaluationReport?.(event.round, event.snapshot);
+    case SSE_EVENT_NAMES.evaluation_report:
+      callbacks.onEvaluationReport?.(
+        event.round,
+        event.snapshot as unknown as EvaluationRoundSnapshot,
+      );
       break;
-    case 'revision_round':
+    case SSE_EVENT_NAMES.revision_round:
       callbacks.onRevisionRound?.(event.round, event.brief);
       break;
-    case 'skills_loaded':
+    case SSE_EVENT_NAMES.skills_loaded:
       callbacks.onSkillsLoaded?.(event.skills);
       break;
-    case 'skill_activated':
+    case SSE_EVENT_NAMES.skill_activated:
       callbacks.onSkillActivated?.({
         key: event.key,
         name: event.name,
         description: event.description,
       });
       break;
-    case 'checkpoint':
-      callbacks.onCheckpoint?.(event.checkpoint);
+    case SSE_EVENT_NAMES.checkpoint:
+      callbacks.onCheckpoint?.(event.checkpoint as unknown as AgenticCheckpoint);
       break;
-    case 'lane_done':
+    case SSE_EVENT_NAMES.lane_done:
       break;
-    case 'done':
+    case SSE_EVENT_NAMES.done:
       callbacks.onDone?.();
       break;
   }
@@ -292,6 +300,12 @@ function dispatchGenerateStreamEvent(
   if (!result.ok) {
     diag?.recordDrop('zod', currentEvent);
     callbacks.onParseError?.(currentEvent, data, result.error);
+    const detail = formatZodFlattenDetails(result.error.flatten());
+    const first = result.error.issues[0];
+    const suffix = detail || (first ? `: ${first.path.join('.')}: ${first.message}` : '');
+    callbacks.onError?.(
+      normalizeError(new Error(`Invalid SSE event "${currentEvent}"${suffix}`)),
+    );
     if (import.meta.env.DEV) {
       console.warn('[generate SSE] invalid payload', currentEvent, result.error.flatten(), data);
     }
@@ -343,6 +357,7 @@ export async function generateHypothesisStream(
 
   try {
     await readSseEventStream(reader, async (currentEvent, raw) => {
+      let notifyError: GenerateStreamCallbacks | undefined;
       try {
         if (currentEvent.trim() === '') {
           diag.recordDrop('empty_event_name', raw.slice(0, 120));
@@ -354,18 +369,22 @@ export async function generateHypothesisStream(
           if (import.meta.env.DEV) {
             console.warn('[generate SSE] non-object or invalid JSON line', currentEvent);
           }
+          lanes[0]?.callbacks.onError?.(
+            normalizeError(new Error(`Invalid JSON in SSE event "${currentEvent}"`)),
+          );
           return;
         }
-        if (currentEvent === 'lane_done') {
-          diag.recordReceived('lane_done');
+        if (currentEvent === SSE_EVENT_NAMES.lane_done) {
+          diag.recordReceived(SSE_EVENT_NAMES.lane_done);
           const idx = parsed.laneIndex;
           if (typeof idx === 'number' && lanes[idx]) {
+            notifyError = lanes[idx].callbacks;
             await lanes[idx].finalizeAfterStream();
           }
           return;
         }
-        if (currentEvent === 'done') {
-          diag.recordReceived('done');
+        if (currentEvent === SSE_EVENT_NAMES.done) {
+          diag.recordReceived(SSE_EVENT_NAMES.done);
           return;
         }
         const { laneIndex, rest } = stripLaneIndex(parsed);
@@ -373,7 +392,7 @@ export async function generateHypothesisStream(
           import.meta.env.DEV &&
           typeof laneIndex !== 'number' &&
           lanes.length > 1 &&
-          currentEvent !== 'done'
+          currentEvent !== SSE_EVENT_NAMES.done
         ) {
           console.debug('[sse:diag] laneIndex missing; using lane 0 fallback', currentEvent);
         }
@@ -382,14 +401,17 @@ export async function generateHypothesisStream(
             ? lanes[laneIndex].callbacks
             : lanes[0]?.callbacks;
         if (cbs) {
+          notifyError = cbs;
           dispatchGenerateStreamEvent(currentEvent, rest, cbs, diag);
         } else {
           diag.recordDrop('no_callbacks', currentEvent);
         }
-      } catch {
+      } catch (err) {
         diag.recordDrop('handler_throw', currentEvent);
+        const fallback = lanes[0]?.callbacks;
+        (notifyError ?? fallback)?.onError?.(normalizeError(err));
         if (import.meta.env.DEV) {
-          console.warn('[generate SSE] handler error', currentEvent);
+          console.warn('[generate SSE] handler error', currentEvent, err);
         }
       }
     });

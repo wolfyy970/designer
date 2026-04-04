@@ -2,14 +2,12 @@
  * Runtime validation for generate/hypothesis SSE payloads before callbacks run.
  * SSE `event:` line is authoritative for `type` (body `type` is ignored if present).
  *
- * Keep discriminant branches aligned with {@link GenerateSSEEvent} in `src/api/types.ts`
- * (Zod uses passthrough on nested objects; the exported TS union remains the callback contract).
+ * {@link GenerateSSEEvent} is `z.infer<typeof generateSSEEventSchema>` (re-exported from `src/api/types.ts`).
  */
 import { z } from 'zod';
-import type { GenerateSSEEvent } from '../api/types';
 import { evaluatorRubricIdZodSchema } from './evaluator-rubric-zod';
-
-const agenticPhaseSchema = z.enum(['building', 'evaluating', 'revising', 'complete']);
+import { SSE_EVENT_NAMES } from '../constants/sse-events';
+import { agenticPhaseZodSchema } from '../constants/agentic-stream';
 
 /** Trace envelope: required fields + passthrough for optional RunTraceEvent keys. */
 const runTraceEventSchema = z
@@ -47,35 +45,35 @@ const agenticCheckpointSchema = z
  * payloads use loose object schemas (required keys + passthrough).
  */
 export const generateSSEEventSchema = z.union([
-  z.object({ type: z.literal('progress'), status: z.string() }),
-  z.object({ type: z.literal('activity'), entry: z.string() }),
+  z.object({ type: z.literal(SSE_EVENT_NAMES.progress), status: z.string() }),
+  z.object({ type: z.literal(SSE_EVENT_NAMES.activity), entry: z.string() }),
   z.object({
-    type: z.literal('thinking'),
+    type: z.literal(SSE_EVENT_NAMES.thinking),
     delta: z.string(),
     turnId: z.number(),
   }),
   z.object({
-    type: z.literal('streaming_tool'),
+    type: z.literal(SSE_EVENT_NAMES.streaming_tool),
     toolName: z.string(),
     streamedChars: z.number(),
     done: z.boolean(),
     toolPath: z.string().optional(),
   }),
-  z.object({ type: z.literal('trace'), trace: runTraceEventSchema }),
-  z.object({ type: z.literal('code'), code: z.string() }),
-  z.object({ type: z.literal('error'), error: z.string() }),
-  z.object({ type: z.literal('file'), path: z.string(), content: z.string() }),
-  z.object({ type: z.literal('plan'), files: z.array(z.string()) }),
-  z.object({ type: z.literal('todos'), todos: z.array(todoItemSchema) }),
-  z.object({ type: z.literal('phase'), phase: agenticPhaseSchema }),
+  z.object({ type: z.literal(SSE_EVENT_NAMES.trace), trace: runTraceEventSchema }),
+  z.object({ type: z.literal(SSE_EVENT_NAMES.code), code: z.string() }),
+  z.object({ type: z.literal(SSE_EVENT_NAMES.error), error: z.string() }),
+  z.object({ type: z.literal(SSE_EVENT_NAMES.file), path: z.string(), content: z.string() }),
+  z.object({ type: z.literal(SSE_EVENT_NAMES.plan), files: z.array(z.string()) }),
+  z.object({ type: z.literal(SSE_EVENT_NAMES.todos), todos: z.array(todoItemSchema) }),
+  z.object({ type: z.literal(SSE_EVENT_NAMES.phase), phase: agenticPhaseZodSchema }),
   z.object({
-    type: z.literal('evaluation_progress'),
+    type: z.literal(SSE_EVENT_NAMES.evaluation_progress),
     round: z.number(),
     phase: z.string(),
     message: z.string().optional(),
   }),
   z.object({
-    type: z.literal('evaluation_worker_done'),
+    type: z.literal(SSE_EVENT_NAMES.evaluation_worker_done),
     round: z.number(),
     rubric: evaluatorRubricIdZodSchema,
     report: z
@@ -85,13 +83,13 @@ export const generateSSEEventSchema = z.union([
       .passthrough(),
   }),
   z.object({
-    type: z.literal('evaluation_report'),
+    type: z.literal(SSE_EVENT_NAMES.evaluation_report),
     round: z.number(),
     snapshot: evaluationReportSnapshotSchema,
   }),
-  z.object({ type: z.literal('revision_round'), round: z.number(), brief: z.string() }),
+  z.object({ type: z.literal(SSE_EVENT_NAMES.revision_round), round: z.number(), brief: z.string() }),
   z.object({
-    type: z.literal('skills_loaded'),
+    type: z.literal(SSE_EVENT_NAMES.skills_loaded),
     skills: z.array(
       z.object({
         key: z.string(),
@@ -101,15 +99,18 @@ export const generateSSEEventSchema = z.union([
     ),
   }),
   z.object({
-    type: z.literal('skill_activated'),
+    type: z.literal(SSE_EVENT_NAMES.skill_activated),
     key: z.string(),
     name: z.string(),
     description: z.string(),
   }),
-  z.object({ type: z.literal('checkpoint'), checkpoint: agenticCheckpointSchema }),
-  z.object({ type: z.literal('lane_done'), laneIndex: z.number() }),
-  z.object({ type: z.literal('done') }),
+  z.object({ type: z.literal(SSE_EVENT_NAMES.checkpoint), checkpoint: agenticCheckpointSchema }),
+  z.object({ type: z.literal(SSE_EVENT_NAMES.lane_done), laneIndex: z.number() }),
+  z.object({ type: z.literal(SSE_EVENT_NAMES.done) }),
 ]);
+
+/** Parsed SSE event shape — single source of truth with {@link generateSSEEventSchema}. */
+export type GenerateSSEEvent = z.infer<typeof generateSSEEventSchema>;
 
 /** Drop `type` from body so the SSE event line always wins. */
 export function mergeSseEventPayload(
@@ -134,5 +135,5 @@ export function safeParseGenerateSSEEvent(
   if (!parsed.success) {
     return { ok: false, error: parsed.error };
   }
-  return { ok: true, event: parsed.data as GenerateSSEEvent };
+  return { ok: true, event: parsed.data };
 }

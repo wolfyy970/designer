@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { agenticPhaseZodSchema } from '../constants/agentic-stream';
 
 /** Mirrors `RunTraceKind` in `types/provider.ts` for log payload validation. */
 const runTraceKindSchema = z.enum([
@@ -20,14 +21,12 @@ const runTraceKindSchema = z.enum([
   'skill_activated',
 ]);
 
-const agenticPhaseSchema = z.enum(['building', 'evaluating', 'revising', 'complete']);
-
 export const runTraceEventSchema = z.object({
   id: z.string(),
   at: z.string(),
   kind: runTraceKindSchema,
   label: z.string(),
-  phase: agenticPhaseSchema.optional(),
+  phase: agenticPhaseZodSchema.optional(),
   round: z.number().optional(),
   toolName: z.string().optional(),
   path: z.string().optional(),

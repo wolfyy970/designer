@@ -5,16 +5,15 @@ import {
   useRef,
   useState,
 } from 'react';
-import {
-  Brain,
-  ChevronDown,
-  ChevronRight,
-  ChevronsDown,
-  Wrench,
-} from 'lucide-react';
+import { Brain, Wrench } from 'lucide-react';
 import type { RunTraceEvent, StreamingToolLiveness, ThinkingTurnSlice } from '../../../types/provider';
 import { StreamdownTimeline } from './StreamdownTimeline.tsx';
 import { formatStreamArgSize } from '../../../lib/format-stream-arg-size';
+import {
+  TimelineAccordionChrome,
+  TimelineEmptyStateSkeleton,
+  TimelineJumpToLatest,
+} from './timeline-parts.tsx';
 
 const NEAR_BOTTOM_PX = 48;
 
@@ -138,37 +137,28 @@ function ThinkingBlock({
   if (!show) return null;
 
   return (
-    <div className="mb-2 border-l-2 border-border-subtle pl-2">
-      <button
-        type="button"
-        onPointerDown={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-        onClick={onToggle}
-        className="nodrag flex w-full items-center gap-1.5 rounded px-0 py-0.5 text-left text-badge text-fg-muted transition-colors hover:bg-surface-nested/50 hover:text-fg-secondary"
-      >
-        {open ? (
-          <ChevronDown size={12} className="shrink-0 opacity-70" />
-        ) : (
-          <ChevronRight size={12} className="shrink-0 opacity-70" />
-        )}
-        <Brain size={12} className="shrink-0 text-fg-faint" />
-        <span className="font-medium">Thinking</span>
-        <span className="tabular-nums text-fg-faint">
-          ({durationSec < 10 ? durationSec.toFixed(1) : Math.round(durationSec)}
-          s)
-        </span>
-        {isStreaming && isActiveTurn && (
-          <span className="ml-1 inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-        )}
-      </button>
-      {open && (
+    <TimelineAccordionChrome
+      open={open}
+      onToggle={onToggle}
+      icon={<Brain size={12} className="shrink-0 text-fg-faint" />}
+      title="Thinking"
+      trailing={
+        <>
+          <span className="tabular-nums text-fg-faint">
+            ({durationSec < 10 ? durationSec.toFixed(1) : Math.round(durationSec)}s)
+          </span>
+          {isStreaming && isActiveTurn && (
+            <span className="ml-1 inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+          )}
+        </>
+      }
+    >
+      {open ? (
         <pre className="mt-1 max-h-[var(--max-height-timeline-scroll)] overflow-y-auto whitespace-pre-wrap break-words rounded bg-surface-nested/40 px-2 py-1.5 font-mono text-badge leading-snug text-fg-muted">
           {text || (isStreaming && isActiveTurn ? '…' : '')}
         </pre>
-      )}
-    </div>
+      ) : null}
+    </TimelineAccordionChrome>
   );
 }
 
@@ -202,42 +192,34 @@ function ToolUseBlock({
     : undefined;
 
   return (
-    <div className="mb-2 border-l-2 border-border-subtle pl-2">
-      <button
-        type="button"
-        onPointerDown={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-        onClick={onToggle}
-        className="nodrag flex w-full items-center gap-1.5 rounded px-0 py-0.5 text-left text-badge text-fg-muted transition-colors hover:bg-surface-nested/50 hover:text-fg-secondary"
-      >
-        {open ? (
-          <ChevronDown size={12} className="shrink-0 opacity-70" />
-        ) : (
-          <ChevronRight size={12} className="shrink-0 opacity-70" />
-        )}
-        <Wrench size={12} className="shrink-0 text-fg-faint" />
-        <span className="font-medium">Tool use</span>
-        {traces.length > 0 && (
-          <span className="tabular-nums text-fg-faint">({traces.length})</span>
-        )}
-        {isStreamingArgs && (
-          <>
-            <span className="ml-1 inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-            <span className="min-w-0 truncate text-fg-secondary">
-              {headerLabel}
-              <span className="ml-1 text-fg-faint">
-                ({formatStreamArgSize(streamingToolChars ?? 0)})
+    <TimelineAccordionChrome
+      open={open}
+      onToggle={onToggle}
+      icon={<Wrench size={12} className="shrink-0 text-fg-faint" />}
+      title="Tool use"
+      trailing={
+        <>
+          {traces.length > 0 && (
+            <span className="tabular-nums text-fg-faint">({traces.length})</span>
+          )}
+          {isStreamingArgs && (
+            <>
+              <span className="ml-1 inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+              <span className="min-w-0 truncate text-fg-secondary">
+                {headerLabel}
+                <span className="ml-1 text-fg-faint">
+                  ({formatStreamArgSize(streamingToolChars ?? 0)})
+                </span>
               </span>
-            </span>
-          </>
-        )}
-        {!isStreamingArgs && isStreaming && isActiveTurn && (
-          <span className="ml-1 inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-        )}
-      </button>
-      {open && (
+            </>
+          )}
+          {!isStreamingArgs && isStreaming && isActiveTurn && (
+            <span className="ml-1 inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+          )}
+        </>
+      }
+    >
+      {open ? (
         <div className="mt-1 max-h-[var(--max-height-timeline-scroll)] space-y-px overflow-y-auto rounded bg-surface-nested/40 px-2 py-1.5">
           {traces.map((t) => (
             <TraceLine key={t.id} t={t} />
@@ -255,8 +237,8 @@ function ToolUseBlock({
             </div>
           )}
         </div>
-      )}
-    </div>
+      ) : null}
+    </TimelineAccordionChrome>
   );
 }
 
@@ -423,44 +405,13 @@ export function Timeline({
             {streamBodyNoTrace}
           </StreamdownTimeline>
         </div>
-        {showJump ? (
-          <button
-            type="button"
-            onPointerDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onClick={jumpToLatest}
-            className="nodrag absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border-subtle bg-surface-floating-strong px-3 py-1 text-nano font-medium text-fg-secondary shadow-md backdrop-blur-sm hover:bg-surface-raised hover:text-fg"
-          >
-            <ChevronsDown size={12} />
-            Latest
-          </button>
-        ) : null}
+        {showJump ? <TimelineJumpToLatest onClick={jumpToLatest} /> : null}
       </div>
     );
   }
 
   if (!hasTrace && !hasAnyOutput) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col justify-center p-4">
-        <div className="flex flex-col gap-2">
-          <div className="h-3 w-4/5 animate-pulse rounded bg-border-pulse-mid" />
-          <div
-            className="h-2.5 w-full animate-pulse rounded bg-border-pulse-track"
-            style={{ animationDelay: '75ms' }}
-          />
-          <div
-            className="h-2.5 w-[90%] animate-pulse rounded bg-border-pulse-track"
-            style={{ animationDelay: '150ms' }}
-          />
-          <div
-            className="h-2.5 w-3/4 animate-pulse rounded bg-border-pulse-track"
-            style={{ animationDelay: '225ms' }}
-          />
-        </div>
-      </div>
-    );
+    return <TimelineEmptyStateSkeleton />;
   }
 
   return (
@@ -561,20 +512,7 @@ export function Timeline({
         )}
       </div>
 
-      {showJump ? (
-        <button
-          type="button"
-          onPointerDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onClick={jumpToLatest}
-          className="nodrag absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border-subtle bg-surface-floating-strong px-3 py-1 text-nano font-medium text-fg-secondary shadow-md backdrop-blur-sm hover:bg-surface-raised hover:text-fg"
-        >
-          <ChevronsDown size={12} />
-          Latest
-        </button>
-      ) : null}
+      {showJump ? <TimelineJumpToLatest onClick={jumpToLatest} /> : null}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { getLogEntries, clearLogEntries } from '../log-store.ts';
 import { appendTraceLines, getTraceLogLines } from '../trace-log-store.ts';
+import { parseRequestJson } from '../lib/parse-request.ts';
 
 const logs = new Hono();
 
@@ -34,11 +35,8 @@ logs.get('/', (c) => {
 });
 
 logs.post('/trace', async (c) => {
-  const raw = await c.req.json();
-  const parsed = PostTraceBodySchema.safeParse(raw);
-  if (!parsed.success) {
-    return c.json({ error: 'Invalid request', details: parsed.error.flatten() }, 400);
-  }
+  const parsed = await parseRequestJson(c, PostTraceBodySchema);
+  if (!parsed.ok) return parsed.response;
   const { correlationId, resultId, events } = parsed.data;
   appendTraceLines(
     events.map((event) => ({

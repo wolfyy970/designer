@@ -10,5 +10,3 @@ export const DomainDesignSystemContentSchema = z.object({
   providerMigration: z.string().optional(),
   modelMigration: z.string().optional(),
 });
-
-export type DomainDesignSystemContentWire = z.infer<typeof DomainDesignSystemContentSchema>;

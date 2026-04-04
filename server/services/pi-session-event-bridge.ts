@@ -89,6 +89,18 @@ interface StreamingToolAcc {
   lastEmitAt: number;
 }
 
+const TOOL_PATH_ARG_KEYS = ['path', 'file', 'filePath', 'target_file'] as const;
+
+/** Shared path resolution for Pi tool argument objects (partial + finalized tool calls). */
+export function toolPathFromArgsRecord(args: Record<string, unknown> | undefined): string | undefined {
+  if (!args || typeof args !== 'object') return undefined;
+  for (const key of TOOL_PATH_ARG_KEYS) {
+    const v = args[key];
+    if (typeof v === 'string' && v.length > 0) return v;
+  }
+  return undefined;
+}
+
 function toolMetaFromPartial(
   partial: AssistantMessage,
   contentIndex: number,
@@ -102,262 +114,299 @@ function toolMetaFromPartial(
   ) {
     const tc = slice as { name?: string; arguments?: Record<string, unknown> };
     const toolName = typeof tc.name === 'string' && tc.name.length > 0 ? tc.name : 'tool';
-    let toolPath: string | undefined;
-    const args = tc.arguments;
-    if (args && typeof args === 'object') {
-      for (const key of ['path', 'file', 'filePath', 'target_file'] as const) {
-        const v = args[key];
-        if (typeof v === 'string' && v.length > 0) {
-          toolPath = v;
-          break;
-        }
-      }
-    }
+    const toolPath = toolPathFromArgsRecord(tc.arguments);
     return { toolName, toolPath };
   }
   return { toolName: 'tool' };
 }
 
 function toolPathFromToolCall(toolCall: { name?: string; arguments?: Record<string, unknown> }): string | undefined {
-  const args = toolCall.arguments;
-  if (!args || typeof args !== 'object') return undefined;
-  for (const key of ['path', 'file', 'filePath', 'target_file'] as const) {
-    const v = args[key];
-    if (typeof v === 'string' && v.length > 0) return v;
+  return toolPathFromArgsRecord(toolCall.arguments);
+}
+
+/** text_delta and thinking_delta share append + emit behavior; only SSE event shape differs. */
+function handleAssistantTextStreamDelta(
+  ctx: PiSessionBridgeContext,
+  rawDelta: string | undefined,
+  kind: 'activity' | 'thinking',
+): void {
+  if (!rawDelta) return;
+  emitFirstTokenIfNeeded(ctx);
+  const delta = stripProviderControlTokens(rawDelta);
+  if (!delta) return;
+  bumpStreamActivity(ctx);
+  const logId = ctx.turnLogRef.current;
+  if (logId) appendLlmCallResponse(logId, delta);
+  if (kind === 'activity') {
+    safeBridgeEmit(ctx, { type: 'activity', payload: delta });
+    return;
   }
-  return undefined;
+  safeBridgeEmit(ctx, {
+    type: 'thinking',
+    payload: delta,
+    turnId: ctx.modelTurnId.current,
+  });
+}
+
+type BridgeMaps = {
+  toolStartMs: Map<string, number>;
+  streamingToolByIndex: Map<number, StreamingToolAcc>;
+};
+
+function handleTurnStart(ctx: PiSessionBridgeContext, maps: BridgeMaps): void {
+  const { toolStartMs } = maps;
+  bumpStreamActivity(ctx);
+  ctx.modelTurnId.current += 1;
+  safeBridgeEmit(ctx, { type: 'progress', payload: 'Model turn…' });
+  ctx.waitingForFirstToken.current = true;
+  safeBridgeEmit(
+    ctx,
+    ctx.trace('model_turn_start', 'Model turn started', {
+      phase: 'building',
+    }),
+  );
+  debugAgentIngest({
+    hypothesisId: 'H1',
+    location: 'pi-session-event-bridge.ts:turn_start',
+    message: 'model turn_start',
+    data: {
+      modelTurnId: ctx.modelTurnId.current,
+      pendingToolCalls: toolStartMs.size,
+    },
+  });
+  syncPendingToolProbe(ctx, toolStartMs);
+}
+
+function handleMessageUpdate(
+  ctx: PiSessionBridgeContext,
+  maps: BridgeMaps,
+  event: Extract<AgentSessionEvent, { type: 'message_update' }>,
+): void {
+  const msg = event.assistantMessageEvent;
+  const { streamingToolByIndex } = maps;
+
+  switch (msg.type) {
+    case 'text_delta': {
+      handleAssistantTextStreamDelta(ctx, msg.delta, 'activity');
+      return;
+    }
+    case 'thinking_delta': {
+      handleAssistantTextStreamDelta(ctx, msg.delta, 'thinking');
+      return;
+    }
+    case 'toolcall_start': {
+      emitFirstTokenIfNeeded(ctx);
+      bumpStreamActivity(ctx);
+      const idx = msg.contentIndex;
+      const { toolName, toolPath } = toolMetaFromPartial(msg.partial, idx);
+      const now = Date.now();
+      streamingToolByIndex.set(idx, {
+        toolName,
+        toolPath,
+        streamedChars: 0,
+        lastEmitAt: now,
+      });
+      safeBridgeEmit(ctx, {
+        type: 'streaming_tool',
+        toolName,
+        streamedChars: 0,
+        done: false,
+        ...(toolPath != null ? { toolPath } : {}),
+      });
+      return;
+    }
+    case 'toolcall_delta': {
+      if (!msg.delta) return;
+      emitFirstTokenIfNeeded(ctx);
+      bumpStreamActivity(ctx);
+      const idx = msg.contentIndex;
+      let acc = streamingToolByIndex.get(idx);
+      if (!acc) {
+        const meta = toolMetaFromPartial(msg.partial, idx);
+        const now = Date.now();
+        acc = {
+          toolName: meta.toolName,
+          toolPath: meta.toolPath,
+          streamedChars: 0,
+          lastEmitAt: now,
+        };
+        streamingToolByIndex.set(idx, acc);
+      }
+      const pathFromPartial = toolMetaFromPartial(msg.partial, idx).toolPath;
+      if (pathFromPartial && !acc.toolPath) acc.toolPath = pathFromPartial;
+      acc.streamedChars += msg.delta.length;
+      const t = Date.now();
+      if (t - acc.lastEmitAt >= STREAMING_TOOL_EMIT_INTERVAL_MS) {
+        acc.lastEmitAt = t;
+        safeBridgeEmit(ctx, {
+          type: 'streaming_tool',
+          toolName: acc.toolName,
+          streamedChars: acc.streamedChars,
+          done: false,
+          ...(acc.toolPath != null ? { toolPath: acc.toolPath } : {}),
+        });
+      }
+      return;
+    }
+    case 'toolcall_end': {
+      bumpStreamActivity(ctx);
+      const idx = msg.contentIndex;
+      const acc = streamingToolByIndex.get(idx);
+      const tc = msg.toolCall as { name?: string; arguments?: Record<string, unknown> };
+      const toolName =
+        (typeof tc?.name === 'string' && tc.name.length > 0 ? tc.name : acc?.toolName) ?? 'tool';
+      const toolPath = toolPathFromToolCall(tc) ?? acc?.toolPath;
+      const streamedChars = acc?.streamedChars ?? 0;
+      streamingToolByIndex.delete(idx);
+      safeBridgeEmit(ctx, {
+        type: 'streaming_tool',
+        toolName,
+        streamedChars,
+        done: true,
+        ...(toolPath != null ? { toolPath } : {}),
+      });
+      return;
+    }
+    default:
+      return;
+  }
+}
+
+function handleToolExecutionStart(ctx: PiSessionBridgeContext, maps: BridgeMaps, event: AgentSessionEvent): void {
+  if (event.type !== 'tool_execution_start') return;
+  const { toolStartMs } = maps;
+  bumpStreamActivity(ctx);
+  const tn = event.toolName;
+  const rawArgs = event.args as Record<string, unknown> | undefined;
+  const command = typeof rawArgs?.command === 'string' ? rawArgs.command : undefined;
+  const { path, pattern } = parsePiToolExecutionArgs(tn, event.args);
+  const reusedToolCallId = toolStartMs.has(event.toolCallId);
+  toolStartMs.set(event.toolCallId, Date.now());
+  debugAgentIngest({
+    hypothesisId: 'H2',
+    location: 'pi-session-event-bridge.ts:tool_execution_start',
+    message: 'tool_execution_start',
+    data: {
+      toolCallId: event.toolCallId,
+      toolName: tn,
+      path,
+      pattern,
+      reusedToolCallId,
+      commandPreview: command != null && command.length > 160 ? `${command.slice(0, 157)}…` : command,
+      pendingAfter: toolStartMs.size,
+    },
+  });
+  syncPendingToolProbe(ctx, toolStartMs);
+  ctx.toolPathByCallId.set(event.toolCallId, path);
+  safeBridgeEmit(
+    ctx,
+    ctx.trace('tool_started', path ? `${tn} → ${path}` : `Started ${tn}`, {
+      phase: 'building',
+      toolName: tn,
+      path,
+    }),
+  );
+  safeBridgeEmit(ctx, {
+    type: 'progress',
+    payload: toolStartProgressPayload(tn, path, pattern, command),
+  });
+}
+
+function handleToolExecutionEnd(ctx: PiSessionBridgeContext, maps: BridgeMaps, event: AgentSessionEvent): void {
+  if (event.type !== 'tool_execution_end') return;
+  const { toolStartMs } = maps;
+  bumpStreamActivity(ctx);
+  const started = toolStartMs.get(event.toolCallId);
+  const durationMs = started != null ? Date.now() - started : undefined;
+  toolStartMs.delete(event.toolCallId);
+  debugAgentIngest({
+    hypothesisId: started == null ? 'H3' : 'H2',
+    location: 'pi-session-event-bridge.ts:tool_execution_end',
+    message: 'tool_execution_end',
+    data: {
+      toolCallId: event.toolCallId,
+      toolName: event.toolName,
+      isError: event.isError,
+      durationMs,
+      hadMatchedStart: started != null,
+      orphanEnd: started == null,
+      pendingAfter: toolStartMs.size,
+    },
+  });
+  syncPendingToolProbe(ctx, toolStartMs);
+  if (event.isError) {
+    const path = ctx.toolPathByCallId.get(event.toolCallId);
+    safeBridgeEmit(
+      ctx,
+      ctx.trace('tool_failed', `Tool failed: ${event.toolName}`, {
+        phase: 'building',
+        toolName: event.toolName,
+        path,
+        status: 'error',
+      }),
+    );
+    safeBridgeEmit(ctx, {
+      type: 'progress',
+      payload: `Tool failed: ${event.toolName}`,
+    });
+  } else {
+    const path = ctx.toolPathByCallId.get(event.toolCallId);
+    safeBridgeEmit(
+      ctx,
+      ctx.trace('tool_finished', `Finished ${event.toolName}`, {
+        phase: 'building',
+        toolName: event.toolName,
+        path,
+        status: 'success',
+      }),
+    );
+  }
+  ctx.toolPathByCallId.delete(event.toolCallId);
+}
+
+function handleCompactionStart(ctx: PiSessionBridgeContext): void {
+  safeBridgeEmit(ctx, { type: 'progress', payload: 'Compacting context…' });
+  safeBridgeEmit(
+    ctx,
+    ctx.trace('compaction', 'Compacting context window', {
+      phase: 'building',
+    }),
+  );
 }
 
 /** Subscribe until `unsubscribe()`; call when the agent session is ready. */
 export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBridgeContext): () => void {
-  const toolStartMs = new Map<string, number>();
-  const streamingToolByIndex = new Map<number, StreamingToolAcc>();
-  syncPendingToolProbe(ctx, toolStartMs);
+  const maps: BridgeMaps = {
+    toolStartMs: new Map<string, number>(),
+    streamingToolByIndex: new Map<number, StreamingToolAcc>(),
+  };
+  syncPendingToolProbe(ctx, maps.toolStartMs);
   return session.subscribe((event: AgentSessionEvent) => {
     let handled = false;
-    if (event.type === 'turn_start') {
-      handled = true;
-      bumpStreamActivity(ctx);
-      ctx.modelTurnId.current += 1;
-      safeBridgeEmit(ctx, { type: 'progress', payload: 'Model turn…' });
-      ctx.waitingForFirstToken.current = true;
-      safeBridgeEmit(
-        ctx,
-        ctx.trace('model_turn_start', 'Model turn started', {
-          phase: 'building',
-        }),
-      );
-      debugAgentIngest({
-        hypothesisId: 'H1',
-        location: 'pi-session-event-bridge.ts:turn_start',
-        message: 'model turn_start',
-        data: {
-          modelTurnId: ctx.modelTurnId.current,
-          pendingToolCalls: toolStartMs.size,
-        },
-      });
-      syncPendingToolProbe(ctx, toolStartMs);
-      return;
+    switch (event.type) {
+      case 'turn_start':
+        handled = true;
+        handleTurnStart(ctx, maps);
+        return;
+      case 'message_update':
+        handled = true;
+        handleMessageUpdate(ctx, maps, event);
+        return;
+      case 'tool_execution_start':
+        handled = true;
+        handleToolExecutionStart(ctx, maps, event);
+        return;
+      case 'tool_execution_end':
+        handled = true;
+        handleToolExecutionEnd(ctx, maps, event);
+        return;
+      case 'compaction_start':
+        handled = true;
+        handleCompactionStart(ctx);
+        return;
+      default:
+        break;
     }
-
-    if (event.type === 'message_update') {
-      handled = true;
-      const e = event.assistantMessageEvent;
-      if (e.type === 'text_delta' && e.delta) {
-        emitFirstTokenIfNeeded(ctx);
-        const delta = stripProviderControlTokens(e.delta);
-        if (delta) {
-          bumpStreamActivity(ctx);
-          const logId = ctx.turnLogRef.current;
-          if (logId) appendLlmCallResponse(logId, delta);
-          safeBridgeEmit(ctx, { type: 'activity', payload: delta });
-        }
-      } else if (e.type === 'thinking_delta' && e.delta) {
-        emitFirstTokenIfNeeded(ctx);
-        const delta = stripProviderControlTokens(e.delta);
-        if (delta) {
-          bumpStreamActivity(ctx);
-          const logId = ctx.turnLogRef.current;
-          if (logId) appendLlmCallResponse(logId, delta);
-          safeBridgeEmit(ctx, {
-            type: 'thinking',
-            payload: delta,
-            turnId: ctx.modelTurnId.current,
-          });
-        }
-      } else if (e.type === 'toolcall_start') {
-        emitFirstTokenIfNeeded(ctx);
-        bumpStreamActivity(ctx);
-        const idx = e.contentIndex;
-        const { toolName, toolPath } = toolMetaFromPartial(e.partial, idx);
-        const now = Date.now();
-        streamingToolByIndex.set(idx, {
-          toolName,
-          toolPath,
-          streamedChars: 0,
-          lastEmitAt: now,
-        });
-        safeBridgeEmit(ctx, {
-          type: 'streaming_tool',
-          toolName,
-          streamedChars: 0,
-          done: false,
-          ...(toolPath != null ? { toolPath } : {}),
-        });
-      } else if (e.type === 'toolcall_delta' && e.delta) {
-        emitFirstTokenIfNeeded(ctx);
-        bumpStreamActivity(ctx);
-        const idx = e.contentIndex;
-        let acc = streamingToolByIndex.get(idx);
-        if (!acc) {
-          const meta = toolMetaFromPartial(e.partial, idx);
-          const now = Date.now();
-          acc = {
-            toolName: meta.toolName,
-            toolPath: meta.toolPath,
-            streamedChars: 0,
-            lastEmitAt: now,
-          };
-          streamingToolByIndex.set(idx, acc);
-        }
-        const pathFromPartial = toolMetaFromPartial(e.partial, idx).toolPath;
-        if (pathFromPartial && !acc.toolPath) acc.toolPath = pathFromPartial;
-        acc.streamedChars += e.delta.length;
-        const t = Date.now();
-        if (t - acc.lastEmitAt >= STREAMING_TOOL_EMIT_INTERVAL_MS) {
-          acc.lastEmitAt = t;
-          safeBridgeEmit(ctx, {
-            type: 'streaming_tool',
-            toolName: acc.toolName,
-            streamedChars: acc.streamedChars,
-            done: false,
-            ...(acc.toolPath != null ? { toolPath: acc.toolPath } : {}),
-          });
-        }
-      } else if (e.type === 'toolcall_end') {
-        bumpStreamActivity(ctx);
-        const idx = e.contentIndex;
-        const acc = streamingToolByIndex.get(idx);
-        const tc = e.toolCall as { name?: string; arguments?: Record<string, unknown> };
-        const toolName =
-          (typeof tc?.name === 'string' && tc.name.length > 0 ? tc.name : acc?.toolName) ?? 'tool';
-        const toolPath = toolPathFromToolCall(tc) ?? acc?.toolPath;
-        const streamedChars = acc?.streamedChars ?? 0;
-        streamingToolByIndex.delete(idx);
-        safeBridgeEmit(ctx, {
-          type: 'streaming_tool',
-          toolName,
-          streamedChars,
-          done: true,
-          ...(toolPath != null ? { toolPath } : {}),
-        });
-      }
-      return;
-    }
-
-    if (event.type === 'tool_execution_start') {
-      handled = true;
-      bumpStreamActivity(ctx);
-      const tn = event.toolName;
-      const rawArgs = event.args as Record<string, unknown> | undefined;
-      const command = typeof rawArgs?.command === 'string' ? rawArgs.command : undefined;
-      const { path, pattern } = parsePiToolExecutionArgs(tn, event.args);
-      const reusedToolCallId = toolStartMs.has(event.toolCallId);
-      toolStartMs.set(event.toolCallId, Date.now());
-      debugAgentIngest({
-        hypothesisId: 'H2',
-        location: 'pi-session-event-bridge.ts:tool_execution_start',
-        message: 'tool_execution_start',
-        data: {
-          toolCallId: event.toolCallId,
-          toolName: tn,
-          path,
-          pattern,
-          reusedToolCallId,
-          commandPreview:
-            command != null && command.length > 160 ? `${command.slice(0, 157)}…` : command,
-          pendingAfter: toolStartMs.size,
-        },
-      });
-      syncPendingToolProbe(ctx, toolStartMs);
-      ctx.toolPathByCallId.set(event.toolCallId, path);
-      safeBridgeEmit(
-        ctx,
-        ctx.trace('tool_started', path ? `${tn} → ${path}` : `Started ${tn}`, {
-          phase: 'building',
-          toolName: tn,
-          path,
-        }),
-      );
-      safeBridgeEmit(ctx, {
-        type: 'progress',
-        payload: toolStartProgressPayload(tn, path, pattern, command),
-      });
-      return;
-    }
-
-    if (event.type === 'tool_execution_end') {
-      handled = true;
-      bumpStreamActivity(ctx);
-      const started = toolStartMs.get(event.toolCallId);
-      const durationMs = started != null ? Date.now() - started : undefined;
-      toolStartMs.delete(event.toolCallId);
-      debugAgentIngest({
-        hypothesisId: started == null ? 'H3' : 'H2',
-        location: 'pi-session-event-bridge.ts:tool_execution_end',
-        message: 'tool_execution_end',
-        data: {
-          toolCallId: event.toolCallId,
-          toolName: event.toolName,
-          isError: event.isError,
-          durationMs,
-          hadMatchedStart: started != null,
-          orphanEnd: started == null,
-          pendingAfter: toolStartMs.size,
-        },
-      });
-      syncPendingToolProbe(ctx, toolStartMs);
-      if (event.isError) {
-        const path = ctx.toolPathByCallId.get(event.toolCallId);
-        safeBridgeEmit(
-          ctx,
-          ctx.trace('tool_failed', `Tool failed: ${event.toolName}`, {
-            phase: 'building',
-            toolName: event.toolName,
-            path,
-            status: 'error',
-          }),
-        );
-        safeBridgeEmit(ctx, {
-          type: 'progress',
-          payload: `Tool failed: ${event.toolName}`,
-        });
-      } else {
-        const path = ctx.toolPathByCallId.get(event.toolCallId);
-        safeBridgeEmit(
-          ctx,
-          ctx.trace('tool_finished', `Finished ${event.toolName}`, {
-            phase: 'building',
-            toolName: event.toolName,
-            path,
-            status: 'success',
-          }),
-        );
-      }
-      ctx.toolPathByCallId.delete(event.toolCallId);
-    }
-
-    if (event.type === 'compaction_start') {
-      handled = true;
-      safeBridgeEmit(ctx, { type: 'progress', payload: 'Compacting context…' });
-      safeBridgeEmit(
-        ctx,
-        ctx.trace('compaction', 'Compacting context window', {
-          phase: 'building',
-        }),
-      );
-    }
-
     if (!handled && process.env.NODE_ENV !== 'production') {
       console.debug('[bridge] unhandled Pi event type:', (event as { type?: string }).type);
     }

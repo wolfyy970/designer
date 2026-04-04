@@ -57,13 +57,13 @@ export async function migrateLegacyStoragePrefixes(): Promise<void> {
         if (v !== undefined) await set(k, v, next);
       }
     }
+
+    localStorage.setItem(LEGACY_PREFIX_MIGRATION_FLAG, '1');
   } catch (err) {
     if (import.meta.env.DEV) {
       console.warn('[migration] Legacy storage prefix rename failed:', err);
     }
   }
-
-  localStorage.setItem(LEGACY_PREFIX_MIGRATION_FLAG, '1');
 }
 
 interface PersistedResult {

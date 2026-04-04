@@ -37,7 +37,8 @@ export async function getBaselinePromptBody(key: PromptKey): Promise<string | nu
     const parsed = parseTextPromptGet(res);
     if (parsed.ok) return parsed.prompt;
     return null;
-  } catch {
+  } catch (err) {
+    logUnexpectedLangfusePromptDev('getBaselinePromptBody', key, err);
     return null;
   }
 }

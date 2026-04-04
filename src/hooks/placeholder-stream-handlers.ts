@@ -16,6 +16,7 @@ import {
   traceRowEvaluationReport,
   traceRowRevisionRound,
 } from './placeholder-trace-rows';
+import { normalizeError } from '../lib/error-utils';
 
 function streamDevDebug(placeholderId: string, message: string, data?: Record<string, unknown>): void {
   if (!import.meta.env.DEV) return;
@@ -148,7 +149,7 @@ export function createPlaceholderStreamCallbacks(options: {
           hypothesisId: 'E1',
           location: 'placeholder-stream-handlers.ts:onEvaluationReport:error',
           message: 'onEvaluationReport threw',
-          data: { placeholderId, err: String(err) },
+          data: { placeholderId, err: normalizeError(err) },
         });
         if (import.meta.env.DEV) {
           console.warn('[gen] onEvaluationReport failed', err);

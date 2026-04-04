@@ -23,7 +23,12 @@ import { mergePreflightWithPlaywright, runBrowserPlaywrightEval } from './browse
 import { parseJsonLenient } from '../lib/parse-json-lenient.ts';
 import { createPreviewSession, deletePreviewSession } from './preview-session-store.ts';
 import { encodeVirtualPathForUrl, resolvePreviewEntryPath } from '../../src/lib/preview-entry.ts';
-import { normalizeError } from '../lib/error-utils.ts';
+import { normalizeError } from '../../src/lib/error-utils.ts';
+import {
+  REVISION_GATE_CRITICAL_SCORE_MAX,
+  REVISION_GATE_LOW_AVERAGE_THRESHOLD,
+} from '../lib/evaluation-revision-gate.ts';
+import { extractLlmJsonObjectSegment } from '../lib/extract-llm-json.ts';
 
 const criterionSchema = z.object({
   score: z.number(),
@@ -48,34 +53,32 @@ export const evaluatorWorkerReportSchema = z.object({
   ),
 });
 
-function coerceFindingLikeArray(v: unknown): unknown[] {
+function coerceToArray(
+  v: unknown,
+  isSingleItem: (o: Record<string, unknown>) => boolean,
+): unknown[] {
   if (v === undefined || v === null) return [];
   if (Array.isArray(v)) return v;
   if (typeof v === 'object') {
     const o = v as Record<string, unknown>;
-    if (
-      typeof o.severity === 'string' &&
-      typeof o.summary === 'string' &&
-      typeof o.detail === 'string'
-    ) {
-      return [v];
-    }
+    if (isSingleItem(o)) return [v];
     return Object.values(o);
   }
   return [];
 }
 
+function coerceFindingLikeArray(v: unknown): unknown[] {
+  return coerceToArray(
+    v,
+    (o) =>
+      typeof o.severity === 'string' &&
+      typeof o.summary === 'string' &&
+      typeof o.detail === 'string',
+  );
+}
+
 function coerceHardFailLikeArray(v: unknown): unknown[] {
-  if (v === undefined || v === null) return [];
-  if (Array.isArray(v)) return v;
-  if (typeof v === 'object') {
-    const o = v as Record<string, unknown>;
-    if (typeof o.code === 'string' && typeof o.message === 'string') {
-      return [v];
-    }
-    return Object.values(o);
-  }
-  return [];
+  return coerceToArray(v, (o) => typeof o.code === 'string' && typeof o.message === 'string');
 }
 
 /**
@@ -136,15 +139,10 @@ export function parseModelJsonObject<T>(
   schema: z.ZodType<T>,
   normalize?: (parsed: unknown) => unknown,
 ): T {
-  let s = raw.trim();
-  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fence) s = fence[1].trim();
-  const start = s.indexOf('{');
-  const end = s.lastIndexOf('}');
-  if (start === -1 || end <= start) {
-    throw new Error('Evaluator model returned no JSON object');
-  }
-  const jsonStr = s.slice(start, end + 1);
+  const jsonStr = extractLlmJsonObjectSegment(raw, {
+    requireObject: true,
+    emptyMessage: 'Evaluator model returned no JSON object',
+  });
   let parsed: unknown = parseJsonLenient(jsonStr);
   if (normalize) parsed = normalize(parsed);
   return schema.parse(parsed);
@@ -376,33 +374,36 @@ export async function runEvaluationWorkers(
       }
     };
 
-    if (input.parallel) {
-      const emitDone = (rubric: EvaluatorRubricId, report: EvaluatorWorkerReport) => {
-        input.onWorkerDone?.(rubric, report);
-        return report;
-      };
-      const wrap = (p: Promise<EvaluatorWorkerReport>, rubric: EvaluatorRubricId) =>
-        p.then(
-          (report) => emitDone(rubric, report),
-          (reason) => emitDone(rubric, buildDegradedReport(rubric, reason)),
+    const rubricJobs: { rubric: EvaluatorRubricId; run: () => Promise<EvaluatorWorkerReport> }[] = [
+      { rubric: 'design', run: runDesign },
+      { rubric: 'strategy', run: runStrategy },
+      { rubric: 'implementation', run: runImpl },
+      { rubric: 'browser', run: runBrowser },
+    ];
+
+    const emitDone = (rubric: EvaluatorRubricId, report: EvaluatorWorkerReport) => {
+      input.onWorkerDone?.(rubric, report);
+      return report;
+    };
+
+    const runWorker = (job: (typeof rubricJobs)[number]) =>
+      job
+        .run()
+        .then((report) => emitDone(job.rubric, report), (reason) =>
+          emitDone(job.rubric, buildDegradedReport(job.rubric, reason)),
         );
-      const [design, strategy, implementation, browser] = await Promise.all([
-        wrap(runDesign(), 'design'),
-        wrap(runStrategy(), 'strategy'),
-        wrap(runImpl(), 'implementation'),
-        wrap(runBrowser(), 'browser'),
-      ]);
+
+    if (input.parallel) {
+      const [design, strategy, implementation, browser] = await Promise.all(rubricJobs.map(runWorker));
       return { design, strategy, implementation, browser };
     }
 
-    const design = await runDesign();
-    input.onWorkerDone?.('design', design);
-    const strategy = await runStrategy();
-    input.onWorkerDone?.('strategy', strategy);
-    const implementation = await runImpl();
-    input.onWorkerDone?.('implementation', implementation);
-    const browser = await runBrowser();
-    input.onWorkerDone?.('browser', browser);
+    const [design, strategy, implementation, browser] = [
+      await runWorker(rubricJobs[0]!),
+      await runWorker(rubricJobs[1]!),
+      await runWorker(rubricJobs[2]!),
+      await runWorker(rubricJobs[3]!),
+    ];
     return { design, strategy, implementation, browser };
   } finally {
     deletePreviewSession(previewSessionId);
@@ -478,7 +479,7 @@ export function aggregateEvaluationReports(reports: WorkerBundle): AggregatedEva
   };
 }
 
-export interface IsEvalSatisfiedOptions {
+interface IsEvalSatisfiedOptions {
   /** If set, treat as satisfied when overallScore >= this and there are zero hard fails, even if shouldRevise is still true. */
   minOverallScore?: number;
 }
@@ -507,9 +508,9 @@ export function enforceRevisionGate(report: AggregatedEvaluationReport): Aggrega
   const scores = Object.values(report.normalizedScores);
   const avg =
     scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : report.overallScore;
-  const anyCritical = scores.some((s) => s <= 2);
+  const anyCritical = scores.some((s) => s <= REVISION_GATE_CRITICAL_SCORE_MAX);
   const hasHardFails = report.hardFails.length > 0;
-  const lowAverage = avg < 3.5;
+  const lowAverage = avg < REVISION_GATE_LOW_AVERAGE_THRESHOLD;
   const shouldRevise = report.shouldRevise || hasHardFails || anyCritical || lowAverage;
   return {
     ...report,

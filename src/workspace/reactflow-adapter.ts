@@ -37,7 +37,7 @@ function fromReactFlowNode(node: Node): WorkspaceNode {
   return w;
 }
 
-export function toReactFlowEdge(edge: WorkspaceEdge): Edge {
+function toReactFlowEdge(edge: WorkspaceEdge): Edge {
   return { ...edge } as Edge;
 }
 

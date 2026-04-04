@@ -1,5 +1,5 @@
 ---
-name: Design quality
+name: Design quality basics
 description: Use when establishing layout, typography scale, spacing rhythm, or visual hierarchy. Activate for polish, scanability, above-the-fold structure, or density on static HTML/CSS. Covers hierarchy, spacing, and craft without a build step.
 tags:
   - layout

@@ -7,6 +7,7 @@ import type { Static } from '@sinclair/typebox';
 import { minimatch } from 'minimatch';
 import type { Bash } from 'just-bash';
 import { debugAgentIngest } from '../../lib/debug-agent-ingest.ts';
+import { normalizeError } from '../../../src/lib/error-utils.ts';
 import { SANDBOX_PROJECT_ROOT } from '../agent-bash-sandbox.ts';
 import {
   createReadToolDefinition,
@@ -319,7 +320,7 @@ export function createVirtualPiCodingTools(
           hypothesisId: 'H4',
           location: 'virtual-tools.ts:ls:error',
           message: 'virtual ls throw',
-          data: { toolCallId, err: String(err) },
+          data: { toolCallId, err: normalizeError(err) },
         });
         throw err;
       }

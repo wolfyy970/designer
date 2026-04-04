@@ -1,16 +1,24 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import type { DesignSpec } from '../../src/types/spec.ts';
-import type { CompilerPromptOptions } from '../lib/prompts/compiler-user.ts';
+import { DesignSpecSchema } from '../../src/types/spec.ts';
+import type { CompilerPromptOptions } from '../../src/lib/prompts/compiler-user.ts';
+import { VariantStrategySchema } from '../lib/hypothesis-schemas.ts';
 import { compileSpec } from '../services/compiler.ts';
 import { getPromptBody } from '../db/prompts.ts';
-import { normalizeError } from '../lib/error-utils.ts';
+import { apiJsonError } from '../lib/api-json-error.ts';
+import { normalizeError } from '../../src/lib/error-utils.ts';
 import { clampProviderModel } from '../lib/lockdown-model.ts';
+import { parseRequestJson } from '../lib/parse-request.ts';
 
 const compile = new Hono();
 
+const CompilerPromptOptionsSchema = z.object({
+  count: z.number().int().positive().optional(),
+  existingStrategies: z.array(VariantStrategySchema).optional(),
+}) satisfies z.ZodType<CompilerPromptOptions>;
+
 const CompileRequestSchema = z.object({
-  spec: z.object({ id: z.string() }).passthrough(),
+  spec: DesignSpecSchema,
   providerId: z.string().min(1),
   modelId: z.string().min(1),
   referenceDesigns: z.array(z.object({
@@ -18,18 +26,12 @@ const CompileRequestSchema = z.object({
     code: z.string(),
   })).optional(),
   supportsVision: z.boolean().optional(),
-  promptOptions: z.object({
-    count: z.number().int().positive().optional(),
-    existingStrategies: z.array(z.unknown()).optional(),
-  }).optional(),
+  promptOptions: CompilerPromptOptionsSchema.optional(),
 });
 
 compile.post('/', async (c) => {
-  const raw = await c.req.json();
-  const parsed = CompileRequestSchema.safeParse(raw);
-  if (!parsed.success) {
-    return c.json({ error: 'Invalid request', details: parsed.error.flatten() }, 400);
-  }
+  const parsed = await parseRequestJson(c, CompileRequestSchema);
+  if (!parsed.ok) return parsed.response;
   const pinned = clampProviderModel(parsed.data.providerId, parsed.data.modelId);
   const body = { ...parsed.data, providerId: pinned.providerId, modelId: pinned.modelId };
 
@@ -40,7 +42,7 @@ compile.post('/', async (c) => {
 
   try {
     const result = await compileSpec(
-      body.spec as DesignSpec,
+      body.spec,
       body.modelId,
       body.providerId,
       {
@@ -48,12 +50,12 @@ compile.post('/', async (c) => {
         userPromptTemplate,
         referenceDesigns: body.referenceDesigns,
         supportsVision: body.supportsVision,
-        promptOptions: body.promptOptions as CompilerPromptOptions | undefined,
+        promptOptions: body.promptOptions,
       },
     );
     return c.json(result);
   } catch (err) {
-    return c.json({ error: normalizeError(err) }, 500);
+    return apiJsonError(c, 500, normalizeError(err));
   }
 });
 

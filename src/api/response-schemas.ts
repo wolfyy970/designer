@@ -149,9 +149,6 @@ export const ObservabilityLogsResponseSchema = z.object({
   trace: z.array(ObservabilityLineTraceSchema),
 });
 
-/** @deprecated Use ObservabilityLogsResponseSchema */
-export const LlmLogListResponseSchema = z.array(LlmLogEntrySchema);
-
 /** GET /api/prompts/:key/history */
 export const PromptHistoryListSchema = z.array(
   z.object({

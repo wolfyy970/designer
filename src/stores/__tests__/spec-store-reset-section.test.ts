@@ -27,7 +27,9 @@ describe('useSpecStore resetSectionContent', () => {
     expect(state['design-brief'].content).toBe('keep other sections untouched');
   });
 
-  it('updates the cleared section lastModified', () => {
+  it('updates the cleared section lastModified', async () => {
+    // `now()` is ms-resolution; same tick as beforeEach's addImage yields identical ISO strings.
+    await new Promise<void>((r) => setTimeout(r, 2));
     const sectionBefore = useSpecStore.getState().spec.sections['research-context'];
     useSpecStore.getState().resetSectionContent('research-context');
     const sectionAfter = useSpecStore.getState().spec.sections['research-context'];

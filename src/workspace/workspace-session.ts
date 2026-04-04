@@ -15,13 +15,10 @@ import {
   evaluationPayloadFromHypothesisContext as evaluationPayloadPure,
   provenanceFromHypothesisContext as provenancePure,
   type HypothesisGenerationContext,
-  type ModelCredential,
   type WorkspaceGraphSnapshot,
 } from './hypothesis-generation-pure';
 
-export type { ModelCredential, WorkspaceGraphSnapshot, HypothesisGenerationContext };
-
-export { buildHypothesisGenerationContextFromInputs } from './hypothesis-generation-pure';
+export type { HypothesisGenerationContext };
 
 export function buildHypothesisGenerationContext(input: {
   hypothesisNodeId: string;

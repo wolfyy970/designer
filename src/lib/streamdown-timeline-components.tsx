@@ -3,6 +3,7 @@
  * headings (and plain-text blocks) with Lucide icons that match the design system.
  */
 import {
+  createElement,
   type ComponentType,
   type HTMLAttributes,
   type ReactNode,
@@ -109,11 +110,14 @@ function makeTimelineHeading(Level: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6') {
     if (!hadEmoji) {
       return <Level {...rest}>{children}</Level>;
     }
-    const Icon = pickTimelineIcon(stripped);
     return (
       <Level {...rest}>
         <span className="inline-flex items-center gap-1.5">
-          <Icon className={headingIconCls} strokeWidth={2} aria-hidden />
+          {createElement(pickTimelineIcon(stripped), {
+            className: headingIconCls,
+            strokeWidth: 2,
+            'aria-hidden': true,
+          })}
           <span>{stripped}</span>
         </span>
       </Level>
@@ -135,11 +139,14 @@ function emojiAwarePlainBlock(
   if (!hadEmoji) {
     return <Tag {...rest}>{children}</Tag>;
   }
-  const Icon = pickTimelineIcon(stripped);
   return (
     <Tag {...rest}>
       <span className="inline-flex items-start gap-1.5">
-        <Icon className={blockIconCls} strokeWidth={2} aria-hidden />
+        {createElement(pickTimelineIcon(stripped), {
+          className: blockIconCls,
+          strokeWidth: 2,
+          'aria-hidden': true,
+        })}
         <span>{stripped}</span>
       </span>
     </Tag>

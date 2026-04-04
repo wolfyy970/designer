@@ -1,6 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
-import { Loader2, AlertCircle } from 'lucide-react';
 import { useGenerationStore } from '../../../stores/generation-store';
 import { normalizeError } from '../../../lib/error-utils';
 import { useCompilerStore, findVariantStrategy } from '../../../stores/compiler-store';
@@ -23,24 +22,16 @@ import { variantStatus } from '../../../lib/node-status';
 import { GENERATION_STATUS } from '../../../constants/generation';
 import { abortGenerationForStrategy } from '../../../lib/generation-abort-registry';
 import { downloadFilesAsZip } from '../../../lib/zip-utils';
-import {
-  type DesignDebugExportOptions,
-  buildDesignRunDebugMarkdown,
-  downloadTextFile,
-} from '../../../lib/debug-markdown-export';
-import { loadProvenance, loadCode, loadFiles } from '../../../services/idb-storage';
 import NodeShell from './NodeShell';
 import VariantToolbar from './VariantToolbar';
 import VariantFooter from './VariantFooter';
-import FileExplorer from './FileExplorer';
-import {
-  DesignDebugExportDialog,
-  EvaluationScorecard,
-  GeneratingFooter,
-  AgenticHarnessStripe,
-  ArtifactPreviewFrame,
-} from '../variant-run';
-import { pickLivenessSlice } from '../../../types/provider';
+import { DesignDebugExportDialog, EvaluationScorecard } from '../variant-run';
+import { VariantNodeGenerating } from './VariantNodeGenerating';
+import { VariantNodeErrorState } from './VariantNodeErrorState';
+import { VariantNodePendingState } from './VariantNodePendingState';
+import { VariantNodeSingleFileBody } from './VariantNodeSingleFileBody';
+import { VariantNodeMultiFileBody } from './VariantNodeMultiFileBody';
+import { useVariantNodeDebugExport } from './useVariantNodeDebugExport';
 
 type VariantNodeType = Node<VariantNodeData, 'variant'>;
 
@@ -68,12 +59,9 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
 
   const hasUserBestOverride = !!(variantStrategyId && userBestOverrides[variantStrategyId]);
 
-  // Legacy fallback: if no variantStrategyId, use refId directly
   const legacyResult = useMemo(
     () =>
-      !variantStrategyId && data.refId
-        ? results.find((r) => r.id === data.refId)
-        : undefined,
+      !variantStrategyId && data.refId ? results.find((r) => r.id === data.refId) : undefined,
     [variantStrategyId, data.refId, results],
   );
   const result = activeResult ?? legacyResult;
@@ -81,10 +69,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
 
   const deleteResult = useGenerationStore((s) => s.deleteResult);
 
-  // Load code from IndexedDB (single-file)
   const { code, isLoading: codeLoading } = useResultCode(result?.id, result?.status);
-
-  // Load files from IndexedDB (multi-file)
   const { files } = useResultFiles(result?.id, result?.status);
 
   const strategy = useCompilerStore((s) => {
@@ -103,10 +88,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
   const removeFromCanvas = useNodeRemoval(id);
   const { requestPermanentDelete } = useRequestPermanentDelete();
 
-  const variantDeleteCopy = useMemo(
-    () => variantNodeDeleteCopy(variantName),
-    [variantName],
-  );
+  const variantDeleteCopy = useMemo(() => variantNodeDeleteCopy(variantName), [variantName]);
 
   const onRemove = useCallback(() => {
     requestPermanentDelete({
@@ -118,15 +100,12 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
     });
   }, [variantDeleteCopy, removeFromCanvas, requestPermanentDelete]);
 
-  // Tab state for multi-file complete view
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
   const [activeCodeFile, setActiveCodeFile] = useState<string | undefined>(undefined);
 
-  // Determine whether we're in multi-file mode
   const currentFiles = files ?? result?.liveFiles;
   const isMultiFile = !!currentFiles && Object.keys(currentFiles).length > 0;
 
-  // Auto-select code file when switching to code tab
   useEffect(() => {
     if (activeTab === 'code' && !activeCodeFile && currentFiles) {
       const ordered = preferredArtifactFileOrder(currentFiles);
@@ -138,8 +117,6 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
   const handleDeleteVersion = useCallback(async () => {
     if (!result || !versionKey) return;
     const resultId = result.id;
-    // Select a survivor before deleting (use full stack — not only completed —
-    // so multi-lane / error / in-flight rows keep a stable selection).
     if (stack.length > 1) {
       const nextResult =
         completedStack.find((r) => r.id !== resultId) ?? stack.find((r) => r.id !== resultId);
@@ -182,62 +159,20 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
     }
   }, [files, code, slug]);
 
-  const [debugExportOpen, setDebugExportOpen] = useState(false);
-
-  const debugExportPreviewInput = useMemo(
-    () =>
-      result
-        ? {
-            exportedAt: new Date().toISOString(),
-            variantNodeId: id,
-            variantName,
-            strategyName: strategy?.name,
-            strategy,
-            result,
-            code: code ?? result.liveCode ?? undefined,
-            files: files ?? result.liveFiles ?? undefined,
-          }
-        : null,
-    [id, variantName, strategy, result, code, files],
-  );
-
-  const handleConfirmDebugExport = useCallback(
-    async (exportOptions: DesignDebugExportOptions) => {
-      if (!result) return;
-      const safeLoad = async <T,>(p: Promise<T | undefined>): Promise<T | undefined> => {
-        try {
-          return await p;
-        } catch {
-          return undefined;
-        }
-      };
-      const [provenance, codeIdb, filesIdb] = await Promise.all([
-        safeLoad(loadProvenance(result.id)),
-        safeLoad(loadCode(result.id)),
-        safeLoad(loadFiles(result.id)),
-      ]);
-      const mergedFiles = filesIdb ?? files ?? result.liveFiles;
-      const mergedCode = codeIdb ?? code ?? result.liveCode;
-      const md = buildDesignRunDebugMarkdown(
-        {
-          exportedAt: new Date().toISOString(),
-          variantNodeId: id,
-          variantName,
-          strategyName: strategy?.name,
-          strategy,
-          result,
-          provenance: provenance ?? undefined,
-          code: mergedCode ?? undefined,
-          files: mergedFiles ?? undefined,
-        },
-        exportOptions,
-      );
-      const stamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-      downloadTextFile(`${slug}-run-v${result.runNumber}-debug-${stamp}.md`, md);
-      setDebugExportOpen(false);
-    },
-    [id, result, variantName, strategy, slug, code, files],
-  );
+  const {
+    debugExportOpen,
+    setDebugExportOpen,
+    debugExportPreviewInput,
+    handleConfirmDebugExport,
+  } = useVariantNodeDebugExport({
+    result,
+    nodeId: id,
+    variantName,
+    strategy,
+    slug,
+    code,
+    files,
+  });
 
   const { contentRef, zoom, zoomIn, zoomOut, resetZoom } = useVariantZoom();
 
@@ -262,11 +197,8 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
     hasCode,
   });
 
-  const stackClass = stackTotal >= 3
-    ? 'variant-stack-deep'
-    : stackTotal === 2
-      ? 'variant-stack'
-      : '';
+  const stackClass =
+    stackTotal >= 3 ? 'variant-stack-deep' : stackTotal === 2 ? 'variant-stack' : '';
 
   return (
     <NodeShell
@@ -305,7 +237,9 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
         onDownloadDebug={result ? () => setDebugExportOpen(true) : undefined}
         onDeleteVersion={confirmDeleteVersion}
         onExpand={() => setExpandedVariant(id)}
-        onToggleWorkspace={() => isWorkspaceOpen ? closeRunInspector() : setRunInspectorVariant(id)}
+        onToggleWorkspace={() =>
+          isWorkspaceOpen ? closeRunInspector() : setRunInspectorVariant(id)
+        }
         isWorkspaceOpen={isWorkspaceOpen}
         onRemove={onRemove}
         showClearUserBest={!isArchived && hasUserBestOverride}
@@ -326,163 +260,42 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
         }
       />
 
-      {/* ── Content area ──────────────────────────────────────── */}
       <div ref={contentRef} className="relative flex-1 overflow-hidden">
-
-        {/* States 1 & 2: GENERATING */}
         {result?.status === GENERATION_STATUS.GENERATING && (
-          <div className="absolute inset-0 flex flex-col bg-surface">
-            <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-3 px-4 py-3">
-              <AgenticHarnessStripe
-                phase={result.agenticPhase}
-                evaluationStatus={result.evaluationStatus}
-              />
-              <p className="text-center text-micro text-fg-secondary">
-                Generating in workspace — open the side panel for tasks, activity, and preview.
-              </p>
-              <button
-                type="button"
-                className="nodrag nowheel rounded-md border border-accent-border-muted bg-accent-surface px-3 py-1.5 text-micro font-medium text-accent transition-colors hover:bg-accent-surface-hover"
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setRunInspectorVariant(id);
-                }}
-              >
-                Open workspace
-              </button>
-            </div>
-            <GeneratingFooter
-              plan={result.liveFilesPlan}
-              written={Object.keys(result.liveFiles ?? {}).length}
-              elapsed={elapsed}
-              liveness={pickLivenessSlice(result)}
-              liveTodos={result.liveTodos}
-              liveSkills={result.liveSkills}
-              liveActivatedSkills={result.liveActivatedSkills}
-            />
-          </div>
+          <VariantNodeGenerating
+            result={result}
+            elapsed={elapsed}
+            onOpenWorkspace={() => setRunInspectorVariant(id)}
+          />
         )}
 
-        {/* Error state */}
-        {result?.status === GENERATION_STATUS.ERROR && (
-          <div className="flex h-full flex-col items-center justify-center bg-error-subtle p-4">
-            <AlertCircle size={16} className="mb-2 text-error" />
-            <p className="text-center text-xs text-error">
-              {result.error ?? 'Generation failed'}
-            </p>
-          </div>
-        )}
+        {result?.status === GENERATION_STATUS.ERROR && <VariantNodeErrorState result={result} />}
 
-        {/* Pending / no result */}
-        {(!result || result.status === GENERATION_STATUS.PENDING) && (
-          <div className="flex h-full items-center justify-center bg-surface">
-            <p className="text-xs text-fg-muted">Waiting...</p>
-          </div>
-        )}
+        {(!result || result.status === GENERATION_STATUS.PENDING) && <VariantNodePendingState />}
 
-        {/* State 3: COMPLETE, single-file */}
         {result?.status === GENERATION_STATUS.COMPLETE && !isMultiFile && (
-          <>
-            {/* Loading code from IndexedDB */}
-            {codeLoading && (
-              <div className="flex h-full items-center justify-center bg-surface">
-                <Loader2 size={14} className="animate-spin text-fg-muted" />
-              </div>
-            )}
-
-            {/* Complete but code missing from IndexedDB */}
-            {!codeLoading && !code && (
-              <div className="flex h-full flex-col items-center justify-center bg-surface p-4">
-                <AlertCircle size={16} className="mb-2 text-fg-muted" />
-                <p className="text-center text-xs text-fg-muted">
-                  Code unavailable — may need to regenerate
-                </p>
-              </div>
-            )}
-
-            {/* Complete: rendered preview */}
-            {code && (
-              <iframe
-                srcDoc={htmlContent}
-                sandbox="allow-scripts"
-                title={`Variant: ${variantName}`}
-                className="absolute left-0 top-0 border-0 bg-preview-canvas"
-                style={{
-                  width: `${100 / zoom}%`,
-                  height: `${100 / zoom}%`,
-                  transform: `scale(${zoom})`,
-                  transformOrigin: '0 0',
-                  pointerEvents: 'auto',
-                }}
-              />
-            )}
-          </>
+          <VariantNodeSingleFileBody
+            codeLoading={codeLoading}
+            code={code}
+            htmlContent={htmlContent}
+            variantName={variantName}
+            zoom={zoom}
+          />
         )}
 
-        {/* State 4: COMPLETE, multi-file — tab bar with preview/code */}
-        {result?.status === GENERATION_STATUS.COMPLETE && isMultiFile && (
-          <div className="absolute inset-0 flex flex-col">
-            {/* Tab bar */}
-            <div className="flex border-b border-border-subtle bg-surface shrink-0">
-              {(['preview', 'code'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onPointerDown={() => setActiveTab(tab)}
-                  className={`nodrag px-3 py-1.5 text-nano font-medium capitalize transition-colors ${
-                    activeTab === tab
-                      ? 'border-b border-accent text-fg'
-                      : 'text-fg-muted hover:text-fg-secondary'
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-            {/* Preview tab */}
-            {activeTab === 'preview' && currentFiles && (
-              <div className="relative flex-1 overflow-hidden">
-                <ArtifactPreviewFrame
-                  files={currentFiles}
-                  title={`Variant: ${variantName}`}
-                  className="absolute left-0 top-0 border-0 bg-preview-canvas"
-                  style={{
-                    width: `${100 / zoom}%`,
-                    height: `${100 / zoom}%`,
-                    transform: `scale(${zoom})`,
-                    transformOrigin: '0 0',
-                    pointerEvents: 'auto',
-                  }}
-                />
-              </div>
-            )}
-            {/* Code tab */}
-            {activeTab === 'code' && (
-              <div className="flex flex-1 overflow-hidden">
-                <div className="w-28 shrink-0 border-r border-border-subtle bg-surface flex flex-col">
-                  <div className="px-2 py-1.5 border-b border-border-subtle">
-                    <span className="text-badge font-medium uppercase tracking-wider text-fg-faint">Files</span>
-                  </div>
-                  <FileExplorer
-                    files={currentFiles!}
-                    activeFile={activeCodeFile}
-                    onSelectFile={setActiveCodeFile}
-                    isGenerating={false}
-                    className="flex-1"
-                  />
-                </div>
-                <div className="nodrag nowheel flex-1 overflow-auto bg-bg">
-                  <pre className="min-h-full p-3 font-mono text-nano leading-relaxed text-fg-secondary whitespace-pre-wrap">
-                    {activeCodeFile && currentFiles?.[activeCodeFile]}
-                  </pre>
-                </div>
-              </div>
-            )}
-          </div>
+        {result?.status === GENERATION_STATUS.COMPLETE && isMultiFile && currentFiles && (
+          <VariantNodeMultiFileBody
+            variantName={variantName}
+            zoom={zoom}
+            currentFiles={currentFiles}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            activeCodeFile={activeCodeFile}
+            onSelectCodeFile={setActiveCodeFile}
+          />
         )}
       </div>
 
-      {/* ── Evaluation (completed agentic runs) ───────────────── */}
       {result?.status === GENERATION_STATUS.COMPLETE && result.evaluationSummary && (
         <EvaluationScorecard
           summary={result.evaluationSummary}
@@ -490,10 +303,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
         />
       )}
 
-      {/* ── Metadata footer ─────────────────────────────────── */}
-      {result?.status === GENERATION_STATUS.COMPLETE && (
-        <VariantFooter result={result} />
-      )}
+      {result?.status === GENERATION_STATUS.COMPLETE && <VariantFooter result={result} />}
 
       {debugExportPreviewInput ? (
         <DesignDebugExportDialog

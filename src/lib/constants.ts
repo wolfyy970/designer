@@ -74,6 +74,9 @@ export const FEEDBACK_DISMISS_MS = 1500;
 /** Delay for iframe to fully render before screenshot capture (ms). */
 export const SCREENSHOT_LOAD_DELAY_MS = 3000;
 
+/** Vertical shift (px) when forking hypothesis variants so new stack does not overlap pins. */
+export const FORK_HYPOTHESIS_VARIANT_STACK_OFFSET_PX = 200;
+
 function createEmptySection(id: SpecSectionId) {
   return {
     id,

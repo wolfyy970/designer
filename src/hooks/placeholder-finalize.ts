@@ -2,6 +2,7 @@ import { debugAgentIngest } from '../lib/debug-agent-ingest';
 import { GENERATION_STATUS } from '../constants/generation';
 import { storage } from '../storage';
 import type { CompiledPrompt } from '../types/compiler';
+import type { AgentMode } from '../types/workspace-domain';
 import type { GenerationResult, Provenance } from '../types/provider';
 import type { ProvenanceContext } from '../types/provenance-context';
 import { useGenerationStore } from '../stores/generation-store';
@@ -13,7 +14,7 @@ export function createPlaceholderFinalizeAfterStream(options: {
   prompt: CompiledPrompt;
   providerId: string;
   model: string;
-  mode?: 'single' | 'agentic';
+  mode?: AgentMode;
   provenanceCtx?: ProvenanceContext;
   updateResult: (id: string, patch: Partial<GenerationResult>) => void;
   flushAllPendingTraces: () => Promise<void>;

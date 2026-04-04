@@ -122,7 +122,7 @@ flowchart TB
 
 **Canonical client model** — `src/stores/workspace-domain-store.ts` (persisted) holds workflow semantics without requiring a graph: incubator input wiring (section / variant node ids), model assignments per incubator and per hypothesis, design-system attachments, hypothesis ↔ incubator ↔ variant-strategy links, variant slots (active result / pins), and mirrors for model/design-system payloads synced from the canvas. `src/types/workspace-domain.ts` defines the shapes.
 
-**Canvas as projection** — `src/stores/canvas-store.ts` still persists React Flow–backed **nodes and edges** for layout and interaction. Graph edits call `src/workspace/domain-commands.ts` so domain relations stay the source of truth for compile/generate. `src/workspace/domain-to-graph.ts` holds small view helpers derived from domain state.
+**Canvas as projection** — `src/stores/canvas-store.ts` still persists React Flow–backed **nodes and edges** for layout and interaction. Graph edits call `src/workspace/domain-commands.ts` so domain relations stay the source of truth for compile/generate. Pure graph helpers live in `src/workspace/graph-queries.ts`.
 
 **Node removal** — Prefer `canvas-store.removeNode` for deletes so domain cleanup (`syncDomainForRemovedNode`), compiler variant pruning, and cascade removal of attached variant nodes stay consistent. Orchestrator paths that filter nodes out of Zustand directly must still call `syncDomainForRemovedNode` for each removed id (see `useCanvasOrchestrator`).
 
@@ -197,7 +197,7 @@ flowchart TB
 
 **Hypothesis flow:** The canvas still owns graph/domain state (Zustand + React Flow), but **prompt assembly and multi-model orchestration** for a hypothesis go through `/api/hypothesis/*`. Pure workspace helpers live in `src/workspace/hypothesis-generation-pure.ts` (importable by the server). `/api/hypothesis/generate` adds `laneIndex` to each event payload and emits `lane_done` per model lane before a final `done`; the client demuxes into one `GenerationResult` per lane.
 
-All POST endpoints validate request bodies with Zod `safeParse` — malformed requests return a structured `400` before any LLM call is made.
+POST endpoints validate bodies with Zod (typically via **`parse-request`** / `safeParse`). Validation and opaque failures use **`apiJsonError`** so JSON error responses stay shape-consistent (`{ error: string }` with selective `details`) across **400** / **404** / **422** / **500** / **503** before any LLM call where applicable.
 
 ### Validation stacks (Zod vs TypeBox)
 
@@ -209,7 +209,8 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 ### Import convention (server ↔ `src/`)
 
 - **Direct `../../src/...` imports are OK** for pure types, Zod schemas, and shared **constants** with no Node/browser coupling (e.g. `src/types/*`, `src/lib/workspace-snapshot-schema.ts`, `src/constants/*`).
-- Prefer **`server/lib/`** modules for shared **logic** that already lives or is mirrored there (`error-utils`, `extract-code`, `provider-helpers`, `lockdown-model`, hypothesis workspace helpers, etc.) so routes stay shallow.
+- Prefer **`server/lib/`** modules for server-local shared logic (`api-json-error`, `parse-request`, `provider-helpers`, `lockdown-model`, hypothesis workspace helpers, etc.) so routes stay shallow.
+- **Pure shared helpers** that live only under **`src/lib/`** (`extract-code`, `error-utils`, `utils`, Zod schemas, constants) are imported from **`../../src/...`** directly — do not add one-line re-export barrels in `server/lib/`.
 - Do **not** import React, Vite-only code, or browser APIs from `server/`.
 
 | File | Responsibility |
@@ -223,7 +224,8 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 | `routes/compile.ts` | POST /api/compile |
 | `routes/generate.ts` | POST /api/generate — delegates to `services/generate-execution.ts` |
 | `routes/hypothesis.ts` | POST `/api/hypothesis/prompt-bundle`, `/api/hypothesis/generate` |
-| `services/generate-execution.ts` | Shared single-lane generate stream (optional `laneIndex` + `lane_done` for multiplex) |
+| `services/generate-execution.ts` | SSE multiplex: agentic path + **`executeSingleShotGenerateStream`**; optional `laneIndex` / `lane_done` |
+| `services/single-shot-generate-stream.ts` | Single-shot `generateChat` + `extractCode` + SSE `progress` / `code` / `done` |
 | `lib/generate-stream-schema.ts` | Zod schema shared by generate + hypothesis routes |
 | `routes/models.ts` | GET /api/models/:provider |
 | `routes/logs.ts` | GET `/api/logs` → `{ llm, trace }`; POST `/api/logs/trace` (Zod); DELETE clears both rings (file append-only) |
@@ -247,22 +249,23 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 | `services/providers/registry.ts` | Provider registration and lookup |
 | `lib/provider-helpers.ts` | Re-exports from `src/lib/provider-fetch.ts` + server-specific `buildChatRequestFromMessages` |
 | `lib/prompts/*` | Re-exports from `src/lib/prompts/` — no server-side duplication |
-| `lib/extract-code.ts` | Re-exports `src/lib/extract-code.ts` |
+| `lib/api-json-error.ts` | `apiJsonError` — consistent JSON error bodies + Hono-typed status literals |
+| `lib/parse-request.ts` | Shared JSON parse + Zod validation helpers for routes |
+| `lib/sse-write-gate.ts` | `createWriteGate` — serializes SSE writes (also exported from `generate-execution` for tests) |
+| `lib/agentic-sse-map.ts` | Maps agentic/orchestrator events to SSE `event` + payload |
 | `lib/build-agentic-system-context.ts` | Langfuse agentic system prompt + **`AGENTS.md`** seed + **`skillCatalog`** entries + skill file seeds (no catalog on system string) |
 | `lib/skill-discovery.ts` | Walk **`skills/*/SKILL.md`**, filter by `when` mode, **`formatSkillsCatalogXml`** / **`buildUseSkillToolDescription`** + sandbox seed map |
 | `lib/skill-schema.ts` | Zod: skill YAML frontmatter |
-| `lib/error-utils.ts` | Error normalization (`normalizeError`) |
-| `lib/utils.ts` | ID generation, interpolation |
 
 ## Generation Engine
 
 ### Single-Shot
 
-`server/routes/generate.ts` (when `mode === 'single'`):
-1. Validates the request with Zod
+`server/routes/generate.ts` (when `mode === 'single'`) delegates to **`executeSingleShotGenerateStream`** in `services/single-shot-generate-stream.ts`:
+1. Request already Zod-validated by the route
 2. Resolves the `genSystemHtml` system prompt (default or client-provided override)
 3. Calls `provider.generateChat([system, user], options)`
-4. Extracts the HTML code block via `extractCode()`
+4. Extracts the HTML code block via `extractCode()` (`src/lib/extract-code.ts`)
 5. Streams three SSE events: `progress` (start), `code` (HTML), `done`
 
 ### Agentic

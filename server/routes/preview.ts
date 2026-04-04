@@ -9,6 +9,7 @@ import {
 } from '../services/preview-session-store.ts';
 import { mimeForPath } from '../lib/preview-mime.ts';
 import { encodeVirtualPathForUrl, resolvePreviewEntryPath } from '../../src/lib/preview-entry.ts';
+import { apiJsonError } from '../lib/api-json-error.ts';
 
 const bodySchema = z.object({
   files: z.record(z.string(), z.string()),
@@ -22,15 +23,15 @@ preview.post('/sessions', async (c) => {
   try {
     body = await c.req.json();
   } catch {
-    return c.json({ error: 'Invalid JSON body' }, 400);
+    return apiJsonError(c, 400, 'Invalid JSON body');
   }
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ error: 'Expected { files: Record<string, string> }' }, 400);
+    return apiJsonError(c, 400, 'Expected { files: Record<string, string> }');
   }
   const { files } = parsed.data;
   if (Object.keys(files).length === 0) {
-    return c.json({ error: 'files must be non-empty' }, 400);
+    return apiJsonError(c, 400, 'files must be non-empty');
   }
   const id = createPreviewSession(files);
   const entry = resolvePreviewEntryPath(files);
@@ -48,18 +49,18 @@ preview.put('/sessions/:id', async (c) => {
   try {
     body = await c.req.json();
   } catch {
-    return c.json({ error: 'Invalid JSON body' }, 400);
+    return apiJsonError(c, 400, 'Invalid JSON body');
   }
   const parsed = putBodySchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ error: 'Expected { files: Record<string, string> }' }, 400);
+    return apiJsonError(c, 400, 'Expected { files: Record<string, string> }');
   }
   const { files } = parsed.data;
   if (Object.keys(files).length === 0) {
-    return c.json({ error: 'files must be non-empty' }, 400);
+    return apiJsonError(c, 400, 'files must be non-empty');
   }
   const ok = replacePreviewSessionFiles(id, files);
-  if (!ok) return c.json({ error: 'Unknown or expired session' }, 404);
+  if (!ok) return apiJsonError(c, 404, 'Unknown or expired session');
   const entry = resolvePreviewEntryPath(files);
   return c.json({ ok: true, entry });
 });

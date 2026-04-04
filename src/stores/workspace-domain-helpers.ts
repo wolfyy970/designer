@@ -2,6 +2,7 @@ import { NODE_TYPES } from '../constants/canvas';
 import type { CanvasNodeType } from '../types/workspace-graph';
 import type { DomainIncubatorWiring } from '../types/workspace-domain';
 import { defaultIncubatorWiring } from '../types/workspace-domain';
+import { findIncubatorForHypothesis as findIncubatorIdForHypothesis } from '../workspace/graph-queries';
 
 export function uniqPush(arr: string[], id: string): string[] {
   if (arr.includes(id)) return arr;
@@ -32,10 +33,5 @@ export function findIncubatorForHypothesis(
   input: { nodes: { id: string; type: string }[]; edges: { source: string; target: string }[] },
   hypothesisId: string,
 ): string | null {
-  for (const e of input.edges) {
-    if (e.target !== hypothesisId) continue;
-    const src = input.nodes.find((n) => n.id === e.source);
-    if (src?.type === NODE_TYPES.COMPILER) return src.id;
-  }
-  return null;
+  return findIncubatorIdForHypothesis(input.nodes, input.edges, hypothesisId);
 }
