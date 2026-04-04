@@ -7,6 +7,8 @@ import type { Bash } from 'just-bash';
 import type { ExtensionContext, ToolDefinition } from './pi-sdk/types.ts';
 import type { TodoItem } from '../../src/types/provider.ts';
 import { SANDBOX_PROJECT_ROOT } from './agent-bash-sandbox.ts';
+import { buildUseSkillToolDescription, SKILL_FILENAME } from '../lib/skill-discovery.ts';
+import type { SkillCatalogEntry } from '../lib/skill-schema.ts';
 
 function projectAbsPath(rel: string): string {
   const t = rel.replace(/^\/+/, '');
@@ -82,6 +84,57 @@ export function createTodoWriteTool(
   };
 }
 
+// ── use_skill (repo Agent Skills; catalog in tool description) ─────────────
+
+const useSkillSchema = Type.Object({
+  name: Type.String({
+    description: 'Skill key — directory name under skills/ (matches <skill key="..."> in this tool description).',
+  }),
+});
+
+export function createUseSkillTool(
+  entries: SkillCatalogEntry[],
+  onActivate: (payload: { key: string; name: string; description: string }) => void,
+): ToolDefinition {
+  const byKey = new Map(entries.map((e) => [e.key, e]));
+  const rows = entries.map((e) => ({
+    key: e.key,
+    name: e.name,
+    description: e.description,
+    path: `skills/${e.key}/${SKILL_FILENAME}`,
+  }));
+  const description = buildUseSkillToolDescription(rows);
+
+  return {
+    name: 'use_skill',
+    label: 'use_skill',
+    description,
+    parameters: useSkillSchema,
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx: ExtensionContext) {
+      const { name } = params as { name: string };
+      const key = name.trim();
+      const skill = byKey.get(key);
+      if (!skill) {
+        const available = [...byKey.keys()].sort().join(', ') || '(none)';
+        return {
+          content: [{ type: 'text', text: `Unknown skill: ${key}. Available: ${available}` }],
+          details: null,
+        };
+      }
+      onActivate({
+        key: skill.key,
+        name: skill.name,
+        description: skill.description,
+      });
+      const header = `# ${skill.name}\n\n`;
+      return {
+        content: [{ type: 'text', text: header + skill.bodyMarkdown }],
+        details: null,
+      };
+    },
+  };
+}
+
 // ── validate_js ──────────────────────────────────────────────────────────────
 
 const validateJsSchema = Type.Object({
@@ -131,7 +184,7 @@ export function createValidateHtmlTool(bash: Bash): ToolDefinition {
     name: 'validate_html',
     label: 'validate_html',
     description:
-      'Structural checks for entry HTML (local linked assets, no inline style/script blocks).',
+      'Structural checks for HTML (DOCTYPE, landmark tags, balanced script/style, local asset refs — inline CSS/JS allowed).',
     parameters: validateHtmlSchema,
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx: ExtensionContext) {
       const { path } = params as { path: string };
@@ -165,16 +218,6 @@ export function createValidateHtmlTool(bash: Bash): ToolDefinition {
       const styleClose = (content.match(/<\/style>/gi) ?? []).length;
       if (styleOpen !== styleClose) {
         issues.push(`Unbalanced <style> tags: ${styleOpen} opening, ${styleClose} closing`);
-      }
-
-      const inlineStyles = content.match(/<style[^>]*>([\s\S]*?)<\/style>/gi) ?? [];
-      if (inlineStyles.some((m) => m.replace(/<style[^>]*>/i, '').replace(/<\/style>/i, '').trim())) {
-        issues.push('Inline <style> content found — move styles into linked local CSS files');
-      }
-
-      const inlineScripts = content.match(/<script[^>]*>([\s\S]*?)<\/script>/gi) ?? [];
-      if (inlineScripts.some((m) => m.replace(/<script[^>]*>/i, '').replace(/<\/script>/i, '').trim())) {
-        issues.push('Inline <script> content found — move scripts into linked local JS files');
       }
 
       const normalizeAssetRef = (rawRef: string): string =>

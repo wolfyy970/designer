@@ -52,8 +52,8 @@ describe('PROMPT_DEFAULTS', () => {
     expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('write_file');
     expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('read_file');
     expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('milestone');
-    expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('available_skills');
-    expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('agent_skills');
+    expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('mandatory_skill_check');
+    expect(PROMPT_DEFAULTS.genSystemHtmlAgentic).toContain('use_skill');
   });
 
   it('genSystemHtmlAgentic documents virtual workspace tools including ls and find', () => {
@@ -79,19 +79,22 @@ describe('PROMPT_DEFAULTS', () => {
     expect(p).toContain('ignoreCase?');
   });
 
-  it('genSystemHtmlAgentic does not hardcode a three-file worldview', () => {
+  it('genSystemHtmlAgentic allows flexible layout and multi-page artifacts', () => {
     const p = PROMPT_DEFAULTS.genSystemHtmlAgentic;
-    expect(p).not.toContain('three-file bundle');
+    expect(p).not.toContain('Contain NO inline');
     expect(p).toContain('file count is not a goal');
-    expect(p).toContain('local relative paths');
+    expect(p.toLowerCase()).toContain('local relative paths');
+    expect(p).toContain('validate_html');
+    expect(p).toMatch(/every[\s\S]{0,40}HTML file/i);
   });
 
   it('sandboxAgentsContext describes static workspace limits and forbids bundlers', () => {
     const p = PROMPT_DEFAULTS.sandboxAgentsContext;
-    expect(p).toContain('virtual filesystem');
+    expect(p).toContain('virtual');
     expect(p).toContain('Vite');
     expect(p).toContain('npm');
     expect(p).toContain('index.html');
+    expect(p).toContain('no fixed trio');
   });
 
   it('variant prompt contains template variables', () => {
@@ -108,5 +111,9 @@ describe('PROMPT_DEFAULTS', () => {
     expect(PROMPT_DEFAULTS.evalDesignSystem).toContain('JSON');
     expect(PROMPT_DEFAULTS.evalStrategySystem).toContain('JSON');
     expect(PROMPT_DEFAULTS.evalImplementationSystem).toContain('JSON');
+  });
+
+  it('evalImplementationSystem mentions preview_page_url', () => {
+    expect(PROMPT_DEFAULTS.evalImplementationSystem).toContain('preview_page_url');
   });
 });

@@ -116,7 +116,7 @@ Variant nodes render the generated code in sandboxed iframes. Open the **run wor
 - **Full-screen** — Click the expand icon for full-viewport preview
 
 **Multi-file (agentic) results:**
-- **Preview tab** — Bundled preview (CSS and JS inlined into the HTML)
+- **Preview tab** — Serves the virtual tree from **`/api/preview/sessions`** in the iframe (relative links work). If registration fails, falls back to a bundled **`srcDoc`**. See [PRODUCT.md](PRODUCT.md).
 - **Code tab** — File explorer on the left, raw file content on the right
 - **Download** — Zip button downloads all files as a `.zip` archive
 - **Eval strip** — Aggregate score, suggested fixes, and runtime QA (including optional headless screenshot)

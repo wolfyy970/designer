@@ -12,7 +12,13 @@ import type {
   HypothesisWorkspaceApiPayload,
 } from './types';
 import type { RunTraceEvent, TodoItem } from '../types/provider';
-import type { AgenticCheckpoint, AgenticPhase, EvaluationRoundSnapshot } from '../types/evaluation';
+import type {
+  AgenticCheckpoint,
+  AgenticPhase,
+  EvaluationRoundSnapshot,
+  EvaluatorRubricId,
+  EvaluatorWorkerReport,
+} from '../types/evaluation';
 import { normalizeError, parseApiErrorBody } from '../lib/error-utils';
 import { safeParseGenerateSSEEvent } from '../lib/generate-sse-event-schema';
 import { readSseEventStream } from '../lib/sse-reader';
@@ -97,6 +103,13 @@ export interface GenerateStreamCallbacks {
   onActivity?: (entry: string) => void;
   /** Model reasoning stream (PI `thinking_delta`), scoped by PI turn id */
   onThinking?: (turnId: number, delta: string) => void;
+  /** Pi tool-call arguments streaming (toolcall_*), before tool_execution_start. */
+  onStreamingTool?: (
+    toolName: string,
+    streamedChars: number,
+    done: boolean,
+    toolPath?: string,
+  ) => void;
   onTrace?: (trace: RunTraceEvent) => void;
   onCode?: (code: string) => void;
   onError?: (error: string) => void;
@@ -105,10 +118,17 @@ export interface GenerateStreamCallbacks {
   onTodos?: (todos: TodoItem[]) => void;
   onPhase?: (phase: AgenticPhase) => void;
   onEvaluationProgress?: (round: number, phase: string, message?: string) => void;
+  onEvaluationWorkerDone?: (
+    round: number,
+    rubric: EvaluatorRubricId,
+    report: EvaluatorWorkerReport,
+  ) => void;
   onEvaluationReport?: (round: number, snapshot: EvaluationRoundSnapshot) => void;
   onRevisionRound?: (round: number, brief: string) => void;
   /** Non-manual skills pre-seeded for this Pi session (may update on revision rounds). */
   onSkillsLoaded?: (skills: { key: string; name: string; description: string }[]) => void;
+  /** Fired when the agent calls use_skill successfully. */
+  onSkillActivated?: (payload: { key: string; name: string; description: string }) => void;
   onCheckpoint?: (checkpoint: AgenticCheckpoint) => void;
   onDone?: () => void;
   /** Fired when SSE JSON fails schema validation (wire `event:` name + body). */
@@ -157,6 +177,14 @@ function dispatchParsedGenerateStreamEvent(
     case 'thinking':
       callbacks.onThinking?.(event.turnId, event.delta);
       break;
+    case 'streaming_tool':
+      callbacks.onStreamingTool?.(
+        event.toolName,
+        event.streamedChars,
+        event.done,
+        event.toolPath,
+      );
+      break;
     case 'trace':
       callbacks.onTrace?.(event.trace);
       break;
@@ -181,6 +209,9 @@ function dispatchParsedGenerateStreamEvent(
     case 'evaluation_progress':
       callbacks.onEvaluationProgress?.(event.round, event.phase, event.message);
       break;
+    case 'evaluation_worker_done':
+      callbacks.onEvaluationWorkerDone?.(event.round, event.rubric, event.report);
+      break;
     case 'evaluation_report':
       callbacks.onEvaluationReport?.(event.round, event.snapshot);
       break;
@@ -189,6 +220,13 @@ function dispatchParsedGenerateStreamEvent(
       break;
     case 'skills_loaded':
       callbacks.onSkillsLoaded?.(event.skills);
+      break;
+    case 'skill_activated':
+      callbacks.onSkillActivated?.({
+        key: event.key,
+        name: event.name,
+        description: event.description,
+      });
       break;
     case 'checkpoint':
       callbacks.onCheckpoint?.(event.checkpoint);

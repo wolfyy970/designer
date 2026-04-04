@@ -5,7 +5,8 @@ import type { CompiledPrompt } from '../types/compiler';
 import type { GenerationResult, Provenance } from '../types/provider';
 import type { ProvenanceContext } from '../types/provenance-context';
 import { useGenerationStore } from '../stores/generation-store';
-import type { PlaceholderGenerationSessionState } from './placeholder-session-state';
+import type { PlaceholderGenerationSessionState, PlaceholderRafBatchers } from './placeholder-session-state';
+import { clearTransientResultFields } from './placeholder-session-state';
 
 export function createPlaceholderFinalizeAfterStream(options: {
   placeholderId: string;
@@ -17,6 +18,7 @@ export function createPlaceholderFinalizeAfterStream(options: {
   updateResult: (id: string, patch: Partial<GenerationResult>) => void;
   flushAllPendingTraces: () => Promise<void>;
   state: PlaceholderGenerationSessionState;
+  raf: PlaceholderRafBatchers;
   onResultComplete?: (placeholderId: string) => void;
 }): () => Promise<void> {
   const {
@@ -29,36 +31,24 @@ export function createPlaceholderFinalizeAfterStream(options: {
     updateResult,
     flushAllPendingTraces,
     state,
+    raf,
     onResultComplete,
   } = options;
 
   return async () => {
-    if (state.thinkingRafId !== null) {
-      cancelAnimationFrame(state.thinkingRafId);
-      state.thinkingRafId = null;
-    }
+    raf.thinking.cancelOnly();
     const endMs = Date.now();
     state.thinkingTurns = state.thinkingTurns.map((t) =>
       t.endedAt == null ? { ...t, endedAt: endMs } : t,
     );
     updateResult(placeholderId, { thinkingTurns: [...state.thinkingTurns] });
-    if (state.rafId !== null) {
-      cancelAnimationFrame(state.rafId);
-      state.rafId = null;
-      updateResult(placeholderId, {
-        activityLog: [state.activityText],
-        activityByTurn: { ...state.activityByTurn },
-        lastActivityAt: Date.now(),
-      });
-    }
-    if (state.codeRafId !== null) {
-      cancelAnimationFrame(state.codeRafId);
-      state.codeRafId = null;
-      updateResult(placeholderId, {
-        liveCode: state.generatedCode,
-        lastActivityAt: Date.now(),
-      });
-    }
+    raf.activity.flushPending();
+    raf.code.flushPending();
+    raf.streamingTool.cancelOnly();
+    state.streamingToolPending = undefined;
+    updateResult(placeholderId, {
+      ...clearTransientResultFields(),
+    });
     await flushAllPendingTraces();
     const current = useGenerationStore.getState().results.find((r) => r.id === placeholderId);
     if (current?.status === GENERATION_STATUS.ERROR) return;

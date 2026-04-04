@@ -82,6 +82,14 @@ async function executeGenerateStream(
         });
         return;
       }
+      if (event.type === 'evaluation_worker_done') {
+        await write('evaluation_worker_done', {
+          round: event.round,
+          rubric: event.rubric,
+          report: event.report,
+        });
+        return;
+      }
       if (event.type === 'evaluation_report') {
         await write('evaluation_report', { round: event.round, snapshot: event.snapshot });
         return;
@@ -90,8 +98,25 @@ async function executeGenerateStream(
         await write('revision_round', { round: event.round, brief: event.brief });
         return;
       }
+      if (event.type === 'streaming_tool') {
+        await write('streaming_tool', {
+          toolName: event.toolName,
+          streamedChars: event.streamedChars,
+          done: event.done,
+          ...(event.toolPath != null ? { toolPath: event.toolPath } : {}),
+        });
+        return;
+      }
       if (event.type === 'skills_loaded') {
         await write('skills_loaded', { skills: event.skills });
+        return;
+      }
+      if (event.type === 'skill_activated') {
+        await write('skill_activated', {
+          key: event.key,
+          name: event.name,
+          description: event.description,
+        });
         return;
       }
       if (event.type === 'trace') {

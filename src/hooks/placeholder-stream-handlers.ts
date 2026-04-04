@@ -4,8 +4,10 @@ import { GENERATION_STATUS } from '../constants/generation';
 import type { GenerationResult, RunTraceEvent, ThinkingTurnSlice } from '../types/provider';
 import type { GenerateStreamCallbacks } from '../api/client';
 import {
+  clearTransientResultFields,
   normalizeEvalSnapshot,
   type PlaceholderGenerationSessionState,
+  type PlaceholderRafBatchers,
 } from './placeholder-session-state';
 import {
   traceRowAgenticPhase,
@@ -21,8 +23,12 @@ export function createPlaceholderStreamCallbacks(options: {
   updateResult: (id: string, patch: Partial<GenerationResult>) => void;
   scheduleTraceServerForward: (trace: RunTraceEvent) => void;
   state: PlaceholderGenerationSessionState;
+  raf: PlaceholderRafBatchers;
 }): GenerateStreamCallbacks {
-  const { placeholderId, traceLimit, updateResult, scheduleTraceServerForward, state } = options;
+  const { placeholderId, traceLimit, updateResult, scheduleTraceServerForward, state, raf } =
+    options;
+
+  const activatedSkills: { key: string; name: string; description: string }[] = [];
 
   const pushTrace = (trace: RunTraceEvent) => {
     state.liveTrace = [...state.liveTrace, trace].slice(-traceLimit);
@@ -43,11 +49,8 @@ export function createPlaceholderStreamCallbacks(options: {
 
   const onTraceWithTurnHandling = (trace: RunTraceEvent) => {
     if (trace.kind === 'model_turn_start') {
-      if (state.thinkingRafId !== null) {
-        cancelAnimationFrame(state.thinkingRafId);
-        state.thinkingRafId = null;
-        updateResult(placeholderId, { thinkingTurns: [...state.thinkingTurns] });
-      }
+      raf.thinking.cancelOnly();
+      updateResult(placeholderId, { thinkingTurns: [...state.thinkingTurns] });
       const tid = trace.turnId ?? state.currentModelTurnId + 1;
       state.currentModelTurnId = tid;
       const now = Date.now();
@@ -65,11 +68,12 @@ export function createPlaceholderStreamCallbacks(options: {
 
   return {
     onPhase: (phase) => {
+      raf.streamingTool.cancelOnly();
+      state.streamingToolPending = undefined;
       pushTrace(traceRowAgenticPhase(phase));
       updateResult(placeholderId, {
         agenticPhase: phase,
-        activeToolName: undefined,
-        activeToolPath: undefined,
+        ...clearTransientResultFields(),
         progressMessage:
           phase === AGENTIC_PHASE.EVALUATING
             ? 'Running evaluators…'
@@ -81,6 +85,8 @@ export function createPlaceholderStreamCallbacks(options: {
       });
     },
     onEvaluationProgress: (round, phase, message) => {
+      state.evalRoundLive = round;
+      state.liveEvalWorkers = {};
       const trace = traceRowEvaluationProgress(round, phase, message);
       const nextStatus = trace.label;
       pushTrace(trace);
@@ -88,6 +94,7 @@ export function createPlaceholderStreamCallbacks(options: {
         agenticPhase: AGENTIC_PHASE.EVALUATING,
         evaluationStatus: nextStatus,
         progressMessage: nextStatus,
+        liveEvalWorkers: {},
       });
     },
     onEvaluationReport: (_round, snapshot) => {
@@ -116,11 +123,13 @@ export function createPlaceholderStreamCallbacks(options: {
         pushTrace(
           traceRowEvaluationReport(normalized.round, scoreLabel, hardFailsLen),
         );
+        state.liveEvalWorkers = {};
         updateResult(placeholderId, {
           evaluationRounds: state.evaluationRounds,
           evaluationSummary: agg,
           agenticPhase: 'evaluating',
           progressMessage: 'Evaluator results received',
+          liveEvalWorkers: {},
         });
       } catch (err) {
         debugAgentIngest({
@@ -134,6 +143,11 @@ export function createPlaceholderStreamCallbacks(options: {
         }
       }
     },
+    onEvaluationWorkerDone: (round, rubric, report) => {
+      if (round !== state.evalRoundLive) return;
+      state.liveEvalWorkers = { ...state.liveEvalWorkers, [rubric]: report };
+      updateResult(placeholderId, { liveEvalWorkers: { ...state.liveEvalWorkers } });
+    },
     onRevisionRound: (round, brief) => {
       pushTrace(traceRowRevisionRound(round));
       updateResult(placeholderId, {
@@ -144,6 +158,12 @@ export function createPlaceholderStreamCallbacks(options: {
     },
     onSkillsLoaded: (skills) => {
       updateResult(placeholderId, { liveSkills: skills });
+    },
+    onSkillActivated: (payload) => {
+      const i = activatedSkills.findIndex((s) => s.key === payload.key);
+      if (i >= 0) activatedSkills.splice(i, 1);
+      activatedSkills.push(payload);
+      updateResult(placeholderId, { liveActivatedSkills: [...activatedSkills] });
     },
     onCheckpoint: (checkpoint) => {
       state.agenticCheckpoint = checkpoint;
@@ -156,16 +176,7 @@ export function createPlaceholderStreamCallbacks(options: {
         ...state.activityByTurn,
         [tid]: (state.activityByTurn[tid] ?? '') + entry,
       };
-      if (state.rafId === null) {
-        state.rafId = requestAnimationFrame(() => {
-          updateResult(placeholderId, {
-            activityLog: [state.activityText],
-            activityByTurn: { ...state.activityByTurn },
-            lastActivityAt: Date.now(),
-          });
-          state.rafId = null;
-        });
-      }
+      raf.activity.schedule();
     },
     onTrace: onTraceWithTurnHandling,
     onThinking: (turnId, delta) => {
@@ -181,31 +192,30 @@ export function createPlaceholderStreamCallbacks(options: {
       state.thinkingTurns = [...state.thinkingTurns.filter((t) => t.turnId !== turnId), next].sort(
         (a, b) => a.turnId - b.turnId,
       );
-      if (state.thinkingRafId === null) {
-        state.thinkingRafId = requestAnimationFrame(() => {
-          updateResult(placeholderId, {
-            thinkingTurns: [...state.thinkingTurns],
-            lastActivityAt: Date.now(),
-          });
-          state.thinkingRafId = null;
-        });
-      }
+      raf.thinking.schedule();
     },
     onProgress: (status) => {
-      updateResult(placeholderId, { progressMessage: status });
+      updateResult(placeholderId, { progressMessage: status, lastActivityAt: Date.now() });
+    },
+    onStreamingTool: (toolName, streamedChars, done, toolPath) => {
+      if (done) {
+        state.streamingToolPending = undefined;
+        raf.streamingTool.cancelOnly();
+        updateResult(placeholderId, {
+          streamingToolName: undefined,
+          streamingToolPath: undefined,
+          streamingToolChars: undefined,
+          lastActivityAt: Date.now(),
+        });
+        return;
+      }
+      state.streamingToolPending = { toolName, streamedChars, toolPath };
+      raf.streamingTool.schedule();
     },
     onCode: (code) => {
       state.generatedCode = code;
       state.pendingLiveCode = code;
-      if (state.codeRafId === null) {
-        state.codeRafId = requestAnimationFrame(() => {
-          updateResult(placeholderId, {
-            liveCode: state.pendingLiveCode,
-            lastActivityAt: Date.now(),
-          });
-          state.codeRafId = null;
-        });
-      }
+      raf.code.schedule();
     },
     onFile: (path, content) => {
       state.liveFiles = { ...state.liveFiles, [path]: content };

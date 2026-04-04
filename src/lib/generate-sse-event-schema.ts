@@ -1,9 +1,13 @@
 /**
  * Runtime validation for generate/hypothesis SSE payloads before callbacks run.
  * SSE `event:` line is authoritative for `type` (body `type` is ignored if present).
+ *
+ * Keep discriminant branches aligned with {@link GenerateSSEEvent} in `src/api/types.ts`
+ * (Zod uses passthrough on nested objects; the exported TS union remains the callback contract).
  */
 import { z } from 'zod';
 import type { GenerateSSEEvent } from '../api/types';
+import { evaluatorRubricIdZodSchema } from './evaluator-rubric-zod';
 
 const agenticPhaseSchema = z.enum(['building', 'evaluating', 'revising', 'complete']);
 
@@ -50,6 +54,13 @@ export const generateSSEEventSchema = z.union([
     delta: z.string(),
     turnId: z.number(),
   }),
+  z.object({
+    type: z.literal('streaming_tool'),
+    toolName: z.string(),
+    streamedChars: z.number(),
+    done: z.boolean(),
+    toolPath: z.string().optional(),
+  }),
   z.object({ type: z.literal('trace'), trace: runTraceEventSchema }),
   z.object({ type: z.literal('code'), code: z.string() }),
   z.object({ type: z.literal('error'), error: z.string() }),
@@ -62,6 +73,16 @@ export const generateSSEEventSchema = z.union([
     round: z.number(),
     phase: z.string(),
     message: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('evaluation_worker_done'),
+    round: z.number(),
+    rubric: evaluatorRubricIdZodSchema,
+    report: z
+      .object({
+        rubric: evaluatorRubricIdZodSchema,
+      })
+      .passthrough(),
   }),
   z.object({
     type: z.literal('evaluation_report'),
@@ -78,6 +99,12 @@ export const generateSSEEventSchema = z.union([
         description: z.string(),
       }),
     ),
+  }),
+  z.object({
+    type: z.literal('skill_activated'),
+    key: z.string(),
+    name: z.string(),
+    description: z.string(),
   }),
   z.object({ type: z.literal('checkpoint'), checkpoint: agenticCheckpointSchema }),
   z.object({ type: z.literal('lane_done'), laneIndex: z.number() }),

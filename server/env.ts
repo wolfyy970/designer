@@ -76,6 +76,17 @@ export const env = {
     if (process.env.VITEST === 'true') return false;
     return process.env.BROWSER_PLAYWRIGHT_EVAL !== '0';
   },
+  /**
+   * Public origin for server-side preview URLs (Playwright, eval). No trailing slash.
+   * Defaults to 127.0.0.1 + PORT so headless browsers hit the same process as the API.
+   */
+  PREVIEW_PUBLIC_URL: (process.env.PREVIEW_PUBLIC_URL ?? '').trim().replace(/\/$/, ''),
+  get previewPublicBaseUrl(): string {
+    const explicit = this.PREVIEW_PUBLIC_URL.trim();
+    if (explicit) return explicit;
+    const port = (process.env.PORT ?? '3001').trim();
+    return `http://127.0.0.1:${port}`;
+  },
   /** Self-hosted or cloud Langfuse origin (no trailing slash). */
   LANGFUSE_BASE_URL: (process.env.LANGFUSE_BASE_URL ?? 'http://localhost:3100').replace(/\/$/, ''),
   LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY ?? '',

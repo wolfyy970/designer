@@ -3,7 +3,12 @@
  * Shared between client metadata and server orchestration.
  */
 
-export type EvaluatorRubricId = 'design' | 'strategy' | 'implementation' | 'browser';
+/** Canonical rubric order for parallel workers, aggregation, and UI. */
+export const EVALUATOR_RUBRIC_IDS = ['design', 'strategy', 'implementation', 'browser'] as const;
+
+export type EvaluatorRubricId = (typeof EVALUATOR_RUBRIC_IDS)[number];
+
+export const EVALUATOR_WORKER_COUNT = EVALUATOR_RUBRIC_IDS.length;
 
 export type AgenticStopReason = 'satisfied' | 'max_revisions' | 'aborted' | 'revision_failed';
 

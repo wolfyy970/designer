@@ -4,7 +4,10 @@ import type { CompiledPrompt } from '../types/compiler';
 import type { GenerationResult } from '../types/provider';
 import type { ProvenanceContext } from '../types/provenance-context';
 import { createPlaceholderTraceForwarder } from './placeholder-trace-forward';
-import { createInitialPlaceholderSessionState } from './placeholder-session-state';
+import {
+  createInitialPlaceholderSessionState,
+  createPlaceholderRafBatchers,
+} from './placeholder-session-state';
 import { createPlaceholderStreamCallbacks } from './placeholder-stream-handlers';
 import { createPlaceholderFinalizeAfterStream } from './placeholder-finalize';
 import type { GenerateStreamCallbacks } from '../api/client';
@@ -48,6 +51,7 @@ export function createPlaceholderGenerationSession(
   } = options;
 
   const state = createInitialPlaceholderSessionState();
+  const raf = createPlaceholderRafBatchers(state, placeholderId, updateResult);
   const trace = createPlaceholderTraceForwarder({
     resultId: placeholderId,
     correlationId: sessionCorrelationId,
@@ -59,6 +63,7 @@ export function createPlaceholderGenerationSession(
     updateResult,
     scheduleTraceServerForward: trace.scheduleTraceServerForward,
     state,
+    raf,
   });
 
   const finalizeAfterStream = createPlaceholderFinalizeAfterStream({
@@ -71,6 +76,7 @@ export function createPlaceholderGenerationSession(
     updateResult,
     flushAllPendingTraces: trace.flushAllPending,
     state,
+    raf,
     onResultComplete,
   });
 

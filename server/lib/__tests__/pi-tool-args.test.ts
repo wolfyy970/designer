@@ -28,4 +28,10 @@ describe('parsePiToolExecutionArgs', () => {
       path: 'a.html',
     });
   });
+
+  it('falls back to name for use_skill progress labels', () => {
+    expect(parsePiToolExecutionArgs('use_skill', { name: 'accessibility' })).toEqual({
+      path: 'accessibility',
+    });
+  });
 });

@@ -17,6 +17,7 @@ const runTraceKindSchema = z.enum([
   'checkpoint',
   'compaction',
   'skills_loaded',
+  'skill_activated',
 ]);
 
 const agenticPhaseSchema = z.enum(['building', 'evaluating', 'revising', 'complete']);

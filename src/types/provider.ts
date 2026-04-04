@@ -4,6 +4,8 @@ import type {
   AggregatedEvaluationReport,
   AgenticPhase,
   EvaluationRoundSnapshot,
+  EvaluatorRubricId,
+  EvaluatorWorkerReport,
 } from './evaluation';
 
 export type { EvaluationContextPayload } from './evaluation';
@@ -81,7 +83,8 @@ export type RunTraceKind =
   | 'revision_round'
   | 'checkpoint'
   | 'compaction'
-  | 'skills_loaded';
+  | 'skills_loaded'
+  | 'skill_activated';
 
 export interface RunTraceEvent {
   id: string;
@@ -103,6 +106,50 @@ export interface ThinkingTurnSlice {
   text: string;
   startedAt: number;
   endedAt?: number;
+}
+
+/** Transient UI fields for generation liveness (footer, idle detection). In-memory only. */
+export interface LivenessSlice {
+  progressMessage?: string;
+  lastAgentFileAt?: number;
+  lastActivityAt?: number;
+  lastTraceAt?: number;
+  activeToolName?: string;
+  activeToolPath?: string;
+  streamingToolName?: string;
+  streamingToolPath?: string;
+  streamingToolChars?: number;
+  agenticPhase?: AgenticPhase;
+  evaluationStatus?: string;
+}
+
+export function pickLivenessSlice(result: GenerationResult): LivenessSlice {
+  return {
+    progressMessage: result.progressMessage,
+    lastAgentFileAt: result.lastAgentFileAt,
+    lastActivityAt: result.lastActivityAt,
+    lastTraceAt: result.lastTraceAt,
+    activeToolName: result.activeToolName,
+    activeToolPath: result.activeToolPath,
+    streamingToolName: result.streamingToolName,
+    streamingToolPath: result.streamingToolPath,
+    streamingToolChars: result.streamingToolChars,
+    agenticPhase: result.agenticPhase,
+    evaluationStatus: result.evaluationStatus,
+  };
+}
+
+export type StreamingToolLiveness = Pick<
+  LivenessSlice,
+  'streamingToolName' | 'streamingToolPath' | 'streamingToolChars'
+>;
+
+export function pickStreamingToolLiveness(result: GenerationResult): StreamingToolLiveness {
+  return {
+    streamingToolName: result.streamingToolName,
+    streamingToolPath: result.streamingToolPath,
+    streamingToolChars: result.streamingToolChars,
+  };
 }
 
 export interface GenerationResult {
@@ -139,6 +186,12 @@ export interface GenerationResult {
   /** Active tool name/path inferred from structured run traces. */
   activeToolName?: string;
   activeToolPath?: string;
+  /** In-memory only — Pi is streaming a tool-call before execution (toolcall_*). */
+  streamingToolName?: string;
+  /** In-memory only — virtual path from partial tool arguments when available. */
+  streamingToolPath?: string;
+  /** In-memory only — accumulated size of streamed tool-call arguments. */
+  streamingToolChars?: number;
   activityLog?: string[];
   /** Assistant text output per PI turn (for timeline). In-memory only. */
   activityByTurn?: Record<number, string>;
@@ -148,6 +201,8 @@ export interface GenerationResult {
   liveTrace?: RunTraceEvent[];
   /** Agent skills pre-seeded for this Pi session (non-manual catalog). Never persisted. */
   liveSkills?: { key: string; name: string; description: string }[];
+  /** Skills the agent activated via use_skill this run. Never persisted. */
+  liveActivatedSkills?: { key: string; name: string; description: string }[];
   /** Agentic harness: high-level phase for UI */
   agenticPhase?: AgenticPhase;
   /** Live evaluation progress label during SSE */
@@ -156,6 +211,8 @@ export interface GenerationResult {
   evaluationSummary?: AggregatedEvaluationReport;
   /** Full rounds (typically 1–2) after run completes */
   evaluationRounds?: EvaluationRoundSnapshot[];
+  /** In-memory only — per-rubric reports as workers finish during SSE. Never persisted. */
+  liveEvalWorkers?: Partial<Record<EvaluatorRubricId, EvaluatorWorkerReport>>;
 }
 
 /**

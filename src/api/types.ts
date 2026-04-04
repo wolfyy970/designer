@@ -8,6 +8,8 @@ import type {
   AgenticPhase,
   EvaluationContextPayload,
   EvaluationRoundSnapshot,
+  EvaluatorRubricId,
+  EvaluatorWorkerReport,
 } from '../types/evaluation';
 import type { WorkspaceSnapshotWire } from '../lib/workspace-snapshot-schema';
 
@@ -98,6 +100,13 @@ export type GenerateSSEEvent =
   | { type: 'progress'; status: string }
   | { type: 'activity'; entry: string }
   | { type: 'thinking'; delta: string; turnId: number }
+  | {
+      type: 'streaming_tool';
+      toolName: string;
+      streamedChars: number;
+      done: boolean;
+      toolPath?: string;
+    }
   | { type: 'trace'; trace: RunTraceEvent }
   | { type: 'code'; code: string }
   | { type: 'error'; error: string }
@@ -106,11 +115,23 @@ export type GenerateSSEEvent =
   | { type: 'todos'; todos: TodoItem[] }
   | { type: 'phase'; phase: AgenticPhase }
   | { type: 'evaluation_progress'; round: number; phase: string; message?: string }
+  | {
+      type: 'evaluation_worker_done';
+      round: number;
+      rubric: EvaluatorRubricId;
+      report: EvaluatorWorkerReport;
+    }
   | { type: 'evaluation_report'; round: number; snapshot: EvaluationRoundSnapshot }
   | { type: 'revision_round'; round: number; brief: string }
   | {
       type: 'skills_loaded';
       skills: { key: string; name: string; description: string }[];
+    }
+  | {
+      type: 'skill_activated';
+      key: string;
+      name: string;
+      description: string;
     }
   | { type: 'checkpoint'; checkpoint: AgenticCheckpoint }
   | { type: 'lane_done'; laneIndex: number }

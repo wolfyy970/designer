@@ -1,6 +1,6 @@
 ---
 name: Accessibility basics
-description: Semantic HTML, keyboard use, ARIA when needed, contrast, and focus visibility for inclusive static pages
+description: Use when building pages for keyboard, screen readers, zoom, or assistive technology. Activate for forms, navigation, interactive controls, landmarks, headings, contrast, or focus. Covers semantic HTML, ARIA when needed, and inclusive static pages.
 tags:
   - accessibility
   - a11y

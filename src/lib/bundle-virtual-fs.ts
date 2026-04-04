@@ -3,6 +3,8 @@
  * Split from iframe-utils so Node/server code can import without DOM types.
  */
 
+import { resolvePreviewEntryPath } from './preview-entry.ts';
+
 function generateMissingEntryShell(files: Record<string, string>): string {
   const fileList = Object.entries(files)
     .map(
@@ -26,7 +28,7 @@ function generateMissingEntryShell(files: Record<string, string>): string {
  * Inlines <link rel="stylesheet"> and <script src="..."> references.
  */
 export function bundleVirtualFS(files: Record<string, string>): string {
-  const htmlKey = Object.keys(files).find((p) => p.endsWith('.html')) ?? 'index.html';
+  const htmlKey = resolvePreviewEntryPath(files);
   let html = files[htmlKey];
   if (!html) return generateMissingEntryShell(files);
 

@@ -12,8 +12,9 @@ import {
   ChevronsDown,
   Wrench,
 } from 'lucide-react';
-import type { RunTraceEvent, ThinkingTurnSlice } from '../../../types/provider';
+import type { RunTraceEvent, StreamingToolLiveness, ThinkingTurnSlice } from '../../../types/provider';
 import { StreamdownTimeline } from './StreamdownTimeline.tsx';
+import { formatStreamArgSize } from '../../../lib/format-stream-arg-size';
 
 const NEAR_BOTTOM_PX = 48;
 
@@ -177,14 +178,28 @@ function ToolUseBlock({
   isActiveTurn,
   open,
   onToggle,
+  streamingToolName,
+  streamingToolPath,
+  streamingToolChars,
 }: {
   traces: RunTraceEvent[];
   isStreaming: boolean;
   isActiveTurn: boolean;
   open: boolean;
   onToggle: () => void;
+  streamingToolName?: string;
+  streamingToolPath?: string;
+  streamingToolChars?: number;
 }) {
-  if (traces.length === 0) return null;
+  const isStreamingArgs =
+    isStreaming && isActiveTurn && streamingToolName != null;
+  if (traces.length === 0 && !isStreamingArgs) return null;
+
+  const headerLabel = isStreamingArgs
+    ? streamingToolPath
+      ? `${streamingToolName} → ${streamingToolPath}`
+      : streamingToolName
+    : undefined;
 
   return (
     <div className="mb-2 border-l-2 border-border-subtle pl-2">
@@ -204,8 +219,21 @@ function ToolUseBlock({
         )}
         <Wrench size={12} className="shrink-0 text-fg-faint" />
         <span className="font-medium">Tool use</span>
-        <span className="tabular-nums text-fg-faint">({traces.length})</span>
-        {isStreaming && isActiveTurn && (
+        {traces.length > 0 && (
+          <span className="tabular-nums text-fg-faint">({traces.length})</span>
+        )}
+        {isStreamingArgs && (
+          <>
+            <span className="ml-1 inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+            <span className="min-w-0 truncate text-fg-secondary">
+              {headerLabel}
+              <span className="ml-1 text-fg-faint">
+                ({formatStreamArgSize(streamingToolChars ?? 0)})
+              </span>
+            </span>
+          </>
+        )}
+        {!isStreamingArgs && isStreaming && isActiveTurn && (
           <span className="ml-1 inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
         )}
       </button>
@@ -214,6 +242,18 @@ function ToolUseBlock({
           {traces.map((t) => (
             <TraceLine key={t.id} t={t} />
           ))}
+          {isStreamingArgs && (
+            <div className="flex items-center gap-1.5 font-mono text-badge leading-snug text-fg-secondary">
+              <span className="inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+              <span>
+                Streaming <code>{streamingToolName}</code>
+                {streamingToolPath ? ` → ${streamingToolPath}` : ''}
+              </span>
+              <span className="text-fg-faint">
+                ({formatStreamArgSize(streamingToolChars ?? 0)})
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -229,13 +269,18 @@ export function Timeline({
   activityByTurn,
   activityLog,
   isStreaming = false,
+  streamingLiveness,
 }: {
   trace?: RunTraceEvent[];
   thinkingTurns?: ThinkingTurnSlice[];
   activityByTurn?: Record<number, string>;
   activityLog?: string[];
   isStreaming?: boolean;
+  streamingLiveness?: StreamingToolLiveness;
 }) {
+  const streamingToolName = streamingLiveness?.streamingToolName;
+  const streamingToolPath = streamingLiveness?.streamingToolPath;
+  const streamingToolChars = streamingLiveness?.streamingToolChars;
   const scrollRef = useRef<HTMLDivElement>(null);
   const followLatestRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
@@ -316,8 +361,8 @@ export function Timeline({
       activityByTurn != null
         ? Object.values(activityByTurn).join('').length
         : fallbackActivity.length;
-    return `${trace?.length ?? 0}:${thLen}:${actLen}`;
-  }, [trace?.length, thinkingTurns, activityByTurn, fallbackActivity.length]);
+    return `${trace?.length ?? 0}:${thLen}:${actLen}:${streamingToolChars ?? 0}`;
+  }, [trace?.length, thinkingTurns, activityByTurn, fallbackActivity.length, streamingToolChars]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -485,6 +530,9 @@ export function Timeline({
                     isActiveTurn={isActive}
                     open={resolvedToolUseOpen(seg.turnId)}
                     onToggle={() => toggleToolUse(seg.turnId)}
+                    streamingToolName={isActive ? streamingToolName : undefined}
+                    streamingToolPath={isActive ? streamingToolPath : undefined}
+                    streamingToolChars={isActive ? streamingToolChars : undefined}
                   />
 
                   {otherTraces.length > 0 && (

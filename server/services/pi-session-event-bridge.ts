@@ -1,7 +1,7 @@
 /**
  * Bridge Pi `AgentSession` events → app `AgentRunEvent` SSE payloads.
  */
-import type { AgentSessionEvent, AgentSession } from './pi-sdk/types.ts';
+import type { AgentSessionEvent, AgentSession, AssistantMessage } from './pi-sdk/types.ts';
 import { appendLlmCallResponse } from '../log-store.ts';
 import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
 import { parsePiToolExecutionArgs } from '../lib/pi-tool-args.ts';
@@ -54,6 +54,8 @@ function toolStartProgressPayload(
       return `Validating ${path ?? 'file'}…`;
     case 'todo_write':
       return 'Updating tasks…';
+    case 'use_skill':
+      return path ? `Loading skill: ${path}…` : 'Loading skill…';
     default:
       return `Running ${toolName}…`;
   }
@@ -67,9 +69,59 @@ function syncPendingToolProbe(ctx: PiSessionBridgeContext, toolStartMs: Map<stri
   if (ctx.pendingToolCallsRef) ctx.pendingToolCallsRef.current = toolStartMs.size;
 }
 
+/** Exported for tests (throttle between streaming_tool SSE payloads during toolcall_delta). */
+export const STREAMING_TOOL_EMIT_INTERVAL_MS = 500;
+
+interface StreamingToolAcc {
+  toolName: string;
+  toolPath?: string;
+  streamedChars: number;
+  lastEmitAt: number;
+}
+
+function toolMetaFromPartial(
+  partial: AssistantMessage,
+  contentIndex: number,
+): { toolName: string; toolPath?: string } {
+  const slice = partial.content[contentIndex];
+  if (
+    slice &&
+    typeof slice === 'object' &&
+    'type' in slice &&
+    (slice as { type?: string }).type === 'toolCall'
+  ) {
+    const tc = slice as { name?: string; arguments?: Record<string, unknown> };
+    const toolName = typeof tc.name === 'string' && tc.name.length > 0 ? tc.name : 'tool';
+    let toolPath: string | undefined;
+    const args = tc.arguments;
+    if (args && typeof args === 'object') {
+      for (const key of ['path', 'file', 'filePath', 'target_file'] as const) {
+        const v = args[key];
+        if (typeof v === 'string' && v.length > 0) {
+          toolPath = v;
+          break;
+        }
+      }
+    }
+    return { toolName, toolPath };
+  }
+  return { toolName: 'tool' };
+}
+
+function toolPathFromToolCall(toolCall: { name?: string; arguments?: Record<string, unknown> }): string | undefined {
+  const args = toolCall.arguments;
+  if (!args || typeof args !== 'object') return undefined;
+  for (const key of ['path', 'file', 'filePath', 'target_file'] as const) {
+    const v = args[key];
+    if (typeof v === 'string' && v.length > 0) return v;
+  }
+  return undefined;
+}
+
 /** Subscribe until `unsubscribe()`; call when the agent session is ready. */
 export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBridgeContext): () => void {
   const toolStartMs = new Map<string, number>();
+  const streamingToolByIndex = new Map<number, StreamingToolAcc>();
   syncPendingToolProbe(ctx, toolStartMs);
   return session.subscribe((event: AgentSessionEvent) => {
     if (event.type === 'turn_start') {
@@ -119,6 +171,72 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
             turnId: ctx.modelTurnId.current,
           });
         }
+      } else if (e.type === 'toolcall_start') {
+        emitFirstTokenIfNeeded(ctx);
+        bumpStreamActivity(ctx);
+        const idx = e.contentIndex;
+        const { toolName, toolPath } = toolMetaFromPartial(e.partial, idx);
+        const now = Date.now();
+        streamingToolByIndex.set(idx, {
+          toolName,
+          toolPath,
+          streamedChars: 0,
+          lastEmitAt: now,
+        });
+        void ctx.onEvent({
+          type: 'streaming_tool',
+          toolName,
+          streamedChars: 0,
+          done: false,
+          ...(toolPath != null ? { toolPath } : {}),
+        });
+      } else if (e.type === 'toolcall_delta' && e.delta) {
+        emitFirstTokenIfNeeded(ctx);
+        bumpStreamActivity(ctx);
+        const idx = e.contentIndex;
+        let acc = streamingToolByIndex.get(idx);
+        if (!acc) {
+          const meta = toolMetaFromPartial(e.partial, idx);
+          const now = Date.now();
+          acc = {
+            toolName: meta.toolName,
+            toolPath: meta.toolPath,
+            streamedChars: 0,
+            lastEmitAt: now,
+          };
+          streamingToolByIndex.set(idx, acc);
+        }
+        const pathFromPartial = toolMetaFromPartial(e.partial, idx).toolPath;
+        if (pathFromPartial && !acc.toolPath) acc.toolPath = pathFromPartial;
+        acc.streamedChars += e.delta.length;
+        const t = Date.now();
+        if (t - acc.lastEmitAt >= STREAMING_TOOL_EMIT_INTERVAL_MS) {
+          acc.lastEmitAt = t;
+          void ctx.onEvent({
+            type: 'streaming_tool',
+            toolName: acc.toolName,
+            streamedChars: acc.streamedChars,
+            done: false,
+            ...(acc.toolPath != null ? { toolPath: acc.toolPath } : {}),
+          });
+        }
+      } else if (e.type === 'toolcall_end') {
+        bumpStreamActivity(ctx);
+        const idx = e.contentIndex;
+        const acc = streamingToolByIndex.get(idx);
+        const tc = e.toolCall as { name?: string; arguments?: Record<string, unknown> };
+        const toolName =
+          (typeof tc?.name === 'string' && tc.name.length > 0 ? tc.name : acc?.toolName) ?? 'tool';
+        const toolPath = toolPathFromToolCall(tc) ?? acc?.toolPath;
+        const streamedChars = acc?.streamedChars ?? 0;
+        streamingToolByIndex.delete(idx);
+        void ctx.onEvent({
+          type: 'streaming_tool',
+          toolName,
+          streamedChars,
+          done: true,
+          ...(toolPath != null ? { toolPath } : {}),
+        });
       }
       return;
     }

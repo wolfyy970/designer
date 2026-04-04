@@ -22,6 +22,7 @@ describe('buildAgenticSystemContext', () => {
       const out = await buildAgenticSystemContext({ getPromptBody, skillsRoot });
 
       expect(out.loadedSkills).toEqual([]);
+      expect(out.skillCatalog).toEqual([]);
       expect(out.sandboxSeedFiles).toEqual({});
       expect(out.systemPrompt).toBe('BASE');
     } finally {
@@ -41,6 +42,7 @@ describe('buildAgenticSystemContext', () => {
       const out = await buildAgenticSystemContext({ getPromptBody, skillsRoot });
 
       expect(out.loadedSkills).toEqual([]);
+      expect(out.skillCatalog).toEqual([]);
       expect(out.sandboxSeedFiles).toEqual({ 'AGENTS.md': 'hello agent' });
     } finally {
       await fs.rm(skillsRoot, { recursive: true, force: true });
@@ -59,13 +61,15 @@ describe('buildAgenticSystemContext', () => {
       const out = await buildAgenticSystemContext({ getPromptBody, skillsRoot });
 
       expect(out.loadedSkills).toEqual([]);
+      expect(out.skillCatalog).toEqual([]);
       expect(out.systemPrompt).toBe('BASE');
+      expect(out.systemPrompt).not.toContain('<available_skills>');
     } finally {
       await fs.rm(skillsRoot, { recursive: true, force: true });
     }
   });
 
-  it('injects when:always skills from a custom skills root', async () => {
+  it('returns skillCatalog + seeds for when:always skills (catalog not in system prompt)', async () => {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'ad-ctx-skills-'));
     try {
       const key = 'always-on';
@@ -88,10 +92,11 @@ Skill body`,
       const out = await buildAgenticSystemContext({ getPromptBody, skillsRoot: tmp });
       expect(out.loadedSkills).toHaveLength(1);
       expect(out.loadedSkills[0]!.key).toBe(key);
-      expect(out.systemPrompt).toContain('<available_skills>');
-      expect(out.systemPrompt).toContain('Always on');
-      expect(out.systemPrompt).toContain(`path="skills/${key}/SKILL.md"`);
-      expect(out.systemPrompt).toContain('read_file');
+      expect(out.skillCatalog).toHaveLength(1);
+      expect(out.skillCatalog[0]!.key).toBe(key);
+      expect(out.skillCatalog[0]!.bodyMarkdown.trim()).toBe('Skill body');
+      expect(out.systemPrompt).toBe('BASE');
+      expect(out.systemPrompt).not.toContain('<available_skills>');
       expect(out.sandboxSeedFiles[`skills/${key}/SKILL.md`]).toBe('Skill body');
     } finally {
       await fs.rm(tmp, { recursive: true, force: true });
@@ -120,7 +125,8 @@ Body`,
       });
       const out = await buildAgenticSystemContext({ getPromptBody, skillsRoot: tmp });
       expect(out.loadedSkills).toHaveLength(1);
-      expect(out.systemPrompt).toContain(`path="skills/${key}/SKILL.md"`);
+      expect(out.skillCatalog).toHaveLength(1);
+      expect(out.systemPrompt).not.toContain('<available_skills>');
       expect(out.sandboxSeedFiles[`skills/${key}/SKILL.md`]).toBe('Body');
     } finally {
       await fs.rm(tmp, { recursive: true, force: true });

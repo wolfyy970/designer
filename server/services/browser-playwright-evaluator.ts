@@ -8,6 +8,8 @@ import type { EvaluatorWorkerReport } from '../../src/types/evaluation.ts';
 
 export interface BrowserPlaywrightInput {
   files: Record<string, string>;
+  /** When set, load this URL (virtual FS preview) instead of inlined bundled HTML. */
+  previewPageUrl?: string;
 }
 
 function scoreFromCount(errors: number, maxPenalty = 4): number {
@@ -74,7 +76,11 @@ export async function runBrowserPlaywrightEval(
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
 
-    await page.setContent(bundled, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+    if (input.previewPageUrl) {
+      await page.goto(input.previewPageUrl, { waitUntil: 'domcontentloaded', timeout: 25_000 });
+    } else {
+      await page.setContent(bundled, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+    }
     await settlePageForEval(page);
 
     const metrics = (await page.evaluate(`(() => {

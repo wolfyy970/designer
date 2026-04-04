@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   buildSkillSandboxSeedMap,
+  buildUseSkillToolDescription,
   catalogEntriesToSummaries,
   discoverSkills,
   filterSkillsForCatalog,
@@ -66,14 +67,26 @@ describe('formatSkillsCatalogXml', () => {
     expect(formatSkillsCatalogXml([])).toBe('');
   });
 
-  it('includes read guidance and path attributes', () => {
-    const xml = formatSkillsCatalogXml([
-      { key: 'a', name: 'A', description: 'Alpha', path: 'skills/a/SKILL.md' },
-      { key: 'b', name: 'B', description: 'Beta', path: 'skills/b/SKILL.md' },
-    ]);
-    expect(xml).toContain('read');
+  it('tool variant includes Load guidance and path attributes', () => {
+    const xml = formatSkillsCatalogXml(
+      [
+        { key: 'a', name: 'A', description: 'Alpha', path: 'skills/a/SKILL.md' },
+        { key: 'b', name: 'B', description: 'Beta', path: 'skills/b/SKILL.md' },
+      ],
+      'tool',
+    );
+    expect(xml).toContain('Load');
     expect(xml).toContain('path="skills/a/SKILL.md"');
     expect(xml).toContain('path="skills/b/SKILL.md"');
+  });
+
+  it('buildUseSkillToolDescription wraps catalog for Pi tool', () => {
+    const desc = buildUseSkillToolDescription([
+      { key: 'x', name: 'X', description: 'Xd', path: 'skills/x/SKILL.md' },
+    ]);
+    expect(desc).toContain('use_skill:');
+    expect(desc).toContain('<available_skills>');
+    expect(desc).toContain('Xd');
   });
 });
 

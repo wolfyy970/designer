@@ -1,43 +1,45 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import type { TodoItem } from '../../../types/provider';
-import type { AgenticPhase } from '../../../types/evaluation';
+import type { LivenessSlice, TodoItem } from '../../../types/provider';
 import {
   FILE_STALL_WARN_SEC,
   FIRST_FILE_WAIT_ELAPSED_SEC,
   modelQuietSeconds,
   STREAM_QUIET_WARN_SEC,
 } from '../../../lib/generation-liveness';
+import { formatStreamArgSize } from '../../../lib/format-stream-arg-size';
 
 export function GeneratingFooter({
   plan,
   written,
-  progressMessage,
   elapsed,
-  lastAgentFileAt,
-  lastActivityAt,
-  lastTraceAt,
-  activeToolName,
-  activeToolPath,
+  liveness,
   liveTodos,
   liveSkills,
-  agenticPhase,
-  evaluationStatus,
+  liveActivatedSkills,
 }: {
   plan: string[] | undefined;
   written: number;
-  progressMessage: string | undefined;
   elapsed: number;
-  lastAgentFileAt?: number;
-  lastActivityAt?: number;
-  lastTraceAt?: number;
-  activeToolName?: string;
-  activeToolPath?: string;
+  liveness: LivenessSlice;
   liveTodos?: TodoItem[];
   liveSkills?: { key: string; name: string; description: string }[];
-  agenticPhase?: AgenticPhase;
-  evaluationStatus?: string;
+  /** Skills successfully loaded via use_skill this run. */
+  liveActivatedSkills?: { key: string; name: string; description: string }[];
 }) {
+  const {
+    progressMessage,
+    lastAgentFileAt,
+    lastActivityAt,
+    lastTraceAt,
+    activeToolName,
+    activeToolPath,
+    streamingToolName,
+    streamingToolPath,
+    streamingToolChars,
+    agenticPhase,
+    evaluationStatus,
+  } = liveness;
   const total = plan?.length ?? 0;
   const hasPlan = total > 0;
   const progress = hasPlan ? written / total : 0;
@@ -89,24 +91,39 @@ export function GeneratingFooter({
     return primaryLine.includes(activeToolName);
   }, [isBuilding, hasPlan, activeToolName, activeToolPath, primaryLine]);
 
+  const isStreamingToolArgs = isBuilding && streamingToolName != null;
+
   const fileStallSec =
     isBuilding && lastAgentFileAt != null && (!hasPlan || written < total)
       ? Math.max(0, Math.floor((now - lastAgentFileAt) / 1000))
       : 0;
   const modelQuietSec = modelQuietSeconds(now, lastActivityAt, lastTraceAt);
   const showStreamQuietWarning =
-    isBuilding && modelQuietSec != null && modelQuietSec >= STREAM_QUIET_WARN_SEC;
-  const showFileStall = fileStallSec >= FILE_STALL_WARN_SEC;
+    isBuilding &&
+    !isStreamingToolArgs &&
+    modelQuietSec != null &&
+    modelQuietSec >= STREAM_QUIET_WARN_SEC;
+  const showFileStall =
+    !isStreamingToolArgs && fileStallSec >= FILE_STALL_WARN_SEC;
   const firstFileWait =
+    !isStreamingToolArgs &&
     isBuilding &&
     written === 0 &&
     lastAgentFileAt == null &&
     elapsed >= FIRST_FILE_WAIT_ELAPSED_SEC;
 
-  const catalogTitles = useMemo(() => {
-    if (!liveSkills?.length) return '';
-    return liveSkills.map((s) => s.name).join(', ');
-  }, [liveSkills]);
+  const modelActivityDetail = (() => {
+    if (!isBuilding || isStreamingToolArgs || modelQuietSec == null) return null;
+    if (modelQuietSec === 0) return 'Model activity updating';
+    if (modelQuietSec < 30) return 'Model reasoning…';
+    if (modelQuietSec < STREAM_QUIET_WARN_SEC) return `Last model activity ${modelQuietSec}s ago`;
+    return null;
+  })();
+
+  const activatedKeys = useMemo(
+    () => new Set((liveActivatedSkills ?? []).map((s) => s.key)),
+    [liveActivatedSkills],
+  );
 
   return (
     <div className="flex flex-col gap-2 border-t border-border-subtle px-4 py-3">
@@ -146,6 +163,27 @@ export function GeneratingFooter({
               {progressMessage}
             </span>
           )}
+          {isStreamingToolArgs && (
+            <span className="flex items-center gap-1.5 pl-[18px] text-nano leading-snug text-fg-secondary">
+              <span
+                className="inline-block size-1.5 shrink-0 animate-pulse rounded-full bg-accent"
+                aria-hidden
+              />
+              <span className="min-w-0">
+                Streaming <code className="text-fg-secondary">{streamingToolName}</code>
+                {streamingToolPath != null && streamingToolPath.length > 0 ? (
+                  <>
+                    {' '}
+                    → <span className="text-fg-muted">{streamingToolPath}</span>
+                  </>
+                ) : null}
+                <span className="text-fg-muted">
+                  {' '}
+                  ({formatStreamArgSize(streamingToolChars ?? 0)})
+                </span>
+              </span>
+            </span>
+          )}
           {todoHint && (
             <span className="pl-[18px] text-nano leading-snug text-fg-muted">
               {todoHint.label}: <span className="text-fg-secondary">{todoHint.task}</span>
@@ -153,13 +191,19 @@ export function GeneratingFooter({
           )}
           {liveSkills != null && liveSkills.length > 0 && (
             <span className="pl-[18px] text-nano leading-snug text-fg-muted">
-              Skills (pre-seeded, read when relevant):{' '}
-              <span
-                className="text-fg-secondary"
-                title={liveSkills.map((s) => s.description).join(' · ')}
-              >
-                {catalogTitles}
-              </span>
+              Skills (✓ = use_skill):{' '}
+              {liveSkills.map((s, i) => (
+                <span key={s.key}>
+                  {i > 0 ? ', ' : ''}
+                  <span
+                    className={activatedKeys.has(s.key) ? 'text-fg-secondary' : 'text-fg-faint'}
+                    title={s.description}
+                  >
+                    {activatedKeys.has(s.key) ? '✓ ' : ''}
+                    {s.name}
+                  </span>
+                </span>
+              ))}
             </span>
           )}
           {liveSkills != null && liveSkills.length === 0 && isBuilding && (
@@ -168,7 +212,7 @@ export function GeneratingFooter({
               <code>manual</code>)
             </span>
           )}
-          {(activeToolName || activeToolPath) && !toolLineRedundant && (
+          {(activeToolName || activeToolPath) && !toolLineRedundant && !isStreamingToolArgs && (
             <span className="pl-[18px] text-nano leading-snug text-fg-muted">
               Tool:{' '}
               <span className="text-fg-secondary">
@@ -177,12 +221,8 @@ export function GeneratingFooter({
               </span>
             </span>
           )}
-          {modelQuietSec != null && (
-            <span className="pl-[18px] text-nano leading-snug text-fg-muted">
-              {modelQuietSec === 0
-                ? 'Model activity updating'
-                : `Last model activity ${modelQuietSec}s ago`}
-            </span>
+          {modelActivityDetail != null && (
+            <span className="pl-[18px] text-nano leading-snug text-fg-muted">{modelActivityDetail}</span>
           )}
           {showStreamQuietWarning && (
             <span className="pl-[18px] text-nano leading-snug text-warning">

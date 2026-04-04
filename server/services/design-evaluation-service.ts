@@ -4,14 +4,16 @@
  */
 import { z } from 'zod';
 import { bundleVirtualFS } from '../../src/lib/bundle-virtual-fs.ts';
-import type {
-  AggregatedEvaluationReport,
-  AggregatedHardFail,
-  EvaluationContextPayload,
-  EvalFinding,
-  EvaluatorRubricId,
-  EvaluatorWorkerReport,
+import {
+  EVALUATOR_RUBRIC_IDS,
+  type AggregatedEvaluationReport,
+  type AggregatedHardFail,
+  type EvaluationContextPayload,
+  type EvalFinding,
+  type EvaluatorRubricId,
+  type EvaluatorWorkerReport,
 } from '../../src/types/evaluation.ts';
+import { evaluatorRubricIdZodSchema } from '../../src/lib/evaluator-rubric-zod.ts';
 import type { PromptKey } from '../lib/prompts/defaults.ts';
 import { env } from '../env.ts';
 import { getProvider } from './providers/registry.ts';
@@ -19,6 +21,8 @@ import { loggedGenerateChat, type LlmLogContext } from '../lib/llm-call-logger.t
 import { runBrowserQA } from './browser-qa-evaluator.ts';
 import { mergePreflightWithPlaywright, runBrowserPlaywrightEval } from './browser-playwright-evaluator.ts';
 import { parseJsonLenient } from '../lib/parse-json-lenient.ts';
+import { createPreviewSession, deletePreviewSession } from './preview-session-store.ts';
+import { encodeVirtualPathForUrl, resolvePreviewEntryPath } from '../../src/lib/preview-entry.ts';
 
 const criterionSchema = z.object({
   score: z.number(),
@@ -26,7 +30,7 @@ const criterionSchema = z.object({
 });
 
 const workerReportSchema = z.object({
-  rubric: z.enum(['design', 'strategy', 'implementation', 'browser']),
+  rubric: evaluatorRubricIdZodSchema,
   scores: z.record(z.string(), criterionSchema),
   findings: z.array(
     z.object({
@@ -102,6 +106,8 @@ export function buildEvaluatorUserContent(
   files: Record<string, string>,
   compiledPrompt: string,
   context?: EvaluationContextPayload,
+  /** Live preview URL for this artifact (same virtual FS the UI serves). */
+  previewPageUrl?: string,
 ): string {
   let bundled = '';
   try {
@@ -151,6 +157,9 @@ export function buildEvaluatorUserContent(
       : compiledPrompt,
     '</compiled_generation_prompt>',
     ctxParts.length > 0 ? `<structured_context>\n${ctxParts.join('\n\n')}\n</structured_context>` : '',
+    previewPageUrl
+      ? `<preview_page_url>\n${previewPageUrl}\n</preview_page_url>`
+      : '',
     '<source_files>',
     fileBlocks,
     '</source_files>',
@@ -232,6 +241,8 @@ export interface EvaluationRoundInput {
   /** Propagates to LLM log rows for this evaluation round */
   correlationId?: string;
   signal?: AbortSignal;
+  /** Called once per rubric worker as it finishes (parallel or sequential). */
+  onWorkerDone?: (rubric: EvaluatorRubricId, report: EvaluatorWorkerReport) => void;
 }
 
 export async function runEvaluationWorkers(
@@ -245,73 +256,85 @@ export async function runEvaluationWorkers(
   const evalProviderId = input.evaluatorProviderId ?? input.providerId;
   const evalModelId = input.evaluatorModelId ?? input.modelId;
 
-  const userContent = buildEvaluatorUserContent(
-    input.files,
-    input.compiledPrompt,
-    input.context,
-  );
+  const previewSessionId = createPreviewSession(input.files);
+  const previewPageUrl = `${env.previewPublicBaseUrl}/api/preview/sessions/${previewSessionId}/${encodeVirtualPathForUrl(resolvePreviewEntryPath(input.files))}`;
 
-  const [sysDesign, sysStrategy, sysImpl] = await Promise.all([
-    input.getPromptBody('evalDesignSystem'),
-    input.getPromptBody('evalStrategySystem'),
-    input.getPromptBody('evalImplementationSystem'),
-  ]);
-
-  const evalLogCtx: Pick<LlmLogContext, 'correlationId' | 'signal'> = {
-    correlationId: input.correlationId,
-    signal: input.signal,
-  };
-
-  const runDesign = () =>
-    runEvaluatorWorker('design', sysDesign, userContent, evalProviderId, evalModelId, evalLogCtx);
-  const runStrategy = () =>
-    runEvaluatorWorker('strategy', sysStrategy, userContent, evalProviderId, evalModelId, evalLogCtx);
-  const runImpl = () =>
-    runEvaluatorWorker(
-      'implementation',
-      sysImpl,
-      userContent,
-      evalProviderId,
-      evalModelId,
-      evalLogCtx,
+  try {
+    const userContent = buildEvaluatorUserContent(
+      input.files,
+      input.compiledPrompt,
+      input.context,
+      previewPageUrl,
     );
-  const runBrowser = async () => {
-    try {
-      const preflight = runBrowserQA({ files: input.files });
-      if (!env.BROWSER_PLAYWRIGHT_EVAL) {
-        return preflight;
+
+    const [sysDesign, sysStrategy, sysImpl] = await Promise.all([
+      input.getPromptBody('evalDesignSystem'),
+      input.getPromptBody('evalStrategySystem'),
+      input.getPromptBody('evalImplementationSystem'),
+    ]);
+
+    const evalLogCtx: Pick<LlmLogContext, 'correlationId' | 'signal'> = {
+      correlationId: input.correlationId,
+      signal: input.signal,
+    };
+
+    const runDesign = () =>
+      runEvaluatorWorker('design', sysDesign, userContent, evalProviderId, evalModelId, evalLogCtx);
+    const runStrategy = () =>
+      runEvaluatorWorker('strategy', sysStrategy, userContent, evalProviderId, evalModelId, evalLogCtx);
+    const runImpl = () =>
+      runEvaluatorWorker(
+        'implementation',
+        sysImpl,
+        userContent,
+        evalProviderId,
+        evalModelId,
+        evalLogCtx,
+      );
+    const runBrowser = async () => {
+      try {
+        const preflight = runBrowserQA({ files: input.files });
+        if (!env.BROWSER_PLAYWRIGHT_EVAL) {
+          return preflight;
+        }
+        const pw = await runBrowserPlaywrightEval({ files: input.files, previewPageUrl });
+        return mergePreflightWithPlaywright(preflight, pw);
+      } catch (err) {
+        return buildDegradedReport('browser', err);
       }
-      const pw = await runBrowserPlaywrightEval({ files: input.files });
-      return mergePreflightWithPlaywright(preflight, pw);
-    } catch (err) {
-      return buildDegradedReport('browser', err);
+    };
+
+    if (input.parallel) {
+      const emitDone = (rubric: EvaluatorRubricId, report: EvaluatorWorkerReport) => {
+        input.onWorkerDone?.(rubric, report);
+        return report;
+      };
+      const wrap = (p: Promise<EvaluatorWorkerReport>, rubric: EvaluatorRubricId) =>
+        p.then(
+          (report) => emitDone(rubric, report),
+          (reason) => emitDone(rubric, buildDegradedReport(rubric, reason)),
+        );
+      const [design, strategy, implementation, browser] = await Promise.all([
+        wrap(runDesign(), 'design'),
+        wrap(runStrategy(), 'strategy'),
+        wrap(runImpl(), 'implementation'),
+        wrap(runBrowser(), 'browser'),
+      ]);
+      return { design, strategy, implementation, browser };
     }
-  };
 
-  if (input.parallel) {
-    const settled = await Promise.allSettled([runDesign(), runStrategy(), runImpl(), runBrowser()]);
-    const design =
-      settled[0].status === 'fulfilled' ? settled[0].value : buildDegradedReport('design', settled[0].reason);
-    const strategy =
-      settled[1].status === 'fulfilled'
-        ? settled[1].value
-        : buildDegradedReport('strategy', settled[1].reason);
-    const implementation =
-      settled[2].status === 'fulfilled'
-        ? settled[2].value
-        : buildDegradedReport('implementation', settled[2].reason);
-    const browser =
-      settled[3].status === 'fulfilled'
-        ? settled[3].value
-        : buildDegradedReport('browser', settled[3].reason);
+    const design = await runDesign();
+    input.onWorkerDone?.('design', design);
+    const strategy = await runStrategy();
+    input.onWorkerDone?.('strategy', strategy);
+    const implementation = await runImpl();
+    input.onWorkerDone?.('implementation', implementation);
+    const browser = await runBrowser();
+    input.onWorkerDone?.('browser', browser);
     return { design, strategy, implementation, browser };
+  } finally {
+    deletePreviewSession(previewSessionId);
   }
-
-  const design = await runDesign();
-  const strategy = await runStrategy();
-  const implementation = await runImpl();
-  const browser = await runBrowser();
-  return { design, strategy, implementation, browser };
 }
 
 type WorkerBundle = {
@@ -326,8 +349,7 @@ type WorkerBundle = {
  */
 export function aggregateEvaluationReports(reports: WorkerBundle): AggregatedEvaluationReport {
   const normalizedScores: Record<string, number> = {};
-  const rubrics: EvaluatorRubricId[] = ['design', 'strategy', 'implementation', 'browser'];
-  for (const rubric of rubrics) {
+  for (const rubric of EVALUATOR_RUBRIC_IDS) {
     for (const [criterion, { score }] of Object.entries(reports[rubric].scores)) {
       const key = `${rubric}_${criterion}`;
       normalizedScores[key] = score;
@@ -339,7 +361,7 @@ export function aggregateEvaluationReports(reports: WorkerBundle): AggregatedEva
     scoreValues.length > 0 ? scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length : 0;
 
   const hardFails: AggregatedHardFail[] = [];
-  for (const rubric of rubrics) {
+  for (const rubric of EVALUATOR_RUBRIC_IDS) {
     for (const hf of reports[rubric].hardFails) {
       hardFails.push({ ...hf, source: rubric });
     }
@@ -347,7 +369,7 @@ export function aggregateEvaluationReports(reports: WorkerBundle): AggregatedEva
 
   type FindingWithSource = EvalFinding & { source: EvaluatorRubricId };
   const allFindings: FindingWithSource[] = [];
-  for (const rubric of rubrics) {
+  for (const rubric of EVALUATOR_RUBRIC_IDS) {
     for (const f of reports[rubric].findings) {
       allFindings.push({ ...f, source: rubric });
     }

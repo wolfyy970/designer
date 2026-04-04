@@ -72,6 +72,62 @@ describe('safeParseGenerateSSEEvent', () => {
     if (r.ok) expect(r.event.type).toBe('skills_loaded');
   });
 
+  it('accepts skill_activated', () => {
+    const r = safeParseGenerateSSEEvent('skill_activated', {
+      key: 'accessibility',
+      name: 'A11y',
+      description: 'Test',
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.event.type).toBe('skill_activated');
+  });
+
+  it('accepts evaluation_worker_done with report passthrough', () => {
+    const r = safeParseGenerateSSEEvent('evaluation_worker_done', {
+      round: 1,
+      rubric: 'design',
+      report: {
+        rubric: 'design',
+        scores: { a: { score: 4, notes: 'ok' } },
+        findings: [],
+        hardFails: [],
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.event.type === 'evaluation_worker_done') {
+      expect(r.event.round).toBe(1);
+      expect(r.event.rubric).toBe('design');
+      expect(r.event.report.scores).toEqual({ a: { score: 4, notes: 'ok' } });
+    }
+  });
+
+  it('accepts streaming_tool with optional toolPath', () => {
+    const r = safeParseGenerateSSEEvent('streaming_tool', {
+      toolName: 'write_file',
+      streamedChars: 2400,
+      done: false,
+      toolPath: 'styles.css',
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok)
+      expect(r.event).toEqual({
+        type: 'streaming_tool',
+        toolName: 'write_file',
+        streamedChars: 2400,
+        done: false,
+        toolPath: 'styles.css',
+      });
+  });
+
+  it('accepts streaming_tool without toolPath', () => {
+    const r = safeParseGenerateSSEEvent('streaming_tool', {
+      toolName: 'bash',
+      streamedChars: 0,
+      done: true,
+    });
+    expect(r.ok).toBe(true);
+  });
+
   it('accepts checkpoint with required envelope', () => {
     const r = safeParseGenerateSSEEvent('checkpoint', {
       checkpoint: {

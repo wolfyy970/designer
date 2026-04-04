@@ -10,7 +10,7 @@ This document is the **narrative** companion to [ARCHITECTURE.md](ARCHITECTURE.m
 2. **Incubator (compiler node)** — Connects section nodes, optional critique/variant feedback, and a **model** node. **Compile** calls the server LLM to produce a **dimension map** (hypothesis strategies).
 3. **Hypothesis nodes** — Each card is one strategy. A **model** connection sets provider/model. **Direct** mode = one-shot HTML; **Agentic** = multi-file PI loop with tools. Domain state (wiring, models, design systems) lives in `workspace-domain-store`; the graph is a **projection** kept in sync via `domain-commands`.
 4. **Design system node** — Optional; injects tokens/text into prompts when wired to hypotheses or used from domain snapshots.
-5. **Variant nodes** — Show iframe previews; agentic runs get a file tree, zip, and evaluation summary. Versions stack per strategy; **Existing design** feedback loops can capture screenshots from variants.
+5. **Variant nodes** — Show iframe previews (URL-backed virtual FS for agentic multi-file); zip, evaluation summary. Versions stack per strategy; **Existing design** feedback loops can capture screenshots from variants.
 
 Multi-model runs per hypothesis use **`/api/hypothesis/generate`**: one SSE stream multiplexed with `laneIndex` and `lane_done` per model.
 
@@ -26,7 +26,7 @@ For a **plain-English map** of each Langfuse prompt name (`compilerSystem`, `var
 | **Variant** | Per-hypothesis user-facing generation prompt template | Langfuse `variant` + `compileVariantPrompts()` on client; bundle API uses same template server-side |
 | **Single-shot system** | Constraints for one HTML response | Langfuse `genSystemHtml` |
 | **Agentic system** | Multi-file static artifact rules (entry `index.html`, local assets, etc.) | Langfuse `genSystemHtmlAgentic` (optional sandbox **`AGENTS.md`** from `sandboxAgentsContext`) |
-| **Skills** | Repo-backed Agent Skills packages | Files under repo-root **`skills/<key>/SKILL.md`**. Each Pi session boundary walks the tree, appends **`<available_skills>`** (non-**`manual`**) with paths, and pre-seeds all of those packages under **`skills/<key>/…`** in **`just-bash`**; the agent **`read`s** relevant **`SKILL.md`** when needed |
+| **Skills** | Repo-backed Agent Skills packages | Files under repo-root **`skills/<key>/SKILL.md`**. Each Pi session embeds **`<available_skills>`** in the **`use_skill`** tool (non-**`manual`**) and pre-seeds packages under **`skills/<key>/…`** in **`just-bash`**; the agent calls **`use_skill`** or **`read_file`** when needed |
 
 Evaluators use separate LLM rubrics (browser / design / strategy / implementation) orchestrated on the server — not the same prompts as the builder model.
 

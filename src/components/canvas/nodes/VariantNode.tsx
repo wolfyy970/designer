@@ -4,7 +4,8 @@ import { Loader2, AlertCircle } from 'lucide-react';
 import { useGenerationStore } from '../../../stores/generation-store';
 import { normalizeError } from '../../../lib/error-utils';
 import { useCompilerStore, findVariantStrategy } from '../../../stores/compiler-store';
-import { bundleVirtualFS, prepareIframeContent, renderErrorHtml } from '../../../lib/iframe-utils';
+import { prepareIframeContent, renderErrorHtml } from '../../../lib/iframe-utils';
+import { preferredArtifactFileOrder } from '../../../lib/preview-entry';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import type { VariantNodeData } from '../../../types/canvas-data';
 import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
@@ -37,7 +38,9 @@ import {
   EvaluationScorecard,
   GeneratingFooter,
   AgenticHarnessStripe,
+  ArtifactPreviewFrame,
 } from '../variant-run';
+import { pickLivenessSlice } from '../../../types/provider';
 
 type VariantNodeType = Node<VariantNodeData, 'variant'>;
 
@@ -124,21 +127,11 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
   // Auto-select code file when switching to code tab
   useEffect(() => {
     if (activeTab === 'code' && !activeCodeFile && currentFiles) {
-      const preferred = ['index.html', 'styles.css', 'app.js'];
-      const first = preferred.find((p) => p in currentFiles) ?? Object.keys(currentFiles)[0];
+      const ordered = preferredArtifactFileOrder(currentFiles);
+      const first = ordered[0] ?? Object.keys(currentFiles)[0];
       setActiveCodeFile(first);
     }
   }, [activeTab, activeCodeFile, currentFiles]);
-
-  // Bundled HTML for multi-file preview
-  const bundledHtml = useMemo(() => {
-    if (!currentFiles || Object.keys(currentFiles).length === 0) return '';
-    try {
-      return bundleVirtualFS(currentFiles);
-    } catch (err) {
-      return renderErrorHtml(normalizeError(err));
-    }
-  }, [currentFiles]);
 
   const handleDeleteVersion = useCallback(async () => {
     if (!result || !versionKey) return;
@@ -358,17 +351,11 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
             <GeneratingFooter
               plan={result.liveFilesPlan}
               written={Object.keys(result.liveFiles ?? {}).length}
-              progressMessage={result.progressMessage}
               elapsed={elapsed}
-              lastAgentFileAt={result.lastAgentFileAt}
-              lastActivityAt={result.lastActivityAt}
-              lastTraceAt={result.lastTraceAt}
-              activeToolName={result.activeToolName}
-              activeToolPath={result.activeToolPath}
+              liveness={pickLivenessSlice(result)}
               liveTodos={result.liveTodos}
               liveSkills={result.liveSkills}
-              agenticPhase={result.agenticPhase}
-              evaluationStatus={result.evaluationStatus}
+              liveActivatedSkills={result.liveActivatedSkills}
             />
           </div>
         )}
@@ -449,11 +436,10 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
               ))}
             </div>
             {/* Preview tab */}
-            {activeTab === 'preview' && (
+            {activeTab === 'preview' && currentFiles && (
               <div className="relative flex-1 overflow-hidden">
-                <iframe
-                  srcDoc={bundledHtml}
-                  sandbox="allow-scripts"
+                <ArtifactPreviewFrame
+                  files={currentFiles}
                   title={`Variant: ${variantName}`}
                   className="absolute left-0 top-0 border-0 bg-white"
                   style={{

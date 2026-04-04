@@ -103,7 +103,7 @@ flowchart TB
 - **`agentic-orchestrator`** calls **`runDesignAgentSession`** only — it does not import `@mariozechner/*` directly. To replace Pi, rework **`server/services/pi-sdk/`**, **`pi-agent-service.ts`**, and the event bridge; keep the orchestrator’s build/eval/revision contract stable.
 - **`createAgentSession`** uses **`tools: []`** so default Pi tools never touch the host filesystem; **`virtual-tools`** maps native Pi file tool schemas to **`just-bash`**, and **`pi-bash-tool`** runs shell commands in the same instance. **`cwd`** is the sandbox project root; **`createSandboxResourceLoader()`** is a no-op loader so Pi does not merge host-repo AGENTS/system prompts — sandbox **`AGENTS.md`** (if any) comes only from Langfuse **`sandboxAgentsContext`** via **`buildAgenticSystemContext`** → orchestrator seed merge.
 - **`pi-session-event-bridge`** turns Pi session callbacks into **`AgentRunEvent`**, which **`executeGenerateStream`** serializes to SSE for the client.
-- **`agent-bash-sandbox`** seeds design files (and optional **`AGENTS.md`** from Langfuse), then **`extractDesignFiles`** collects artifacts after the run; evaluation runs in **`design-evaluation-service`** (parallel workers), not inside Pi tool definitions. Repo-root **`skills/`** packages (see **`server/lib/skill-discovery.ts`**) are walked at each Pi session boundary; every non-**`manual`** skill appears in the agentic system prompt (`<available_skills>` with workspace paths) and is **pre-seeded** under **`skills/<key>/…`**. The model should **`read`** relevant **`SKILL.md`** files when needed (not all at once). **`skills_loaded`** SSE (+ trace) advertises the catalog.
+- **`agent-bash-sandbox`** seeds design files (and optional **`AGENTS.md`** from Langfuse), then **`extractDesignFiles`** collects artifacts after the run; evaluation runs in **`design-evaluation-service`** (parallel workers), not inside Pi tool definitions. Repo-root **`skills/`** packages (see **`server/lib/skill-discovery.ts`**) are walked at each Pi session boundary; every non-**`manual`** skill is **pre-seeded** under **`skills/<key>/…`** and listed in **`<available_skills>`** inside the Pi **`use_skill`** tool description (progressive disclosure). Successful **`use_skill`** calls emit **`skill_activated`** (SSE + trace). **`skills_loaded`** (+ trace) advertises the catalog summary for the UI.
 
 ## Four Abstraction Layers
 
@@ -113,7 +113,7 @@ flowchart TB
   spec["1. Spec Model — DesignSpec, 5 SpecSections, images, types/spec.ts"]
   api["2. API Client + Prompt Compiler — compileVariantPrompts locally, compileSpec and generate on server"]
   storage["3. Storage Abstraction — StoragePort interface, BrowserStorage, IndexedDB"]
-  output["4. Output Rendering — HTML iframe or bundleVirtualFS, VariantNode"]
+  output["4. Output Rendering — iframe preview (URL-backed VFS or bundled fallback), VariantNode"]
 
   ui --> spec --> api --> storage --> output
 ```
@@ -184,10 +184,15 @@ flowchart TB
 | `/api/design-system/extract` | POST | Extract design tokens from screenshots | JSON: extracted tokens |
 | `/api/prompts/*` | GET | Versioned prompt bodies from Langfuse (label from `LANGFUSE_PROMPT_LABEL`) | JSON |
 | `/api/health` | GET | Health check | JSON: `{ ok: true }` |
+| `/api/preview/sessions` | POST | Register ephemeral virtual file tree for iframe preview; returns `{ id, entry }` | JSON |
+| `/api/preview/sessions/:id` | GET | Redirect to default HTML entry for that session | 302 |
+| `/api/preview/sessions/:id/*` | GET | Serve one file from the session (nested paths supported) | raw bytes + `Content-Type` |
+| `/api/preview/sessions/:id` | PUT | Replace session file map (optional; client re-POST is primary) | JSON |
+| `/api/preview/sessions/:id` | DELETE | Drop session from memory | JSON |
 
 **`/api/generate` request fields:** `prompt`, `providerId`, `modelId`, `promptOverrides` (`genSystemHtml`, `genSystemHtmlAgentic`, `variant`), `supportsVision`, `mode` (`single` | `agentic`), `thinkingLevel` (`off` | `minimal` | `low` | `medium` | `high`).
 
-**SSE events:** `progress` (status label), `activity` (streaming agent text), `code` (final HTML in single-shot), `file` (path + content in agentic), `plan` (declared file list in agentic), `skills_loaded` (pre-seeded non-manual skills for this Pi session; may repeat on revision rounds), `error`, `done`.
+**SSE events:** `progress` (status label), `activity` (streaming agent text), `code` (final HTML in single-shot), `file` (path + content in agentic), `plan` (declared file list in agentic), `skills_loaded` (pre-seeded non-manual skills for this Pi session; may repeat on revision rounds), `skill_activated` (successful **`use_skill`** call), `evaluation_worker_done` (one per rubric worker in an eval round; payload includes `round`, `rubric`, `report` snapshot for live UI), `error`, `done`.
 
 **Hypothesis flow:** The canvas still owns graph/domain state (Zustand + React Flow), but **prompt assembly and multi-model orchestration** for a hypothesis go through `/api/hypothesis/*`. Pure workspace helpers live in `src/workspace/hypothesis-generation-pure.ts` (importable by the server). `/api/hypothesis/generate` adds `laneIndex` to each event payload and emits `lane_done` per model lane before a final `done`; the client demuxes into one `GenerationResult` per lane.
 
@@ -216,12 +221,13 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 | `routes/logs.ts` | GET `/api/logs` → `{ llm, trace }`; POST `/api/logs/trace` (Zod); DELETE clears both rings (file append-only) |
 | `routes/design-system.ts` | POST /api/design-system/extract |
 | `routes/prompts.ts` | GET `/api/prompts/:key` — latest prompt body from Langfuse (label from `LANGFUSE_PROMPT_LABEL`) |
+| `routes/preview.ts` | POST/GET `/api/preview/sessions*` — ephemeral virtual FS for iframe + eval |
 | `db/prompts.ts` | Langfuse prompt reads for runtime + Prompt Studio |
 | `services/pi-sdk/` | **Only** place that imports `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent`; types, `createAgentSession`, `streamSimple`, stream budget, **`virtual-tools.ts`** (Pi tool definitions → `just-bash` FS / `grep` via `bash.exec`). |
-| `services/pi-agent-service.ts` | Pi session adapter — `tools: []`, `customTools` = virtual file tools + bash + app tools; `session.prompt`; LLM log wrapping; merges app + SDK system prompts; SSE via `pi-session-event-bridge.ts`. |
+| `services/pi-agent-service.ts` | Pi session adapter — `tools: []`, `customTools` = virtual file tools + bash + **use_skill** (skill catalog in tool description) + app tools; `session.prompt`; LLM log wrapping; merges app + SDK system prompts; SSE via `pi-session-event-bridge.ts`. |
 | `services/agent-bash-sandbox.ts` | `just-bash` instance: seed design files, extract artifacts after the run. |
 | `services/pi-bash-tool.ts` | Pi `bash` tool → `bash.exec`, snapshot diff → SSE file events for design paths. |
-| `services/pi-app-tools.ts` | Pi tools: `todo_write`, `validate_js`, `validate_html`. |
+| `services/pi-app-tools.ts` | Pi tools: `todo_write`, `use_skill` (loads `SkillCatalogEntry` body + `skill_activated` event), `validate_js`, `validate_html`. |
 | `services/pi-session-event-bridge.ts` | Maps `AgentSession` subscribe events → app `AgentRunEvent` stream. |
 | `services/agentic-orchestrator.ts` | Agentic evaluation / tool orchestration helpers |
 | `services/design-evaluation-service.ts` | Design evaluation payload handling |
@@ -234,8 +240,8 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 | `lib/provider-helpers.ts` | Re-exports from `src/lib/provider-fetch.ts` + server-specific `buildChatRequestFromMessages` |
 | `lib/prompts/*` | Re-exports from `src/lib/prompts/` — no server-side duplication |
 | `lib/extract-code.ts` | Re-exports `src/lib/extract-code.ts` |
-| `lib/build-agentic-system-context.ts` | Langfuse agentic system prompt + **`AGENTS.md`** seed + skills catalog XML + skill file seeds |
-| `lib/skill-discovery.ts` | Walk **`skills/*/SKILL.md`**, filter by `when` mode, build catalog XML + sandbox seed map |
+| `lib/build-agentic-system-context.ts` | Langfuse agentic system prompt + **`AGENTS.md`** seed + **`skillCatalog`** entries + skill file seeds (no catalog on system string) |
+| `lib/skill-discovery.ts` | Walk **`skills/*/SKILL.md`**, filter by `when` mode, **`formatSkillsCatalogXml`** / **`buildUseSkillToolDescription`** + sandbox seed map |
 | `lib/skill-schema.ts` | Zod: skill YAML frontmatter |
 | `lib/error-utils.ts` | Error normalization (`normalizeError`) |
 | `lib/utils.ts` | ID generation, interpolation |
@@ -253,7 +259,7 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 
 ### Agentic
 
-`server/routes/generate.ts` (when `mode === 'agentic'`) delegates to `server/services/agentic-orchestrator.ts` → `runAgenticWithEvaluation`. Agentic system text comes from Langfuse **`genSystemHtmlAgentic`** (and optional sandbox **`AGENTS.md`** from **`sandboxAgentsContext`** via `buildAgenticSystemContext`), plus an **`<available_skills>`** catalog. All non-**`manual`** skill bodies (+ small extras) are pre-seeded under **`skills/<key>/…`** in **`just-bash`** before the run.
+`server/routes/generate.ts` (when `mode === 'agentic'`) delegates to `server/services/agentic-orchestrator.ts` → `runAgenticWithEvaluation`. Agentic system text comes from Langfuse **`genSystemHtmlAgentic`** (and optional sandbox **`AGENTS.md`** from **`sandboxAgentsContext`** via `buildAgenticSystemContext`); the skill catalog XML is attached to the **`use_skill`** Pi tool, not appended to the system prompt. All non-**`manual`** skill bodies (+ small extras) are pre-seeded under **`skills/<key>/…`** in **`just-bash`** before the run.
 
 **Orchestrator (`runAgenticWithEvaluation`):**
 1. **Build:** `runDesignAgentSession` in `pi-agent-service.ts` — virtual FS is seeded with optional **`AGENTS.md`**, all catalog **skills** (`skills/<key>/…`), and any caller `seedFiles`, then the agent writes design artifacts. Each Pi session boundary re-runs **`discoverSkills`** (revision rounds use a fresh Pi session and re-seed skills).
@@ -287,7 +293,7 @@ The primary interface is a node-graph canvas built on `@xyflow/react` v12.
 
 When a result has files (agentic output), `VariantNode` shows:
 - **Generating state:** file explorer sidebar (planned + written files with status dots) + activity log + progress bar
-- **Complete state:** Preview/Code tab bar. Preview bundles all files via `bundleVirtualFS()`. Code tab shows the file explorer + raw file content.
+- **Complete state:** Preview/Code tab bar. **Preview** registers the file map with **`/api/preview/sessions`** and loads the default entry in a sandboxed iframe via **`src`** (real relative URLs between HTML/CSS/JS). If the API is unreachable, **`bundleVirtualFS()`** inlines linked assets into **`srcDoc`** as a fallback. Code tab shows the file explorer + raw file content.
 - **Download:** produces a `.zip` via `fflate`.
 
 ### Auto-Connection Logic (`canvas-connections.ts`)
@@ -377,7 +383,8 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 | File | Purpose |
 |------|---------|
-| `iframe-utils.ts` | `bundleVirtualFS(files)` — inlines `<link>` and `<script>` references for multi-file preview; `prepareIframeContent(code)` — single-file pass-through; `renderErrorHtml(msg)` |
+| `iframe-utils.ts` | Re-exports `bundleVirtualFS` — optional **fallback** for multi-file `srcDoc` when preview API registration fails; `prepareIframeContent(code)` — single-file pass-through; `renderErrorHtml(msg)` |
+| `preview-entry.ts` | `resolvePreviewEntryPath`, `encodeVirtualPathForUrl`, `preferredArtifactFileOrder` — shared by bundler, preview URLs, and eval |
 | `zip-utils.ts` | `downloadFilesAsZip(files, filename)` — bundles virtual FS into a `.zip` via `fflate` and triggers browser download |
 | `node-status.ts` | `filledOrEmpty`, `processingOrFilled`, `variantStatus` — pure helpers for node visual state |
 | `provider-fetch.ts` | Environment-agnostic fetch utilities shared by client and server (`fetchChatCompletion`, `fetchModelList`, `parseChatResponse`, `extractMessageText`) |
@@ -406,7 +413,9 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 **Why SSE for generation.** Each variant is a separate SSE stream. Single-shot events: `progress`, `code`, `done`. Agentic events additionally include `activity`, `plan`, and `file`. The client manages sequencing across variants.
 
-**Why `bundleVirtualFS` on the client.** The agentic agent produces separate files (index.html, styles.css, app.js). The sandboxed iframe environment has no file system — it renders a single HTML string. `bundleVirtualFS` inlines CSS and JS at display time, keeping the stored files pristine and separately downloadable.
+**Why URL-backed preview.** Agentic runs produce a **virtual file tree**. The API serves it at **`/api/preview/sessions/:id/...`** so iframe **`src`** uses real relative URLs (multi-page `a href` works). Sessions are ephemeral (TTL), not durable storage.
+
+**Why `bundleVirtualFS` still exists.** Fallback when preview registration fails, and for **evaluator** `bundled_preview_html` context. It inlines `<link>` / `<script src>` from the entry HTML determined by **`resolvePreviewEntryPath`**.
 
 **Why StoragePort.** Generated code currently lives in IndexedDB (browser-local). The `StoragePort` abstraction allows swapping to a server-backed database later without changing any consuming code. The files store (agentic output) is added alongside the existing code and provenance stores.
 
@@ -414,7 +423,7 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 **Why two TypeScript configs.** `tsconfig.app.json` targets the browser (DOM lib, JSX, Vite types). `tsconfig.server.json` targets Node.js (no DOM). Prevents browser globals from leaking into server code.
 
-**Why sandboxed iframes with srcdoc.** Generated code is untrusted. `sandbox="allow-scripts"` enables JS but blocks navigation, forms, and parent DOM access.
+**Why sandboxed iframes.** Generated code is untrusted. Previews use **`allow-scripts`**; URL-backed previews also use **`allow-same-origin`** so the document can load sibling paths from the same preview origin. Tighten if the threat model changes.
 
 ## Adding a New Provider
 
@@ -429,6 +438,7 @@ Single source of truth for string literals shared across the codebase. Eliminate
 - `vercel.json` configures static output from `dist/` and API routes via `api/[[...route]].ts`
 - Set `OPENROUTER_API_KEY` as a Vercel environment variable
 - `pnpm build` produces the SPA; Vercel bundles the serverless function automatically
+- **Preview sessions** are in-memory on one Node instance. On multi-instance / cold-start serverless, `POST /api/preview/sessions` and follow-up `GET` may hit different workers — the UI falls back to `bundleVirtualFS` `srcDoc` when requests fail; for sticky preview in production, persist maps (e.g. Redis) or route preview entirely client-side.
 
 **Local dev:**
 - `pnpm dev` — Vite dev server (port 5173)

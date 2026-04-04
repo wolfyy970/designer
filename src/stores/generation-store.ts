@@ -208,6 +208,7 @@ export const useGenerationStore = create<GenerationStore>()(
           delete persisted.liveTodos;
           delete persisted.liveTrace;
           delete persisted.liveSkills;
+          delete persisted.liveActivatedSkills;
           delete persisted.agenticPhase;
           delete persisted.evaluationStatus;
           delete persisted.lastAgentFileAt;
@@ -215,6 +216,10 @@ export const useGenerationStore = create<GenerationStore>()(
           delete persisted.lastTraceAt;
           delete persisted.activeToolName;
           delete persisted.activeToolPath;
+          delete persisted.streamingToolName;
+          delete persisted.streamingToolPath;
+          delete persisted.streamingToolChars;
+          delete persisted.liveEvalWorkers;
           if (persisted.evaluationRounds?.length) {
             persisted.evaluationRounds = persisted.evaluationRounds.map((er) => {
               const meta = { ...er };

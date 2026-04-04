@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
+import type { GenerationProvider } from '../../../src/types/provider.ts';
+import { EVALUATOR_RUBRIC_IDS, type EvaluatorRubricId } from '../../../src/types/evaluation.ts';
+import * as registry from '../providers/registry.ts';
 import {
   parseModelJsonObject,
   enforceRevisionGate,
@@ -7,6 +10,7 @@ import {
   buildDegradedReport,
   aggregateEvaluationReports,
   isEvalSatisfied,
+  runEvaluationWorkers,
 } from '../design-evaluation-service.ts';
 import { runBrowserQA } from '../browser-qa-evaluator.ts';
 import type { AggregatedEvaluationReport } from '../../../src/types/evaluation.ts';
@@ -216,10 +220,79 @@ describe('runBrowserQA', () => {
     expect(result.scores.asset_integrity?.score).toBe(5);
   });
 
+  it('checks asset integrity on secondary html pages', () => {
+    const result = runBrowserQA({
+      files: {
+        'index.html':
+          '<!DOCTYPE html><html><body><h1>Home page with words for content</h1><a href="p2.html">Next</a></body></html>',
+        'p2.html':
+          '<!DOCTYPE html><html><head><link rel="stylesheet" href="missing.css"/></head><body><h1>Second page words here</h1></body></html>',
+      },
+    });
+    expect(result.hardFails.some((hf) => hf.code === 'missing_assets')).toBe(true);
+  });
+
   it('returns degraded-shaped report when files map is empty', () => {
     const result = runBrowserQA({ files: {} });
     expect(result.rubric).toBe('browser');
     expect(result.hardFails.some((hf) => hf.code === 'empty_page')).toBe(true);
+  });
+});
+
+describe('runEvaluationWorkers onWorkerDone', () => {
+  const html =
+    '<!DOCTYPE html><html><head><title>T</title></head><body><h1>Hello</h1><p>World content here with lots of words to make the content check pass easily</p><button onclick="go()">CTA</button><a href="#home">Nav</a></body></html>';
+
+  let getProviderSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    getProviderSpy = vi.spyOn(registry, 'getProvider').mockReturnValue({
+      generateChat: vi.fn().mockResolvedValue({
+        raw: JSON.stringify({
+          rubric: 'design',
+          scores: { x: { score: 4, notes: 'n' } },
+          findings: [],
+          hardFails: [],
+        }),
+      }),
+    } as unknown as GenerationProvider);
+  });
+
+  afterEach(() => {
+    getProviderSpy.mockRestore();
+  });
+
+  it('invokes onWorkerDone once per rubric in parallel mode', async () => {
+    const done: EvaluatorRubricId[] = [];
+    await runEvaluationWorkers({
+      files: { 'index.html': html },
+      compiledPrompt: 'p',
+      providerId: 'openrouter',
+      modelId: 'x',
+      parallel: true,
+      getPromptBody: vi.fn().mockResolvedValue('system'),
+      onWorkerDone: (rubric) => {
+        done.push(rubric);
+      },
+    });
+    expect(done).toHaveLength(4);
+    expect(new Set(done).size).toBe(4);
+  });
+
+  it('invokes onWorkerDone in sequential rubric order', async () => {
+    const done: EvaluatorRubricId[] = [];
+    await runEvaluationWorkers({
+      files: { 'index.html': html },
+      compiledPrompt: 'p',
+      providerId: 'openrouter',
+      modelId: 'x',
+      parallel: false,
+      getPromptBody: vi.fn().mockResolvedValue('system'),
+      onWorkerDone: (rubric) => {
+        done.push(rubric);
+      },
+    });
+    expect(done).toEqual([...EVALUATOR_RUBRIC_IDS]);
   });
 });
 
@@ -236,6 +309,18 @@ describe('buildEvaluatorUserContent', () => {
     expect(body).toContain('compiled prompt text');
     expect(body).toContain('Bold dark UI');
     expect(body).toContain('Increase trust');
+    expect(body).toContain('bundled_preview_html');
     expect(body).toContain('index.html');
+  });
+
+  it('embeds preview_page_url when provided', () => {
+    const body = buildEvaluatorUserContent(
+      { 'index.html': '<html><body>x</body></html>' },
+      'p',
+      undefined,
+      'http://127.0.0.1:3001/api/preview/sessions/abc/index.html',
+    );
+    expect(body).toContain('<preview_page_url>');
+    expect(body).toContain('http://127.0.0.1:3001/api/preview/sessions/abc/index.html');
   });
 });

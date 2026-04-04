@@ -171,26 +171,51 @@ export function catalogEntriesToSummaries(entries: SkillCatalogEntry[]): LoadedS
   }));
 }
 
-type CatalogSkillXmlRow = {
+export type CatalogSkillXmlRow = {
   key: string;
   name: string;
   description: string;
   path: string;
 };
 
-/** Append `<available_skills>` block (paths under workspace; agent uses `read` when relevant). */
-export function formatSkillsCatalogXml(rows: CatalogSkillXmlRow[]): string {
+/**
+ * Build `<available_skills>` XML (for embedding in the use_skill tool description).
+ * `variant: 'tool'` — routing copy + use_skill naming; `system_prompt` is deprecated (catalog lives on tool only).
+ */
+export function formatSkillsCatalogXml(
+  rows: CatalogSkillXmlRow[],
+  variant: 'tool' | 'system_prompt' = 'tool',
+): string {
   if (rows.length === 0) return '';
-  const intro = [
-    '  Skill packages are under skills/&lt;key&gt;/SKILL.md (your system prompt describes when to consult them).',
-    '  Match entries to the hypothesis and milestones; read_file only paths you will apply this run. Do not bulk-read every skill.',
-    '',
-  ].join('\n');
+  const intro =
+    variant === 'tool'
+      ? [
+          "Load a skill's full instructions into context. Call before implementing work that matches a skill's description.",
+          'Parameter `name` is the skill key (directory name under skills/), same as the XML `key` attribute below.',
+          '',
+        ].join('\n')
+      : [
+          '  Skill packages are under skills/&lt;key&gt;/SKILL.md (your system prompt describes when to consult them).',
+          '  Match entries to the hypothesis and milestones; read_file only paths you will apply this run. Do not bulk-read every skill.',
+          '',
+        ].join('\n');
   const lines = rows.map(
     (s) =>
       `  <skill key="${escapeXmlAttr(s.key)}" name="${escapeXmlAttr(s.name)}" path="${escapeXmlAttr(s.path)}">${escapeXmlAttr(s.description)}</skill>`,
   );
   return `\n\n<available_skills>\n${intro}${lines.join('\n')}\n</available_skills>\n`;
+}
+
+/** Full tool description string for Pi use_skill (empty catalog still registers the tool). */
+export function buildUseSkillToolDescription(rows: CatalogSkillXmlRow[]): string {
+  const catalog = formatSkillsCatalogXml(rows, 'tool').trim();
+  if (!catalog) {
+    return (
+      'use_skill: No repo skills are configured for this session (or all are manual). ' +
+      'Do not call this tool until skills exist.'
+    );
+  }
+  return `use_skill: ${catalog}`;
 }
 
 function escapeXmlAttr(s: string): string {

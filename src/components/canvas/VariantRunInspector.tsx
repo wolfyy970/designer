@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
+import { EVALUATOR_RUBRIC_IDS, EVALUATOR_WORKER_COUNT } from '../../types/evaluation';
 import { storage } from '../../storage';
 import { useCanvasStore } from '../../stores/canvas-store';
 import { useCompilerStore, findVariantStrategy } from '../../stores/compiler-store';
@@ -10,11 +11,14 @@ import { useResultFiles } from '../../hooks/useResultFiles';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
 import { GENERATION_STATUS } from '../../constants/generation';
 import { abortGenerationForStrategy } from '../../lib/generation-abort-registry';
-import { bundleVirtualFS, prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
+import { prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
+import { preferredArtifactFileOrder } from '../../lib/preview-entry';
 import { normalizeError } from '../../lib/error-utils';
+import { pickLivenessSlice, pickStreamingToolLiveness } from '../../types/provider';
 import {
   AgenticHarnessStripe,
-  EvaluationScorecard,
+  ArtifactPreviewFrame,
+  EvaluationTabPanel,
   GeneratingFooter,
   Timeline,
   TodoTracker,
@@ -179,14 +183,6 @@ export default function VariantRunInspector() {
 
   const designIsMultiFile =
     !!designPreviewFiles && Object.keys(designPreviewFiles).length > 0;
-  const designBundledHtml = useMemo(() => {
-    if (!designPreviewFiles || Object.keys(designPreviewFiles).length === 0) return '';
-    try {
-      return bundleVirtualFS(designPreviewFiles);
-    } catch (err) {
-      return renderErrorHtml(normalizeError(err));
-    }
-  }, [designPreviewFiles]);
 
   const writtenForFilesTab = designPreviewFiles;
   const filesTabPlanned =
@@ -198,10 +194,8 @@ export default function VariantRunInspector() {
     const inWritten = filesTabPath != null && filesTabPath in written;
     const inPlanned = filesTabPlanned?.includes(filesTabPath ?? '') ?? false;
     if (filesTabPath && (inWritten || inPlanned)) return;
-    const preferred = ['index.html', 'styles.css', 'app.js'];
     const firstWritten =
-      preferred.find((p) => p in written) ??
-      Object.keys(written).sort()[0];
+      preferredArtifactFileOrder(written)[0] ?? Object.keys(written).sort()[0];
     const next = firstWritten ?? filesTabPlanned?.[0];
     setFilesTabPath(next);
   }, [tab, writtenForFilesTab, filesTabPlanned, filesTabPath]);
@@ -211,23 +205,16 @@ export default function VariantRunInspector() {
       ? writtenForFilesTab[filesTabPath]
       : undefined;
 
-  const tabBtn = useCallback(
-    (id: TabId, label: string) => (
-      <button
-        key={id}
-        type="button"
-        onClick={() => setTab(id)}
-        className={`shrink-0 rounded px-2 py-0.5 text-nano font-medium transition-colors ${
-          tab === id
-            ? 'bg-surface-secondary text-fg'
-            : 'text-fg-muted hover:text-fg-secondary'
-        }`}
-      >
-        {label}
-      </button>
-    ),
-    [tab],
+  const evalWorkers = result?.liveEvalWorkers;
+  const evalWorkersDoneCount = useMemo(
+    () =>
+      evalWorkers ? EVALUATOR_RUBRIC_IDS.filter((r) => evalWorkers[r] != null).length : 0,
+    [evalWorkers],
   );
+  const showEvaluationTabBadge =
+    tab !== 'evaluation' &&
+    isGenerating &&
+    (result?.agenticPhase === 'evaluating' || evalWorkersDoneCount > 0);
 
   if (!runInspectorVariantNodeId || !node || node.type !== 'variant') return null;
 
@@ -295,7 +282,31 @@ export default function VariantRunInspector() {
 
       {/* ── Tabs ─────────────────────────────────────────────── */}
       <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border-subtle px-2 py-1">
-        {TAB_DEFS.map(({ id, label }) => tabBtn(id, label))}
+        {TAB_DEFS.map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTab(id)}
+            className={`flex shrink-0 items-center rounded px-2 py-0.5 text-nano font-medium transition-colors ${
+              tab === id
+                ? 'bg-surface-secondary text-fg'
+                : 'text-fg-muted hover:text-fg-secondary'
+            }`}
+          >
+            {label}
+            {id === 'evaluation' && showEvaluationTabBadge ? (
+              <>
+                <span
+                  className="ml-1 inline-flex h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent"
+                  aria-hidden
+                />
+                <span className="ml-0.5 shrink-0 tabular-nums text-fg-faint">
+                  ({evalWorkersDoneCount}/{EVALUATOR_WORKER_COUNT})
+                </span>
+              </>
+            ) : null}
+          </button>
+        ))}
       </div>
 
       {/* ── Tab content ──────────────────────────────────────── */}
@@ -313,17 +324,11 @@ export default function VariantRunInspector() {
                 <GeneratingFooter
                   plan={result.liveFilesPlan}
                   written={Object.keys(result.liveFiles ?? {}).length}
-                  progressMessage={result.progressMessage}
                   elapsed={elapsed}
-                  lastAgentFileAt={result.lastAgentFileAt}
-                  lastActivityAt={result.lastActivityAt}
-                  lastTraceAt={result.lastTraceAt}
-                  activeToolName={result.activeToolName}
-                  activeToolPath={result.activeToolPath}
+                  liveness={pickLivenessSlice(result)}
                   liveTodos={result.liveTodos}
                   liveSkills={result.liveSkills}
-                  agenticPhase={result.agenticPhase}
-                  evaluationStatus={result.evaluationStatus}
+                  liveActivatedSkills={result.liveActivatedSkills}
                 />
               </div>
             )}
@@ -349,6 +354,7 @@ export default function VariantRunInspector() {
               activityByTurn={result?.activityByTurn}
               activityLog={result?.activityLog}
               isStreaming={isGenerating}
+              streamingLiveness={result ? pickStreamingToolLiveness(result) : undefined}
             />
           </div>
         )}
@@ -480,11 +486,11 @@ export default function VariantRunInspector() {
             {!codeLoading &&
               !filesLoading &&
               !(rounds.length > 1 && !isLatestEvalRound && !roundFilesFromIdb && !selectedRound?.files) &&
-              designIsMultiFile && (
-              <iframe
+              designIsMultiFile &&
+              designPreviewFiles && (
+              <ArtifactPreviewFrame
+                files={designPreviewFiles}
                 title={`Design preview: ${variantName}`}
-                sandbox="allow-scripts"
-                srcDoc={designBundledHtml || undefined}
                 className="min-h-[240px] flex-1 border-0 bg-white"
               />
             )}
@@ -519,82 +525,16 @@ export default function VariantRunInspector() {
         )}
 
         {tab === 'evaluation' && (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
-              {rounds.length > 0 ? (
-                <div className="flex flex-col gap-3 p-3">
-                  {rounds.map((round) => {
-                    const isLatest = lastRoundNum != null && round.round === lastRoundNum;
-                    return (
-                      <article
-                        key={round.round}
-                        className="overflow-hidden rounded-lg border border-border-subtle bg-surface-secondary/25"
-                      >
-                        <header className="flex items-start justify-between gap-2 border-b border-border-subtle bg-surface-secondary/50 px-3 py-2">
-                          <div className="min-w-0 space-y-0.5">
-                            <div className="text-nano font-semibold uppercase tracking-wide text-fg-secondary">
-                              Round {round.round}
-                              {isLatest ? (
-                                <span className="ml-1.5 font-normal normal-case text-fg-faint">
-                                  · latest
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="text-badge text-fg-muted">
-                              {round.aggregate.shouldRevise ? 'Revise suggested' : 'Pass'}
-                            </div>
-                          </div>
-                          <span className="shrink-0 tabular-nums font-mono text-sm text-accent">
-                            {round.aggregate.overallScore.toFixed(1)}
-                          </span>
-                        </header>
-                        <div className="px-3 pb-3 pt-1">
-                          <EvaluationScorecard
-                            summary={round.aggregate}
-                            latestSnapshot={round}
-                            mode="panel"
-                            showAggregateHeader={false}
-                          />
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              ) : evalSummary ? (
-                <div className="p-3">
-                  <article className="overflow-hidden rounded-lg border border-border-subtle bg-surface-secondary/25">
-                    <header className="flex items-start justify-between gap-2 border-b border-border-subtle bg-surface-secondary/50 px-3 py-2">
-                      <div className="min-w-0 space-y-0.5">
-                        <div className="text-nano font-semibold uppercase tracking-wide text-fg-secondary">
-                          Evaluation
-                        </div>
-                        <div className="text-badge text-fg-muted">
-                          {evalSummary.shouldRevise ? 'Revise suggested' : 'Pass'}
-                        </div>
-                      </div>
-                      <span className="shrink-0 tabular-nums font-mono text-sm text-accent">
-                        {evalSummary.overallScore.toFixed(1)}
-                      </span>
-                    </header>
-                    <div className="px-3 pb-3 pt-1">
-                      <EvaluationScorecard
-                        summary={evalSummary}
-                        latestSnapshot={selectedRound}
-                        mode="panel"
-                        showAggregateHeader={false}
-                      />
-                    </div>
-                  </article>
-                </div>
-              ) : (
-                <p className="px-3 py-3 text-nano text-fg-muted">
-                  {isGenerating
-                    ? 'Evaluation runs after the build phase; completed rounds will stack here.'
-                    : 'No evaluation data for this run.'}
-                </p>
-              )}
-            </div>
-          </div>
+          <EvaluationTabPanel
+            isGenerating={isGenerating}
+            agenticPhase={result?.agenticPhase}
+            liveEvalWorkers={result?.liveEvalWorkers}
+            evalWorkersDoneCount={evalWorkersDoneCount}
+            rounds={rounds}
+            lastRoundNum={lastRoundNum}
+            evalSummary={evalSummary}
+            selectedRound={selectedRound}
+          />
         )}
       </div>
     </aside>

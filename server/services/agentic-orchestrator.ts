@@ -9,6 +9,8 @@ import type {
   AggregatedEvaluationReport,
   EvaluationContextPayload,
   EvaluationRoundSnapshot,
+  EvaluatorRubricId,
+  EvaluatorWorkerReport,
 } from '../../src/types/evaluation.ts';
 import { getProvider } from './providers/registry.ts';
 import {
@@ -34,6 +36,12 @@ export type AgenticOrchestratorEvent =
   | { type: 'phase'; phase: AgenticPhase }
   | { type: 'skills_loaded'; skills: LoadedSkillSummary[] }
   | { type: 'evaluation_progress'; round: number; phase: string; message?: string }
+  | {
+      type: 'evaluation_worker_done';
+      round: number;
+      rubric: EvaluatorRubricId;
+      report: EvaluatorWorkerReport;
+    }
   | { type: 'evaluation_report'; round: number; snapshot: EvaluationRoundSnapshot }
   | { type: 'revision_round'; round: number; brief: string };
 
@@ -139,6 +147,9 @@ async function runEvaluationRound(
     getPromptBody: options.getPromptBody,
     correlationId: options.build.correlationId,
     signal: options.build.signal,
+    onWorkerDone: async (rubric, report) => {
+      await emit(options.onStream, { type: 'evaluation_worker_done', round, rubric, report });
+    },
   });
 
   const rawAgg = aggregateEvaluationReports(workers);
@@ -243,7 +254,21 @@ async function runAgenticWithEvaluationImpl(
       ? { minOverallScore: options.minOverallScore }
       : undefined;
 
+  let piTracePhase: AgenticPhase = 'building';
   const forward = async (e: AgentRunEvent) => {
+    if (e.type === 'skill_activated') {
+      await emit(options.onStream, {
+        type: 'trace',
+        trace: {
+          id: crypto.randomUUID(),
+          at: new Date().toISOString(),
+          kind: 'skill_activated',
+          label: `Skill activated: ${e.name} (${e.key})`,
+          phase: piTracePhase,
+          status: 'success',
+        },
+      });
+    }
     await options.onStream(e);
   };
 
@@ -260,11 +285,13 @@ async function runAgenticWithEvaluationImpl(
   const seedFilesForBuild =
     Object.keys(initialSeedFiles).length > 0 ? initialSeedFiles : undefined;
 
+  piTracePhase = 'building';
   const buildResult = await runDesignAgentSession(
     {
       ...options.build,
       systemPrompt: initialCtx.systemPrompt,
       seedFiles: seedFilesForBuild,
+      skillCatalog: initialCtx.skillCatalog,
     },
     forward,
   );
@@ -338,6 +365,7 @@ async function runAgenticWithEvaluationImpl(
     });
     await emitSkillsLoaded(options.onStream, revisionCtx.loadedSkills, 'revising');
 
+    piTracePhase = 'revising';
     const revised = await runDesignAgentSession(
       {
         ...options.build,
@@ -346,6 +374,7 @@ async function runAgenticWithEvaluationImpl(
         seedFiles: mergeSeedWithDesign(files, revisionCtx.sandboxSeedFiles),
         compactionNote: `Post-evaluation revision requested. Overall ${snapshot.aggregate.overallScore.toFixed(2)}. Hard fails: ${snapshot.aggregate.hardFails.length}.`,
         initialProgressMessage: 'Revising design from evaluation feedback…',
+        skillCatalog: revisionCtx.skillCatalog,
       },
       forward,
     );

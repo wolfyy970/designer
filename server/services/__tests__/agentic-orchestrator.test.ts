@@ -3,8 +3,11 @@ import {
   runAgenticWithEvaluation,
   buildRevisionUserContext,
 } from '../agentic-orchestrator.ts';
-import type { EvaluatorWorkerReport } from '../../../src/types/evaluation.ts';
-import { buildDegradedReport } from '../design-evaluation-service.ts';
+import { EVALUATOR_RUBRIC_IDS, type EvaluatorWorkerReport } from '../../../src/types/evaluation.ts';
+import {
+  buildDegradedReport,
+  type EvaluationRoundInput,
+} from '../design-evaluation-service.ts';
 
 const mocks = vi.hoisted(() => ({
   runDesignAgentSession: vi.fn(),
@@ -23,6 +26,7 @@ vi.mock('../../lib/build-agentic-system-context.ts', async (importOriginal) => {
       systemPrompt: 'sys',
       sandboxSeedFiles: {},
       loadedSkills: [],
+      skillCatalog: [],
     }),
   };
 });
@@ -109,6 +113,36 @@ describe('runAgenticWithEvaluation', () => {
     browser: healthyReport('browser'),
   });
 
+  it('emits evaluation_worker_done once per rubric before evaluation_report', async () => {
+    mocks.runDesignAgentSession.mockResolvedValueOnce({
+      files: { 'index.html': '<html></html>' },
+      todos: [],
+    });
+    mocks.runEvaluationWorkers.mockImplementation(async (input: EvaluationRoundInput) => {
+      const bundle = allHealthy();
+      EVALUATOR_RUBRIC_IDS.forEach((k) => {
+        input.onWorkerDone?.(k, bundle[k]);
+      });
+      return bundle;
+    });
+
+    const events: { type?: string }[] = [];
+    await runAgenticWithEvaluation({
+      ...baseOpts,
+      onStream: async (e) => {
+        events.push(e as { type?: string });
+      },
+    });
+
+    const types = events.map((e) => e.type);
+    const firstReport = types.indexOf('evaluation_report');
+    const workerDoneBeforeReport = types.filter(
+      (t, i) => t === 'evaluation_worker_done' && i < firstReport,
+    ).length;
+    expect(workerDoneBeforeReport).toBe(4);
+    expect(types.lastIndexOf('evaluation_worker_done')).toBeLessThan(firstReport);
+  });
+
   it('stops after one evaluation round when scores pass revision gate', async () => {
     mocks.runDesignAgentSession.mockResolvedValueOnce({
       files: { 'index.html': '<html></html>' },
@@ -120,6 +154,7 @@ describe('runAgenticWithEvaluation', () => {
 
     expect(result).not.toBeNull();
     expect(mocks.runDesignAgentSession).toHaveBeenCalledTimes(1);
+    expect(mocks.runDesignAgentSession.mock.calls[0][0].skillCatalog).toEqual([]);
     expect(mocks.runEvaluationWorkers).toHaveBeenCalledTimes(1);
     expect(result?.rounds).toHaveLength(1);
     expect(result?.finalAggregate.shouldRevise).toBe(false);

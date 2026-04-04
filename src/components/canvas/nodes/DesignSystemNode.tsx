@@ -1,4 +1,4 @@
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useMemo } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
 import { useDropzone } from 'react-dropzone';
 import { ImagePlus, Sparkles, Loader2, X } from 'lucide-react';
@@ -23,7 +23,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
 
   const title = data.title || 'Design System';
   const content = data.content || '';
-  const images = data.images || [];
+  const images = useMemo(() => data.images ?? [], [data.images]);
 
   const { providerId, modelId, supportsVision } = useConnectedModel(id);
 

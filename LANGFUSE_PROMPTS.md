@@ -47,7 +47,7 @@ In **Langfuse** and **Prompt Studio**, templates are keyed by short **camelCase 
 | Langfuse name | Plain-language goal |
 |----------------|---------------------|
 | **`agentCompactionSystem`** | When the agentic session **truncates history**, this prompt defines how to **summarize** prior work into a checkpoint the model can continue from without losing the thread. |
-| **`sandboxAgentsContext`** | Body seeded as **`AGENTS.md`** at the virtual workspace root (`/home/user/project`). Tells the tool-using agent what the sandbox supports (static HTML/CSS/JS) and forbids (npm, Vite, bundlers, CDNs, etc.). |
+| **`sandboxAgentsContext`** | Body seeded as **`AGENTS.md`** at the virtual workspace root (`/home/user/project`). Describes the **virtual file tree** (multi-page HTML, CSS, JS, assets), default preview entry (`index.html`), and forbids npm/Vite/CDNs/network. |
 
 **Runs during:** **`agentCompactionSystem`** — when the Pi session compacts long histories (still in `pi-agent-service`). **`sandboxAgentsContext`** — when **`buildAgenticSystemContext`** runs at each orchestrator Pi session boundary (initial build and revision rounds), merged into sandbox seed files as **`AGENTS.md`**.
 
@@ -61,7 +61,7 @@ Three **separate rubrics** score the artifact for **design quality**, **strategy
 |----------------|---------------------|
 | **`evalDesignSystem`** | Subjective **design / UX** critique (craft, coherence, originality, usability) of the preview. |
 | **`evalStrategySystem`** | Does the output **match the hypothesis**, KPIs, constraints, and design-system guidance? |
-| **`evalImplementationSystem`** | **Frontend engineering** review: HTML/CSS/JS structure, completeness, whether the code plausibly expresses the design bet. |
+| **`evalImplementationSystem`** | **Frontend engineering** review: file-tree structure, **`preview_page_url`** + `source_files`, optional bundled fallback; whether the implementation expresses the design bet. |
 
 **Runs when:** evaluation runs after agentic (and related paths) on the server — not the same call as the “builder” model.
 

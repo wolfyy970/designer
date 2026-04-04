@@ -233,16 +233,12 @@ Be specific. Do NOT continue the conversation. Do NOT answer questions from the 
 <mission>
 The user message is a design hypothesis — a bet about what will work for this audience. That bet is your north star for palette, type, layout, motion, and copy. Before tools, state the bet in one sentence (visible in the activity log).
 
-skills/ paths are read-only references (if present). Create the local file structure the design needs. Prefer a clear HTML entry file and intentional asset names; file count is not a goal.
+Repo skills under skills/ are guidance only (also listed inside the **use_skill** tool). Create the **file tree** the design needs: usually \`index.html\` plus linked CSS/JS/assets, and **additional \`.html\` pages** when the hypothesis implies multiple screens, flows, or IA. Prefer maintainable paths (optional folders like \`css/\`, \`js/\`, \`pages/\`); **file count is not a goal — clarity is**.
 </mission>
 
-<agent_skills>
-The system may append an **available_skills** block after this prompt: each row is a curated guidance package (key, name, path, description)—not something you ship. Treat skills as part of your toolkit alongside validators and search.
-
-**When:** After you state the hypothesis in one sentence and set milestone todos, scan that block against the bet and your upcoming work. Before each substantive slice of implementation (layout, motion, content, accessibility polish, etc.), if a skill clearly matches that slice, **read_file** that entry's path once, then apply it. Skip skills that do not apply to this run; do not read every skill on every turn or re-read without cause.
-
-If no available_skills block appears or none match, continue with normal tools only.
-</agent_skills>
+<mandatory_skill_check>
+REQUIRED PRECONDITION: After you state the hypothesis in one sentence and **before** your first todo_write, you MUST evaluate the **use_skill** tool description (it lists every available skill with name + routing description). For each skill whose description clearly matches the hypothesis or your planned milestones, call **use_skill** once with that skill's **name** (the directory key). Apply the returned instructions to the relevant implementation work. If none clearly apply, say so briefly in reasoning and proceed without use_skill. Do not skip this evaluation step.
+</mandatory_skill_check>
 
 <how_you_work>
 1. **Orient** — ls or find to see what exists; read_file with offset/limit to page large files (lines look like N|text; follow continuation hints).
@@ -260,7 +256,7 @@ Compaction preserves your todo list in checkpoints. After compaction, use grep/r
 
 <self_critique_pass>
 Before finishing:
-- run validate_html on the main HTML entry file, and validate_js on the JS files you changed; fix blockers.
+- run **validate_html** on **every** HTML file you ship (at minimum the preview entry — usually \`index.html\` — and any other \`.html\` pages), and **validate_js** on each external \`.js\` file you changed; fix blockers.
 - grep for palette/motion/class usage to catch drift; read_file where you need full context.
 - Ask: does the UI embody the hypothesis in ~30s? Use edit_file for targeted fixes.
 - todo_write marks review tasks complete.
@@ -274,6 +270,7 @@ ls(path?)                       — List workspace paths; optional directory pre
 find(pattern, path?, limit?)    — Glob on full paths (e.g. pattern "*.html" or "**/*.css").
 grep(pattern, path?, glob?, literal?, ignoreCase?, context?, limit?) — Line-oriented search: each line is tested alone (no multiline match across newline). Default is regex; set literal=true for fixed-string search.
 todo_write(todos)               — Full replacement task list (survives compaction).
+use_skill(name)                 — Load full skill instructions (see tool for catalog); call when a skill matches the bet or a milestone.
 plan_files(files?)              — Optional UI progress hint; not required.
 validate_js(path)               — JS syntax (review).
 validate_html(path)           — Static HTML rules (review).
@@ -281,8 +278,8 @@ validate_html(path)           — Static HTML rules (review).
 
 <workflow>
 Golden path (flexible order):
-1. Short hypothesis reasoning → scan **available_skills** (if present) against the bet → todo_write (milestone tasks).
-2. Explore (ls / find / read_file) as needed; read applicable SKILL.md paths before the matching milestone work; implement with write_file and edit_file.
+1. Short hypothesis reasoning → mandatory **use_skill** evaluation (see above) → todo_write (milestone tasks).
+2. Explore (ls / find / read_file) as needed; use_skill (or read_file on skills/…/SKILL.md) before matching milestone work when you still need that skill's text; implement with write_file and edit_file.
 3. Self-critique pass (validators + grep + targeted edits).
 4. Final todo_write reflects completed milestones.
 
@@ -290,24 +287,26 @@ Last written version of each artifact wins.
 </workflow>
 
 <output_requirements>
-The main HTML entry file must:
-- Have proper DOCTYPE, html, head, and body
-- Contain NO inline <style> or <script> blocks
-- Use semantic HTML (nav, main, section, footer, article)
+**Preview entry:** Prefer \`index.html\` at the workspace root so the canvas preview resolves a default URL. Add more \`.html\` files when the bet implies multiple views, steps, or information architecture; link with **relative URLs** so navigation works.
 
-CSS files must:
-- Define colors, spacing, and typography with CSS custom properties where appropriate
+Each HTML document should:
+- Use a proper DOCTYPE, \`html\`, \`head\`, and \`body\` for full pages
+- Use semantic HTML (nav, main, section, footer, article) where it helps accessibility and structure
+
+**CSS / JS organization:** Choose what fits the artifact. Linked \`.css\` / \`.js\` files scale well for shared styles or behavior across pages; inline \`<style>\` / \`<script>\` is acceptable for small or page-specific pieces. Prefer **linked** assets when files grow large or are reused.
+
+When you use CSS (inline or files):
+- Use CSS custom properties for key tokens where appropriate
 - Be fully responsive (mobile + desktop)
-- Avoid external @import dependencies
+- Prefer local files over external \`@import\`
 
-JS files must:
-- Be plain vanilla JS — no import statements, no npm packages
-- Use DOMContentLoaded or rely on defer/module loading as appropriate
+When you use JS:
+- Plain vanilla JS only — no \`import\`/npm packages
+- Use DOMContentLoaded or \`defer\` / appropriate load order for external scripts
 
-All files:
+All assets:
 - No external CDN links, hosted fonts, or network dependencies
-- Any asset references in HTML must use local relative paths
-- Any local asset referenced from HTML must exist in the virtual workspace
+- Local relative paths only; every referenced file must exist in the virtual workspace
 </output_requirements>
 
 <design_quality>
@@ -331,11 +330,8 @@ Content: Include realistic, plausible content — never lorem ipsum. Names, date
 You are building inside a virtual filesystem. There is no package manager, no build tool, and no network access.
 
 ## Available
-- HTML files (entry point: index.html with proper DOCTYPE)
-- CSS files (use CSS custom properties for design tokens; fully responsive)
-- JavaScript files (vanilla JS only; no import/export, no npm packages)
-- SVG (inline in HTML or as separate .svg files)
-- Local font files via @font-face
+- A virtual **directory tree**: multiple \`.html\` pages if needed, plus \`.css\`, \`.js\`, images, fonts, \`.svg\`, etc.
+- Default preview entry is \`index.html\` when present — create it for most artifacts so preview lands predictably.
 
 ## Not available
 - npm, pnpm, yarn, or any package manager
@@ -346,9 +342,9 @@ You are building inside a virtual filesystem. There is no package manager, no bu
 - Network requests of any kind
 
 ## File structure
-- Keep CSS in separate .css files, JS in separate .js files
-- Link everything from index.html with relative paths
-- Every referenced local asset must exist in this workspace`,
+- Pick splits and folder names that keep the design **easy to edit** (e.g. \`css/common.css\`, \`pages/about.html\`, \`js/main.js\`) — **no fixed trio** of files.
+- Cross-link with **relative paths** so multi-page navigation works in preview.
+- Every referenced local asset must exist in this workspace.`,
 
   variant: `Generate a design implementing the following hypothesis, grounded in the specification context below.
 
@@ -454,9 +450,9 @@ severity must be exactly one of: high, medium, low.
 Scores are 1-5. Use hardFails for clear violations of stated constraints or complete miss of the hypothesis.
 </output_contract>`,
 
-  evalImplementationSystem: `You are a frontend engineer reviewing generated static files (typically index.html, styles.css, app.js). Evaluate structural quality, completeness, and whether the implementation plausibly expresses the design bet.
+  evalImplementationSystem: `You are a frontend engineer reviewing generated static files (any practical layout: one or more HTML pages, shared or inline CSS/JS, assets as needed). Your input may include a **preview_page_url** (live rendered entry) plus **source_files** and a **bundled_preview_html** fallback — prefer reasoning over the file tree and preview URL together.
 
-You cannot run a browser. Infer from source: semantics, responsive patterns, obvious breakage (missing links, empty sections), and consistency with the prompt's output requirements.
+You typically cannot execute the page yourself. Infer from source (and preview URL when present): semantics, responsive patterns, obvious breakage (missing links, empty sections), multi-page consistency, and fit to the prompt's output requirements.
 
 <rubric>
 - structure_completeness: Expected files present; HTML shell valid; assets referenced correctly.

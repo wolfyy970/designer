@@ -8,7 +8,7 @@ import {
   findHypothesisIdForVariantNode,
   getVariantNodeIdsForHypothesis,
 } from '../../workspace/domain-variant-selectors';
-import { bundleVirtualFS, prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
+import { prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
 import { normalizeError } from '../../lib/error-utils';
 import { useResultCode } from '../../hooks/useResultCode';
 import { useResultFiles } from '../../hooks/useResultFiles';
@@ -16,6 +16,47 @@ import { useVersionStack } from '../../hooks/useVersionStack';
 import { badgeColor } from '../../lib/badge-colors';
 import type { GenerationResult } from '../../types/provider';
 import { GENERATION_STATUS } from '../../constants/generation';
+import { ArtifactPreviewFrame } from './variant-run';
+
+function ExpandedVariantIframe({
+  files,
+  code,
+  isLoading,
+  title,
+}: {
+  files?: Record<string, string>;
+  code?: string;
+  isLoading: boolean;
+  title: string;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Loader2 size={20} className="animate-spin text-fg-muted" />
+      </div>
+    );
+  }
+  if (files && Object.keys(files).length > 0) {
+    return <ArtifactPreviewFrame files={files} title={title} className="h-full w-full border-0" />;
+  }
+  if (code) {
+    let content: string;
+    try {
+      content = prepareIframeContent(code);
+    } catch (err) {
+      content = renderErrorHtml(normalizeError(err));
+    }
+    return (
+      <iframe srcDoc={content} sandbox="allow-scripts" title={title} className="h-full w-full border-0" />
+    );
+  }
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
+      <AlertCircle size={24} className="text-fg-muted" />
+      <p className="text-sm text-fg-muted">Code unavailable — may need to regenerate</p>
+    </div>
+  );
+}
 
 /** All canvas variant nodes with results, sorted by position (fallback). */
 function useAllVariantNodeIdsWithResults(): string[] {
@@ -156,21 +197,11 @@ export default function VariantPreviewOverlay() {
     label?: string,
   ) {
     const strat = findVariantStrategy(dimensionMaps, r.variantStrategyId);
-    let content: string | null = null;
-
-    if (panelFiles && Object.keys(panelFiles).length > 0) {
-      try {
-        content = bundleVirtualFS(panelFiles);
-      } catch (err) {
-        content = renderErrorHtml(normalizeError(err));
-      }
-    } else if (panelCode) {
-      try {
-        content = prepareIframeContent(panelCode);
-      } catch (err) {
-        content = renderErrorHtml(normalizeError(err));
-      }
-    }
+    const stratName = strat?.name ?? 'Variant';
+    const hasPayload =
+      isLoading ||
+      (panelFiles && Object.keys(panelFiles).length > 0) ||
+      !!panelCode;
 
     return (
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -178,7 +209,7 @@ export default function VariantPreviewOverlay() {
           <div className="shrink-0 border-b border-white/10 px-4 py-1.5">
             <span className="text-micro text-white/60">{label}</span>
             <span className="ml-2 text-xs font-medium text-white">
-              {strat?.name ?? 'Variant'}
+              {stratName}
               {r.runNumber != null && (
                 <span
                   className={`ml-1.5 rounded px-1 py-px text-badge font-bold leading-none ${badgeColor(r.runNumber).bg} ${badgeColor(r.runNumber).text}`}
@@ -190,16 +221,12 @@ export default function VariantPreviewOverlay() {
           </div>
         )}
         <div className="flex-1 overflow-hidden bg-white">
-          {isLoading ? (
-            <div className="flex h-full items-center justify-center">
-              <Loader2 size={20} className="animate-spin text-fg-muted" />
-            </div>
-          ) : content ? (
-            <iframe
-              srcDoc={content}
-              sandbox="allow-scripts"
-              title={`Preview: ${strat?.name ?? 'Variant'}`}
-              className="h-full w-full border-0"
+          {hasPayload || isLoading ? (
+            <ExpandedVariantIframe
+              files={panelFiles}
+              code={panelCode}
+              isLoading={isLoading}
+              title={`Preview: ${stratName}`}
             />
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">

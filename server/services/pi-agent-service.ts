@@ -23,6 +23,7 @@ import {
 import { createSandboxBashTool } from './pi-bash-tool.ts';
 import {
   createTodoWriteTool,
+  createUseSkillTool,
   createValidateHtmlTool,
   createValidateJsTool,
 } from './pi-app-tools.ts';
@@ -117,6 +118,15 @@ export async function runDesignAgentSession(
   });
   const validateJsTool = createValidateJsTool(bash);
   const validateHtmlTool = createValidateHtmlTool(bash);
+  const skillCatalog = params.skillCatalog ?? [];
+  const useSkillTool = createUseSkillTool(skillCatalog, (payload) => {
+    void onEvent({
+      type: 'skill_activated',
+      key: payload.key,
+      name: payload.name,
+      description: payload.description,
+    });
+  });
 
   const llmTurnLogRef: { current?: string } = {};
 
@@ -131,6 +141,7 @@ export async function runDesignAgentSession(
       ...virtualPiTools,
       bashTool,
       todoTool,
+      useSkillTool,
       validateJsTool,
       validateHtmlTool,
     ] as ToolDefinition[],

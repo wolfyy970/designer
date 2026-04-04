@@ -14,6 +14,7 @@
 import { Script, createContext } from 'node:vm';
 import type { EvaluatorWorkerReport } from '../../src/types/evaluation.ts';
 import { bundleVirtualFS } from '../../src/lib/bundle-virtual-fs.ts';
+import { resolvePreviewEntryPath } from '../../src/lib/preview-entry.ts';
 
 /** VM `runInContext` timeout per inline script (avoid infinite loops). */
 const INLINE_SCRIPT_VM_TIMEOUT_MS = 2000;
@@ -291,17 +292,25 @@ export function runBrowserQA(input: BrowserQAInput): EvaluatorWorkerReport {
     bundledHtml = Object.values(input.files).find((v) => /<html/i.test(v)) ?? '';
   }
 
+  const htmlPaths = Object.keys(input.files).filter((k) => k.endsWith('.html'));
+  const entryKey = resolvePreviewEntryPath(input.files);
+  const entryHtml = input.files[entryKey] ?? bundledHtml;
+
   const scores: EvaluatorWorkerReport['scores'] = {};
   const findings: EvaluatorWorkerReport['findings'] = [];
   const hardFails: EvaluatorWorkerReport['hardFails'] = [];
 
-  const structure = checkPageStructure(bundledHtml);
+  const structure = checkPageStructure(entryHtml);
   scores.page_structure = structure;
   if (structure.score <= 2) {
     findings.push({ severity: 'high', summary: 'Malformed HTML structure', detail: structure.notes });
   }
 
-  const assets = checkAssetIntegrity(bundledHtml, input.files);
+  let assets = checkAssetIntegrity(bundledHtml, input.files);
+  for (const p of htmlPaths) {
+    const a = checkAssetIntegrity(input.files[p], input.files);
+    if (a.score < assets.score) assets = a;
+  }
   scores.asset_integrity = assets;
   if (assets.score < 5) {
     findings.push({ severity: 'high', summary: 'Missing asset references', detail: assets.notes });
@@ -323,13 +332,21 @@ export function runBrowserQA(input: BrowserQAInput): EvaluatorWorkerReport {
     }
   }
 
-  const interactive = checkInteractiveElements(bundledHtml);
+  let interactive = checkInteractiveElements(bundledHtml);
+  for (const p of htmlPaths) {
+    const i = checkInteractiveElements(input.files[p]);
+    if (i.score > interactive.score) interactive = i;
+  }
   scores.interactive_elems = interactive;
   if (interactive.score <= 1) {
     findings.push({ severity: 'medium', summary: 'No interactive elements found', detail: interactive.notes });
   }
 
-  const content = checkContentPresence(bundledHtml);
+  let content = checkContentPresence(bundledHtml);
+  for (const p of htmlPaths) {
+    const c = checkContentPresence(input.files[p]);
+    if (c.score > content.score) content = c;
+  }
   scores.content_presence = content;
   if (content.score <= 1) {
     findings.push({ severity: 'high', summary: 'Page appears empty or minimal', detail: content.notes });
