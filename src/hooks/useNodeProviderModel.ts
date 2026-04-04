@@ -1,5 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { useCanvasStore } from '../stores/canvas-store';
+import { LOCKDOWN_MODEL_ID, LOCKDOWN_PROVIDER_ID } from '../lib/lockdown-model';
+import { useAppConfig } from './useAppConfig';
 import { useProviderModels } from './useProviderModels';
 
 interface UseNodeProviderModelOptions {
@@ -20,6 +22,8 @@ export function useNodeProviderModel(
   options: UseNodeProviderModelOptions = {},
 ) {
   const { disconnectOnChange = true } = options;
+  const { data: appConfig } = useAppConfig();
+  const lockdown = appConfig?.lockdown === true;
 
   // Primitive selectors — stable across re-renders when value unchanged
   const storedProviderId = useCanvasStore(
@@ -29,30 +33,35 @@ export function useNodeProviderModel(
     (s) => s.nodes.find((n) => n.id === nodeId)?.data.modelId as string | undefined,
   );
 
-  const providerId = storedProviderId || defaultProvider;
-  const modelId = storedModelId || '';
-  const { data: models } = useProviderModels(providerId);
+  const providerId = lockdown
+    ? LOCKDOWN_PROVIDER_ID
+    : (storedProviderId || defaultProvider);
+  const modelId = lockdown ? LOCKDOWN_MODEL_ID : (storedModelId || '');
+  const { data: models } = useProviderModels(lockdown ? LOCKDOWN_PROVIDER_ID : providerId);
+  const storedModelIdForWrites = storedModelId || '';
 
   const handleProviderChange = useCallback(
     (newId: string) => {
+      if (lockdown) return;
       const store = useCanvasStore.getState();
       store.updateNodeData(nodeId, { providerId: newId, modelId: '' });
       if (disconnectOnChange) {
         store.disconnectOutputs(nodeId);
       }
     },
-    [nodeId, disconnectOnChange],
+    [nodeId, disconnectOnChange, lockdown],
   );
 
   const handleModelChange = useCallback(
     (model: string) => {
+      if (lockdown) return;
       const store = useCanvasStore.getState();
-      if (disconnectOnChange && modelId && model !== modelId) {
+      if (disconnectOnChange && storedModelIdForWrites && model !== storedModelIdForWrites) {
         store.disconnectOutputs(nodeId);
       }
       store.updateNodeData(nodeId, { modelId: model });
     },
-    [nodeId, modelId, disconnectOnChange],
+    [nodeId, storedModelIdForWrites, disconnectOnChange, lockdown],
   );
 
   const supportsVision = useMemo(

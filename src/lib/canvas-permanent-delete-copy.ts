@@ -20,7 +20,7 @@ export function sectionCardDeleteCopy(sectionTitle: string): PermanentDeleteCopy
 }
 
 /** Tier T — structural incubator. */
-export function incubatorDeleteCopy(): PermanentDeleteCopy {
+function incubatorDeleteCopy(): PermanentDeleteCopy {
   return {
     title: 'Remove Incubator from the canvas?',
     description:
@@ -30,7 +30,7 @@ export function incubatorDeleteCopy(): PermanentDeleteCopy {
 }
 
 /** Tier T — structural model node. */
-export function modelNodeDeleteCopy(): PermanentDeleteCopy {
+function modelNodeDeleteCopy(): PermanentDeleteCopy {
   return {
     title: 'Remove Model node from the canvas?',
     description:
@@ -40,7 +40,7 @@ export function modelNodeDeleteCopy(): PermanentDeleteCopy {
 }
 
 /** Tier G — design system processing node. */
-export function designSystemNodeDeleteCopy(): PermanentDeleteCopy {
+function designSystemNodeDeleteCopy(): PermanentDeleteCopy {
   return {
     title: 'Remove Design System from the canvas?',
     description:

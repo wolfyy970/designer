@@ -18,7 +18,7 @@ import type { VariantStrategy } from '../../../types/compiler';
 import { compile as apiCompile } from '../../../api/client';
 import { buildCompileInputs } from '../../../lib/canvas-graph';
 import { useWorkspaceDomainStore } from '../../../stores/workspace-domain-store';
-import { FIT_VIEW_DELAY_MS, FIT_VIEW_DURATION_MS } from '../../../lib/constants';
+import { scheduleCanvasFitView } from '../../../lib/canvas-fit-view';
 import { processingOrFilled } from '../../../lib/node-status';
 import { isPlaceholderHypothesis } from '../../../lib/hypothesis-node-utils';
 import { EDGE_STATUS } from '../../../constants/canvas';
@@ -133,7 +133,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
       appendVariantsToNode(id, map);
       syncAfterCompile(map.variants, id);
       setEdgeStatusBySource(id, EDGE_STATUS.COMPLETE);
-      setTimeout(() => fitView({ duration: FIT_VIEW_DURATION_MS, padding: 0.15 }), FIT_VIEW_DELAY_MS);
+      scheduleCanvasFitView(fitView);
     } catch (err) {
       removePlaceholders(placeholderIds);
       setError(normalizeError(err, 'Compilation failed'));

@@ -85,27 +85,31 @@ export default function SettingsModal({
               </span>
             </label>
           </div>
-          <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">
-            <span className="block text-sm font-medium text-fg">Design system</span>
-            <p className="mt-1 text-xs text-fg-secondary">
-              Browse <code className="rounded bg-surface px-1 font-mono text-nano">@theme</code> swatches, typography
-              scale, and <code className="rounded bg-surface px-1 font-mono text-nano">ds-*</code> patterns in a
-              scrollable reference.
-            </p>
-            <button
-              type="button"
-              onClick={() => setDesignTokensOpen(true)}
-              className="ds-btn-primary-muted mt-2 w-fit"
-            >
-              Open design tokens kitchen sink…
-            </button>
-          </div>
+          {import.meta.env.DEV ? (
+            <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">
+              <span className="block text-sm font-medium text-fg">Design system</span>
+              <p className="mt-1 text-xs text-fg-secondary">
+                Browse <code className="rounded bg-surface px-1 font-mono text-nano">@theme</code> swatches, typography
+                scale, and <code className="rounded bg-surface px-1 font-mono text-nano">ds-*</code> patterns in a
+                scrollable reference.
+              </p>
+              <button
+                type="button"
+                onClick={() => setDesignTokensOpen(true)}
+                className="ds-btn-primary-muted mt-2 w-fit"
+              >
+                Open design tokens kitchen sink…
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
 
       {tab === 'prompts' && <PromptEditor initialPromptKey={initialPromptKey} />}
     </Modal>
-    <DesignTokensModal open={designTokensOpen} onClose={() => setDesignTokensOpen(false)} />
+    {import.meta.env.DEV ? (
+      <DesignTokensModal open={designTokensOpen} onClose={() => setDesignTokensOpen(false)} />
+    ) : null}
     </>
   );
 }

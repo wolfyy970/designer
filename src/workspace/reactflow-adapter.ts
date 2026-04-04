@@ -16,7 +16,7 @@ import type { WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 
 export type { Connection, EdgeChange, NodeChange };
 
-export function toReactFlowNode(node: WorkspaceNode): Node {
+function toReactFlowNode(node: WorkspaceNode): Node {
   return { ...node } as Node;
 }
 
@@ -24,7 +24,7 @@ export function toReactFlowNodes(nodes: WorkspaceNode[]): Node[] {
   return nodes.map(toReactFlowNode);
 }
 
-export function fromReactFlowNode(node: Node): WorkspaceNode {
+function fromReactFlowNode(node: Node): WorkspaceNode {
   const w: WorkspaceNode = {
     id: node.id,
     type: node.type as WorkspaceNode['type'],
@@ -45,7 +45,7 @@ export function toReactFlowEdges(edges: WorkspaceEdge[]): Edge[] {
   return edges.map(toReactFlowEdge);
 }
 
-export function fromReactFlowEdge(edge: Edge): WorkspaceEdge {
+function fromReactFlowEdge(edge: Edge): WorkspaceEdge {
   return {
     id: edge.id,
     source: edge.source,

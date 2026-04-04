@@ -8,6 +8,7 @@ import {
 import type { VariantStrategy } from '../../types/compiler';
 import type { DesignSpec } from '../../types/spec';
 import { EDGE_STATUS, NODE_TYPES } from '../../constants/canvas';
+import { LOCKDOWN_MODEL_ID, LOCKDOWN_PROVIDER_ID } from '../../lib/lockdown-model';
 
 const strategy: VariantStrategy = {
   id: 'vs1',
@@ -74,6 +75,18 @@ describe('normalizeModelProfilesForApi', () => {
     );
     expect(n.a.thinkingLevel).toBeUndefined();
     expect(n.b.thinkingLevel).toBe('high');
+  });
+
+  it('overwrites provider and model when lockdown is true', () => {
+    const n = normalizeModelProfilesForApi(
+      {
+        m1: { nodeId: 'm1', providerId: 'lmstudio', modelId: 'local' },
+      },
+      'default-provider',
+      true,
+    );
+    expect(n.m1?.providerId).toBe(LOCKDOWN_PROVIDER_ID);
+    expect(n.m1?.modelId).toBe(LOCKDOWN_MODEL_ID);
   });
 });
 

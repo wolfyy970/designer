@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { ThinkingLevelSchema } from './hypothesis-schemas.ts';
 
-export const EvaluationContextSchema = z
+const EvaluationContextSchema = z
   .object({
     strategyName: z.string().optional(),
     hypothesis: z.string().optional(),
@@ -22,7 +23,7 @@ export const GenerateStreamBodySchema = z.object({
   correlationId: z.string().min(1).max(200).optional(),
   supportsVision: z.boolean().optional(),
   mode: z.enum(['single', 'agentic']).optional().default('single'),
-  thinkingLevel: z.enum(['off', 'minimal', 'low', 'medium', 'high']).optional(),
+  thinkingLevel: ThinkingLevelSchema.optional(),
   evaluationContext: EvaluationContextSchema,
   evaluatorProviderId: z.string().optional(),
   evaluatorModelId: z.string().optional(),

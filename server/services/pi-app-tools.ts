@@ -7,6 +7,7 @@ import type { Bash } from 'just-bash';
 import type { ExtensionContext, ToolDefinition } from './pi-sdk/types.ts';
 import type { TodoItem } from '../../src/types/provider.ts';
 import { SANDBOX_PROJECT_ROOT } from './agent-bash-sandbox.ts';
+import { normalizeError } from '../lib/error-utils.ts';
 import { buildUseSkillToolDescription, SKILL_FILENAME } from '../lib/skill-discovery.ts';
 import type { SkillCatalogEntry } from '../lib/skill-schema.ts';
 
@@ -163,7 +164,7 @@ export function createValidateJsTool(bash: Bash): ToolDefinition {
           details: null,
         };
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = normalizeError(err);
         return {
           content: [{ type: 'text', text: `${path}: ${msg}` }],
           details: null,

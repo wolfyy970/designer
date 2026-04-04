@@ -22,7 +22,7 @@ export const OPTIONAL_SECTION_SLOTS: readonly SectionGhostTargetType[] = [
 /** Prefix for stable ghost node ids; keep in sync with onNodesChange remove guard. */
 export const SECTION_GHOST_ID_PREFIX = 'ghost-section-' as const;
 
-export function sectionGhostStableId(slot: SectionGhostTargetType): string {
+function sectionGhostStableId(slot: SectionGhostTargetType): string {
   return `${SECTION_GHOST_ID_PREFIX}${slot}`;
 }
 
@@ -36,7 +36,7 @@ const LAYER0_GHOST_BASE = 100;
 const LAYER0_MODEL = 1000;
 const LAYER0_FALLBACK = 500;
 
-export function optionalSectionSlotIndex(type: string): number {
+function optionalSectionSlotIndex(type: string): number {
   const i = (OPTIONAL_SECTION_SLOTS as readonly string[]).indexOf(type);
   return i === -1 ? OPTIONAL_SLOT_UNKNOWN : i;
 }
@@ -62,7 +62,7 @@ export const DEFAULT_COL_GAP = 160;
 export const MIN_COL_GAP = 80;
 export const MAX_COL_GAP = 320;
 /** Fallback Y coordinate when no existing nodes can be used as an anchor. */
-export const DEFAULT_CANVAS_Y = 300;
+const DEFAULT_CANVAS_Y = 300;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 

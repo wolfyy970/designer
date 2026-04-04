@@ -8,6 +8,7 @@ import designSystem from './routes/design-system.ts';
 import prompts from './routes/prompts.ts';
 import hypothesis from './routes/hypothesis.ts';
 import preview from './routes/preview.ts';
+import configRoute from './routes/config.ts';
 
 const app = new Hono().basePath('/api');
 
@@ -24,6 +25,7 @@ app.use(
 );
 
 app.get('/health', (c) => c.json({ ok: true }));
+app.route('/config', configRoute);
 app.route('/compile', compile);
 app.route('/generate', generate);
 app.route('/models', models);

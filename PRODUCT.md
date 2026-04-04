@@ -39,7 +39,7 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 - **Observability (dev)** — Header modal listing **LLM** calls and **trace** events from the API session; optional NDJSON on disk when enabled (see [ARCHITECTURE.md](ARCHITECTURE.md)).
 - **Prompt Studio** — Settings → Prompts: edit DB-backed system prompts; **Save** / ⌘S commits a new **version** (no automatic save).
 - **Optional section slots** — Fresh canvases can show **ghost** placeholders for inputs not in the minimal default. Loading a **Canvas Manager** entry **materializes** optional section nodes when the persisted spec has non-empty text or images for those sections (see `src/lib/spec-materialize-sections.ts`).
-- **Design tokens kitchen sink** — Settings → General opens a modal reference for `@theme` tokens and patterns; dev-only full-page route `/dev/design-tokens`. Documented in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
+- **Design tokens kitchen sink** (development only) — Settings → General opens a modal reference for `@theme` tokens and patterns; full-page route `/dev/design-tokens`. Documented in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 
 ### Iteration Loop
 
@@ -101,7 +101,7 @@ Do not duplicate the prompt catalog here — use **[LANGFUSE_PROMPTS.md](LANGFUS
 | OpenRouter | Yes | Yes | Auto-detected from model metadata |
 | LM Studio | Yes | Yes | Configurable via `VITE_LMSTUDIO_VISION_MODELS` env var |
 
-- Both stages (compilation and generation) support independent provider + model selection via connected Model nodes
+- Both stages (compilation and generation) support independent provider + model selection via connected Model nodes **when server lockdown is off** (`LOCKDOWN=false` or equivalent). Default / locked deployments pin **OpenRouter + MiniMax M2.5** for all LLM calls and disable changing provider/model in the UI.
 - Models fetched dynamically via each provider's API
 - Vision-capable models show an eye icon in the model selector
 - When vision is available, reference images are sent as multimodal content alongside text

@@ -3,7 +3,7 @@ import { useDropzone } from 'react-dropzone';
 import { ImagePlus } from 'lucide-react';
 import type { SpecSectionId } from '../../types/spec';
 import { useSpecStore } from '../../stores/spec-store';
-import { generateId, now } from '../../lib/utils';
+import { readFileAsReferenceImage } from '../../lib/image-utils';
 import ImagePreview from './ImagePreview';
 
 const EMPTY_IMAGES: never[] = [];
@@ -19,22 +19,12 @@ export default function ReferenceImageUpload({
   const addImage = useSpecStore((s) => s.addImage);
 
   const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
-      acceptedFiles.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          addImage(sectionId, {
-            id: generateId(),
-            filename: file.name,
-            dataUrl: reader.result as string,
-            description: '',
-            createdAt: now(),
-          });
-        };
-        reader.readAsDataURL(file);
-      });
+    async (acceptedFiles: File[]) => {
+      for (const file of acceptedFiles) {
+        addImage(sectionId, await readFileAsReferenceImage(file));
+      }
     },
-    [sectionId, addImage]
+    [sectionId, addImage],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

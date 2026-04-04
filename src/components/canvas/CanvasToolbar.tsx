@@ -12,6 +12,7 @@ import {
   AlignHorizontalSpaceAround,
 } from 'lucide-react';
 import { useReactFlow } from '@xyflow/react';
+import { fitViewWithDefaults } from '../../lib/canvas-fit-view';
 import { useCanvasStore } from '../../stores/canvas-store';
 import NodePalette from './NodePalette';
 
@@ -101,7 +102,7 @@ export default function CanvasToolbar() {
         <ToolButton
           icon={<Maximize2 size={16} />}
           label="Fit view"
-          onClick={() => fitView({ duration: 300, padding: 0.15 })}
+          onClick={() => fitViewWithDefaults(fitView)}
         />
         <ToolButton
           icon={<Map size={16} />}

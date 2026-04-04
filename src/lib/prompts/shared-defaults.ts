@@ -412,6 +412,8 @@ Return ONLY valid JSON. No markdown fences, no prose outside JSON.
   "hardFails": [{ "code": "string", "message": "string" }]
 }
 
+The findings and hardFails arrays MUST be top-level keys. Never nest them inside scores — only rubric criterion names belong in scores, each as { "score", "notes" }.
+
 severity must be exactly one of: high, medium, low (string values, not a union literal in JSON).
 
 hardFails: only for show-stopping visual or UX failures (e.g. unreadable contrast, broken hierarchy that hides the core CTA).
@@ -445,6 +447,8 @@ Return ONLY valid JSON. No markdown fences, no prose outside JSON.
   "hardFails": [{ "code": "string", "message": "string" }]
 }
 
+The findings and hardFails arrays MUST be top-level keys, never inside scores.
+
 severity must be exactly one of: high, medium, low.
 
 Scores are 1-5. Use hardFails for clear violations of stated constraints or complete miss of the hypothesis.
@@ -477,6 +481,8 @@ Return ONLY valid JSON. No markdown fences, no prose outside JSON.
   "findings": [{ "severity": "medium", "summary": "string", "detail": "string" }],
   "hardFails": [{ "code": "string", "message": "string" }]
 }
+
+The findings and hardFails arrays MUST be top-level keys, never inside scores.
 
 severity must be exactly one of: high, medium, low.
 

@@ -4,6 +4,7 @@ import type { ReferenceImage } from '../../src/types/spec.ts';
 import { getPromptBody } from '../db/prompts.ts';
 import { normalizeError } from '../lib/error-utils.ts';
 import { loggedCallLLM } from '../lib/llm-call-logger.ts';
+import { clampProviderModel } from '../lib/lockdown-model.ts';
 
 const designSystem = new Hono();
 
@@ -23,7 +24,8 @@ designSystem.post('/extract', async (c) => {
   if (!parsed.success) {
     return c.json({ error: 'Invalid request', details: parsed.error.flatten() }, 400);
   }
-  const body = parsed.data;
+  const pinned = clampProviderModel(parsed.data.providerId, parsed.data.modelId);
+  const body = { ...parsed.data, providerId: pinned.providerId, modelId: pinned.modelId };
 
   const [systemPrompt, userPrompt] = await Promise.all([
     getPromptBody('designSystemExtract'),

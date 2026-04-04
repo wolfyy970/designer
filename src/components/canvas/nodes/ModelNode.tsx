@@ -1,11 +1,14 @@
-import { memo, useCallback, useEffect } from 'react';
+import { memo, useCallback, useEffect, useMemo } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
 import { DEFAULT_COMPILER_PROVIDER } from '../../../lib/constants';
+import { LOCKDOWN_MODEL_LABEL } from '../../../lib/lockdown-model';
+import { useAppConfig } from '../../../hooks/useAppConfig';
 import { filledOrEmpty } from '../../../lib/node-status';
 import { useNodeProviderModel } from '../../../hooks/useNodeProviderModel';
 import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
 import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
 import { useCanvasStore } from '../../../stores/canvas-store';
+import { getModelNodeData } from '../../../lib/canvas-node-data';
 import type { ModelNodeData } from '../../../types/canvas-data';
 import ProviderSelector from '../../shared/ProviderSelector';
 import ModelSelector from '../../shared/ModelSelector';
@@ -15,11 +18,13 @@ import NodeHeader from './NodeHeader';
 type ModelNodeType = Node<ModelNodeData, 'model'>;
 
 function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
+  const { data: appConfig } = useAppConfig();
+  const lockdown = appConfig?.lockdown === true;
   const onRemove = useCanvasNodePermanentRemove(id, STATIC_NODE_DELETE_COPY.model);
 
   const thinkingLevel = useCanvasStore(
     (s) =>
-      ((s.nodes.find((n) => n.id === id)?.data as ModelNodeData)?.thinkingLevel as
+      (getModelNodeData(s.nodes.find((n) => n.id === id))?.thinkingLevel as
         | 'off'
         | 'minimal'
         | 'low'
@@ -52,6 +57,15 @@ function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
 
   const status = filledOrEmpty(configured);
 
+  const subtitle = useMemo(() => {
+    if (!configured) return 'No model selected';
+    if (lockdown) {
+      const tail = modelId.includes('/') ? modelId.split('/').pop() ?? modelId : modelId;
+      return `Locked: ${LOCKDOWN_MODEL_LABEL} (${tail})`;
+    }
+    return `${providerId} / ${modelId.split('/').pop()}`;
+  }, [configured, lockdown, modelId, providerId]);
+
   return (
     <NodeShell
       nodeId={id}
@@ -62,10 +76,7 @@ function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
       hasTarget={false}
       handleColor={configured ? 'green' : 'amber'}
     >
-      <NodeHeader
-        onRemove={onRemove}
-        description={configured ? `${providerId} / ${modelId.split('/').pop()}` : 'No model selected'}
-      >
+      <NodeHeader onRemove={onRemove} description={subtitle}>
         <h3 className="text-xs font-semibold text-fg">Model</h3>
       </NodeHeader>
 
@@ -74,12 +85,14 @@ function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
           label="Provider"
           selectedId={providerId}
           onChange={handleProviderChange}
+          disabled={lockdown}
         />
         <ModelSelector
           label="Model"
           providerId={providerId}
           selectedModelId={modelId}
           onChange={handleModelChange}
+          disabled={lockdown}
         />
         {supportsReasoning && (
           <div className="nodrag nowheel space-y-1">

@@ -2,6 +2,7 @@ import { usePromptStudio } from './prompt-editor/usePromptStudio';
 import { PromptSidebar } from './prompt-editor/PromptSidebar';
 import { PromptStudioPanel } from './prompt-editor/PromptStudioPanel';
 import type { PromptKey } from '../../stores/prompt-store';
+import { normalizeError } from '../../lib/error-utils';
 
 export interface PromptEditorProps {
   initialPromptKey?: PromptKey;
@@ -48,7 +49,7 @@ export default function PromptEditor({ initialPromptKey }: PromptEditorProps) {
   } = usePromptStudio(initialPromptKey);
 
   if (loadError) {
-    const message = loadError instanceof Error ? loadError.message : String(loadError);
+    const message = normalizeError(loadError);
     return (
       <div className="rounded-lg border border-warning-border bg-warning-subtle p-4 text-sm text-fg-secondary">
         <p className="font-medium text-fg">Prompt loading failed</p>

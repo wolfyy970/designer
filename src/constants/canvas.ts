@@ -31,6 +31,12 @@ export const EDGE_STATUS = {
 
 export type EdgeStatus = (typeof EDGE_STATUS)[keyof typeof EDGE_STATUS];
 
+/** DimensionMap.compilerModel when prompts are built from a hypothesis workspace slice (not incubator compile). */
+export const HYPOTHESIS_COMPILER_MODEL = 'merged' as const;
+
+/** Fallback `pinnedRunId` on variant nodes when forking before any completed generation exists. */
+export const UNKNOWN_PINNED_RUN_ID = 'unknown' as const;
+
 /** Node border/fill status values (drives NodeShell visual state) */
 export const NODE_STATUS = {
   SELECTED: 'selected',

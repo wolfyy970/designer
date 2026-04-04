@@ -42,7 +42,7 @@ The **Langfuse** tab does not load traces into the app; it links to the **Langfu
 
 ## Design tokens reference (Settings)
 
-**Settings** (gear) → **General** → **Open design tokens kitchen sink** opens a scrollable modal of live `@theme` colors, typography, and composition classes (`ds-*`, `.input-focus`). In **development** builds only, the same content is available at **`/dev/design-tokens`**. Semantics and rules: [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
+**Development only:** **Settings** (gear) → **General** → **Open design tokens kitchen sink** opens a scrollable modal of live `@theme` colors, typography, and composition classes (`ds-*`, `.input-focus`). The same content is available at **`/dev/design-tokens`**. Semantics and rules: [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 
 ## System prompts (Settings → Prompts)
 
@@ -70,7 +70,7 @@ Write in prose, not bullets. Precision is the product.
 
 ### 2. Connect a Model Node
 
-Add a **Model** node (Processing group) and connect it to the Incubator. Select your provider and model in the Model node. You can use different Model nodes for compilation vs generation — e.g., a powerful reasoning model for the Incubator and a faster one for generation.
+Add a **Model** node (Processing group) and connect it to the Incubator. Select your provider and model in the Model node — **unless the deployment is in lockdown mode** (server env `LOCKDOWN` unset or empty): then every run uses **OpenRouter + MiniMax M2.5**, pickers are disabled, and the canvas reconciles to that pin. Set `LOCKDOWN=false` on the API to restore normal selection. With lockdown off, you can use different Model nodes for compilation vs generation (e.g. a reasoning model on the Incubator and a faster one on hypotheses).
 
 ### 3. Incubate (Compile)
 

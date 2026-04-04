@@ -24,10 +24,11 @@ Both processes are required for local development. The Vite dev server proxies `
 | Key | Where to get it | Required | What it does |
 |-----|----------------|----------|--------------|
 | `OPENROUTER_API_KEY` | [openrouter.ai](https://openrouter.ai) | For OpenRouter | Server-side only — proxied via Vite, never exposed to browser |
+| `LOCKDOWN` | N/A | Optional | When **unset or empty**, the API and UI use **OpenRouter + MiniMax M2.5** only (`minimax/minimax-m2.5`); model pickers are disabled. Set to `false`, `0`, `no`, or `off` (case-insensitive) to allow other providers/models. The SPA reads **`GET /api/config`** at runtime — restart the API after changing this. |
 | `VITE_LMSTUDIO_URL` | Local (default: `http://192.168.252.213:1234`) | For LM Studio | Local inference endpoint |
 | `VITE_LMSTUDIO_VISION_MODELS` | N/A | Optional | Comma-separated model ID substrings that support vision |
 
-You can mix and match providers — e.g. OpenRouter Claude for compilation, LM Studio for generation. See `.env.example` for all options.
+With `LOCKDOWN` disabled, you can mix providers — e.g. OpenRouter for one node and LM Studio for another. See `.env.example` for defaults and optional keys.
 
 ## Canvas Workflow
 
@@ -42,7 +43,7 @@ The primary interface is a visual node-graph canvas (`/canvas`, the default rout
 
 Nodes connect left-to-right. Auto-layout arranges everything based on connections. Variants can connect back to Existing Design for iterative feedback loops.
 
-The header also opens **Settings** (General preferences, optional **design tokens kitchen sink** for `@theme` reference, and **Prompt Studio** — prompts save only on **Save** / ⌘S) and **Observability** (LLM + trace logs — primarily for development). Details: [USER_GUIDE.md](USER_GUIDE.md) and [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
+The header also opens **Settings** (General preferences, **Prompt Studio** — prompts save only on **Save** / ⌘S; in **development**, a **design tokens kitchen sink** modal on the General tab) and **Observability** (LLM + trace logs — primarily for development). Details: [USER_GUIDE.md](USER_GUIDE.md) and [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 
 ## Scripts
 

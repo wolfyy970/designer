@@ -4,7 +4,7 @@ import { EVALUATOR_RUBRIC_IDS, EVALUATOR_WORKER_COUNT } from '../../types/evalua
 import { storage } from '../../storage';
 import { useCanvasStore } from '../../stores/canvas-store';
 import { useCompilerStore, findVariantStrategy } from '../../stores/compiler-store';
-import type { VariantNodeData } from '../../types/canvas-data';
+import { getVariantNodeData } from '../../lib/canvas-node-data';
 import { useVersionStack } from '../../hooks/useVersionStack';
 import { useResultCode } from '../../hooks/useResultCode';
 import { useResultFiles } from '../../hooks/useResultFiles';
@@ -78,7 +78,7 @@ export default function VariantRunInspector() {
     setFilesTabPath(undefined);
   }, [runInspectorVariantNodeId]);
 
-  const data = node?.type === 'variant' ? (node.data as VariantNodeData) : undefined;
+  const data = getVariantNodeData(node ?? undefined);
   const variantStrategyId = data?.variantStrategyId;
   const pinnedRunId = data?.pinnedRunId;
 

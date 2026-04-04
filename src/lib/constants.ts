@@ -1,4 +1,5 @@
 import type { SpecSectionId, SpecSectionMeta } from '../types/spec';
+import { LOCKDOWN_MODEL_ID } from './lockdown-model';
 
 export const SPEC_SECTIONS: SpecSectionMeta[] = [
   {
@@ -45,16 +46,11 @@ export const SPEC_SECTIONS: SpecSectionMeta[] = [
   },
 ];
 
-// Proxy base paths (must match vite.config.ts proxy entries)
-export const OPENROUTER_PROXY = '/openrouter-api';
-export const LMSTUDIO_PROXY = '/lmstudio-api';
-
 // Default providers
 export const DEFAULT_COMPILER_PROVIDER = import.meta.env.VITE_DEFAULT_COMPILER_PROVIDER || 'openrouter';
-export const DEFAULT_GENERATION_PROVIDER = import.meta.env.VITE_DEFAULT_GENERATION_PROVIDER || 'lmstudio';
 
-// Default model for auto-created Model nodes (OpenRouter ID)
-export const DEFAULT_MODEL_ID = import.meta.env.VITE_DEFAULT_MODEL_ID || 'z-ai/glm-5';
+// Default model for auto-created Model nodes (OpenRouter slug; matches lockdown pin)
+export const DEFAULT_MODEL_ID = import.meta.env.VITE_DEFAULT_MODEL_ID || LOCKDOWN_MODEL_ID;
 
 /**
  * Default node data for each auto-created prerequisite type.

@@ -3,7 +3,7 @@
  * No Zustand, no Vite env, no IndexedDB.
  */
 import { NODE_TYPES } from '../constants/canvas';
-import type { DesignSystemNodeData } from '../types/canvas-data';
+import { getDesignSystemNodeData, getModelNodeData } from '../lib/canvas-node-data';
 import type { VariantStrategy } from '../types/compiler';
 import type { EvaluationContextPayload } from '../types/evaluation';
 import type { ProvenanceContext } from '../types/provenance-context';
@@ -16,6 +16,10 @@ import type {
 } from '../types/workspace-domain';
 import type { WorkspaceSnapshotWire } from '../lib/workspace-snapshot-schema';
 import type { WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
+import {
+  LOCKDOWN_MODEL_ID,
+  LOCKDOWN_PROVIDER_ID,
+} from '../lib/lockdown-model';
 
 export interface WorkspaceGraphSnapshot {
   readonly nodes: readonly WorkspaceNode[];
@@ -36,15 +40,20 @@ function isThinkingLevel(x: unknown): x is ThinkingLevel {
 export function normalizeModelProfilesForApi(
   profiles: Record<string, DomainModelProfile>,
   defaultCompilerProvider: string,
+  lockdown = false,
 ): Record<string, DomainModelProfile> {
   const out: Record<string, DomainModelProfile> = {};
   for (const [nodeId, raw] of Object.entries(profiles)) {
     if (!raw || typeof raw !== 'object') continue;
-    const providerId =
+    let providerId =
       typeof raw.providerId === 'string' && raw.providerId.trim() !== ''
         ? raw.providerId
         : defaultCompilerProvider;
-    const modelId = typeof raw.modelId === 'string' ? raw.modelId : '';
+    let modelId = typeof raw.modelId === 'string' ? raw.modelId : '';
+    if (lockdown) {
+      providerId = LOCKDOWN_PROVIDER_ID;
+      modelId = LOCKDOWN_MODEL_ID;
+    }
     const entry: DomainModelProfile = {
       nodeId: typeof raw.nodeId === 'string' && raw.nodeId ? raw.nodeId : nodeId,
       providerId,
@@ -104,12 +113,11 @@ export function listIncomingModelCredentialsFromGraph(
     if (e.target !== targetNodeId) continue;
     const src = nodeById(snapshot, e.source);
     if (!src || src.type !== NODE_TYPES.MODEL) continue;
-    const modelId = src.data.modelId as string | undefined;
-    if (!modelId) continue;
-    const providerId = (src.data.providerId as string) || defaultCompilerProvider;
-    const thinkingLevel =
-      (src.data.thinkingLevel as ThinkingLevel | undefined) ?? 'minimal';
-    out.push({ providerId, modelId, thinkingLevel });
+    const md = getModelNodeData(src);
+    if (!md?.modelId) continue;
+    const providerId = md.providerId || defaultCompilerProvider;
+    const thinkingLevel = (isThinkingLevel(md.thinkingLevel) ? md.thinkingLevel : undefined) ?? 'minimal';
+    out.push({ providerId, modelId: md.modelId, thinkingLevel });
   }
   return out;
 }
@@ -148,16 +156,16 @@ function collectDesignSystemFromGraph(
 
   const parts = dsNodes
     .map((n) => {
-      const data = n.data as DesignSystemNodeData;
-      const t = data.title || 'Design System';
-      const c = data.content || '';
+      const data = getDesignSystemNodeData(n);
+      const t = data?.title || 'Design System';
+      const c = data?.content || '';
       return c.trim() ? `## ${t}\n${c}` : '';
     })
     .filter(Boolean);
 
   return {
     content: parts.join('\n\n---\n\n') || undefined,
-    images: dsNodes.flatMap((n) => (n.data as DesignSystemNodeData).images ?? []),
+    images: dsNodes.flatMap((n) => getDesignSystemNodeData(n)?.images ?? []),
   };
 }
 

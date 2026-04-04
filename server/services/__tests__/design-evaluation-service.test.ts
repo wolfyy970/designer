@@ -5,6 +5,8 @@ import { EVALUATOR_RUBRIC_IDS, type EvaluatorRubricId } from '../../../src/types
 import * as registry from '../providers/registry.ts';
 import {
   parseModelJsonObject,
+  normalizeEvaluatorWorkerPayload,
+  evaluatorWorkerReportSchema,
   enforceRevisionGate,
   buildEvaluatorUserContent,
   buildDegradedReport,
@@ -35,6 +37,47 @@ describe('parseModelJsonObject', () => {
         z.object({ ok: z.boolean(), trailing: z.string() }),
       ),
     ).toEqual({ ok: true, trailing: 'x' });
+  });
+
+  it('accepts evaluator JSON when findings and hardFails were wrongly nested under scores', () => {
+    const raw = JSON.stringify({
+      rubric: 'design',
+      scores: {
+        design_quality: { score: 4, notes: 'ok' },
+        originality: { score: 3, notes: 'fine' },
+        craft: { score: 4, notes: 'ok' },
+        usability: { score: 4, notes: 'ok' },
+        findings: [{ severity: 'high', summary: 'S', detail: 'D' }],
+        hardFails: [{ code: 'MISSING_X', message: 'bad' }],
+      },
+      findings: [{ severity: 'low', summary: 'Top', detail: 'T' }],
+      hardFails: [],
+    });
+    const parsed = parseModelJsonObject(raw, evaluatorWorkerReportSchema, normalizeEvaluatorWorkerPayload);
+    expect(parsed.scores).not.toHaveProperty('findings');
+    expect(parsed.scores).not.toHaveProperty('hardFails');
+    expect(parsed.findings).toHaveLength(2);
+    expect(parsed.hardFails).toHaveLength(1);
+    expect(parsed.hardFails[0].code).toBe('MISSING_X');
+  });
+
+  it('coerces a single finding object at top level into an array', () => {
+    const raw = JSON.stringify({
+      rubric: 'strategy',
+      scores: {
+        hypothesis_adherence: { score: 5, notes: 'n' },
+        kpi_alignment: { score: 5, notes: 'n' },
+        constraints_respect: { score: 5, notes: 'n' },
+        dimension_fit: { score: 5, notes: 'n' },
+        design_system_use: { score: 5, notes: 'n' },
+      },
+      findings: { severity: 'medium', summary: 'One', detail: 'Detail' },
+      hardFails: [],
+    });
+    const parsed = parseModelJsonObject(raw, evaluatorWorkerReportSchema, normalizeEvaluatorWorkerPayload);
+    expect(parsed.findings).toEqual([
+      { severity: 'medium', summary: 'One', detail: 'Detail' },
+    ]);
   });
 });
 

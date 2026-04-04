@@ -1,4 +1,5 @@
 import { lazy, Suspense, type ComponentProps } from 'react';
+import { streamdownTimelineComponents } from '../../../lib/streamdown-timeline-components';
 
 const Streamdown = lazy(() =>
   import('streamdown').then((m) => ({ default: m.Streamdown })),
@@ -18,10 +19,13 @@ function StreamdownFallback() {
  * Streamdown + Mermaid are heavy (~800k min). Load only when the variant activity
  * timeline renders so the main canvas bundle stays smaller.
  */
-export function StreamdownTimeline(props: StreamdownProps) {
+export function StreamdownTimeline({ components, ...rest }: StreamdownProps) {
   return (
     <Suspense fallback={<StreamdownFallback />}>
-      <Streamdown {...props} />
+      <Streamdown
+        components={{ ...streamdownTimelineComponents, ...components }}
+        {...rest}
+      />
     </Suspense>
   );
 }

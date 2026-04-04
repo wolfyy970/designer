@@ -1,5 +1,6 @@
 import { config as loadEnv } from 'dotenv';
 import path from 'node:path';
+import { parseLockdownEnvValue } from '../src/lib/lockdown-model.ts';
 
 // Must run before `export const env` reads `process.env`. ESM hoists `import`s above the body of
 // `server/dev.ts`, so `config()` there ran too late — Langfuse keys from `.env.local` were missed.
@@ -116,5 +117,12 @@ export const env = {
     const pk = this.LANGFUSE_PUBLIC_KEY.trim();
     const sk = this.LANGFUSE_SECRET_KEY.trim();
     return Boolean(pk && sk && this.LANGFUSE_BASE_URL);
+  },
+  /**
+   * When true (default when unset), all LLM routes clamp to OpenRouter + MiniMax M2.5.
+   * Set LOCKDOWN=false (or 0/no/off) to allow arbitrary provider/model from the client.
+   */
+  get LOCKDOWN(): boolean {
+    return parseLockdownEnvValue(process.env.LOCKDOWN);
   },
 } as const;

@@ -27,6 +27,11 @@ import {
   createSseStreamDiagnostics,
   type SseStreamDiagnostics,
 } from '../lib/sse-diagnostics';
+import {
+  LOCKDOWN_MODEL_ID,
+  LOCKDOWN_MODEL_LABEL,
+  LOCKDOWN_PROVIDER_ID,
+} from '../lib/lockdown-model';
 import type { ZodError, ZodType } from 'zod';
 import {
   CompileResponseSchema,
@@ -37,6 +42,8 @@ import {
   PromptHistoryListSchema,
   PromptVersionBodySchema,
   ProvidersListResponseSchema,
+  AppConfigResponseSchema,
+  type AppConfigResponse,
 } from './response-schemas';
 
 const API_BASE = '/api';
@@ -91,6 +98,37 @@ async function getParsedList<T>(path: string, schema: ZodType<T>, empty: T): Pro
       console.warn(`[api] GET ${path} response shape unexpected`, r.error.flatten());
     }
     return empty;
+  }
+  return r.data;
+}
+
+/** Default client assumption until GET /api/config succeeds (matches server: unset LOCKDOWN = locked). */
+export function getPlaceholderAppConfig(): AppConfigResponse {
+  return {
+    lockdown: true,
+    lockdownProviderId: LOCKDOWN_PROVIDER_ID,
+    lockdownModelId: LOCKDOWN_MODEL_ID,
+    lockdownModelLabel: LOCKDOWN_MODEL_LABEL,
+  };
+}
+
+export async function fetchAppConfig(signal?: AbortSignal): Promise<AppConfigResponse> {
+  const response = await fetch(`${API_BASE}/config`, { signal });
+  if (!response.ok) {
+    throw new Error('Failed to load app config');
+  }
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    throw new Error(INVALID_SERVER_RESPONSE);
+  }
+  const r = AppConfigResponseSchema.safeParse(json);
+  if (!r.success) {
+    if (import.meta.env.DEV) {
+      console.warn('[api] GET /config response shape unexpected', r.error.flatten());
+    }
+    throw new Error(INVALID_SERVER_RESPONSE);
   }
   return r.data;
 }

@@ -1,10 +1,10 @@
 import type { StateCreator } from 'zustand';
-import type {
-  DesignSystemNodeData,
-  HypothesisNodeData,
-  ModelNodeData,
-  SectionGhostTargetType,
-} from '../../types/canvas-data';
+import type { SectionGhostTargetType } from '../../types/canvas-data';
+import {
+  getDesignSystemNodeData,
+  getHypothesisNodeData,
+  getModelNodeData,
+} from '../../lib/canvas-node-data';
 import type { DesignSpec } from '../../types/spec';
 import {
   NODE_TYPE_TO_SECTION,
@@ -293,31 +293,37 @@ export const createGraphSlice: StateCreator<
     if (!n) return;
     const dom = useWorkspaceDomainStore.getState();
     const merged = { ...n.data, ...data };
+    const mergedNode = { ...n, data: merged } as WorkspaceNode;
     if (n.type === 'hypothesis') {
       if ('agentMode' in data) {
-        dom.setHypothesisGenerationSettings(nodeId, {
-          agentMode: merged.agentMode as HypothesisNodeData['agentMode'],
-        });
+        const h = getHypothesisNodeData(mergedNode);
+        if (h?.agentMode != null) {
+          dom.setHypothesisGenerationSettings(nodeId, { agentMode: h.agentMode });
+        }
       }
     }
     if (n.type === 'model') {
-      const m = merged as ModelNodeData;
-      dom.upsertModelProfile(nodeId, {
-        providerId: m.providerId,
-        modelId: m.modelId,
-        title: m.title,
-        thinkingLevel: m.thinkingLevel ?? 'minimal',
-      });
+      const m = getModelNodeData(mergedNode);
+      if (m) {
+        dom.upsertModelProfile(nodeId, {
+          providerId: m.providerId,
+          modelId: m.modelId,
+          title: m.title,
+          thinkingLevel: m.thinkingLevel ?? 'minimal',
+        });
+      }
     }
     if (n.type === 'designSystem') {
-      const ds = merged as DesignSystemNodeData;
-      dom.upsertDesignSystem(nodeId, {
-        title: ds.title ?? '',
-        content: ds.content ?? '',
-        images: ds.images ?? [],
-        providerMigration: ds.providerId,
-        modelMigration: ds.modelId,
-      });
+      const ds = getDesignSystemNodeData(mergedNode);
+      if (ds) {
+        dom.upsertDesignSystem(nodeId, {
+          title: ds.title ?? '',
+          content: ds.content ?? '',
+          images: ds.images ?? [],
+          providerMigration: ds.providerId,
+          modelMigration: ds.modelId,
+        });
+      }
     }
   },
 

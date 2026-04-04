@@ -112,7 +112,7 @@ Larger copy uses component classes in the same file (`h1`–`h4`, `body-text`, `
 
 ## Developer kitchen sink
 
-**In-app (all builds):** **Settings** (gear in the canvas header) → **General** → **Open design tokens kitchen sink…** opens a large, scrollable modal with the same reference content.
+**In-app (development only):** **Settings** (gear in the canvas header) → **General** → **Open design tokens kitchen sink…** opens a large, scrollable modal with the same reference content.
 
 **Full page (development only):** run the app and open **`/dev/design-tokens`** for the standalone route. It is omitted from production builds.
 

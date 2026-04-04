@@ -15,6 +15,7 @@ import { Script, createContext } from 'node:vm';
 import type { EvaluatorWorkerReport } from '../../src/types/evaluation.ts';
 import { bundleVirtualFS } from '../../src/lib/bundle-virtual-fs.ts';
 import { resolvePreviewEntryPath } from '../../src/lib/preview-entry.ts';
+import { normalizeError } from '../lib/error-utils.ts';
 
 /** VM `runInContext` timeout per inline script (avoid infinite loops). */
 const INLINE_SCRIPT_VM_TIMEOUT_MS = 2000;
@@ -185,7 +186,7 @@ function checkJsRuntime(html: string): { score: number; notes: string; errors: s
     try {
       new Script(src).runInContext(sandbox, { timeout: INLINE_SCRIPT_VM_TIMEOUT_MS });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = normalizeError(err);
       // Ignore missing browser APIs not worth penalising
       if (
         msg.includes('fetch not available') ||

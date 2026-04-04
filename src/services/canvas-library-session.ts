@@ -50,12 +50,6 @@ export function activateSavedSpecById(
   return { ok: true };
 }
 
-export function activateSpecFromImport(spec: DesignSpec): void {
-  checkpointCurrentSpec();
-  resetSessionStores();
-  applySpecToActiveSession(spec);
-}
-
 export async function activateImportedSpecFile(file: File): Promise<void> {
   checkpointCurrentSpec();
   const spec = await importCanvas(file);

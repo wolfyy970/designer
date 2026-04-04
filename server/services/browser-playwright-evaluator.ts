@@ -5,6 +5,7 @@
 import { chromium, type Page } from 'playwright';
 import { bundleVirtualFS } from '../../src/lib/bundle-virtual-fs.ts';
 import type { EvaluatorWorkerReport } from '../../src/types/evaluation.ts';
+import { normalizeError } from '../lib/error-utils.ts';
 
 export interface BrowserPlaywrightInput {
   files: Record<string, string>;
@@ -65,8 +66,7 @@ export async function runBrowserPlaywrightEval(
   try {
     browser = await chromium.launch({ headless: true });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return skipReport('browser_unavailable', `Chromium launch failed: ${msg}`);
+    return skipReport('browser_unavailable', `Chromium launch failed: ${normalizeError(err)}`);
   }
 
   try {
@@ -183,8 +183,7 @@ export async function runBrowserPlaywrightEval(
 
     return { rubric: 'browser', scores, findings, hardFails, artifacts };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return skipReport('eval_error', msg);
+    return skipReport('eval_error', normalizeError(err));
   } finally {
     await browser.close().catch(() => {});
   }

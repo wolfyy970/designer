@@ -1,5 +1,5 @@
-import type { HypothesisNodeData } from '../types/canvas-data';
 import type { WorkspaceNode } from '../types/workspace-graph';
+import { getHypothesisNodeData } from './canvas-node-data';
 
 /** Runtime check for hypothesis card data marked as compile-time placeholder. */
 export function isPlaceholderHypothesis(data: unknown): boolean {
@@ -9,7 +9,6 @@ export function isPlaceholderHypothesis(data: unknown): boolean {
 
 /** Strategy id from a hypothesis node, if present. */
 export function getHypothesisRefId(node: WorkspaceNode): string | undefined {
-  if (node.type !== 'hypothesis') return undefined;
-  const refId = (node.data as HypothesisNodeData).refId;
+  const refId = getHypothesisNodeData(node)?.refId;
   return typeof refId === 'string' ? refId : undefined;
 }

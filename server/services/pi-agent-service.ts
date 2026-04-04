@@ -11,8 +11,8 @@ import {
 import type { RunTraceEvent, TodoItem } from '../../src/types/provider.ts';
 import { env } from '../env.ts';
 import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
+import { normalizeError } from '../lib/error-utils.ts';
 import { wrapPiStreamWithLogging, PI_LLM_LOG_PHASE } from '../lib/pi-llm-log.ts';
-import { getPromptBody } from '../db/prompts.ts';
 import { getProviderModelContextWindow } from '../lib/provider-model-context.ts';
 import { buildModel } from './pi-model.ts';
 import {
@@ -39,11 +39,6 @@ import type {
 
 export type { ThinkingLevel } from './pi-model.ts';
 export type { AgentRunParams, AgentSessionParams, AgentRunEvent, DesignAgentSessionResult };
-
-/** Optional: Langfuse / prompts that still reference agent compaction copy. */
-export async function loadAgentCompactionSystemPrompt(): Promise<string> {
-  return getPromptBody('agentCompactionSystem');
-}
 
 export async function runDesignAgentSession(
   params: AgentSessionParams,
@@ -221,8 +216,7 @@ export async function runDesignAgentSession(
       { expandPromptTemplates: false },
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await onEvent({ type: 'error', payload: `Agent error: ${message}` });
+    await onEvent({ type: 'error', payload: `Agent error: ${normalizeError(err)}` });
     return null;
   } finally {
     clearInterval(idleTimer);

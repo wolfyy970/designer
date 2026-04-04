@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -15,7 +15,9 @@ import { useCanvasStore, SECTION_NODE_TYPES, GRID_SIZE, type CanvasNodeType } fr
 import { useGenerationStore } from '../../stores/generation-store';
 import { GENERATION_STATUS } from '../../constants/generation';
 import { VARIANT_NODE_GENERATING_Z_INDEX } from '../../constants/canvas';
-import { FIT_VIEW_DELAY_MS, FIT_VIEW_DURATION_MS } from '../../lib/constants';
+import { getVariantNodeData } from '../../lib/canvas-node-data';
+import { scheduleCanvasFitView } from '../../lib/canvas-fit-view';
+import type { WorkspaceNode } from '../../types/workspace-graph';
 import { toReactFlowEdges, toReactFlowNodes } from '../../workspace/reactflow-adapter';
 import { nodeTypes } from './nodes/node-types';
 import { edgeTypes } from './edges/edge-types';
@@ -29,9 +31,38 @@ import { useCanvasOrchestrator } from './hooks/useCanvasOrchestrator';
 import { useNodeDeletion } from './hooks/useNodeDeletion';
 import { useFeedbackLoopConnection } from './hooks/useFeedbackLoopConnection';
 import { PermanentDeleteConfirmProvider } from '../../contexts/PermanentDeleteConfirmProvider';
+import { useAppConfig } from '../../hooks/useAppConfig';
+import { reconcileLockdownCanvasState } from '../../lib/lockdown-reconcile';
+
 function CanvasInner() {
   useCanvasOrchestrator();
   useNodeDeletion();
+
+  const { data: appConfig } = useAppConfig();
+  const lockdown = appConfig?.lockdown === true;
+
+  const [canvasHydrated, setCanvasHydrated] = useState(() =>
+    useCanvasStore.persist.hasHydrated(),
+  );
+
+  useEffect(() => {
+    const unsub = useCanvasStore.persist.onFinishHydration(() => {
+      setCanvasHydrated(true);
+    });
+    return unsub;
+  }, []);
+
+  const lockdownReconciledRef = useRef(false);
+  useEffect(() => {
+    if (!lockdown) {
+      lockdownReconciledRef.current = false;
+      return;
+    }
+    if (!canvasHydrated) return;
+    if (lockdownReconciledRef.current) return;
+    lockdownReconciledRef.current = true;
+    reconcileLockdownCanvasState();
+  }, [lockdown, canvasHydrated]);
   const { handleConnect } = useFeedbackLoopConnection();
   
   const { setCenter, getNodes, fitView } = useReactFlow();
@@ -53,11 +84,12 @@ function CanvasInner() {
     );
     return toReactFlowNodes(nodes).map((n) => {
       if (n.type !== 'variant') return n;
-      const data = n.data as { refId?: string; variantStrategyId?: string };
-      const vsId = data.variantStrategyId;
+      const data = getVariantNodeData(n as unknown as WorkspaceNode);
+      const vsId = data?.variantStrategyId;
+      const refId = data?.refId;
       const bumpZ =
         (vsId != null && generatingByStrategy.has(vsId)) ||
-        (!!data.refId && generatingIds.has(data.refId));
+        (!!refId && generatingIds.has(refId));
       if (bumpZ) {
         return { ...n, zIndex: VARIANT_NODE_GENERATING_Z_INDEX };
       }
@@ -88,10 +120,7 @@ function CanvasInner() {
 
   useEffect(() => {
     if (!pendingFitViewAfterTemplate) return;
-    const id = window.setTimeout(() => {
-      fitView({ duration: FIT_VIEW_DURATION_MS, padding: 0.15 });
-      consumePendingFitView();
-    }, FIT_VIEW_DELAY_MS);
+    const id = scheduleCanvasFitView(fitView, consumePendingFitView);
     return () => window.clearTimeout(id);
   }, [pendingFitViewAfterTemplate, fitView, consumePendingFitView]);
 

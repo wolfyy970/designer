@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
 import { useCanvasStore } from '../stores/canvas-store';
 import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
+import { LOCKDOWN_MODEL_ID, LOCKDOWN_PROVIDER_ID } from '../lib/lockdown-model';
+import { useAppConfig } from './useAppConfig';
 import { useProviderModels } from './useProviderModels';
 import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
-import type { ModelNodeData } from '../types/canvas-data';
+import { getModelNodeData } from '../lib/canvas-node-data';
 import { findFirstUpstreamModelNodeId } from '../workspace/graph-queries';
 
 /**
@@ -14,6 +16,9 @@ import { findFirstUpstreamModelNodeId } from '../workspace/graph-queries';
  * Uses primitive Zustand selectors to avoid useSyncExternalStore infinite loops.
  */
 export function useConnectedModel(nodeId: string) {
+  const { data: appConfig } = useAppConfig();
+  const lockdown = appConfig?.lockdown === true;
+
   const domainModelNodeId = useWorkspaceDomainStore((s) => {
     const fromIncubator = s.incubatorModelNodeIds[nodeId]?.[0];
     if (fromIncubator) return fromIncubator;
@@ -33,7 +38,7 @@ export function useConnectedModel(nodeId: string) {
   const providerId = useCanvasStore(
     (s) => {
       if (!modelNodeId) return null;
-      const data = s.nodes.find((n) => n.id === modelNodeId)?.data as ModelNodeData | undefined;
+      const data = getModelNodeData(s.nodes.find((n) => n.id === modelNodeId));
       return data?.providerId || DEFAULT_COMPILER_PROVIDER;
     },
   );
@@ -41,26 +46,35 @@ export function useConnectedModel(nodeId: string) {
   const modelId = useCanvasStore(
     (s) => {
       if (!modelNodeId) return null;
-      const data = s.nodes.find((n) => n.id === modelNodeId)?.data as ModelNodeData | undefined;
+      const data = getModelNodeData(s.nodes.find((n) => n.id === modelNodeId));
       return data?.modelId || null;
     },
   );
 
-  const { data: models } = useProviderModels(providerId ?? '');
+  const resolvedProviderId =
+    lockdown && modelNodeId
+      ? LOCKDOWN_PROVIDER_ID
+      : providerId;
+  const resolvedModelId =
+    lockdown && modelNodeId ? LOCKDOWN_MODEL_ID : modelId;
+
+  const { data: models } = useProviderModels(
+    lockdown && modelNodeId ? LOCKDOWN_PROVIDER_ID : (providerId ?? ''),
+  );
 
   const supportsVision = useMemo(
-    () => models?.find((m) => m.id === modelId)?.supportsVision ?? false,
-    [models, modelId],
+    () => models?.find((m) => m.id === resolvedModelId)?.supportsVision ?? false,
+    [models, resolvedModelId],
   );
 
   const supportsReasoning = useMemo(
-    () => models?.find((m) => m.id === modelId)?.supportsReasoning ?? false,
-    [models, modelId],
+    () => models?.find((m) => m.id === resolvedModelId)?.supportsReasoning ?? false,
+    [models, resolvedModelId],
   );
 
   return {
-    providerId,
-    modelId,
+    providerId: resolvedProviderId,
+    modelId: resolvedModelId,
     supportsVision,
     supportsReasoning,
     isConnected: modelNodeId !== null,

@@ -1,12 +1,18 @@
 import type { StateCreator } from 'zustand';
-import type { VariantNodeData } from '../../types/canvas-data';
 import { generateId } from '../../lib/utils';
+import { getVariantNodeData } from '../../lib/canvas-node-data';
 import { columnX, snap } from '../../lib/canvas-layout';
 import {
   buildAutoConnectEdges,
   buildModelEdgesFromParent,
 } from '../../lib/canvas-connections';
-import { buildEdgeId, EDGE_TYPES, EDGE_STATUS } from '../../constants/canvas';
+import {
+  UNKNOWN_PINNED_RUN_ID,
+  buildEdgeId,
+  EDGE_TYPES,
+  EDGE_STATUS,
+} from '../../constants/canvas';
+import { GENERATION_STATUS } from '../../constants/generation';
 import { useWorkspaceDomainStore } from '../workspace-domain-store';
 import { useGenerationStore } from '../generation-store';
 import { linkHypothesesAfterCompile, syncDomainForNewEdge } from '../../workspace/domain-commands';
@@ -177,11 +183,9 @@ export const createSyncSlice: StateCreator<
         const target = state.nodes.find(
           (n) => n.id === e.target && n.type === 'variant',
         );
-        if ((target?.data as VariantNodeData | undefined)?.variantStrategyId) {
-          existingVariantByStrategy.set(
-            (target!.data as VariantNodeData).variantStrategyId!,
-            target!.id,
-          );
+        const variantData = target ? getVariantNodeData(target) : undefined;
+        if (variantData?.variantStrategyId) {
+          existingVariantByStrategy.set(variantData.variantStrategyId, target!.id);
         }
       }
     }
@@ -279,7 +283,7 @@ export const createSyncSlice: StateCreator<
 
     const newNodes = state.nodes.map((n) => {
       if (!variantIdSet.has(n.id)) return n;
-      const vsId = (n.data as VariantNodeData).variantStrategyId;
+      const vsId = getVariantNodeData(n)?.variantStrategyId;
       if (!vsId) return n;
 
       const stack = genState.results
@@ -288,14 +292,14 @@ export const createSyncSlice: StateCreator<
       const selectedId = genState.selectedVersions[vsId];
       const active = selectedId
         ? stack.find((r) => r.id === selectedId)
-        : stack.find((r) => r.status === 'complete') ?? stack[0];
+        : stack.find((r) => r.status === GENERATION_STATUS.COMPLETE) ?? stack[0];
 
       return {
         ...n,
         position: { x: n.position.x, y: n.position.y + 200 },
         data: {
           ...n.data,
-          pinnedRunId: active?.runId ?? 'unknown',
+          pinnedRunId: active?.runId ?? UNKNOWN_PINNED_RUN_ID,
         },
       };
     });
@@ -309,8 +313,9 @@ export const createSyncSlice: StateCreator<
     const dom = useWorkspaceDomainStore.getState();
     for (const n of newNodes) {
       if (!variantIdSet.has(n.id)) continue;
-      const vsId = (n.data as VariantNodeData).variantStrategyId;
-      const pin = (n.data as VariantNodeData).pinnedRunId;
+      const variantD = getVariantNodeData(n);
+      const vsId = variantD?.variantStrategyId;
+      const pin = variantD?.pinnedRunId;
       if (vsId && pin) {
         dom.setVariantSlot(hypothesisNodeId, vsId, { pinnedRunId: pin });
       }

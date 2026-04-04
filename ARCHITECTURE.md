@@ -173,6 +173,7 @@ flowchart TB
 
 | Endpoint | Method | Purpose | Response |
 |---|---|---|---|
+| `/api/config` | GET | App flags from server (`lockdown` + pinned model ids when `LOCKDOWN` is enabled; default locked if env unset) | JSON |
 | `/api/compile` | POST | Compile spec into dimension map | JSON: `DimensionMap` |
 | `/api/generate` | POST | Generate one variant (single-shot or agentic) | SSE stream |
 | `/api/hypothesis/prompt-bundle` | POST | Build compiled prompts + eval/provenance from workspace slice (authoritative variant template) | JSON |
@@ -205,6 +206,12 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 
 ## Server Architecture (`server/`)
 
+### Import convention (server ↔ `src/`)
+
+- **Direct `../../src/...` imports are OK** for pure types, Zod schemas, and shared **constants** with no Node/browser coupling (e.g. `src/types/*`, `src/lib/workspace-snapshot-schema.ts`, `src/constants/*`).
+- Prefer **`server/lib/`** modules for shared **logic** that already lives or is mirrored there (`error-utils`, `extract-code`, `provider-helpers`, `lockdown-model`, hypothesis workspace helpers, etc.) so routes stay shallow.
+- Do **not** import React, Vite-only code, or browser APIs from `server/`.
+
 | File | Responsibility |
 |------|---------------|
 | `app.ts` | Hono app: mounts routes, CORS |
@@ -212,6 +219,7 @@ All POST endpoints validate request bodies with Zod `safeParse` — malformed re
 | `dev.ts` | Local dev entry (Hono + `@hono/node-server` on 3001) |
 | `log-store.ts` | In-memory LLM call ring (dev); finalized rows + one-shots → single `writeObservabilityLine` NDJSON via `server/lib/observability-sink.ts` |
 | `trace-log-store.ts` | Run-trace ring (dedupe by `event.id`); client POST `/api/logs/trace`; same NDJSON sink |
+| `routes/config.ts` | GET /api/config — `env.LOCKDOWN` and shared lockdown constants |
 | `routes/compile.ts` | POST /api/compile |
 | `routes/generate.ts` | POST /api/generate — delegates to `services/generate-execution.ts` |
 | `routes/hypothesis.ts` | POST `/api/hypothesis/prompt-bundle`, `/api/hypothesis/generate` |
@@ -338,7 +346,7 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 | File | Purpose |
 |------|---------|
 | `client.ts` | REST + SSE fetch wrappers. `GenerateStreamCallbacks` includes `onFile(path, content)` and `onPlan(files)` for agentic events. |
-| `types.ts` | Request/response interfaces. `GenerateRequest` includes `mode` and `thinkingLevel`. `GenerateSSEEvent` includes `file` and `plan` variants. |
+| `types.ts` | Request/response interfaces for compile, hypothesis, and observability. `GenerateSSEEvent` includes `file` and `plan` variants. Legacy `/api/generate` wire types live on the server. |
 
 ### Storage (`src/storage/`)
 

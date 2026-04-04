@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { GenerateStreamBodySchema } from '../lib/generate-stream-schema.ts';
 import { executeGenerateStreamSafe } from '../services/generate-execution.ts';
+import { clampEvaluatorOptional, clampProviderModel } from '../lib/lockdown-model.ts';
 
 const generate = new Hono();
 
@@ -11,7 +12,9 @@ generate.post('/', async (c) => {
   if (!parsed.success) {
     return c.json({ error: 'Invalid request', details: parsed.error.flatten() }, 400);
   }
-  const body = parsed.data;
+  const m = clampProviderModel(parsed.data.providerId, parsed.data.modelId);
+  const ev = clampEvaluatorOptional(parsed.data.evaluatorProviderId, parsed.data.evaluatorModelId);
+  const body = { ...parsed.data, ...ev, providerId: m.providerId, modelId: m.modelId };
   const correlationId =
     body.correlationId?.trim() || crypto.randomUUID();
 

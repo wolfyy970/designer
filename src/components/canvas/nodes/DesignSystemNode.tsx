@@ -6,7 +6,7 @@ import { normalizeError } from '../../../lib/error-utils';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import type { DesignSystemNodeData } from '../../../types/canvas-data';
 import { extractDesignSystem } from '../../../api/client';
-import { generateId, now } from '../../../lib/utils';
+import { readFileAsReferenceImage } from '../../../lib/image-utils';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
 import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
 import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
@@ -41,21 +41,12 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
   );
 
   const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
-      acceptedFiles.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const newImage: ReferenceImage = {
-            id: generateId(),
-            filename: file.name,
-            dataUrl: reader.result as string,
-            description: '',
-            createdAt: now(),
-          };
-          updateNodeData(id, { images: [...getCurrentImages(), newImage] });
-        };
-        reader.readAsDataURL(file);
-      });
+    async (acceptedFiles: File[]) => {
+      const newImages = await Promise.all(
+        acceptedFiles.map((file) => readFileAsReferenceImage(file)),
+      );
+      if (newImages.length === 0) return;
+      updateNodeData(id, { images: [...getCurrentImages(), ...newImages] });
     },
     [id, updateNodeData, getCurrentImages],
   );

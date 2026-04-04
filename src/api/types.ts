@@ -29,28 +29,6 @@ export interface CompileRequest {
 
 export type CompileResponse = DimensionMap;
 
-// ── Generate ────────────────────────────────────────────────────────
-
-export interface GenerateRequest {
-  prompt: string;
-  images?: ReferenceImage[];
-  providerId: string;
-  modelId: string;
-  /** Passed through to LLM log rows; defaults to a server UUID when omitted */
-  correlationId?: string;
-  supportsVision?: boolean;
-  mode?: 'single' | 'agentic';
-  thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high';
-  evaluationContext?: EvaluationContextPayload;
-  /** Optional separate provider/model for LLM evaluators; defaults to builder's when unset */
-  evaluatorProviderId?: string;
-  evaluatorModelId?: string;
-  /** Override server default max PI revision rounds (0–20). */
-  agenticMaxRevisionRounds?: number;
-  /** Optional early satisfaction when overall score ≥ this and no hard fails. */
-  agenticMinOverallScore?: number;
-}
-
 /** Workspace slice sent to `/api/hypothesis/*` (mirrors client domain + graph). */
 export interface HypothesisWorkspaceApiPayload {
   hypothesisNodeId: string;

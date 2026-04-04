@@ -29,7 +29,7 @@ export function isValidConnection(sourceType: string, targetType: string): boole
 
 // ── Prerequisite rules ──────────────────────────────────────────────
 
-export const PREREQUISITE_RULES: Partial<Record<string, string>> = {
+const PREREQUISITE_RULES: Partial<Record<string, string>> = {
   compiler: 'model',
   hypothesis: 'model',
   designSystem: 'model',
@@ -111,7 +111,7 @@ export function buildAutoConnectEdges(
 /**
  * Find model node(s) connected as inputs to a specific node.
  */
-export function findModelsConnectedTo(
+function findModelsConnectedTo(
   parentId: string,
   nodes: MinimalNode[],
   edges: MinimalEdge[],

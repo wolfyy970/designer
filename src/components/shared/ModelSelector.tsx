@@ -8,6 +8,7 @@ interface ModelSelectorProps {
   providerId: string;
   selectedModelId: string;
   onChange: (modelId: string) => void;
+  disabled?: boolean;
 }
 
 export default function ModelSelector({
@@ -15,6 +16,7 @@ export default function ModelSelector({
   providerId,
   selectedModelId,
   onChange,
+  disabled = false,
 }: ModelSelectorProps) {
   const { data: models, isLoading, isError } = useProviderModels(providerId);
   const queryClient = useQueryClient();
@@ -58,9 +60,8 @@ export default function ModelSelector({
     setHighlightIndex(0);
   }, [filtered.length]);
 
-  // Close on outside click
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || disabled) return;
     function handleClick(e: PointerEvent) {
       if (
         containerRef.current &&
@@ -72,14 +73,13 @@ export default function ModelSelector({
     }
     document.addEventListener('pointerdown', handleClick, true);
     return () => document.removeEventListener('pointerdown', handleClick, true);
-  }, [isOpen]);
+  }, [isOpen, disabled]);
 
-  // Scroll highlighted item into view
   useEffect(() => {
-    if (!isOpen || !listRef.current) return;
+    if (!isOpen || !listRef.current || disabled) return;
     const el = listRef.current.children[highlightIndex] as HTMLElement;
     el?.scrollIntoView({ block: 'nearest' });
-  }, [highlightIndex, isOpen]);
+  }, [highlightIndex, isOpen, disabled]);
 
   const select = useCallback(
     (modelId: string) => {
@@ -92,6 +92,7 @@ export default function ModelSelector({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (disabled) return;
       if (!isOpen) {
         if (e.key === 'ArrowDown' || e.key === 'Enter') {
           e.preventDefault();
@@ -120,7 +121,7 @@ export default function ModelSelector({
           break;
       }
     },
-    [isOpen, filtered, highlightIndex, select]
+    [disabled, isOpen, filtered, highlightIndex, select]
   );
 
   const selectedModel = models?.find((m) => m.id === selectedModelId);
@@ -167,7 +168,7 @@ export default function ModelSelector({
           </span>
         </div>
 
-        {isOpen && (
+        {isOpen && !disabled && (
           <ul
             ref={listRef}
             className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-border bg-bg py-1 shadow-lg"

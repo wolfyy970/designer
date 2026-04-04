@@ -11,6 +11,7 @@ import {
   sharedDefaultForKey,
 } from '../db/prompts.ts';
 import { env } from '../env.ts';
+import { normalizeError } from '../lib/error-utils.ts';
 import { PROMPT_KEYS, type PromptKey } from '../lib/prompts/defaults.ts';
 
 const prompts = new Hono();
@@ -32,8 +33,7 @@ prompts.get('/', async (c) => {
     );
     return c.json(all);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return c.json({ error: message }, 500);
+    return c.json({ error: normalizeError(err) }, 500);
   }
 });
 
@@ -96,8 +96,7 @@ prompts.get('/status', async (c) => {
       })),
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return c.json({ error: message, ok: false }, 500);
+    return c.json({ error: normalizeError(err), ok: false }, 500);
   }
 });
 
@@ -179,8 +178,7 @@ prompts.get('/:key', async (c) => {
       isSharedDefault: body === sharedDefault,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return c.json({ error: message }, 500);
+    return c.json({ error: normalizeError(err) }, 500);
   }
 });
 
@@ -225,8 +223,7 @@ prompts.get('/:key/history', async (c) => {
     const versions = await listPromptHistoryRows(key);
     return c.json(versions);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return c.json({ error: message }, 500);
+    return c.json({ error: normalizeError(err) }, 500);
   }
 });
 

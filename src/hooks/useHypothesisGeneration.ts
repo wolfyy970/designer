@@ -5,15 +5,14 @@ import { useCompilerStore, findVariantStrategy } from '../stores/compiler-store'
 import { useGenerationStore, nextRunNumber } from '../stores/generation-store';
 import { useCanvasStore } from '../stores/canvas-store';
 import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
-import {
-  DEFAULT_COMPILER_PROVIDER,
-  FIT_VIEW_DELAY_MS,
-  FIT_VIEW_DURATION_MS,
-} from '../lib/constants';
+import { scheduleCanvasFitView } from '../lib/canvas-fit-view';
+import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
 import { warnIfWorkspaceSnapshotInvalid } from '../lib/workspace-snapshot-warn';
 import { buildHypothesisGenerationContext } from '../workspace/workspace-session';
 import { normalizeError } from '../lib/error-utils';
+import { pinModelCredentialsIfLockdown } from '../lib/lockdown-model';
 import { normalizeModelProfilesForApi } from '../workspace/hypothesis-generation-pure';
+import { useAppConfig } from './useAppConfig';
 import { GENERATION_STATUS } from '../constants/generation';
 import { EDGE_STATUS } from '../constants/canvas';
 import {
@@ -52,6 +51,8 @@ export function useHypothesisGeneration({
   strategyId,
 }: HypothesisGenerationParams) {
   const { fitView } = useReactFlow();
+  const { data: appConfig } = useAppConfig();
+  const lockdown = appConfig?.lockdown === true;
 
   const spec = useSpecStore((s) => s.spec);
   const strategy = useCompilerStore(
@@ -82,13 +83,17 @@ export function useHypothesisGeneration({
     if (!strategy) return;
 
     const snapshot = useCanvasStore.getState();
-    const genCtx = buildHypothesisGenerationContext({
+    const genCtxRaw = buildHypothesisGenerationContext({
       hypothesisNodeId: nodeId,
       variantStrategy: strategy,
       snapshot: { nodes: snapshot.nodes, edges: snapshot.edges },
       spec,
     });
-    if (!genCtx) return;
+    if (!genCtxRaw) return;
+    const genCtx = {
+      ...genCtxRaw,
+      modelCredentials: pinModelCredentialsIfLockdown(genCtxRaw.modelCredentials, lockdown),
+    };
 
     const runId = crypto.randomUUID();
 
@@ -102,6 +107,7 @@ export function useHypothesisGeneration({
       modelProfiles: normalizeModelProfilesForApi(
         domain.modelProfiles,
         DEFAULT_COMPILER_PROVIDER,
+        lockdown,
       ),
       designSystems: domain.designSystems,
       defaultCompilerProvider: DEFAULT_COMPILER_PROVIDER,
@@ -120,6 +126,8 @@ export function useHypothesisGeneration({
 
     let lanePlaceholderIds: string[] = [];
     const abortController = swapGenerationAbortController(strategyId);
+    /** When true, hypothesis→… source edge already set to ERROR — do not overwrite in `finally`. */
+    let hypothesisSourceEdgeTerminalError = false;
 
     try {
       const onLaneComplete = (id: string) => {
@@ -151,11 +159,9 @@ export function useHypothesisGeneration({
             nextRunNumber(useGenerationStore.getState(), variantStrategyId),
           syncAfterGenerate,
           getCanvasState: () => useCanvasStore.getState(),
-          scheduleFitView: () =>
-            setTimeout(
-              () => fitView({ duration: FIT_VIEW_DURATION_MS, padding: 0.15 }),
-              FIT_VIEW_DELAY_MS,
-            ),
+          scheduleFitView: () => {
+            scheduleCanvasFitView(fitView);
+          },
           fetchBundle: fetchHypothesisPromptBundle,
           runStream: generateHypothesisStream,
           onLaneIdsReady: (ids) => {
@@ -166,6 +172,7 @@ export function useHypothesisGeneration({
       );
 
       if (!runResult.ok) {
+        hypothesisSourceEdgeTerminalError = true;
         setGenerationError('No prompt from server');
         setGenerating(false);
         setEdgeStatusBySource(nodeId, EDGE_STATUS.ERROR);
@@ -186,13 +193,16 @@ export function useHypothesisGeneration({
         setGenerationError(null);
         setEdgeStatusBySource(nodeId, EDGE_STATUS.COMPLETE);
       } else {
+        hypothesisSourceEdgeTerminalError = true;
         setGenerationError(msg);
         setEdgeStatusBySource(nodeId, EDGE_STATUS.ERROR);
       }
     } finally {
       clearGenerationAbortController(strategyId, abortController);
       clearVariantNodeIdMap();
-      setEdgeStatusBySource(nodeId, EDGE_STATUS.COMPLETE);
+      if (!hypothesisSourceEdgeTerminalError) {
+        setEdgeStatusBySource(nodeId, EDGE_STATUS.COMPLETE);
+      }
       const stillGenerating = useGenerationStore.getState().results.some(
         (r) => r.status === GENERATION_STATUS.GENERATING,
       );
@@ -229,6 +239,7 @@ export function useHypothesisGeneration({
     setEdgeStatusByTarget,
     fitView,
     strategyId,
+    lockdown,
   ]);
 
   return { handleGenerate, generationProgress, generationError };

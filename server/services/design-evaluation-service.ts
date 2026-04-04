@@ -23,13 +23,14 @@ import { mergePreflightWithPlaywright, runBrowserPlaywrightEval } from './browse
 import { parseJsonLenient } from '../lib/parse-json-lenient.ts';
 import { createPreviewSession, deletePreviewSession } from './preview-session-store.ts';
 import { encodeVirtualPathForUrl, resolvePreviewEntryPath } from '../../src/lib/preview-entry.ts';
+import { normalizeError } from '../lib/error-utils.ts';
 
 const criterionSchema = z.object({
   score: z.number(),
   notes: z.string(),
 });
 
-const workerReportSchema = z.object({
+export const evaluatorWorkerReportSchema = z.object({
   rubric: evaluatorRubricIdZodSchema,
   scores: z.record(z.string(), criterionSchema),
   findings: z.array(
@@ -46,6 +47,72 @@ const workerReportSchema = z.object({
     }),
   ),
 });
+
+function coerceFindingLikeArray(v: unknown): unknown[] {
+  if (v === undefined || v === null) return [];
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    if (
+      typeof o.severity === 'string' &&
+      typeof o.summary === 'string' &&
+      typeof o.detail === 'string'
+    ) {
+      return [v];
+    }
+    return Object.values(o);
+  }
+  return [];
+}
+
+function coerceHardFailLikeArray(v: unknown): unknown[] {
+  if (v === undefined || v === null) return [];
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    if (typeof o.code === 'string' && typeof o.message === 'string') {
+      return [v];
+    }
+    return Object.values(o);
+  }
+  return [];
+}
+
+/**
+ * LLMs often nest `findings` / `hardFails` under `scores` or emit a single object instead of an array.
+ * Hoist and coerce so Zod matches our EvaluatorWorkerReport contract.
+ */
+export function normalizeEvaluatorWorkerPayload(parsed: unknown): unknown {
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return parsed;
+  }
+  const root = { ...(parsed as Record<string, unknown>) };
+  const scoresRaw = root.scores;
+  if (scoresRaw !== null && typeof scoresRaw === 'object' && !Array.isArray(scoresRaw)) {
+    const scores = { ...(scoresRaw as Record<string, unknown>) };
+    let mutated = false;
+    if ('findings' in scores) {
+      const nested = scores.findings;
+      const hoisted = Array.isArray(nested) ? nested : coerceFindingLikeArray(nested);
+      delete scores.findings;
+      mutated = true;
+      const top = coerceFindingLikeArray(root.findings);
+      root.findings = [...top, ...hoisted];
+    }
+    if ('hardFails' in scores) {
+      const nested = scores.hardFails;
+      const hoisted = Array.isArray(nested) ? nested : coerceHardFailLikeArray(nested);
+      delete scores.hardFails;
+      mutated = true;
+      const top = coerceHardFailLikeArray(root.hardFails);
+      root.hardFails = [...top, ...hoisted];
+    }
+    if (mutated) root.scores = scores;
+  }
+  root.findings = coerceFindingLikeArray(root.findings);
+  root.hardFails = coerceHardFailLikeArray(root.hardFails);
+  return root;
+}
 
 const MAX_FILE_CHARS = 24_000;
 const MAX_BUNDLE_CHARS = 32_000;
@@ -64,7 +131,11 @@ function truncateBlock(label: string, content: string): string {
 }
 
 /** Strip markdown fences and parse first JSON object from model output */
-export function parseModelJsonObject<T>(raw: string, schema: z.ZodType<T>): T {
+export function parseModelJsonObject<T>(
+  raw: string,
+  schema: z.ZodType<T>,
+  normalize?: (parsed: unknown) => unknown,
+): T {
   let s = raw.trim();
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence) s = fence[1].trim();
@@ -74,13 +145,14 @@ export function parseModelJsonObject<T>(raw: string, schema: z.ZodType<T>): T {
     throw new Error('Evaluator model returned no JSON object');
   }
   const jsonStr = s.slice(start, end + 1);
-  const parsed = parseJsonLenient(jsonStr);
+  let parsed: unknown = parseJsonLenient(jsonStr);
+  if (normalize) parsed = normalize(parsed);
   return schema.parse(parsed);
 }
 
 /** Fallback when a single evaluator worker throws or returns invalid JSON */
 export function buildDegradedReport(rubric: EvaluatorRubricId, error: unknown): EvaluatorWorkerReport {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = normalizeError(error);
   return {
     rubric,
     scores: {
@@ -195,7 +267,7 @@ async function runOneEvaluator(
       ...(logCtx.correlationId ? { correlationId: `${logCtx.correlationId}:eval:${rubric}` } : {}),
     },
   );
-  return parseModelJsonObject(response.raw, workerReportSchema);
+  return parseModelJsonObject(response.raw, evaluatorWorkerReportSchema, normalizeEvaluatorWorkerPayload);
 }
 
 async function runEvaluatorWorker(

@@ -1,6 +1,6 @@
-import type { DesignSpec, ReferenceImage } from '../types/spec';
+import type { DesignSpec } from '../types/spec';
 import type { GenerationResult } from '../types/provider';
-import type { DesignSystemNodeData, VariantNodeData } from '../types/canvas-data';
+import { getVariantNodeData } from './canvas-node-data';
 import { loadCode } from '../services/idb-storage';
 import { SECTION_NODE_TYPES } from '../lib/canvas-layout';
 import {
@@ -13,44 +13,6 @@ import type { DomainIncubatorWiring } from '../types/workspace-domain';
 
 type AnyNode = WorkspaceNode;
 type AnyEdge = WorkspaceEdge;
-
-// ── Design system inputs ────────────────────────────────────────────
-
-export interface DesignSystemInputs {
-  content: string | undefined;
-  images: ReferenceImage[];
-}
-
-/**
- * Collect merged design system content and images from all DesignSystem nodes
- * connected upstream of the given target node.
- */
-export function collectDesignSystemInputs(
-  nodes: AnyNode[],
-  edges: AnyEdge[],
-  targetNodeId: string,
-): DesignSystemInputs {
-  const incomingEdges = edges.filter((e) => e.target === targetNodeId);
-  const dsNodes = incomingEdges
-    .map((e) => nodes.find((n) => n.id === e.source && n.type === 'designSystem'))
-    .filter(Boolean) as AnyNode[];
-
-  if (dsNodes.length === 0) return { content: undefined, images: [] };
-
-  const parts = dsNodes
-    .map((n) => {
-      const data = n.data as DesignSystemNodeData;
-      const t = data.title || 'Design System';
-      const c = data.content || '';
-      return c.trim() ? `## ${t}\n${c}` : '';
-    })
-    .filter(Boolean);
-
-  return {
-    content: parts.join('\n\n---\n\n') || undefined,
-    images: dsNodes.flatMap((n) => (n.data as DesignSystemNodeData).images ?? []),
-  };
-}
 
 // ── Lineage computation ─────────────────────────────────────────────
 
@@ -168,8 +130,8 @@ export async function buildCompileInputs(
   // Collect reference designs from connected variant nodes
   const referenceDesigns: { name: string; code: string }[] = [];
   const collectVariantCode = async (variantNode: AnyNode) => {
-    const variantData = variantNode.data as VariantNodeData;
-    if (variantNode.type === 'variant' && variantData.refId) {
+    const variantData = getVariantNodeData(variantNode);
+    if (variantNode.type === 'variant' && variantData?.refId) {
       const result = results.find((r) => r.id === variantData.refId);
       if (result) {
         // Try in-memory code first (during active generation), then IndexedDB
