@@ -8,6 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The header’s **date/time** comes from **`git log -1 --format=%cI`** (committer time of `HEAD`) when Vite loads — no manual timestamp. If you ship a tree **without** `.git`, set optional **`releasedAt`** in `package.json` (ISO-8601); `vite.config.ts` falls back to it. Display is always **America/New_York** (EST/EDT) in the UI.
 
+**Version and timestamp in the header are baked in when Vite starts** (`vite.config.ts` `define`). After you change `package.json` or make a new `git commit`, **restart `pnpm dev`** / **`pnpm dev:all`** (or run `pnpm build` / `pnpm preview`) so the canvas header shows the updated `v…` and Eastern time — a running dev server does not pick up new values on its own.
+
 **`git commit --amend`** runs the hook again and bumps patch again; avoid amending often or use `SKIP_PATCH_BUMP=1` if the version was already correct for that commit.
 
 ## Commands
