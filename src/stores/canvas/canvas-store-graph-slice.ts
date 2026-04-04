@@ -104,6 +104,7 @@ export const createGraphSlice: StateCreator<
     const state = get();
 
     if (SECTION_NODE_TYPES.has(type) && state.nodes.some((n) => n.type === type)) return;
+    if (type === 'hypothesis' && !state.nodes.some((n) => n.type === 'compiler')) return;
 
     const id = `${type}-${generateId()}`;
     const col = columnX(state.colGap);

@@ -19,7 +19,7 @@ interface NodeEntry {
   type: CanvasNodeType;
   label: string;
   icon: React.ReactNode;
-  group: 'input' | 'processing' | 'output';
+  group: 'input' | 'processing' | 'strategies';
 }
 
 const NODE_ENTRIES: NodeEntry[] = [
@@ -31,13 +31,13 @@ const NODE_ENTRIES: NodeEntry[] = [
   { type: 'model', label: 'Model', icon: <Bot size={14} />, group: 'processing' },
   { type: 'compiler', label: 'Incubator', icon: <Cpu size={14} />, group: 'processing' },
   { type: 'designSystem', label: 'Design System', icon: <SwatchBook size={14} />, group: 'processing' },
-  { type: 'hypothesis', label: 'Hypothesis', icon: <Lightbulb size={14} />, group: 'output' },
+  { type: 'hypothesis', label: 'Hypothesis', icon: <Lightbulb size={14} />, group: 'strategies' },
 ];
 
 const GROUP_LABELS: Record<string, string> = {
   input: 'Input',
   processing: 'Processing',
-  output: 'Output',
+  strategies: 'Strategies',
 };
 
 interface NodePaletteProps {
@@ -59,6 +59,8 @@ export default function NodePalette({ onAdd, position }: NodePaletteProps) {
     return nodes.some((n) => n.type === type);
   }
 
+  const hasIncubator = nodes.some((n) => n.type === 'compiler');
+
   function handleClick(type: CanvasNodeType) {
     if (onAdd) {
       onAdd(type, position);
@@ -67,7 +69,7 @@ export default function NodePalette({ onAdd, position }: NodePaletteProps) {
     }
   }
 
-  const groups = ['input', 'processing', 'output'] as const;
+  const groups = ['input', 'processing', 'strategies'] as const;
 
   return (
     <div className="w-palette rounded-lg border border-border bg-surface py-1 shadow-lg">
@@ -80,18 +82,34 @@ export default function NodePalette({ onAdd, position }: NodePaletteProps) {
               {GROUP_LABELS[group]}
             </div>
             {entries.map((entry) => {
-              const disabled = isSingleton(entry.type) && isOnCanvas(entry.type);
+              const singletonTaken = isSingleton(entry.type) && isOnCanvas(entry.type);
+              const needsIncubator = entry.type === 'hypothesis' && !hasIncubator;
+              const disabled = singletonTaken || needsIncubator;
+              let statusLabel: string | null = null;
+              if (singletonTaken) statusLabel = 'added';
+              else if (needsIncubator) statusLabel = 'needs Incubator';
               return (
                 <button
                   key={entry.type}
+                  type="button"
                   onClick={() => handleClick(entry.type)}
                   disabled={disabled}
+                  title={
+                    needsIncubator
+                      ? 'Add an Incubator to the canvas first, then add hypotheses.'
+                      : undefined
+                  }
+                  aria-label={
+                    needsIncubator ? `${entry.label} (add an Incubator first)` : entry.label
+                  }
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-fg-secondary transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <span className="text-fg-muted">{entry.icon}</span>
                   {entry.label}
-                  {disabled && (
-                    <span className="ml-auto text-nano text-fg-faint">added</span>
+                  {statusLabel && (
+                    <span className="ml-auto max-w-[7rem] truncate text-right text-nano text-fg-faint">
+                      {statusLabel}
+                    </span>
                   )}
                 </button>
               );
@@ -99,6 +117,9 @@ export default function NodePalette({ onAdd, position }: NodePaletteProps) {
           </div>
         );
       })}
+      <p className="border-t border-border-subtle px-3 py-2 text-nano leading-snug text-fg-muted">
+        Variant previews appear after you generate from a hypothesis.
+      </p>
     </div>
   );
 }
