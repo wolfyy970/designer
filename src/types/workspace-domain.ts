@@ -7,11 +7,10 @@ import type { ReferenceImage } from './spec';
 export type AgentMode = 'single' | 'agentic';
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high';
 
-/** Wired inputs for compile: section + variant + critique node ids feeding an incubator. */
+/** Wired inputs for compile: section + variant node ids feeding an incubator. */
 export interface DomainIncubatorWiring {
   readonly sectionNodeIds: string[];
   readonly variantNodeIds: string[];
-  readonly critiqueNodeIds: string[];
 }
 
 /** Hypothesis runtime settings and bindings (not graph topology). */
@@ -44,14 +43,6 @@ export interface DomainDesignSystemContent {
   modelMigration?: string;
 }
 
-export interface DomainCritiqueContent {
-  readonly nodeId: string;
-  title: string;
-  strengths: string;
-  improvements: string;
-  direction: string;
-}
-
 /** Variant preview slot per hypothesis + strategy (canvas node id is projection). */
 export interface DomainVariantSlot {
   readonly hypothesisId: string;
@@ -69,12 +60,11 @@ export interface WorkspaceDomainStateV1 {
   hypotheses: Record<string, DomainHypothesis>;
   modelProfiles: Record<string, DomainModelProfile>;
   designSystems: Record<string, DomainDesignSystemContent>;
-  critiques: Record<string, DomainCritiqueContent>;
   variantSlots: Record<string, DomainVariantSlot>;
 }
 
 export function defaultIncubatorWiring(): DomainIncubatorWiring {
-  return { sectionNodeIds: [], variantNodeIds: [], critiqueNodeIds: [] };
+  return { sectionNodeIds: [], variantNodeIds: [] };
 }
 
 /** Slot key used in variantSlots map */

@@ -20,20 +20,11 @@ export interface CompileRequest {
   providerId: string;
   modelId: string;
   referenceDesigns?: { name: string; code: string }[];
-  critiques?: CritiqueInput[];
   supportsVision?: boolean;
   promptOptions?: {
     count?: number;
     existingStrategies?: VariantStrategy[];
   };
-}
-
-export interface CritiqueInput {
-  title: string;
-  strengths: string;
-  improvements: string;
-  direction: string;
-  variantCode?: string;
 }
 
 export type CompileResponse = DimensionMap;

@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { DesignSpec } from '../../src/types/spec.ts';
-import type { CritiqueInput } from '../lib/prompts/compiler-user.ts';
 import type { CompilerPromptOptions } from '../lib/prompts/compiler-user.ts';
 import { compileSpec } from '../services/compiler.ts';
 import { getPromptBody } from '../db/prompts.ts';
@@ -17,7 +16,6 @@ const CompileRequestSchema = z.object({
     name: z.string(),
     code: z.string(),
   })).optional(),
-  critiques: z.array(z.unknown()).optional(),
   supportsVision: z.boolean().optional(),
   promptOptions: z.object({
     count: z.number().int().positive().optional(),
@@ -47,7 +45,6 @@ compile.post('/', async (c) => {
         systemPrompt,
         userPromptTemplate,
         referenceDesigns: body.referenceDesigns,
-        critiques: body.critiques as CritiqueInput[] | undefined,
         supportsVision: body.supportsVision,
         promptOptions: body.promptOptions as CompilerPromptOptions | undefined,
       },

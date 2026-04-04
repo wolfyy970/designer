@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { DesignSpec, ReferenceImage } from '../../src/types/spec.ts';
 import type { CompiledPrompt, DimensionMap, VariantStrategy } from '../../src/types/compiler.ts';
 import type { ChatResponse, ContentPart, ChatMessage } from '../../src/types/provider.ts';
-import { buildCompilerUserPrompt, type CritiqueInput, type CompilerPromptOptions } from '../lib/prompts/compiler-user.ts';
+import { buildCompilerUserPrompt, type CompilerPromptOptions } from '../lib/prompts/compiler-user.ts';
 import { buildVariantPrompt } from '../lib/prompts/variant-prompt.ts';
 import { generateId, now } from '../lib/utils.ts';
 import { env } from '../env.ts';
@@ -164,7 +164,6 @@ export interface CompileOptions {
   systemPrompt: string;
   userPromptTemplate: string;
   referenceDesigns?: { name: string; code: string }[];
-  critiques?: CritiqueInput[];
   supportsVision?: boolean;
   promptOptions?: CompilerPromptOptions;
 }
@@ -179,7 +178,6 @@ export async function compileSpec(
     spec,
     options.userPromptTemplate,
     options.referenceDesigns,
-    options.critiques,
     options.promptOptions,
   );
 

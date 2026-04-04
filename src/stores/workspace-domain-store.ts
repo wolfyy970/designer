@@ -42,8 +42,6 @@ const empty = (): Omit<
   | 'purgeModelNode'
   | 'upsertDesignSystem'
   | 'removeDesignSystem'
-  | 'upsertCritique'
-  | 'removeCritique'
   | 'setVariantSlot'
   | 'removeVariantSlot'
   | 'reset'
@@ -53,7 +51,6 @@ const empty = (): Omit<
   hypotheses: {},
   modelProfiles: {},
   designSystems: {},
-  critiques: {},
   variantSlots: {},
 });
 
@@ -109,20 +106,6 @@ export function hydrateDomainFromCanvasGraph(input: {
         modelMigration: d.modelId,
       });
     }
-    if (n.type === NODE_TYPES.CRITIQUE) {
-      const d = n.data as {
-        title?: string;
-        strengths?: string;
-        improvements?: string;
-        direction?: string;
-      };
-      store.upsertCritique(n.id, {
-        title: d.title ?? '',
-        strengths: d.strengths ?? '',
-        improvements: d.improvements ?? '',
-        direction: d.direction ?? '',
-      });
-    }
   }
 
   const compilerHypFirst = (e: { source: string; target: string }) => {
@@ -172,10 +155,6 @@ export function hydrateDomainFromCanvasGraph(input: {
     if (src.type === NODE_TYPES.VARIANT && tgt.type === NODE_TYPES.COMPILER) {
       store.ensureIncubatorWiring(tgt.id);
       store.attachIncubatorInput(tgt.id, src.id, NODE_TYPES.VARIANT);
-    }
-    if (src.type === NODE_TYPES.CRITIQUE && tgt.type === NODE_TYPES.COMPILER) {
-      store.ensureIncubatorWiring(tgt.id);
-      store.attachIncubatorInput(tgt.id, src.id, NODE_TYPES.CRITIQUE);
     }
     if (src.type === NODE_TYPES.DESIGN_SYSTEM && tgt.type === NODE_TYPES.HYPOTHESIS) {
       store.attachDesignSystemToHypothesis(src.id, tgt.id);

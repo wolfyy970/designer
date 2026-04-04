@@ -37,13 +37,6 @@ export type DesignSystemNodeData = NodeData<{
   modelId?: string;
 }>;
 
-export type CritiqueNodeData = NodeData<{
-  title?: string;
-  strengths?: string;
-  improvements?: string;
-  direction?: string;
-}>;
-
 export type ModelNodeData = NodeData<{
   title?: string;
   providerId?: string;

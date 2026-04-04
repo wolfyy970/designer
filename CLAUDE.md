@@ -54,8 +54,8 @@ A single-page app with one route: `/canvas`. Everything else redirects there.
 **Design tokens** — [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md); implementation `src/index.css` `@theme`. Use status colors for eval severity, not `accent`.
 
 **State management** — Zustand stores with `persist` middleware:
-- `workspace-domain-store` — canonical workflow relations (incubator wiring, hypotheses, model assignments, variant slots, mirrored DS/model/critique payloads)
-- `canvas-store` — React Flow nodes, edges, viewport, layout (persist v15); kept in sync with domain via `workspace/domain-commands.ts`. Prefer `removeNode` for deletions so domain + compiler maps stay consistent; orchestrator-only graph filters must pair with `syncDomainForRemovedNode`.
+- `workspace-domain-store` — canonical workflow relations (incubator wiring, hypotheses, model assignments, variant slots, mirrored DS/model payloads)
+- `canvas-store` — React Flow nodes, edges, viewport, layout (persist v16); kept in sync with domain via `workspace/domain-commands.ts`. Prefer `removeNode` for deletions so domain + compiler maps stay consistent; orchestrator-only graph filters must pair with `syncDomainForRemovedNode`.
 - `generation-store` — result metadata only; code is in IndexedDB (persist v2)
 - `spec-store` — 8-section spec document
 - `compiler-store` — `DimensionMap` per incubator id + compiled prompts
@@ -64,16 +64,15 @@ A single-page app with one route: `/canvas`. Everything else redirects there.
 **Heavy data in IndexedDB** — generated code + provenance snapshots are stored via `idb-keyval` (`src/services/idb-storage.ts`), not localStorage. The generation store only persists metadata; code is stripped via `partialize`. GC runs 3s after App mount.
 
 ### Canvas node-graph
-Uses `@xyflow/react` v12. The canvas has 11 node types in a 4-column layout:
+Uses `@xyflow/react` v12. The canvas has 10 node types in a 4-column layout:
 1. **Section nodes** (col 0) — `designBrief`, `existingDesign`, `researchContext`, `objectivesMetrics`, `designConstraints` — all rendered by the shared `SectionNode.tsx` component
 2. **Processing nodes** (col 1–2) — `compiler` (labeled "Incubator"), `designSystem`, `model`
 3. **Hypothesis nodes** (col 2) — strategy + format + **Generate** / **Run agent**; Mode **Direct** vs **Agentic**; reads provider/model from connected ModelNode
 4. **Variant nodes** (col 3) — sandboxed iframe previews of generated code; accumulate across runs (version stacking)
-5. **Critique node** — feedback input for iterating on variants
 
 **Model config** — Domain store records models per incubator and per hypothesis; `useConnectedModel(nodeId)` prefers that, then incoming model edges. There is no inline provider/model on processing nodes.
 
-**Canvas migrations** (`src/stores/canvas-migrations.ts`) run on every hydration via Zustand's `migrate` option. Current version: 15 (see `version` in `canvas-store.ts`). Any schema change to canvas node data requires a new migration function.
+**Canvas migrations** (`src/stores/canvas-migrations.ts`) run on every hydration via Zustand's `migrate` option. Current version: 16 (see `version` in `canvas-store.ts`). Any schema change to canvas node data requires a new migration function.
 
 ### Generation flow
 **Hypothesis (Direct and Agentic):** User clicks **Generate** on a hypothesis → [`useHypothesisGeneration`](src/hooks/useHypothesisGeneration.ts) POSTs `/api/hypothesis/prompt-bundle` then `/api/hypothesis/generate` (multiplexed SSE). [`executeHypothesisGenerationRun`](src/hooks/hypothesis-generation-run.ts) wires lanes; [`createPlaceholderGenerationSession`](src/hooks/placeholder-generation-session.ts) handles deltas, files, traces, and finalize → IndexedDB + variant iframe. Direct mode streams single-shot code; agentic mode runs the Pi pipeline below through the same SSE contract.

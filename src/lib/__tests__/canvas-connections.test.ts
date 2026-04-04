@@ -27,14 +27,9 @@ describe('isValidConnection', () => {
     expect(isValidConnection('hypothesis', 'variant')).toBe(true);
   });
 
-  it('allows variant to connect to compiler, existingDesign, and critique', () => {
+  it('allows variant to connect to compiler and existingDesign', () => {
     expect(isValidConnection('variant', 'compiler')).toBe(true);
     expect(isValidConnection('variant', 'existingDesign')).toBe(true);
-    expect(isValidConnection('variant', 'critique')).toBe(true);
-  });
-
-  it('allows critique to connect to compiler', () => {
-    expect(isValidConnection('critique', 'compiler')).toBe(true);
   });
 
   it('rejects designSystem connecting to compiler', () => {
@@ -63,10 +58,9 @@ describe('isValidConnection', () => {
     expect(isValidConnection('model', 'designSystem')).toBe(true);
   });
 
-  it('rejects model connecting to sections, variants, or critiques', () => {
+  it('rejects model connecting to sections or variants', () => {
     expect(isValidConnection('model', 'designBrief')).toBe(false);
     expect(isValidConnection('model', 'variant')).toBe(false);
-    expect(isValidConnection('model', 'critique')).toBe(false);
   });
 
   it('rejects connections TO model nodes', () => {
@@ -77,6 +71,6 @@ describe('isValidConnection', () => {
 
   it('covers all defined source types', () => {
     const definedSources = Object.keys(VALID_CONNECTIONS);
-    expect(definedSources.length).toBeGreaterThanOrEqual(11); // Now includes 'model'
+    expect(definedSources.length).toBeGreaterThanOrEqual(10);
   });
 });

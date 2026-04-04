@@ -11,7 +11,7 @@ export function getDomainIncubatorWiring(incubatorId: string): DomainIncubatorWi
 
 /** Pure count of structural inputs on an incubator wiring record (no store). */
 export function countStructuralInputs(w: DomainIncubatorWiring): number {
-  return w.sectionNodeIds.length + w.variantNodeIds.length + w.critiqueNodeIds.length;
+  return w.sectionNodeIds.length + w.variantNodeIds.length;
 }
 
 /** When domain has wiring, use it for input counts; otherwise returns null (use edges). */

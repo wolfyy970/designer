@@ -16,8 +16,6 @@ export function createWorkspaceDomainEntitiesSlice(set: DomainSet): Pick<
   | 'purgeModelNode'
   | 'upsertDesignSystem'
   | 'removeDesignSystem'
-  | 'upsertCritique'
-  | 'removeCritique'
 > {
   return {
     upsertModelProfile: (nodeId, partial) =>
@@ -97,30 +95,6 @@ export function createWorkspaceDomainEntitiesSlice(set: DomainSet): Pick<
         const rest = { ...s.designSystems };
         delete rest[nodeId];
         return { designSystems: rest };
-      }),
-
-    upsertCritique: (nodeId, partial) =>
-      set((s) => {
-        const cur = s.critiques[nodeId] ?? {
-          nodeId,
-          title: '',
-          strengths: '',
-          improvements: '',
-          direction: '',
-        };
-        return {
-          critiques: {
-            ...s.critiques,
-            [nodeId]: { ...cur, ...partial, nodeId },
-          },
-        };
-      }),
-
-    removeCritique: (nodeId) =>
-      set((s) => {
-        const rest = { ...s.critiques };
-        delete rest[nodeId];
-        return { critiques: rest };
       }),
   };
 }

@@ -384,6 +384,23 @@ function migrateV14ToV15(s: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
+/** v15 → v16: remove Critique nodes (feature retired) and edges touching them */
+function migrateV15ToV16(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
+  const edges = (s.edges as Array<Record<string, unknown>>) ?? [];
+  const removed = new Set<string>();
+  for (const n of nodes) {
+    if (n.type === 'critique') removed.add(n.id as string);
+  }
+  const nextNodes = nodes.filter((n) => n.type !== 'critique');
+  const nextEdges = edges.filter((e) => {
+    const src = e.source as string;
+    const tgt = e.target as string;
+    return !removed.has(src) && !removed.has(tgt);
+  });
+  return { ...s, nodes: nextNodes, edges: nextEdges };
+}
+
 // ── Top-level migration runner ────────────────────────────────────────
 
 /**
@@ -413,6 +430,7 @@ export function migrateCanvasState(
   if (fromVersion < 13) s = migrateV12ToV13(s);
   if (fromVersion < 14) s = migrateV13ToV14(s);
   if (fromVersion < 15) s = migrateV14ToV15(s);
+  if (fromVersion < 16) s = migrateV15ToV16(s);
 
   return s;
 }

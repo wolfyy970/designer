@@ -50,7 +50,6 @@ describe('buildCompileInputs', () => {
     const wiring = {
       sectionNodeIds: ['brief1'],
       variantNodeIds: [] as string[],
-      critiqueNodeIds: [] as string[],
     };
 
     const out = await buildCompileInputs(nodes, edges, spec, 'compiler-orphan', [], wiring);
@@ -83,7 +82,6 @@ describe('buildCompileInputs', () => {
     const emptyWiring = {
       sectionNodeIds: [] as string[],
       variantNodeIds: [] as string[],
-      critiqueNodeIds: [] as string[],
     };
 
     const withEdge = await buildCompileInputs(nodes, edges, spec, 'comp1', [], emptyWiring);

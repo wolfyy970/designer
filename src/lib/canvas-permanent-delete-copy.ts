@@ -35,14 +35,6 @@ export function designSystemNodeDeleteCopy(): { title: string; description: stri
   };
 }
 
-export function critiqueNodeDeleteCopy(): { title: string; description: string } {
-  return {
-    title: 'Remove Critique from the canvas?',
-    description:
-      'If you continue, this critique node is deleted permanently and disconnected. This cannot be undone from the canvas.',
-  };
-}
-
 export function variantNodeDeleteCopy(variantLabel: string): { title: string; description: string } {
   return {
     title: `Remove “${variantLabel}” from the canvas?`,
@@ -82,7 +74,6 @@ export const STATIC_NODE_DELETE_COPY = {
   incubator: incubatorDeleteCopy(),
   model: modelNodeDeleteCopy(),
   designSystem: designSystemNodeDeleteCopy(),
-  critique: critiqueNodeDeleteCopy(),
 } as const;
 
 export function keyboardMultiDeleteCopy(
@@ -101,7 +92,6 @@ export function keyboardMultiDeleteCopy(
     }
     if (t === NODE_TYPES.MODEL) return modelNodeDeleteCopy();
     if (t === NODE_TYPES.DESIGN_SYSTEM) return designSystemNodeDeleteCopy();
-    if (t === NODE_TYPES.CRITIQUE) return critiqueNodeDeleteCopy();
   }
 
   const n = removable.length;

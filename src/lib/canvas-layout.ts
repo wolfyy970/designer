@@ -16,7 +16,7 @@ const NODE_W_VARIANT = 480;
 export const GRID_SIZE = 20;
 const NODE_SPACING = 60;
 const FALLBACK_H: Record<string, number> = {
-  section: 400, compiler: 220, designSystem: 300, hypothesis: 440, variant: 400, critique: 260, model: 180,
+  section: 400, compiler: 220, designSystem: 300, hypothesis: 440, variant: 400, model: 180,
 };
 export const DEFAULT_COL_GAP = 160;
 export const MIN_COL_GAP = 80;
@@ -112,17 +112,6 @@ export function computeDefaultPosition(
       y += nodeH(hn) + NODE_SPACING;
     }
     return snap({ x: col.hypothesis, y });
-  }
-  if (type === 'critique') {
-    const critiqueNodes = existingNodes.filter((n) => n.type === 'critique');
-    const variantNodes = existingNodes.filter((n) => n.type === 'variant');
-    const baseY = variantNodes.length > 0
-      ? Math.max(...variantNodes.map((n) => n.position.y + nodeH(n))) + NODE_SPACING
-      : DEFAULT_CANVAS_Y;
-    const y = critiqueNodes.length > 0
-      ? Math.max(...critiqueNodes.map((n) => n.position.y + nodeH(n))) + NODE_SPACING
-      : baseY;
-    return snap({ x: col.variant + NODE_W_VARIANT + 80, y });
   }
   return snap({ x: col.variant, y: DEFAULT_CANVAS_Y });
 }
@@ -239,7 +228,7 @@ export function computeAutoLayout(
   const TYPE_ORDER: Record<string, number> = {
     designBrief: 0, existingDesign: 1, researchContext: 2,
     objectivesMetrics: 3, designConstraints: 4, model: 5,
-    compiler: 6, designSystem: 7, hypothesis: 8, variant: 9, critique: 10,
+    compiler: 6, designSystem: 7, hypothesis: 8, variant: 9,
   };
 
   nonEmptyLayers[0].sort((a, b) =>

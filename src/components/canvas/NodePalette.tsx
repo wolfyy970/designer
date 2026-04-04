@@ -7,7 +7,6 @@ import {
   Cpu,
   Bot,
   Lightbulb,
-  MessageSquareDiff,
   SwatchBook,
 } from 'lucide-react';
 import {
@@ -33,7 +32,6 @@ const NODE_ENTRIES: NodeEntry[] = [
   { type: 'compiler', label: 'Incubator', icon: <Cpu size={14} />, group: 'processing' },
   { type: 'designSystem', label: 'Design System', icon: <SwatchBook size={14} />, group: 'processing' },
   { type: 'hypothesis', label: 'Hypothesis', icon: <Lightbulb size={14} />, group: 'output' },
-  { type: 'critique', label: 'Critique', icon: <MessageSquareDiff size={14} />, group: 'processing' },
 ];
 
 const GROUP_LABELS: Record<string, string> = {

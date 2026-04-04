@@ -1,6 +1,7 @@
 import type {
   AgentMode,
   DomainHypothesis,
+  DomainIncubatorWiring,
   DomainModelProfile,
 } from '../types/workspace-domain';
 import type { WorkspaceDomainStore } from './workspace-domain-store-types';
@@ -16,10 +17,9 @@ export const workspaceDomainPersistOptions = {
     hypotheses: state.hypotheses,
     modelProfiles: state.modelProfiles,
     designSystems: state.designSystems,
-    critiques: state.critiques,
     variantSlots: state.variantSlots,
   }),
-  version: 4,
+  version: 5,
   migrate: (persisted: unknown, fromVersion: number) => {
     let p = persisted as Record<string, unknown>;
     if (fromVersion < 2) {
@@ -95,6 +95,19 @@ export const workspaceDomainPersistOptions = {
       }
 
       p = { ...p, hypotheses, modelProfiles: modelProfiles as Record<string, DomainModelProfile> };
+    }
+    if (fromVersion < 5) {
+      const { critiques: _dropCritiques, ...rest } = p;
+      void _dropCritiques;
+      const rawW = (rest.incubatorWirings as Record<string, Record<string, unknown>>) ?? {};
+      const incubatorWirings: Record<string, DomainIncubatorWiring> = {};
+      for (const [k, w] of Object.entries(rawW)) {
+        incubatorWirings[k] = {
+          sectionNodeIds: (w.sectionNodeIds as string[]) ?? [],
+          variantNodeIds: (w.variantNodeIds as string[]) ?? [],
+        };
+      }
+      p = { ...rest, incubatorWirings };
     }
     return p;
   },

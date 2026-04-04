@@ -17,7 +17,6 @@ export type CanvasNodeType =
   | 'compiler'
   | 'hypothesis'
   | 'variant'
-  | 'critique'
   | 'model';
 
 export type CanvasNodeData = Record<string, unknown> & {

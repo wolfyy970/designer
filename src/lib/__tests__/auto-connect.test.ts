@@ -80,7 +80,6 @@ describe('buildAutoConnectEdges', () => {
   it('returns empty for types with no structural auto-connect rules', () => {
     const existing = [makeNode('c1', 'compiler'), makeNode('h1', 'hypothesis')];
     expect(buildAutoConnectEdges('v1', 'variant', existing)).toHaveLength(0);
-    expect(buildAutoConnectEdges('cr1', 'critique', existing)).toHaveLength(0);
   });
 
   it('does NOT wire models (model wiring is separate)', () => {
@@ -216,6 +215,5 @@ describe('findMissingPrerequisite', () => {
     expect(findMissingPrerequisite('designBrief', [])).toBeNull();
     expect(findMissingPrerequisite('variant', [])).toBeNull();
     expect(findMissingPrerequisite('model', [])).toBeNull();
-    expect(findMissingPrerequisite('critique', [])).toBeNull();
   });
 });

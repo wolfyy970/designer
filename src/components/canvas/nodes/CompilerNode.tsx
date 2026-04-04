@@ -59,18 +59,15 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
 
   const hypothesisCount = (data.hypothesisCount as number | undefined) ?? DEFAULT_COUNT;
 
-  // Count connected input nodes (sections + variants + critiques)
+  // Count connected input nodes (sections + variants)
   const connectedInputCount = useMemo(() => {
     if (
       domainWiring &&
-      (domainWiring.sectionNodeIds.length > 0 ||
-        domainWiring.variantNodeIds.length > 0 ||
-        domainWiring.critiqueNodeIds.length > 0)
+      (domainWiring.sectionNodeIds.length > 0 || domainWiring.variantNodeIds.length > 0)
     ) {
       return (
         domainWiring.sectionNodeIds.length +
-        domainWiring.variantNodeIds.length +
-        domainWiring.critiqueNodeIds.length
+        domainWiring.variantNodeIds.length
       );
     }
     const incomingEdges = edges.filter((e) => e.target === id);
@@ -78,8 +75,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
       const sourceNode = nodes.find((n) => n.id === e.source);
       return sourceNode && (
         SECTION_NODE_TYPES.has(sourceNode.type as CanvasNodeType) ||
-        sourceNode.type === 'variant' ||
-        sourceNode.type === 'critique'
+        sourceNode.type === 'variant'
       );
     }).length;
   }, [domainWiring, edges, nodes, id]);
@@ -106,7 +102,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
   const handleCompile = useCallback(async () => {
     const results = useGenerationStore.getState().results;
     const wiring = useWorkspaceDomainStore.getState().incubatorWirings[id];
-    const { partialSpec, referenceDesigns, critiques } =
+    const { partialSpec, referenceDesigns } =
       await buildCompileInputs(nodes, edges, spec, id, results, wiring);
 
     const dimensionMaps = useCompilerStore.getState().dimensionMaps;
@@ -130,7 +126,6 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
         providerId: providerId!,
         modelId: modelId!,
         referenceDesigns,
-        critiques: critiques.length > 0 ? critiques : undefined,
         supportsVision,
         promptOptions: { count: hypothesisCount, existingStrategies },
       });

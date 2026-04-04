@@ -120,7 +120,7 @@ flowchart TB
 
 ## Domain model, canvas projection, and session DTOs
 
-**Canonical client model** — `src/stores/workspace-domain-store.ts` (persisted) holds workflow semantics without requiring a graph: incubator input wiring (section / variant / critique node ids), model assignments per incubator and per hypothesis, design-system attachments, hypothesis ↔ incubator ↔ variant-strategy links, variant slots (active result / pins), and mirrors for model/design-system/critique payloads synced from the canvas. `src/types/workspace-domain.ts` defines the shapes.
+**Canonical client model** — `src/stores/workspace-domain-store.ts` (persisted) holds workflow semantics without requiring a graph: incubator input wiring (section / variant node ids), model assignments per incubator and per hypothesis, design-system attachments, hypothesis ↔ incubator ↔ variant-strategy links, variant slots (active result / pins), and mirrors for model/design-system payloads synced from the canvas. `src/types/workspace-domain.ts` defines the shapes.
 
 **Canvas as projection** — `src/stores/canvas-store.ts` still persists React Flow–backed **nodes and edges** for layout and interaction. Graph edits call `src/workspace/domain-commands.ts` so domain relations stay the source of truth for compile/generate. `src/workspace/domain-to-graph.ts` holds small view helpers derived from domain state.
 
@@ -283,7 +283,7 @@ The primary interface is a node-graph canvas built on `@xyflow/react` v12.
 
 ### Node Types
 
-11 node types in 3 categories: 5 input nodes rendered by shared `SectionNode.tsx`, plus `ModelNode`, `DesignSystemNode`, `CompilerNode`, `HypothesisNode`, `VariantNode`, and `CritiqueNode`. `ModelNode` centralizes provider/model selection. Design System is self-contained (data in `node.data`, not spec store). Each node uses a typed data interface from `types/canvas-data.ts`.
+10 node types in 3 categories: 5 input nodes rendered by shared `SectionNode.tsx`, plus `ModelNode`, `DesignSystemNode`, `CompilerNode`, `HypothesisNode`, and `VariantNode`. `ModelNode` centralizes provider/model selection. Design System is self-contained (data in `node.data`, not spec store). Each node uses a typed data interface from `types/canvas-data.ts`.
 
 ### HypothesisNode — Generation Controls
 
@@ -310,7 +310,7 @@ Model connections are column-scoped: a Model node connects only to adjacent-colu
 
 `computeLineage` performs a full connected-component walk (bidirectional BFS). Selecting a node highlights every node reachable through any chain of edges — including sibling inputs to shared targets. Unconnected nodes dim to 40%.
 
-`buildCompileInputs` builds the partial spec, reference designs, and critiques for `/api/compile`; it can use **domain incubator wiring** when provided so compile does not depend solely on edge topology.
+`buildCompileInputs` builds the partial spec and reference designs for `/api/compile`; it can use **domain incubator wiring** when provided so compile does not depend solely on edge topology.
 
 ### Version Stacking
 

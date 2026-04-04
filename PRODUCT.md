@@ -20,7 +20,6 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 | Incubator | Processing | Compiles connected inputs → hypothesis strategies via LLM |
 | Hypothesis | Processing | Editable strategy card with built-in generation controls. Mode **Direct** (one forward generation) vs **Agentic** (tool loop + evaluation). Connect a Model node, then **Generate** or **Run agent**. |
 | Variant | Output | Rendered design preview. Single-file results show an HTML iframe. Multi-file (agentic) results show a file explorer + preview/code tabs + zip download. Completed agentic runs show an **evaluation scorecard** (aggregate score, prioritized fixes, runtime QA) and, when available, a **headless browser thumbnail**. Version navigation across all results. |
-| Critique | Processing | Structured feedback (strengths, improvements, direction) for iteration |
 
 ### Canvas Features
 
@@ -42,11 +41,13 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 
 ### Iteration Loop
 
-Variants can connect back to Existing Design (or to a Critique node, then to Incubator). This creates a feedback loop:
+Variants can connect to **Existing Design** (screenshot reference) or **Incubator** (prior output as reference code). This creates a feedback loop:
 1. Generate variants
-2. Connect best variant → Existing Design (captures screenshot) or add Critique
+2. Connect a strong variant → Existing Design and/or wire a variant → Incubator
 3. Re-incubate with the new context
 4. Generate improved variants
+
+Structured critique during agentic runs comes from the **evaluator** (scorecard, fix list, revision rounds), not a separate canvas node.
 
 ## Generation Engine
 

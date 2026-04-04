@@ -1,6 +1,5 @@
 import type { StateCreator } from 'zustand';
 import type {
-  CritiqueNodeData,
   DesignSystemNodeData,
   HypothesisNodeData,
   ModelNodeData,
@@ -246,15 +245,6 @@ export const createGraphSlice: StateCreator<
         images: ds.images ?? [],
         providerMigration: ds.providerId,
         modelMigration: ds.modelId,
-      });
-    }
-    if (n.type === 'critique') {
-      const c = merged as CritiqueNodeData;
-      dom.upsertCritique(nodeId, {
-        title: c.title ?? '',
-        strengths: c.strengths ?? '',
-        improvements: c.improvements ?? '',
-        direction: c.direction ?? '',
       });
     }
   },

@@ -1,7 +1,6 @@
 import type { DesignSpec, ReferenceImage } from '../types/spec';
 import type { GenerationResult } from '../types/provider';
-import type { CritiqueInput } from './prompts/compiler-user';
-import type { DesignSystemNodeData, CritiqueNodeData, VariantNodeData } from '../types/canvas-data';
+import type { DesignSystemNodeData, VariantNodeData } from '../types/canvas-data';
 import { loadCode } from '../services/idb-storage';
 import { SECTION_NODE_TYPES } from '../lib/canvas-layout';
 import {
@@ -101,13 +100,12 @@ export function computeLineage(
 export interface CompileInputs {
   partialSpec: DesignSpec;
   referenceDesigns: { name: string; code: string }[];
-  critiques: CritiqueInput[];
 }
 
 /**
  * Walk the graph from a compiler node to build all inputs
  * needed for compilation — spec sections wired to this compiler **or** non-empty in the shared
- * spec store, reference designs (from connected variant nodes), and critiques.
+ * spec store, and reference designs (from connected variant nodes).
  *
  * Async because generated code is now stored in IndexedDB.
  */
@@ -122,14 +120,11 @@ export async function buildCompileInputs(
   let connectedNodes: AnyNode[];
   if (
     wiring &&
-    (wiring.sectionNodeIds.length > 0 ||
-      wiring.variantNodeIds.length > 0 ||
-      wiring.critiqueNodeIds.length > 0)
+    (wiring.sectionNodeIds.length > 0 || wiring.variantNodeIds.length > 0)
   ) {
     const idSet = new Set<string>([
       ...wiring.sectionNodeIds,
       ...wiring.variantNodeIds,
-      ...wiring.critiqueNodeIds,
     ]);
     connectedNodes = nodes.filter((n) => idSet.has(n.id));
   } else {
@@ -205,37 +200,6 @@ export async function buildCompileInputs(
   }
   await Promise.all(codePromises);
 
-  // Collect critiques from connected critique nodes
-  const critiques: CritiqueInput[] = [];
-  for (const node of connectedNodes) {
-    if (node.type === 'critique') {
-      const critiqueData = node.data as CritiqueNodeData;
-      const critique: CritiqueInput = {
-        title: critiqueData.title || 'Critique',
-        strengths: critiqueData.strengths || '',
-        improvements: critiqueData.improvements || '',
-        direction: critiqueData.direction || '',
-      };
-
-      // Follow the critique's incoming edges to find the variant it references
-      const critiqueInputEdges = edges.filter((e) => e.target === node.id);
-      for (const e of critiqueInputEdges) {
-        const sourceNode = nodes.find((n) => n.id === e.source);
-        if (sourceNode?.type === 'variant' && (sourceNode.data as VariantNodeData).refId) {
-          const result = results.find((r) => r.id === (sourceNode.data as VariantNodeData).refId);
-          if (result) {
-            const code = result.code ?? (await loadCode(result.id));
-            if (code) {
-              critique.variantCode = code;
-            }
-          }
-        }
-      }
-
-      critiques.push(critique);
-    }
-  }
-
-  return { partialSpec, referenceDesigns, critiques };
+  return { partialSpec, referenceDesigns };
 }
 

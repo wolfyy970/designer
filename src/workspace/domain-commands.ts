@@ -68,12 +68,6 @@ export function syncDomainForNewEdge(
     return;
   }
 
-  if (src.type === NODE_TYPES.CRITIQUE && tgt.type === NODE_TYPES.COMPILER) {
-    d.ensureIncubatorWiring(tgt.id);
-    d.attachIncubatorInput(tgt.id, src.id, NODE_TYPES.CRITIQUE);
-    return;
-  }
-
   if (src.type === NODE_TYPES.DESIGN_SYSTEM && tgt.type === NODE_TYPES.HYPOTHESIS) {
     d.attachDesignSystemToHypothesis(src.id, tgt.id);
     const refId = getHypothesisRefId(tgt);
@@ -105,10 +99,6 @@ export function syncDomainForRemovedEdge(edge: Pick<WorkspaceEdge, 'source' | 't
     d.detachIncubatorInput(tgt.id, src.id, NODE_TYPES.VARIANT);
     return;
   }
-  if (src.type === NODE_TYPES.CRITIQUE && tgt.type === NODE_TYPES.COMPILER) {
-    d.detachIncubatorInput(tgt.id, src.id, NODE_TYPES.CRITIQUE);
-    return;
-  }
   if (src.type === NODE_TYPES.DESIGN_SYSTEM && tgt.type === NODE_TYPES.HYPOTHESIS) {
     d.detachDesignSystemFromHypothesis(src.id, tgt.id);
   }
@@ -135,13 +125,6 @@ export function syncDomainForRemovedNode(node: WorkspaceNode): void {
       if (h.designSystemNodeIds.includes(node.id)) {
         d.detachDesignSystemFromHypothesis(node.id, h.id);
       }
-    }
-    return;
-  }
-  if (node.type === NODE_TYPES.CRITIQUE) {
-    d.removeCritique(node.id);
-    for (const incId of Object.keys(d.incubatorWirings)) {
-      d.detachIncubatorInput(incId, node.id, NODE_TYPES.CRITIQUE);
     }
     return;
   }

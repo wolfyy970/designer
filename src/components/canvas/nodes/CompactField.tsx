@@ -1,4 +1,4 @@
-/** Shared labeled textarea for canvas nodes (HypothesisNode, CritiqueNode). */
+/** Shared labeled textarea for canvas nodes (HypothesisNode). */
 export default function CompactField({
   label,
   value,

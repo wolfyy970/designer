@@ -453,3 +453,22 @@ describe('v14 → v15: hypothesis agentMode, model thinkingLevel', () => {
     expect((m!.data as Record<string, unknown>).thinkingLevel).toBe('medium');
   });
 });
+
+describe('v15 → v16: remove critique nodes', () => {
+  it('drops critique nodes and edges that touch them', () => {
+    const state = {
+      nodes: [
+        makeNode('c1', 'compiler'),
+        makeNode('q1', 'critique', {}),
+        makeNode('v1', 'variant', {}),
+      ],
+      edges: [makeEdge('e1', 'v1', 'q1'), makeEdge('e2', 'q1', 'c1')],
+    };
+    const result = migrateCanvasState(state, 15);
+    const nodes = result.nodes as Array<Record<string, unknown>>;
+    const edges = result.edges as Array<Record<string, unknown>>;
+    expect(nodes.some((n) => n.type === 'critique')).toBe(false);
+    expect(nodes.map((n) => n.id).sort()).toEqual(['c1', 'v1']);
+    expect(edges.map((e) => e.id as string).sort()).toEqual([]);
+  });
+});

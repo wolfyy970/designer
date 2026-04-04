@@ -166,7 +166,6 @@ function CanvasInner() {
         return 'var(--color-accent)'; // processing
       case 'hypothesis':
       case 'variant':
-      case 'critique':
         return 'var(--color-info)'; // output
       default:
         return 'var(--color-border)';

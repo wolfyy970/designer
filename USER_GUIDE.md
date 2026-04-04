@@ -128,8 +128,8 @@ Variant nodes render the generated code in sandboxed iframes. Open the **run wor
 
 To iterate on results:
 - **Screenshot feedback** — Drag a connection from a variant's right handle to the Existing Design node. This captures a screenshot and adds it as a reference image.
-- **Critique** — Add a Critique node, connect a variant to it, write structured feedback (strengths, improvements, direction), then connect the critique to a new Incubator.
-- **Re-incubate** — The Incubator reads reference designs and critiques from its connected inputs, producing improved hypotheses.
+- **Reference code** — Connect a variant to an Incubator to pass the prior design into the next compile as a **reference design** in the prompt.
+- **Re-incubate** — The Incubator reads **reference designs** (and section inputs) from its connected nodes, producing improved hypotheses. In **agentic** mode, evaluator feedback and revision passes are built into the generation run (see the variant run workspace scorecard).
 
 ### Auto-Layout
 

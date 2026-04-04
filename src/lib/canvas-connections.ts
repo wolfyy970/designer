@@ -4,7 +4,7 @@ import { NODE_TYPES, EDGE_TYPES, EDGE_STATUS, buildEdgeId } from '../constants/c
 type NodeType =
   | 'designBrief' | 'existingDesign' | 'researchContext'
   | 'objectivesMetrics' | 'designConstraints' | 'designSystem'
-  | 'compiler' | 'hypothesis' | 'variant' | 'critique'
+  | 'compiler' | 'hypothesis' | 'variant'
   | 'model';
 
 // ── Topology ────────────────────────────────────────────────────────
@@ -19,8 +19,7 @@ export const VALID_CONNECTIONS: Record<NodeType, Set<NodeType>> = {
   designSystem: new Set(['hypothesis']),
   compiler: new Set(['hypothesis']),
   hypothesis: new Set(['variant']),
-  variant: new Set(['compiler', 'existingDesign', 'critique']),
-  critique: new Set(['compiler']),
+  variant: new Set(['compiler', 'existingDesign']),
   model: new Set(['compiler', 'hypothesis', 'designSystem']),
 };
 

@@ -1,6 +1,5 @@
 import type {
   AgentMode,
-  DomainCritiqueContent,
   DomainDesignSystemContent,
   DomainHypothesis,
   DomainIncubatorWiring,
@@ -15,7 +14,6 @@ export interface WorkspaceDomainStore {
   hypotheses: Record<string, DomainHypothesis>;
   modelProfiles: Record<string, DomainModelProfile>;
   designSystems: Record<string, DomainDesignSystemContent>;
-  critiques: Record<string, DomainCritiqueContent>;
   variantSlots: Record<string, DomainVariantSlot>;
 
   ensureIncubatorWiring: (incubatorId: string) => void;
@@ -55,8 +53,6 @@ export interface WorkspaceDomainStore {
   purgeModelNode: (modelNodeId: string) => void;
   upsertDesignSystem: (nodeId: string, partial: Partial<DomainDesignSystemContent>) => void;
   removeDesignSystem: (nodeId: string) => void;
-  upsertCritique: (nodeId: string, partial: Partial<DomainCritiqueContent>) => void;
-  removeCritique: (nodeId: string) => void;
 
   setVariantSlot: (
     hypothesisId: string,

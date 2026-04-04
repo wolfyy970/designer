@@ -106,9 +106,9 @@ describe('computeDefaultPosition', () => {
     expect(pos.x).toBe(col.hypothesis);
   });
 
-  it('places critique to the right of variant column', () => {
-    const pos = computeDefaultPosition('critique', [], col);
-    expect(pos.x).toBeGreaterThan(col.variant);
+  it('places variant at variant column by default', () => {
+    const pos = computeDefaultPosition('variant', [], col);
+    expect(pos.x).toBe(col.variant);
   });
 
   it('returns snapped positions', () => {

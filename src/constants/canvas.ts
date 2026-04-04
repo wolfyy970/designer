@@ -9,7 +9,6 @@ export const NODE_TYPES = {
   COMPILER: 'compiler',
   HYPOTHESIS: 'hypothesis',
   VARIANT: 'variant',
-  CRITIQUE: 'critique',
   MODEL: 'model',
 } as const;
 
