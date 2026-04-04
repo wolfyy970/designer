@@ -61,7 +61,7 @@ function SectionNode({ id, type, selected }: NodeProps<SectionNodeType>) {
               : `Describe the ${meta.title.toLowerCase()}...`
           }
           rows={10}
-          className="nodrag nowheel min-h-[240px] w-full resize-y rounded border border-border px-2.5 py-2 text-xs leading-relaxed text-fg-secondary placeholder:text-fg-faint outline-none input-focus"
+          className="nodrag nowheel min-h-[var(--min-height-section-textarea)] w-full resize-y rounded border border-border px-2.5 py-2 text-xs leading-relaxed text-fg-secondary placeholder:text-fg-faint outline-none input-focus"
         />
 
         {/* Reference images for existing design */}

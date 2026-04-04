@@ -72,7 +72,7 @@ Uses `@xyflow/react` v12. The canvas has 10 node types in a 4-column layout:
 
 **Model config** — Domain store records models per incubator and per hypothesis; `useConnectedModel(nodeId)` prefers that, then incoming model edges. There is no inline provider/model on processing nodes.
 
-**Canvas migrations** (`src/stores/canvas-migrations.ts`) run on every hydration via Zustand's `migrate` option. Current version: 16 (see `version` in `canvas-store.ts`). Any schema change to canvas node data requires a new migration function.
+**Canvas migrations** (`src/stores/canvas-migrations.ts`) run on every hydration via Zustand's `migrate` option. Current version: 19 (see `version` in `canvas-store.ts`). Any schema change to canvas node data requires a new migration function.
 
 ### Generation flow
 **Hypothesis (Direct and Agentic):** User clicks **Generate** on a hypothesis → [`useHypothesisGeneration`](src/hooks/useHypothesisGeneration.ts) POSTs `/api/hypothesis/prompt-bundle` then `/api/hypothesis/generate` (multiplexed SSE). [`executeHypothesisGenerationRun`](src/hooks/hypothesis-generation-run.ts) wires lanes; [`createPlaceholderGenerationSession`](src/hooks/placeholder-generation-session.ts) handles deltas, files, traces, and finalize → IndexedDB + variant iframe. Direct mode streams single-shot code; agentic mode runs the Pi pipeline below through the same SSE contract.

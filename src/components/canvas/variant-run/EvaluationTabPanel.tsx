@@ -29,8 +29,8 @@ function LiveEvalProgressCard(props: {
   const { liveEvalWorkers, evalWorkersDoneCount } = props;
   return (
     <div className="border-b border-border-subtle p-3">
-      <article className="overflow-hidden rounded-lg border border-border-subtle bg-surface-secondary/25">
-        <header className="flex items-center gap-2 border-b border-border-subtle bg-surface-secondary/50 px-3 py-2">
+      <article className="overflow-hidden rounded-lg border border-border-subtle bg-surface-nested/25">
+        <header className="flex items-center gap-2 border-b border-border-subtle bg-surface-nested/50 px-3 py-2">
           <span
             className="inline-flex h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent"
             aria-hidden
@@ -111,9 +111,9 @@ export function EvaluationTabPanel(props: {
               return (
                 <article
                   key={round.round}
-                  className="overflow-hidden rounded-lg border border-border-subtle bg-surface-secondary/25"
+                  className="overflow-hidden rounded-lg border border-border-subtle bg-surface-nested/25"
                 >
-                  <header className="flex items-start justify-between gap-2 border-b border-border-subtle bg-surface-secondary/50 px-3 py-2">
+                  <header className="flex items-start justify-between gap-2 border-b border-border-subtle bg-surface-nested/50 px-3 py-2">
                     <div className="min-w-0 space-y-0.5">
                       <div className="text-nano font-semibold uppercase tracking-wide text-fg-secondary">
                         Round {round.round}
@@ -145,8 +145,8 @@ export function EvaluationTabPanel(props: {
           </div>
         ) : evalSummary ? (
           <div className="p-3">
-            <article className="overflow-hidden rounded-lg border border-border-subtle bg-surface-secondary/25">
-              <header className="flex items-start justify-between gap-2 border-b border-border-subtle bg-surface-secondary/50 px-3 py-2">
+            <article className="overflow-hidden rounded-lg border border-border-subtle bg-surface-nested/25">
+              <header className="flex items-start justify-between gap-2 border-b border-border-subtle bg-surface-nested/50 px-3 py-2">
                 <div className="min-w-0 space-y-0.5">
                   <div className="text-nano font-semibold uppercase tracking-wide text-fg-secondary">
                     Evaluation

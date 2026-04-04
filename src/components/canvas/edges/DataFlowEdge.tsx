@@ -102,7 +102,7 @@ export default function DataFlowEdge({
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: 'all',
             }}
-            className="nodrag nopan flex h-5 w-5 items-center justify-center rounded-full border border-border bg-surface text-fg-muted shadow-sm transition-colors hover:border-error/30 hover:bg-error-subtle hover:text-error"
+            className="nodrag nopan flex h-5 w-5 items-center justify-center rounded-full border border-border bg-surface text-fg-muted shadow-sm transition-colors hover:border-error-border-soft hover:bg-error-subtle hover:text-error"
             onClick={() => removeEdge(id)}
             title="Remove connection"
           >

@@ -1,3 +1,4 @@
+import { isSectionGhostTargetType, type SectionGhostTargetType } from '../types/canvas-data';
 import { DEFAULT_COL_GAP } from '../lib/canvas-layout';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 import { EDGE_TYPES, EDGE_STATUS } from '../constants/canvas';
@@ -401,6 +402,35 @@ function migrateV15ToV16(s: Record<string, unknown>): Record<string, unknown> {
   return { ...s, nodes: nextNodes, edges: nextEdges };
 }
 
+/** v16 → v17: strip ephemeral section ghosts if any ever leaked into storage */
+function migrateV16ToV17(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
+  return {
+    ...s,
+    nodes: nodes.filter((n) => n.type !== 'sectionGhost'),
+  };
+}
+
+/** v17 → v18: default dismissedSectionGhostSlots for ghost dismiss persistence */
+function migrateV17ToV18(s: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(s.dismissedSectionGhostSlots)) {
+    return { ...s, dismissedSectionGhostSlots: [] };
+  }
+  return s;
+}
+
+/** v18 → v19: sanitize dismissedSectionGhostSlots (strip invalid strings) */
+function migrateV18ToV19(s: Record<string, unknown>): Record<string, unknown> {
+  const raw = s.dismissedSectionGhostSlots;
+  if (!Array.isArray(raw)) {
+    return { ...s, dismissedSectionGhostSlots: [] };
+  }
+  const dismissedSectionGhostSlots = raw.filter(
+    (x): x is SectionGhostTargetType => typeof x === 'string' && isSectionGhostTargetType(x),
+  );
+  return { ...s, dismissedSectionGhostSlots };
+}
+
 // ── Top-level migration runner ────────────────────────────────────────
 
 /**
@@ -431,6 +461,9 @@ export function migrateCanvasState(
   if (fromVersion < 14) s = migrateV13ToV14(s);
   if (fromVersion < 15) s = migrateV14ToV15(s);
   if (fromVersion < 16) s = migrateV15ToV16(s);
+  if (fromVersion < 17) s = migrateV16ToV17(s);
+  if (fromVersion < 18) s = migrateV17ToV18(s);
+  if (fromVersion < 19) s = migrateV18ToV19(s);
 
   return s;
 }

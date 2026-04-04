@@ -28,5 +28,6 @@ describe('canvas-permanent-delete-copy', () => {
     ];
     const { title } = keyboardMultiDeleteCopy(nodes, nodes, []);
     expect(title).toContain('2 selected nodes');
+    expect(title).toContain('Remove');
   });
 });

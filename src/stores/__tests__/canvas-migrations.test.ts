@@ -472,3 +472,54 @@ describe('v15 → v16: remove critique nodes', () => {
     expect(edges.map((e) => e.id as string).sort()).toEqual([]);
   });
 });
+
+describe('v16 → v17: strip sectionGhost nodes', () => {
+  it('removes ephemeral ghost nodes from persisted snapshot', () => {
+    const state = {
+      nodes: [
+        makeNode('b', 'designBrief'),
+        {
+          id: 'ghost-section-existingDesign',
+          type: 'sectionGhost',
+          position: { x: 0, y: 0 },
+          data: { targetType: 'existingDesign' },
+        },
+      ],
+      edges: [],
+    };
+    const result = migrateCanvasState(state, 16);
+    const nodes = result.nodes as Array<Record<string, unknown>>;
+    expect(nodes.some((n) => n.type === 'sectionGhost')).toBe(false);
+    expect(nodes.map((n) => n.id)).toEqual(['b']);
+  });
+});
+
+describe('v17 → v18: dismissedSectionGhostSlots default', () => {
+  it('adds empty dismissedSectionGhostSlots when missing', () => {
+    const state = { nodes: [makeNode('b', 'designBrief')], edges: [] };
+    const result = migrateCanvasState(state, 17);
+    expect(result.dismissedSectionGhostSlots).toEqual([]);
+  });
+});
+
+describe('v18 → v19: sanitize dismissedSectionGhostSlots', () => {
+  it('strips junk strings from dismissedSectionGhostSlots', () => {
+    const state = {
+      nodes: [makeNode('b', 'designBrief')],
+      edges: [],
+      dismissedSectionGhostSlots: ['researchContext', 'not-a-slot', 'existingDesign', ''],
+    };
+    const result = migrateCanvasState(state, 18);
+    expect(result.dismissedSectionGhostSlots).toEqual(['researchContext', 'existingDesign']);
+  });
+
+  it('replaces non-array dismissedSectionGhostSlots with empty array', () => {
+    const state = {
+      nodes: [],
+      edges: [],
+      dismissedSectionGhostSlots: 'invalid',
+    };
+    const result = migrateCanvasState(state, 18);
+    expect(result.dismissedSectionGhostSlots).toEqual([]);
+  });
+});

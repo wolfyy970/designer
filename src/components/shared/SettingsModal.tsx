@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Modal from './Modal';
+import { DesignTokensModal } from './DesignTokensModal';
 import PromptEditor from './PromptEditor';
 import type { PromptKey } from '../../stores/prompt-store';
 import { useCanvasStore } from '../../stores/canvas-store';
@@ -22,6 +23,7 @@ export default function SettingsModal({
   initialPromptKey,
 }: SettingsModalProps) {
   const [tab, setTab] = useState<Tab>('general');
+  const [designTokensOpen, setDesignTokensOpen] = useState(false);
   const autoLayout = useCanvasStore((s) => s.autoLayout);
   const toggleAutoLayout = useCanvasStore((s) => s.toggleAutoLayout);
   const wasOpenRef = useRef(false);
@@ -32,6 +34,7 @@ export default function SettingsModal({
   }, [open, initialTab]);
 
   return (
+    <>
     <Modal
       open={open}
       onClose={onClose}
@@ -64,26 +67,45 @@ export default function SettingsModal({
       </div>
 
       {tab === 'general' && (
-        <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">
-          <label className="flex cursor-pointer items-start gap-2.5 select-none">
-            <input
-              type="checkbox"
-              checked={autoLayout}
-              onChange={toggleAutoLayout}
-              className="accent-accent mt-0.5 shrink-0"
-            />
-            <span>
-              <span className="block text-sm font-medium text-fg">Auto layout</span>
-              <span className="mt-0.5 block text-xs text-fg-secondary">
-                When on, nodes follow the graph layout automatically and are not draggable.
-                Updates after compile, generate, and connection changes.
+        <div className="space-y-4">
+          <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">
+            <label className="flex cursor-pointer items-start gap-2.5 select-none">
+              <input
+                type="checkbox"
+                checked={autoLayout}
+                onChange={toggleAutoLayout}
+                className="accent-accent mt-0.5 shrink-0"
+              />
+              <span>
+                <span className="block text-sm font-medium text-fg">Auto layout</span>
+                <span className="mt-0.5 block text-xs text-fg-secondary">
+                  When on, nodes follow the graph layout automatically and are not draggable.
+                  Updates after compile, generate, and connection changes.
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
+          </div>
+          <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">
+            <span className="block text-sm font-medium text-fg">Design system</span>
+            <p className="mt-1 text-xs text-fg-secondary">
+              Browse <code className="rounded bg-surface px-1 font-mono text-nano">@theme</code> swatches, typography
+              scale, and <code className="rounded bg-surface px-1 font-mono text-nano">ds-*</code> patterns in a
+              scrollable reference.
+            </p>
+            <button
+              type="button"
+              onClick={() => setDesignTokensOpen(true)}
+              className="ds-btn-primary-muted mt-2 w-fit"
+            >
+              Open design tokens kitchen sink…
+            </button>
+          </div>
         </div>
       )}
 
       {tab === 'prompts' && <PromptEditor initialPromptKey={initialPromptKey} />}
     </Modal>
+    <DesignTokensModal open={designTokensOpen} onClose={() => setDesignTokensOpen(false)} />
+    </>
   );
 }

@@ -226,7 +226,7 @@ export default function VariantRunInspector() {
 
   return (
     <aside
-      className="flex min-h-0 w-[min(100vw,480px)] shrink-0 flex-col border-l border-border-subtle bg-surface pt-[var(--height-header)]"
+      className="flex min-h-0 w-[var(--width-variant-inspector)] shrink-0 flex-col border-l border-border-subtle bg-surface pt-[var(--height-header)]"
       aria-label="Variant run workspace"
     >
       {/* ── Identity header ──────────────────────────────────── */}
@@ -240,7 +240,7 @@ export default function VariantRunInspector() {
               <button
                 type="button"
                 onClick={() => abortGenerationForStrategy(laneStrategyIdForAbort)}
-                className="rounded border border-error/35 bg-error-subtle px-2 py-0.5 text-nano font-semibold text-error transition-colors hover:bg-error/20"
+                className="rounded border border-error-border bg-error-subtle px-2 py-0.5 text-nano font-semibold text-error transition-colors hover:bg-error-surface-hover"
                 title="Stop generation (cancels the in-flight request)"
               >
                 Stop
@@ -249,7 +249,7 @@ export default function VariantRunInspector() {
             <button
               type="button"
               onClick={closeRunInspector}
-              className="shrink-0 rounded p-0.5 text-fg-muted transition-colors hover:bg-surface-secondary hover:text-fg"
+              className="shrink-0 rounded p-0.5 text-fg-muted transition-colors hover:bg-surface-nested hover:text-fg"
               title="Close (Esc)"
             >
               <X size={14} />
@@ -289,7 +289,7 @@ export default function VariantRunInspector() {
             onClick={() => setTab(id)}
             className={`flex shrink-0 items-center rounded px-2 py-0.5 text-nano font-medium transition-colors ${
               tab === id
-                ? 'bg-surface-secondary text-fg'
+                ? 'bg-surface-nested text-fg'
                 : 'text-fg-muted hover:text-fg-secondary'
             }`}
           >
@@ -335,7 +335,7 @@ export default function VariantRunInspector() {
 
             {/* Tasks — fixed, auto-height, fits content snugly */}
             <div className="shrink-0 border-b border-border-subtle">
-              <div className="flex items-center bg-surface-secondary/40 px-3 py-0.5">
+              <div className="flex items-center bg-surface-nested/40 px-3 py-0.5">
                 <span className="text-pico font-semibold uppercase tracking-widest text-fg-faint">Tasks</span>
               </div>
               {result?.liveTodos && result.liveTodos.length > 0 ? (
@@ -367,7 +367,7 @@ export default function VariantRunInspector() {
                   Eval round
                 </span>
                 <select
-                  className="nodrag max-w-[220px] rounded border border-border-subtle bg-surface px-2 py-0.5 text-nano text-fg"
+                  className="nodrag max-w-[var(--width-model-trigger)] rounded border border-border-subtle bg-surface px-2 py-0.5 text-nano text-fg"
                   value={safeRoundIdx}
                   onChange={(e) => setEvalRoundIdx(Number(e.target.value))}
                 >
@@ -400,7 +400,7 @@ export default function VariantRunInspector() {
               (Object.keys(writtenForFilesTab ?? {}).length > 0 ||
                 (filesTabPlanned?.length ?? 0) > 0) && (
                 <div className="flex min-h-0 flex-1 overflow-hidden">
-                  <div className="flex w-[min(40%,11rem)] shrink-0 flex-col border-r border-border-subtle bg-surface">
+                  <div className="flex w-[var(--width-inspector-tab)] shrink-0 flex-col border-r border-border-subtle bg-surface">
                     <div className="border-b border-border-subtle px-2 py-1.5">
                       <span className="text-badge font-medium uppercase tracking-wider text-fg-faint">
                         Files
@@ -456,7 +456,7 @@ export default function VariantRunInspector() {
                   Eval round
                 </span>
                 <select
-                  className="nodrag max-w-[220px] rounded border border-border-subtle bg-surface px-2 py-0.5 text-nano text-fg"
+                  className="nodrag max-w-[var(--width-model-trigger)] rounded border border-border-subtle bg-surface px-2 py-0.5 text-nano text-fg"
                   value={safeRoundIdx}
                   onChange={(e) => setEvalRoundIdx(Number(e.target.value))}
                 >
@@ -491,7 +491,7 @@ export default function VariantRunInspector() {
               <ArtifactPreviewFrame
                 files={designPreviewFiles}
                 title={`Design preview: ${variantName}`}
-                className="min-h-[240px] flex-1 border-0 bg-white"
+                className="min-h-[var(--min-height-section-textarea)] flex-1 border-0 bg-preview-canvas"
               />
             )}
             {!codeLoading &&
@@ -503,7 +503,7 @@ export default function VariantRunInspector() {
                 title={`Design preview: ${variantName}`}
                 sandbox="allow-scripts"
                 srcDoc={singleFileSrc}
-                className="min-h-[240px] flex-1 border-0 bg-white"
+                className="min-h-[var(--min-height-section-textarea)] flex-1 border-0 bg-preview-canvas"
               />
             )}
             {!codeLoading &&

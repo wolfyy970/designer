@@ -81,12 +81,12 @@ export default function VariantToolbar({
         {variantName}
       </h4>
       {isArchived && (
-        <span className="shrink-0 rounded bg-fg-faint/10 px-1.5 py-px text-badge font-medium text-fg-muted">
+        <span className="shrink-0 rounded bg-surface-meta-chip px-1.5 py-px text-badge font-medium text-fg-muted">
           Archived
         </span>
       )}
       {!isArchived && isBestCurrent && (
-        <span className="shrink-0 rounded bg-success/10 px-1.5 py-px text-badge font-medium text-success">
+        <span className="shrink-0 rounded bg-success-surface px-1.5 py-px text-badge font-medium text-success">
           Best
         </span>
       )}
@@ -98,7 +98,7 @@ export default function VariantToolbar({
             e.stopPropagation();
             onStopGeneration();
           }}
-          className="nodrag shrink-0 rounded border border-error/35 bg-error-subtle px-1.5 py-px text-badge font-semibold text-error transition-colors hover:bg-error/20"
+          className="nodrag shrink-0 rounded border border-error-border bg-error-subtle px-1.5 py-px text-badge font-semibold text-error transition-colors hover:bg-error-surface-hover"
           title="Stop generation (cancels the in-flight request)"
         >
           Stop
@@ -177,7 +177,7 @@ export default function VariantToolbar({
             e.stopPropagation();
             onClearUserBest();
           }}
-          className="nodrag rounded p-0.5 text-warning transition-colors hover:text-warning/85"
+          className="nodrag rounded p-0.5 text-warning transition-colors hover:text-warning-text-soft"
           title="Clear your best pick (use evaluator ranking)"
         >
           <Star size={10} className="fill-current" />
@@ -205,7 +205,7 @@ export default function VariantToolbar({
         }}
         className={`nodrag rounded p-0.5 transition-colors ${
           isWorkspaceOpen
-            ? 'text-accent hover:text-accent/80'
+            ? 'text-accent hover:text-accent-text-dim'
             : 'text-fg-faint hover:text-fg-muted'
         }`}
         title={isWorkspaceOpen ? 'Close run workspace' : 'Open run workspace'}

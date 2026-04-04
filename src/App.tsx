@@ -7,6 +7,9 @@ import { garbageCollect } from './services/idb-storage';
 import { ErrorBoundary } from './components/shared/ErrorBoundary';
 
 const CanvasPage = lazy(() => import('./pages/CanvasPage'));
+const DesignTokensKitchenSink = import.meta.env.DEV
+  ? lazy(() => import('./pages/DesignTokensKitchenSink'))
+  : null;
 
 const queryClient = new QueryClient();
 
@@ -45,6 +48,9 @@ export default function App() {
           <Routes>
             {/* Canvas is the sole workspace */}
             <Route path="/canvas" element={<ErrorBoundary><CanvasPage /></ErrorBoundary>} />
+            {import.meta.env.DEV && DesignTokensKitchenSink ? (
+              <Route path="/dev/design-tokens" element={<DesignTokensKitchenSink />} />
+            ) : null}
             <Route path="*" element={<Navigate to="/canvas" replace />} />
           </Routes>
         </Suspense>

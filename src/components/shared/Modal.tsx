@@ -6,16 +6,29 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: ReactNode;
-  size?: 'md' | 'lg' | 'xl';
+  size?: 'md' | 'lg' | 'xl' | '2xl';
+  /** Overlay + panel stacking (e.g. z-[60] above another modal). */
+  zIndexClass?: string;
+  /** Panel max height; inner area scrolls. */
+  maxHeightClass?: string;
 }
 
 const SIZE_CLASSES = {
   md: 'max-w-lg',
   lg: 'max-w-3xl',
   xl: 'max-w-5xl',
+  '2xl': 'max-w-6xl',
 };
 
-export default function Modal({ open, onClose, title, children, size = 'md' }: ModalProps) {
+export default function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  size = 'md',
+  zIndexClass = 'z-50',
+  maxHeightClass = 'max-h-[var(--max-height-modal)]',
+}: ModalProps) {
   useEffect(() => {
     if (!open) return;
     const handleEsc = (e: KeyboardEvent) => {
@@ -28,13 +41,13 @@ export default function Modal({ open, onClose, title, children, size = 'md' }: M
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className={`fixed inset-0 ${zIndexClass} flex items-center justify-center`}>
       <div
         className="absolute inset-0 bg-overlay"
         onClick={onClose}
       />
       <div
-        className={`relative z-10 mx-4 flex max-h-[85vh] w-full min-h-0 flex-col overflow-hidden rounded-xl bg-surface-raised shadow-xl ${SIZE_CLASSES[size]}`}
+        className={`relative z-10 mx-4 flex ${maxHeightClass} w-full min-h-0 flex-col overflow-hidden rounded-xl bg-surface-raised shadow-xl ${SIZE_CLASSES[size]}`}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-border bg-surface-raised px-5 py-3">
           <h2 className="text-base font-semibold text-fg">{title}</h2>

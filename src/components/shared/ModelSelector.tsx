@@ -204,7 +204,7 @@ export default function ModelSelector({
                 onMouseEnter={() => setHighlightIndex(i)}
                 className={`cursor-pointer px-2.5 py-1.5 text-xs ${
                   i === highlightIndex
-                    ? 'bg-accent/15 text-fg'
+                    ? 'bg-accent-highlight text-fg'
                     : 'text-fg-secondary'
                 } ${m.id === selectedModelId ? 'font-medium' : ''}`}
               >

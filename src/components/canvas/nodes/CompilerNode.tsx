@@ -227,7 +227,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
           <button
             onClick={handleCompile}
             disabled={isCompiling || !isReady}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-fg px-3 py-2 text-xs font-medium text-bg transition-colors hover:bg-fg/90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-fg px-3 py-2 text-xs font-medium text-bg transition-colors hover:bg-fg-on-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isCompiling ? (
               <>

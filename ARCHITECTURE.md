@@ -32,7 +32,7 @@ flowchart TB
 
 ## Design system (frontend)
 
-UI color and typography tokens: **[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)** (warm/cool axes, complementary info vs orange, file icons alias semantics). Implemented in `src/index.css` (`@theme`).
+UI color and typography tokens: **[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)** (Zinc neutrals, accent vs status, complementary info vs orange, file-role aliases). Implemented in `src/index.css` (`@theme`).
 
 ## Layered architecture (diagram)
 

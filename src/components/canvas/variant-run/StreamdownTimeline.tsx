@@ -8,7 +8,7 @@ type StreamdownProps = ComponentProps<(typeof import('streamdown'))['Streamdown'
 
 function StreamdownFallback() {
   return (
-    <div className="rounded bg-surface-secondary/30 px-2 py-1.5 font-mono text-badge text-fg-faint">
+    <div className="rounded bg-surface-nested/30 px-2 py-1.5 font-mono text-badge text-fg-faint">
       Loading markdown…
     </div>
   );

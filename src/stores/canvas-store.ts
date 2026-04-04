@@ -35,6 +35,8 @@ const initialCanvasState: Pick<
   | 'variantNodeIdMap'
   | 'connectingFrom'
   | 'pendingFitViewAfterTemplate'
+  | 'dismissedSectionGhostSlots'
+  | 'sectionGhostToolbarNudge'
 > = {
   nodes: [],
   edges: [],
@@ -50,6 +52,8 @@ const initialCanvasState: Pick<
   variantNodeIdMap: new Map<string, string>(),
   connectingFrom: null,
   pendingFitViewAfterTemplate: false,
+  dismissedSectionGhostSlots: [],
+  sectionGhostToolbarNudge: false,
 };
 
 export const useCanvasStore = create<CanvasStore>()(
@@ -63,7 +67,7 @@ export const useCanvasStore = create<CanvasStore>()(
     }),
     {
       name: STORAGE_KEYS.CANVAS,
-      version: 16,
+      version: 19,
       migrate: (persistedState: unknown, version: number) => {
         try {
           if (typeof persistedState === 'string') {
@@ -76,13 +80,14 @@ export const useCanvasStore = create<CanvasStore>()(
         }
       },
       partialize: (state) => ({
-        nodes: state.nodes,
+        nodes: state.nodes.filter((n) => n.type !== 'sectionGhost'),
         edges: state.edges,
         viewport: state.viewport,
         showMiniMap: state.showMiniMap,
         showGrid: state.showGrid,
         colGap: state.colGap,
         autoLayout: state.autoLayout,
+        dismissedSectionGhostSlots: state.dismissedSectionGhostSlots,
       }),
     },
   ),

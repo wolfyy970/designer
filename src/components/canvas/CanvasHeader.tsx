@@ -77,7 +77,7 @@ export default function CanvasHeader() {
 
   return (
     <>
-      <div className="absolute top-0 left-0 right-0 z-10 flex h-header items-center justify-between border-b border-border bg-bg/90 px-4 backdrop-blur-sm">
+      <div className="absolute top-0 left-0 right-0 z-10 flex h-header items-center justify-between border-b border-border bg-header-scrim px-4 backdrop-blur-sm">
         {/* Left: App identity */}
         <div className="flex w-0 min-w-0 flex-1 items-center gap-2 sm:gap-3">
           <span className="font-logo text-base font-medium tracking-wide text-fg shrink-0">AutoDesigner</span>
@@ -99,13 +99,13 @@ export default function CanvasHeader() {
               onBlur={handleSave}
               onKeyDown={handleKeyDown}
               aria-label="Canvas title"
-              className="min-w-[12rem] max-w-[min(28rem,calc(100vw-8rem))] rounded border border-border px-2 py-0.5 text-sm text-fg text-center input-focus"
+              className="min-w-[var(--width-canvas-title-min)] max-w-[var(--width-canvas-title)] rounded border border-border px-2 py-0.5 text-sm text-fg text-center input-focus"
             />
           ) : (
             <button
               type="button"
               onClick={() => setIsEditing(true)}
-              className="flex max-w-[min(28rem,calc(100vw-8rem))] items-center gap-1.5 truncate text-sm text-fg-secondary hover:text-fg"
+              className="flex max-w-[var(--width-canvas-title)] items-center gap-1.5 truncate text-sm text-fg-secondary hover:text-fg"
               aria-label={`Rename canvas: ${title || 'Untitled Canvas'}`}
             >
               <span className="truncate">{title || 'Untitled Canvas'}</span>

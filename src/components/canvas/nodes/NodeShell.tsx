@@ -9,9 +9,9 @@ export type NodeBorderStatus = NodeStatus;
 
 const BORDER_CLASSES: Record<NodeBorderStatus, string> = {
   selected: 'border-accent',
-  processing: 'border-accent/50 animate-pulse',
-  error: 'border-error/50',
-  dimmed: 'border-border/50',
+  processing: 'border-accent-border-medium animate-pulse',
+  error: 'border-error-border-medium',
+  dimmed: 'border-border-section-divider',
   filled: 'border-border',
   empty: 'border-dashed border-border',
 };

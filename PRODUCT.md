@@ -38,6 +38,8 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 - **Agentic eval rounds (workspace)** — When a run has multiple evaluation rounds (build + revisions), the **variant run workspace** (side panel) can show **Eval round** on **Design** and **Evaluation** tabs; per-round file trees are stored in IndexedDB (`{resultId}:round:{n}`) so earlier revisions remain viewable without bloating localStorage metadata.
 - **Observability (dev)** — Header modal listing **LLM** calls and **trace** events from the API session; optional NDJSON on disk when enabled (see [ARCHITECTURE.md](ARCHITECTURE.md)).
 - **Prompt Studio** — Settings → Prompts: edit DB-backed system prompts; **Save** / ⌘S commits a new **version** (no automatic save).
+- **Optional section slots** — Fresh canvases can show **ghost** placeholders for inputs not in the minimal default. Loading a **Canvas Manager** entry **materializes** optional section nodes when the persisted spec has non-empty text or images for those sections (see `src/lib/spec-materialize-sections.ts`).
+- **Design tokens kitchen sink** — Settings → General opens a modal reference for `@theme` tokens and patterns; dev-only full-page route `/dev/design-tokens`. Documented in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 
 ### Iteration Loop
 

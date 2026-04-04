@@ -30,6 +30,7 @@ export function useNodeDeletion() {
 
         const PROTECTED = new Set<string>([
           'compiler',
+          'sectionGhost',
           ...SECTION_NODE_TYPES,
         ]);
 
@@ -37,10 +38,16 @@ export function useNodeDeletion() {
         if (removable.length === 0) return;
 
         const { edges: storeEdges, nodes: storeNodes } = useCanvasStore.getState();
-        const { title, description } = keyboardMultiDeleteCopy(removable, storeNodes, storeEdges);
+        const { title, description, confirmLabel, cancelLabel } = keyboardMultiDeleteCopy(
+          removable,
+          storeNodes,
+          storeEdges,
+        );
         requestPermanentDelete({
           title,
           description,
+          confirmLabel,
+          cancelLabel,
           onConfirm: () => {
             const removeNode = useCanvasStore.getState().removeNode;
             removable.forEach((n) => removeNode(n.id));

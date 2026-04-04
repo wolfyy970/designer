@@ -203,7 +203,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
             <button
               onClick={handleExtract}
               disabled={extracting || !modelId}
-              className="flex w-full items-center justify-center gap-1.5 rounded-md bg-fg px-3 py-1.5 text-xs font-medium text-bg transition-colors hover:bg-fg/90 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex w-full items-center justify-center gap-1.5 rounded-md bg-fg px-3 py-1.5 text-xs font-medium text-bg transition-colors hover:bg-fg-on-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
               {extracting ? (
                 <Loader2 size={12} className="animate-spin" />

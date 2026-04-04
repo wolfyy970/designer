@@ -12,6 +12,8 @@ export const STORAGE_KEYS = {
   PROMPTS: 'auto-designer-prompts',
 
   // localStorage (manual)
+  /** User dismissed the optional input sections tip on the canvas */
+  CANVAS_OPTIONAL_SECTIONS_TIP_DISMISSED: 'auto-designer-canvas-optional-sections-tip-dismissed',
   CANVASES: 'auto-designer-canvases',
   MIGRATION_FLAG: 'auto-designer-migrated-idb',
 
@@ -20,6 +22,9 @@ export const STORAGE_KEYS = {
   IDB_PROVENANCE: 'auto-designer-provenance',
   IDB_FILES: 'auto-designer-files',
 } as const;
+
+/** Value stored under `STORAGE_KEYS.CANVAS_OPTIONAL_SECTIONS_TIP_DISMISSED` when the tip is dismissed. */
+export const CANVAS_OPTIONAL_SECTIONS_TIP_DISMISSED_VALUE = '1';
 
 /** Keys backed by localStorage (not IndexedDB DB names). Used by branding migration. */
 export const PERSISTED_LOCAL_STORAGE_KEY_NAMES = [

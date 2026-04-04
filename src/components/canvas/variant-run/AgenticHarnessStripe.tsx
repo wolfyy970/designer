@@ -7,7 +7,7 @@ export function AgenticHarnessStripe({
 }) {
   if (!phase && !evaluationStatus) return null;
   return (
-    <div className="border-b border-border-subtle px-3 py-1.5 shrink-0 bg-surface-secondary/80">
+    <div className="border-b border-border-subtle px-3 py-1.5 shrink-0 bg-surface-nested/80">
       {phase ? (
         <div className="text-badge font-medium uppercase tracking-wider text-fg-faint">{phase}</div>
       ) : null}

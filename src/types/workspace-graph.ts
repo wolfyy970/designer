@@ -13,6 +13,8 @@ export type CanvasNodeType =
   | 'researchContext'
   | 'objectivesMetrics'
   | 'designConstraints'
+  /** UI-only placeholder; not persisted and not wired to the spec graph */
+  | 'sectionGhost'
   | 'designSystem'
   | 'compiler'
   | 'hypothesis'

@@ -7,6 +7,7 @@ import { useSpecStore } from '../stores/spec-store';
 import { useCompilerStore } from '../stores/compiler-store';
 import { useGenerationStore } from '../stores/generation-store';
 import { useCanvasStore } from '../stores/canvas-store';
+import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
 import { saveSpecToLibrary, getSavedSpec, importCanvas } from './persistence';
 import { generateId, now } from '../lib/utils';
 
@@ -15,23 +16,38 @@ export function checkpointCurrentSpec(): void {
 }
 
 export function resetSessionStores(): void {
+  useWorkspaceDomainStore.getState().reset();
   useCompilerStore.getState().reset();
   useGenerationStore.getState().reset();
   useCanvasStore.getState().resetCanvas();
 }
 
+export type ActivateSavedSpecResult =
+  | { ok: true }
+  | { ok: false; reason: 'not_found' };
+
 /** Apply a DesignSpec to the active session (normalizes sections in spec-store). */
 export function applySpecToActiveSession(spec: DesignSpec): void {
   useSpecStore.getState().loadCanvas(spec);
+  useCanvasStore.getState().materializeOptionalSectionNodesFromSpec(spec);
 }
 
-export function activateSavedSpecById(specId: string): boolean {
-  checkpointCurrentSpec();
+/**
+ * @param options.skipCheckpoint - Use when reloading the active library entry from disk without
+ *   persisting the current (possibly dirty) spec first—otherwise checkpoint would overwrite the saved copy.
+ */
+export function activateSavedSpecById(
+  specId: string,
+  options?: { skipCheckpoint?: boolean },
+): ActivateSavedSpecResult {
+  if (!options?.skipCheckpoint) {
+    checkpointCurrentSpec();
+  }
   const spec = getSavedSpec(specId);
-  if (!spec) return false;
+  if (!spec) return { ok: false, reason: 'not_found' };
   resetSessionStores();
   applySpecToActiveSession(spec);
-  return true;
+  return { ok: true };
 }
 
 export function activateSpecFromImport(spec: DesignSpec): void {

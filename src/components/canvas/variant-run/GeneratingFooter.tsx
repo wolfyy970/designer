@@ -152,13 +152,13 @@ export function GeneratingFooter({
       {hasPlan && isBuilding ? (
         <div className="h-1 w-full overflow-hidden rounded-full bg-border">
           <div
-            className="h-full rounded-full bg-accent/70 transition-all duration-500"
+            className="h-full rounded-full bg-accent-progress-strong transition-all duration-500"
             style={{ width: `${Math.min(progress * 100, 100)}%` }}
           />
         </div>
       ) : (
         <div className="h-1 w-full overflow-hidden rounded-full bg-border">
-          <div className="h-full w-full animate-pulse rounded-full bg-accent/60" />
+          <div className="h-full w-full animate-pulse rounded-full bg-accent-progress-soft" />
         </div>
       )}
       <div className="flex items-start justify-between gap-2">

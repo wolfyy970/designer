@@ -5,9 +5,12 @@ import {
   computeDefaultPosition,
   computeHypothesisPositions,
   computeAutoLayout,
+  reconcileSectionGhostNodes,
+  layoutTypeOrder,
   GRID_SIZE,
   DEFAULT_COL_GAP,
 } from '../canvas-layout';
+import type { WorkspaceNode } from '../../types/workspace-graph';
 import { EDGE_STATUS, EDGE_TYPES } from '../../constants/canvas';
 import type { WorkspaceEdge } from '../../types/workspace-graph';
 
@@ -270,5 +273,81 @@ describe('computeAutoLayout', () => {
     // Should not throw or infinite loop
     const result = computeAutoLayout(nodes, edges, DEFAULT_COL_GAP);
     expect(result).toHaveLength(2);
+  });
+});
+
+// ─── reconcileSectionGhostNodes / layoutTypeOrder ──────────────────
+
+describe('reconcileSectionGhostNodes', () => {
+  it('adds four ghosts when optional sections are absent', () => {
+    const nodes = [makeNode('b', 'designBrief')];
+    const out = reconcileSectionGhostNodes(nodes as WorkspaceNode[]);
+    expect(out).toHaveLength(5);
+    const ghosts = out.filter((n) => n.type === 'sectionGhost');
+    expect(ghosts).toHaveLength(4);
+    expect(ghosts.map((g) => (g.data as { targetType: string }).targetType)).toEqual([
+      'researchContext',
+      'objectivesMetrics',
+      'designConstraints',
+      'existingDesign',
+    ]);
+  });
+
+  it('skips slots listed in dismissedSlots', () => {
+    const nodes = [makeNode('b', 'designBrief')] as WorkspaceNode[];
+    const out = reconcileSectionGhostNodes(nodes, ['researchContext', 'existingDesign']);
+    const targets = out
+      .filter((n) => n.type === 'sectionGhost')
+      .map((g) => (g.data as { targetType: string }).targetType);
+    expect(targets).toEqual(['objectivesMetrics', 'designConstraints']);
+  });
+
+  it('drops stale ghosts and skips slots with a real node', () => {
+    const nodes = [
+      makeNode('b', 'designBrief'),
+      {
+        id: 'ghost-section-existingDesign',
+        type: 'sectionGhost',
+        position: { x: 0, y: 0 },
+        data: { targetType: 'existingDesign' },
+      },
+      makeNode('e', 'existingDesign'),
+    ] as WorkspaceNode[];
+    const out = reconcileSectionGhostNodes(nodes);
+    expect(out.some((n) => n.id === 'ghost-section-existingDesign')).toBe(false);
+    expect(out.filter((n) => n.type === 'sectionGhost')).toHaveLength(3);
+  });
+});
+
+describe('layoutTypeOrder', () => {
+  it('orders ghosts research before existing design', () => {
+    const ghostResearch: WorkspaceNode = {
+      id: 'g1',
+      type: 'sectionGhost',
+      position: { x: 0, y: 0 },
+      data: { targetType: 'researchContext' },
+    };
+    const ghostExisting: WorkspaceNode = {
+      id: 'g2',
+      type: 'sectionGhost',
+      position: { x: 0, y: 0 },
+      data: { targetType: 'existingDesign' },
+    };
+    expect(layoutTypeOrder(ghostResearch)).toBeLessThan(layoutTypeOrder(ghostExisting));
+  });
+
+  it('places real optional sections before ghosts and model last in layer 0', () => {
+    const brief = makeNode('b', 'designBrief') as WorkspaceNode;
+    const real = makeNode('r', 'researchContext') as WorkspaceNode;
+    const ghost: WorkspaceNode = {
+      id: 'g',
+      type: 'sectionGhost',
+      position: { x: 0, y: 0 },
+      data: { targetType: 'objectivesMetrics' },
+    };
+    const model = makeNode('m', 'model') as WorkspaceNode;
+    expect(layoutTypeOrder(brief)).toBeLessThan(layoutTypeOrder(real));
+    expect(layoutTypeOrder(real)).toBeLessThan(layoutTypeOrder(ghost));
+    expect(layoutTypeOrder(ghost)).toBeLessThan(layoutTypeOrder(model));
   });
 });

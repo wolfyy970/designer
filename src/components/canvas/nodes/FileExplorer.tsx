@@ -78,10 +78,10 @@ export default function FileExplorer({
                     ? 'cursor-default opacity-35'
                     : isPlannedOnly
                       ? isActive
-                        ? 'bg-accent/15 text-fg opacity-90'
+                        ? 'bg-accent-highlight text-fg opacity-90'
                         : 'cursor-pointer text-fg-muted opacity-80 hover:bg-surface-raised hover:opacity-100'
                       : isActive
-                        ? 'bg-accent/15 text-fg'
+                        ? 'bg-accent-highlight text-fg'
                         : 'text-fg-secondary hover:bg-surface-raised'
                 }`}
               >

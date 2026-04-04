@@ -127,8 +127,15 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
   const handleDelete = useCallback(() => {
     const snap = useCanvasStore.getState();
     const variantCount = countOutgoingNodesOfType(nodeId, NODE_TYPES.VARIANT, snap);
-    const { title, description } = hypothesisDeleteCopy(variantCount);
-    requestPermanentDelete({ title, description, onConfirm: handleRemove });
+    const { title, description, confirmLabel, cancelLabel } =
+      hypothesisDeleteCopy(variantCount);
+    requestPermanentDelete({
+      title,
+      description,
+      confirmLabel,
+      cancelLabel,
+      onConfirm: handleRemove,
+    });
   }, [handleRemove, nodeId, requestPermanentDelete]);
 
   if (data.placeholder) {
@@ -257,7 +264,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
       </NodeHeader>
 
       {/* Hypothesis / Why / Measurements — one tab at a time for readable editing */}
-      <div className="flex min-h-[200px] flex-col px-3 pb-2 pt-1">
+      <div className="flex min-h-[var(--min-height-hypothesis-shell)] flex-col px-3 pb-2 pt-1">
         <div
           className="nodrag nowheel mb-1.5 flex gap-0.5 rounded-md border border-border bg-surface-raised p-0.5"
           role="tablist"
@@ -270,7 +277,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               role="tab"
               aria-selected={editorTab === id}
               onPointerDown={() => setEditorTab(id)}
-              className={`nodrag nowheel min-w-0 flex-1 rounded px-2 py-1 text-center text-[10px] font-medium transition-colors ${
+              className={`nodrag nowheel min-w-0 flex-1 rounded px-2 py-1 text-center text-nano font-medium transition-colors ${
                 editorTab === id
                   ? 'bg-fg text-bg shadow-sm'
                   : 'text-fg-muted hover:bg-surface hover:text-fg-secondary'
@@ -287,7 +294,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               onChange={(e) => update('hypothesis', e.target.value)}
               rows={8}
               placeholder="What you're exploring or validating with this variant..."
-              className="nodrag nowheel min-h-[176px] w-full resize-y rounded border border-border px-2.5 py-2 text-micro leading-relaxed text-fg-secondary placeholder:text-fg-faint input-focus"
+              className="nodrag nowheel min-h-[var(--min-height-hypothesis-textarea)] w-full resize-y rounded border border-border px-2.5 py-2 text-micro leading-relaxed text-fg-secondary placeholder:text-fg-faint input-focus"
             />
           )}
           {editorTab === 'why' && (
@@ -296,7 +303,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               onChange={(e) => update('rationale', e.target.value)}
               rows={8}
               placeholder="Rationale, tradeoffs, and why this hypothesis is worth testing..."
-              className="nodrag nowheel min-h-[176px] w-full resize-y rounded border border-border px-2.5 py-2 text-micro leading-relaxed text-fg-secondary placeholder:text-fg-faint input-focus"
+              className="nodrag nowheel min-h-[var(--min-height-hypothesis-textarea)] w-full resize-y rounded border border-border px-2.5 py-2 text-micro leading-relaxed text-fg-secondary placeholder:text-fg-faint input-focus"
             />
           )}
           {editorTab === 'measurements' && (
@@ -305,7 +312,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               onChange={(e) => update('measurements', e.target.value)}
               rows={8}
               placeholder="Signals, metrics, or evaluation criteria..."
-              className="nodrag nowheel min-h-[176px] w-full resize-y rounded border border-border px-2.5 py-2 text-micro leading-relaxed text-fg-secondary placeholder:text-fg-faint input-focus"
+              className="nodrag nowheel min-h-[var(--min-height-hypothesis-textarea)] w-full resize-y rounded border border-border px-2.5 py-2 text-micro leading-relaxed text-fg-secondary placeholder:text-fg-faint input-focus"
             />
           )}
         </div>
@@ -330,7 +337,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               type="button"
               onPointerDown={(e) => e.stopPropagation()}
               onClick={() => void navigator.clipboard?.writeText(generationError)}
-              className="nodrag nowheel mt-1 flex items-center gap-1 rounded px-0.5 py-0.5 text-[10px] font-medium text-error/90 hover:bg-error/10 hover:text-error"
+              className="nodrag nowheel mt-1 flex items-center gap-1 rounded px-0.5 py-0.5 text-nano font-medium text-error hover:bg-error-surface hover:text-error"
             >
               <ClipboardCopy size={10} className="shrink-0 opacity-90" aria-hidden />
               Copy message
@@ -366,7 +373,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               </button>
             </div>
           </div>
-          <p className="text-[10px] leading-snug text-fg-muted">
+          <p className="text-nano leading-snug text-fg-muted">
             <span className="font-medium text-fg-secondary">Thinking</span> is set on each{' '}
             <span className="text-fg-secondary">Model</span> node.
           </p>
@@ -379,7 +386,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
           <button
             onClick={handleGenerate}
             disabled={isGenerating || !canGenerate}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-fg px-3 py-2 text-xs font-medium text-bg transition-colors hover:bg-fg/90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-fg px-3 py-2 text-xs font-medium text-bg transition-colors hover:bg-fg-on-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isGenerating ? (
               <>
@@ -413,7 +420,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               type="button"
               onPointerDown={(e) => e.stopPropagation()}
               onClick={handleStopGeneration}
-              className="mt-2 w-full rounded-md border border-error/35 bg-error-subtle px-3 py-2 text-xs font-semibold text-error transition-colors hover:bg-error/20"
+              className="mt-2 w-full rounded-md border border-error-border bg-error-subtle px-3 py-2 text-xs font-semibold text-error transition-colors hover:bg-error-surface-hover"
             >
               Stop generation
             </button>

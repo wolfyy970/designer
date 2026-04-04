@@ -40,6 +40,10 @@ The **Langfuse** tab does not load traces into the app; it links to the **Langfu
 
 **Clear** empties the in-memory rings only; it does not delete Langfuse data.
 
+## Design tokens reference (Settings)
+
+**Settings** (gear) → **General** → **Open design tokens kitchen sink** opens a scrollable modal of live `@theme` colors, typography, and composition classes (`ds-*`, `.input-focus`). In **development** builds only, the same content is available at **`/dev/design-tokens`**. Semantics and rules: [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
+
 ## System prompts (Settings → Prompts)
 
 **Settings** (gear) → **Prompts** opens **Prompt Studio** for versioned system prompts. Changes are **not** auto-saved — click **Save** or use ⌘S / Ctrl+S. A confirmation shows the stored **version**.
@@ -61,6 +65,8 @@ The canvas starts with a **Design Brief**, a **Model**, and an **Incubator** —
 - **Design Constraints** — Non-negotiable boundaries + exploration ranges.
 
 Write in prose, not bullets. Precision is the product.
+
+**Optional inputs:** The default template focuses on Design Brief + Model + Incubator. Other sections may show as **ghost** prompts on the canvas until you add the node from the toolbar (or load a saved canvas whose spec already fills that section—see **Managing Canvases**).
 
 ### 2. Connect a Model Node
 

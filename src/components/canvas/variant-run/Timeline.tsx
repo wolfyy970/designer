@@ -146,7 +146,7 @@ function ThinkingBlock({
           e.stopPropagation();
         }}
         onClick={onToggle}
-        className="nodrag flex w-full items-center gap-1.5 rounded px-0 py-0.5 text-left text-badge text-fg-muted transition-colors hover:bg-surface-secondary/50 hover:text-fg-secondary"
+        className="nodrag flex w-full items-center gap-1.5 rounded px-0 py-0.5 text-left text-badge text-fg-muted transition-colors hover:bg-surface-nested/50 hover:text-fg-secondary"
       >
         {open ? (
           <ChevronDown size={12} className="shrink-0 opacity-70" />
@@ -164,7 +164,7 @@ function ThinkingBlock({
         )}
       </button>
       {open && (
-        <pre className="mt-1 max-h-[min(40vh,320px)] overflow-y-auto whitespace-pre-wrap break-words rounded bg-surface-secondary/40 px-2 py-1.5 font-mono text-badge leading-snug text-fg-muted">
+        <pre className="mt-1 max-h-[var(--max-height-timeline-scroll)] overflow-y-auto whitespace-pre-wrap break-words rounded bg-surface-nested/40 px-2 py-1.5 font-mono text-badge leading-snug text-fg-muted">
           {text || (isStreaming && isActiveTurn ? '…' : '')}
         </pre>
       )}
@@ -210,7 +210,7 @@ function ToolUseBlock({
           e.stopPropagation();
         }}
         onClick={onToggle}
-        className="nodrag flex w-full items-center gap-1.5 rounded px-0 py-0.5 text-left text-badge text-fg-muted transition-colors hover:bg-surface-secondary/50 hover:text-fg-secondary"
+        className="nodrag flex w-full items-center gap-1.5 rounded px-0 py-0.5 text-left text-badge text-fg-muted transition-colors hover:bg-surface-nested/50 hover:text-fg-secondary"
       >
         {open ? (
           <ChevronDown size={12} className="shrink-0 opacity-70" />
@@ -238,7 +238,7 @@ function ToolUseBlock({
         )}
       </button>
       {open && (
-        <div className="mt-1 max-h-[min(40vh,320px)] space-y-px overflow-y-auto rounded bg-surface-secondary/40 px-2 py-1.5">
+        <div className="mt-1 max-h-[var(--max-height-timeline-scroll)] space-y-px overflow-y-auto rounded bg-surface-nested/40 px-2 py-1.5">
           {traces.map((t) => (
             <TraceLine key={t.id} t={t} />
           ))}
@@ -431,7 +431,7 @@ export function Timeline({
               e.stopPropagation();
             }}
             onClick={jumpToLatest}
-            className="nodrag absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border-subtle bg-surface/95 px-3 py-1 text-nano font-medium text-fg-secondary shadow-md backdrop-blur-sm hover:bg-surface-raised hover:text-fg"
+            className="nodrag absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border-subtle bg-surface-floating-strong px-3 py-1 text-nano font-medium text-fg-secondary shadow-md backdrop-blur-sm hover:bg-surface-raised hover:text-fg"
           >
             <ChevronsDown size={12} />
             Latest
@@ -445,17 +445,17 @@ export function Timeline({
     return (
       <div className="flex min-h-0 flex-1 flex-col justify-center p-4">
         <div className="flex flex-col gap-2">
-          <div className="h-3 w-4/5 animate-pulse rounded bg-border/40" />
+          <div className="h-3 w-4/5 animate-pulse rounded bg-border-pulse-mid" />
           <div
-            className="h-2.5 w-full animate-pulse rounded bg-border/30"
+            className="h-2.5 w-full animate-pulse rounded bg-border-pulse-track"
             style={{ animationDelay: '75ms' }}
           />
           <div
-            className="h-2.5 w-[90%] animate-pulse rounded bg-border/30"
+            className="h-2.5 w-[90%] animate-pulse rounded bg-border-pulse-track"
             style={{ animationDelay: '150ms' }}
           />
           <div
-            className="h-2.5 w-3/4 animate-pulse rounded bg-border/30"
+            className="h-2.5 w-3/4 animate-pulse rounded bg-border-pulse-track"
             style={{ animationDelay: '225ms' }}
           />
         </div>
@@ -569,7 +569,7 @@ export function Timeline({
             e.stopPropagation();
           }}
           onClick={jumpToLatest}
-          className="nodrag absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border-subtle bg-surface/95 px-3 py-1 text-nano font-medium text-fg-secondary shadow-md backdrop-blur-sm hover:bg-surface-raised hover:text-fg"
+          className="nodrag absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border-subtle bg-surface-floating-strong px-3 py-1 text-nano font-medium text-fg-secondary shadow-md backdrop-blur-sm hover:bg-surface-raised hover:text-fg"
         >
           <ChevronsDown size={12} />
           Latest

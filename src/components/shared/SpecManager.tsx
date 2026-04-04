@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { Download, Upload, Copy, Trash2, Check } from 'lucide-react';
+import { Download, Upload, Copy, Trash2, Check, RefreshCw } from 'lucide-react';
 import { normalizeError } from '../../lib/error-utils';
 import { useSpecStore } from '../../stores/spec-store';
 import { FEEDBACK_DISMISS_MS } from '../../lib/constants';
@@ -13,8 +13,14 @@ import {
   activateImportedSpecFile,
   startNewCanvasAfterCheckpoint,
   duplicateCurrentSpec,
+  type ActivateSavedSpecResult,
 } from '../../services/canvas-library-session';
 import { useCanvasLibraryList } from '../../hooks/useCanvasLibraryList';
+import {
+  CANVAS_MANAGER_LOAD_FAILED,
+  CANVAS_MANAGER_RELOAD_CONFIRM,
+  CANVAS_MANAGER_STORAGE_WARNING,
+} from './canvas-manager-copy';
 import Modal from './Modal';
 
 interface SpecManagerProps {
@@ -36,14 +42,31 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
     setTimeout(() => setSavedFeedback(false), FEEDBACK_DISMISS_MS);
   }, [spec, refresh]);
 
-  const handleLoad = useCallback(
-    (specId: string) => {
-      if (activateSavedSpecById(specId)) {
+  const finalizeLoadResult = useCallback(
+    (result: ActivateSavedSpecResult) => {
+      if (result.ok) {
         refresh();
         onClose();
+      } else {
+        alert(CANVAS_MANAGER_LOAD_FAILED);
       }
     },
     [refresh, onClose],
+  );
+
+  const handleLoad = useCallback(
+    (specId: string) => {
+      finalizeLoadResult(activateSavedSpecById(specId));
+    },
+    [finalizeLoadResult],
+  );
+
+  const handleReloadFromSaved = useCallback(
+    (specId: string) => {
+      if (!window.confirm(CANVAS_MANAGER_RELOAD_CONFIRM)) return;
+      finalizeLoadResult(activateSavedSpecById(specId, { skipCheckpoint: true }));
+    },
+    [finalizeLoadResult],
   );
 
   const handleDelete = useCallback(
@@ -96,17 +119,10 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
   return (
     <Modal open={open} onClose={onClose} title="Canvas Manager">
       <div className="space-y-4">
-        <div className="space-y-1.5 text-xs text-fg-muted">
-          <p>
-            Saved entries store <strong>spec sections</strong> (left column) only—not the node graph.
-            Loading a saved entry resets the graph and compile/generate state. Use <strong>Save Current</strong>{' '}
-            to add or update your work in the list below.
-          </p>
-          <p>
-            Renaming in the header updates this document immediately; if it already has a library entry,
-            the list title updates automatically after a short delay.
-          </p>
+        <div className="ds-callout-note" role="note">
+          {CANVAS_MANAGER_STORAGE_WARNING}
         </div>
+
         <div className="rounded-md border border-border bg-surface px-3 py-2">
           <p className="text-nano font-medium uppercase tracking-wide text-fg-muted">
             Currently editing
@@ -114,10 +130,11 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
           <p className="text-sm font-medium text-fg-secondary">{spec.title}</p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <button
+            type="button"
             onClick={handleSave}
-            className="flex items-center gap-1 rounded-md bg-fg px-3 py-1.5 text-xs font-medium text-bg hover:bg-fg/90"
+            className="ds-btn-primary-muted"
           >
             {savedFeedback ? (
               <>
@@ -139,7 +156,7 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
           <button
             type="button"
             onClick={handleDuplicate}
-            className="flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface"
+            className="flex items-center justify-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface"
             title="Saves current work, then opens a copy with new id (graph reset to match the copy)"
           >
             <Copy size={12} />
@@ -148,14 +165,14 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
           <button
             type="button"
             onClick={handleExport}
-            className="flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface"
+            className="flex items-center justify-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface"
             title="Download spec document as JSON (sections + metadata)"
           >
             <Download size={12} />
             Export JSON
           </button>
           <label
-            className="flex cursor-pointer items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface"
+            className="flex cursor-pointer items-center justify-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface sm:col-span-2"
             title="Replace session with a previously exported JSON file (graph resets)"
           >
             <Upload size={12} />
@@ -172,59 +189,67 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
 
         {specs.length > 0 ? (
           <div>
-            <h3 className="mb-2 text-xs font-medium text-fg-secondary">
-              Saved Canvases
-            </h3>
+            <h3 className="mb-2 text-xs font-medium text-fg-secondary">Saved Canvases</h3>
             <div className="space-y-1">
               {specs.map((s) => {
                 const isActive = s.id === spec.id;
                 return (
                   <div
                     key={s.id}
-                    className={`flex items-center justify-between rounded-md border px-3 py-2 ${
-                      isActive
-                        ? 'border-accent bg-info-subtle'
-                        : 'border-border-subtle hover:bg-surface'
-                    }`}
+                    className={`ds-list-row${isActive ? ' ds-list-row-current' : ''}`}
                   >
-                    <button
-                      type="button"
-                      onClick={() => !isActive && handleLoad(s.id)}
-                      disabled={isActive}
-                      className="flex-1 min-w-0 text-left"
-                    >
+                    <div className="min-w-0 flex-1">
                       <span
-                        className={`text-sm font-medium ${isActive ? 'text-info' : 'text-fg-secondary'}`}
+                        className={`text-sm font-medium ${isActive ? 'text-fg' : 'text-fg-secondary'}`}
                       >
                         {s.title}
                       </span>
                       {isActive && (
-                        <span className="ml-2 inline-block rounded bg-accent-subtle px-1.5 py-0.5 text-nano font-medium text-info">
-                          Active
-                        </span>
+                        <span className="ds-chip-current">Active</span>
                       )}
                       <span className="ml-2 text-xs text-fg-muted">
                         {new Date(s.lastModified).toLocaleDateString()}
                       </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(s.id, s.title)}
-                      disabled={isActive}
-                      className={`ml-2 rounded p-1 ${
-                        isActive
-                          ? 'cursor-not-allowed text-fg-faint'
-                          : 'text-fg-muted hover:bg-error-subtle hover:text-error'
-                      }`}
-                      aria-label="Delete canvas"
-                      title={
-                        isActive
-                          ? 'Cannot delete the active canvas'
-                          : 'Delete canvas'
-                      }
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {isActive ? (
+                        <button
+                          type="button"
+                          onClick={() => handleReloadFromSaved(s.id)}
+                          className="flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-nano font-medium text-fg-secondary hover:bg-surface-raised"
+                          title="Discard unsaved changes and reload the saved copy from this list"
+                        >
+                          <RefreshCw size={12} />
+                          Reload saved
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleLoad(s.id)}
+                          className="rounded-md border border-border bg-surface px-2 py-1 text-nano font-medium text-fg-secondary hover:bg-surface-raised"
+                        >
+                          Load
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(s.id, s.title)}
+                        disabled={isActive}
+                        className={`rounded p-1 ${
+                          isActive
+                            ? 'cursor-not-allowed text-fg-faint'
+                            : 'text-fg-muted hover:bg-error-subtle hover:text-error'
+                        }`}
+                        aria-label="Delete canvas"
+                        title={
+                          isActive
+                            ? 'Cannot delete the active canvas'
+                            : 'Delete canvas'
+                        }
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -232,8 +257,7 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
           </div>
         ) : (
           <p className="text-xs text-fg-muted">
-            No saved canvases yet. Click &ldquo;Save Current&rdquo; to save your
-            work.
+            No saved canvases yet. Click &ldquo;Save Current&rdquo; to save your work.
           </p>
         )}
       </div>

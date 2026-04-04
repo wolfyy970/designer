@@ -73,7 +73,7 @@ export function PermanentDeleteConfirmDialog({
           <button
             type="button"
             onClick={onConfirm}
-            className="rounded-lg border border-error/35 bg-error-subtle px-3 py-1.5 text-nano font-semibold text-error transition-colors hover:bg-error/20"
+            className="rounded-lg border border-error-border bg-error-subtle px-3 py-1.5 text-nano font-semibold text-error transition-colors hover:bg-error-surface-hover"
           >
             {confirmLabel}
           </button>

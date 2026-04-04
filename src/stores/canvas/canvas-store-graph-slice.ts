@@ -3,8 +3,15 @@ import type {
   DesignSystemNodeData,
   HypothesisNodeData,
   ModelNodeData,
+  SectionGhostTargetType,
 } from '../../types/canvas-data';
-import type { CanvasNodeType, WorkspaceEdge, WorkspaceNode } from '../../types/workspace-graph';
+import type { DesignSpec } from '../../types/spec';
+import {
+  NODE_TYPE_TO_SECTION,
+  type CanvasNodeType,
+  type WorkspaceEdge,
+  type WorkspaceNode,
+} from '../../types/workspace-graph';
 import {
   applyWorkspaceEdgeChanges,
   applyWorkspaceNodeChanges,
@@ -16,6 +23,9 @@ import {
   columnX,
   computeAdjacentPosition,
   computeDefaultPosition,
+  reconcileSectionGhostNodes,
+  OPTIONAL_SECTION_SLOTS,
+  SECTION_GHOST_ID_PREFIX,
   snap,
   SECTION_NODE_TYPES,
 } from '../../lib/canvas-layout';
@@ -38,6 +48,8 @@ import {
   scheduleDebouncedAutoLayout,
   shouldScheduleAutoLayoutOnDimensionChange,
 } from '../canvas/dimension-layout-debounce';
+import { optionalSectionSlotsWithSpecMaterial } from '../../lib/spec-materialize-sections';
+import { hydrateDomainFromCanvasGraph } from '../workspace-domain-store';
 import type { CanvasStore } from './canvas-store-types';
 
 export const createGraphSlice: StateCreator<
@@ -51,15 +63,22 @@ export const createGraphSlice: StateCreator<
     | 'isValidConnection'
     | 'onConnect'
     | 'addNode'
+    | 'materializeOptionalSectionNodesFromSpec'
     | 'removeNode'
     | 'removeEdge'
     | 'updateNodeData'
     | 'disconnectOutputs'
+    | 'dismissSectionGhostSlot'
   >
 > = (set, get) => ({
   onNodesChange: (changes) => {
-    set({ nodes: applyWorkspaceNodeChanges(changes, get().nodes) });
-    if (shouldScheduleAutoLayoutOnDimensionChange(get().autoLayout, changes)) {
+    const filtered = changes.filter((ch) => {
+      if (ch.type !== 'remove') return true;
+      const id = 'id' in ch ? (ch.id as string) : '';
+      return !id.startsWith(SECTION_GHOST_ID_PREFIX);
+    });
+    set({ nodes: applyWorkspaceNodeChanges(filtered, get().nodes) });
+    if (shouldScheduleAutoLayoutOnDimensionChange(get().autoLayout, filtered)) {
       scheduleDebouncedAutoLayout(get);
     }
   },
@@ -81,7 +100,22 @@ export const createGraphSlice: StateCreator<
     const sourceNode = nodes.find((n) => n.id === connection.source);
     const targetNode = nodes.find((n) => n.id === connection.target);
     if (!sourceNode || !targetNode) return false;
+    if (sourceNode.type === 'sectionGhost' || targetNode.type === 'sectionGhost') {
+      return false;
+    }
     return checkValidConnection(sourceNode.type ?? '', targetNode.type ?? '');
+  },
+
+  dismissSectionGhostSlot: (targetType: SectionGhostTargetType) => {
+    const current = get().dismissedSectionGhostSlots;
+    if (current.includes(targetType)) return;
+    const dismissedSectionGhostSlots = [...current, targetType];
+    set({
+      dismissedSectionGhostSlots,
+      sectionGhostToolbarNudge: true,
+      nodes: reconcileSectionGhostNodes(get().nodes, dismissedSectionGhostSlots),
+    });
+    if (get().autoLayout) get().applyAutoLayout();
   },
 
   onConnect: (connection) => {
@@ -105,6 +139,10 @@ export const createGraphSlice: StateCreator<
 
     if (SECTION_NODE_TYPES.has(type) && state.nodes.some((n) => n.type === type)) return;
     if (type === 'hypothesis' && !state.nodes.some((n) => n.type === 'compiler')) return;
+
+    const dismissedSectionGhostSlots = (OPTIONAL_SECTION_SLOTS as readonly string[]).includes(type)
+      ? state.dismissedSectionGhostSlots.filter((s) => s !== type)
+      : state.dismissedSectionGhostSlots;
 
     const id = `${type}-${generateId()}`;
     const col = columnX(state.colGap);
@@ -160,7 +198,28 @@ export const createGraphSlice: StateCreator<
     const structuralEdges = buildAutoConnectEdges(id, type, intermediateNodes);
     const modelEdges = buildModelEdgeForNode(id, type, intermediateNodes);
 
-    set({ nodes: [...intermediateNodes, newNode], edges: [...state.edges, ...structuralEdges, ...modelEdges] });
+    set({
+      dismissedSectionGhostSlots,
+      nodes: reconcileSectionGhostNodes(
+        [...intermediateNodes, newNode],
+        dismissedSectionGhostSlots,
+      ),
+      edges: [...state.edges, ...structuralEdges, ...modelEdges],
+    });
+    if (get().autoLayout) get().applyAutoLayout();
+  },
+
+  materializeOptionalSectionNodesFromSpec: (spec: DesignSpec) => {
+    for (const slot of optionalSectionSlotsWithSpecMaterial(spec)) {
+      if (get().nodes.some((n) => n.type === slot)) continue;
+      get().addNode(slot);
+    }
+    const nodes = get().nodes;
+    const edges = get().edges;
+    hydrateDomainFromCanvasGraph({
+      nodes: nodes as { id: string; type: CanvasNodeType; data: Record<string, unknown> }[],
+      edges,
+    });
     if (get().autoLayout) get().applyAutoLayout();
   },
 
@@ -168,6 +227,15 @@ export const createGraphSlice: StateCreator<
     const state = get();
     const node = state.nodes.find((n) => n.id === nodeId);
     if (!node) return;
+    if (node.type === 'sectionGhost') return;
+
+    const removedType = node.type as CanvasNodeType;
+    if (SECTION_NODE_TYPES.has(removedType)) {
+      const sectionId = NODE_TYPE_TO_SECTION[removedType];
+      if (sectionId) {
+        useSpecStore.getState().resetSectionContent(sectionId);
+      }
+    }
 
     syncDomainForRemovedNode(node);
 
@@ -197,7 +265,10 @@ export const createGraphSlice: StateCreator<
       if (removeIds.has(v)) nextVariantMap.delete(k);
     }
     set({
-      nodes: state.nodes.filter((n) => !removeIds.has(n.id)),
+      nodes: reconcileSectionGhostNodes(
+        state.nodes.filter((n) => !removeIds.has(n.id)),
+        state.dismissedSectionGhostSlots,
+      ),
       edges: state.edges.filter(
         (e) => !removeIds.has(e.source) && !removeIds.has(e.target),
       ),

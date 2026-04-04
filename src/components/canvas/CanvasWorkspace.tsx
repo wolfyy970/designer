@@ -24,6 +24,7 @@ import CanvasToolbar from './CanvasToolbar';
 import CanvasContextMenu from './CanvasContextMenu';
 import VariantPreviewOverlay from './VariantPreviewOverlay';
 import VariantRunInspector from './VariantRunInspector';
+import OptionalSectionsTip from './OptionalSectionsTip';
 import { useCanvasOrchestrator } from './hooks/useCanvasOrchestrator';
 import { useNodeDeletion } from './hooks/useNodeDeletion';
 import { useFeedbackLoopConnection } from './hooks/useFeedbackLoopConnection';
@@ -159,6 +160,7 @@ function CanvasInner() {
   const miniMapNodeColor = useCallback((node: { type?: string }) => {
     const t = node.type as CanvasNodeType | undefined;
     if (t && SECTION_NODE_TYPES.has(t)) return 'var(--color-fg-muted)'; // inputs
+    if (t === 'sectionGhost') return 'var(--color-fg-faint)';
     switch (t) {
       case 'compiler':
       case 'designSystem':
@@ -222,6 +224,7 @@ function CanvasInner() {
               />
             )}
             <CanvasToolbar />
+            <OptionalSectionsTip />
           </ReactFlow>
           {contextMenu && (
             <CanvasContextMenu

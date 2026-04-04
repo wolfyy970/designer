@@ -9,9 +9,9 @@ export default function GeneratingSkeleton({ label = 'Generating…', elapsed }:
   return (
     <div className="flex flex-col gap-3 px-3 py-4">
       <div className="flex flex-col gap-1.5">
-        <div className="h-3 w-3/4 animate-pulse rounded bg-border/60" />
-        <div className="h-3 w-full animate-pulse rounded bg-border/60" style={{ animationDelay: '75ms' }} />
-        <div className="h-3 w-5/6 animate-pulse rounded bg-border/60" style={{ animationDelay: '150ms' }} />
+        <div className="h-3 w-3/4 animate-pulse rounded bg-border-pulse-heavy" />
+        <div className="h-3 w-full animate-pulse rounded bg-border-pulse-heavy" style={{ animationDelay: '75ms' }} />
+        <div className="h-3 w-5/6 animate-pulse rounded bg-border-pulse-heavy" style={{ animationDelay: '150ms' }} />
       </div>
 
       <div className="flex items-center justify-between">

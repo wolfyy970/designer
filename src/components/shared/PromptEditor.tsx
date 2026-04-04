@@ -50,7 +50,7 @@ export default function PromptEditor({ initialPromptKey }: PromptEditorProps) {
   if (loadError) {
     const message = loadError instanceof Error ? loadError.message : String(loadError);
     return (
-      <div className="rounded-lg border border-warning/35 bg-warning-subtle p-4 text-sm text-fg-secondary">
+      <div className="rounded-lg border border-warning-border bg-warning-subtle p-4 text-sm text-fg-secondary">
         <p className="font-medium text-fg">Prompt loading failed</p>
         <p className="mt-1">{message}</p>
         <p className="mt-2 text-fg-muted">
@@ -61,7 +61,7 @@ export default function PromptEditor({ initialPromptKey }: PromptEditorProps) {
   }
 
   return (
-    <div ref={rootRef} tabIndex={-1} className="flex h-[calc(85vh-7rem)] min-h-[420px] outline-none">
+    <div ref={rootRef} tabIndex={-1} className="flex h-[var(--height-prompt-editor-pane)] min-h-[var(--min-height-prompt-editor)] outline-none">
       <PromptSidebar
         search={search}
         onSearchChange={setSearch}

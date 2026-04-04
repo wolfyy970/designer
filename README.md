@@ -33,7 +33,7 @@ You can mix and match providers — e.g. OpenRouter Claude for compilation, LM S
 
 The primary interface is a visual node-graph canvas (`/canvas`, the default route):
 
-1. **Input nodes** (left) — Design Brief, Existing Design, Research Context, Objectives & Metrics, Design Constraints
+1. **Input nodes** (left) — Design Brief, Existing Design, Research Context, Objectives & Metrics, Design Constraints. On a fresh canvas, optional inputs may appear as **ghost placeholders**; opening **Canvas Manager** → **Load** materializes real section nodes when the saved spec already has text or images for those sections.
 2. **Model node** — Connect to the Incubator or Hypotheses to configure which provider and model they use
 3. **Incubator** — Connect input nodes and a Model node, then click Generate to produce hypothesis strategies
 4. **Hypotheses** — Editable strategy cards. Connect a Model node, choose **Direct** (one-shot) or **Agentic**, then **Generate** or **Run agent**
@@ -42,7 +42,7 @@ The primary interface is a visual node-graph canvas (`/canvas`, the default rout
 
 Nodes connect left-to-right. Auto-layout arranges everything based on connections. Variants can connect back to Existing Design for iterative feedback loops.
 
-The header also opens **Settings** (General preferences and **Prompt Studio** — prompts save only on **Save** / ⌘S) and **Observability** (LLM + trace logs — primarily for development). Details: [USER_GUIDE.md](USER_GUIDE.md).
+The header also opens **Settings** (General preferences, optional **design tokens kitchen sink** for `@theme` reference, and **Prompt Studio** — prompts save only on **Save** / ⌘S) and **Observability** (LLM + trace logs — primarily for development). Details: [USER_GUIDE.md](USER_GUIDE.md) and [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 
 ## Scripts
 

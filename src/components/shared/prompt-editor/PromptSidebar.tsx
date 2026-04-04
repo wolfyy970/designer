@@ -64,7 +64,7 @@ export function PromptSidebar({
                   {modified && (
                     <span
                       className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                        active ? 'bg-accent' : 'bg-accent/75'
+                        active ? 'bg-accent' : 'bg-accent-segment-idle'
                       }`}
                     />
                   )}

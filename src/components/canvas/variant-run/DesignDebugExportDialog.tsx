@@ -92,7 +92,7 @@ function PresetButton({
       title={hint}
       className={`nodrag flex flex-1 flex-col items-start gap-0.5 rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-40 ${
         active
-          ? 'border-accent bg-accent/10 text-fg'
+          ? 'border-accent bg-accent-surface text-fg'
           : 'border-border-subtle bg-surface text-fg-secondary hover:border-border hover:bg-surface-hover'
       }`}
     >
@@ -116,7 +116,7 @@ function ArtifactChoice({
     return (
       <label
         className={`flex cursor-pointer gap-2.5 rounded-lg border px-3 py-2.5 ${disabled ? 'pointer-events-none opacity-45' : ''} ${
-          selected ? 'border-accent bg-accent/5' : 'border-border-subtle bg-surface hover:border-border'
+          selected ? 'border-accent bg-accent-tonal-weak' : 'border-border-subtle bg-surface hover:border-border'
         }`}
       >
         <input
@@ -274,7 +274,7 @@ export function DesignDebugExportDialog({
       title={`Export debug — ${variantLabel}`}
       size="lg"
     >
-      <div className="flex max-h-[72vh] flex-col overflow-hidden">
+      <div className="flex max-h-[var(--max-height-debug-export)] flex-col overflow-hidden">
         <p className="mb-3 shrink-0 text-xs text-fg-secondary">
           Download a Markdown file you can share or archive. Pick a preset, then tweak what goes in. Anything marked
           “large” can make the file huge.
@@ -386,7 +386,7 @@ export function DesignDebugExportDialog({
               ) : null}
             </section>
 
-            <details className="rounded-lg border border-border-subtle bg-surface-secondary/30 px-3 py-2 text-xs">
+            <details className="rounded-lg border border-border-subtle bg-surface-nested/30 px-3 py-2 text-xs">
               <summary className="cursor-pointer select-none font-medium text-fg-secondary">Advanced — duplicate evaluation block</summary>
               <p className="mb-2 mt-2 text-micro text-fg-muted">
                 Normally one evaluation section is enough. Turn this on only if you need the copy that was stored
@@ -421,7 +421,7 @@ export function DesignDebugExportDialog({
           </button>
           <button
             type="button"
-            className="nodrag rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+            className="nodrag rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             disabled={busy}
             onClick={() => void handleConfirm()}
           >

@@ -20,21 +20,21 @@ export const SPEC_SECTIONS: SpecSectionMeta[] = [
     title: 'Research & Context',
     description:
       "Who you're designing for, what they need, and why today's options fall short.",
-    required: true,
+    required: false,
   },
   {
     id: 'objectives-metrics',
     title: 'Objectives & Metrics',
     description:
       "Success for the business and user: goals, KPIs, how you'll measure, and timeframe.",
-    required: true,
+    required: false,
   },
   {
     id: 'design-constraints',
     title: 'Design Constraints',
     description:
       'Non-negotiables versus what may vary—brand, accessibility, legal limits, and exploration axes.',
-    required: true,
+    required: false,
   },
   {
     id: 'design-system',

@@ -17,7 +17,7 @@ export function EvaluationScorecard({
   className?: string;
 }) {
   const rootCompact =
-    'nodrag nowheel shrink-0 overflow-y-auto border-t border-border-subtle bg-surface-secondary/50 px-3 py-2 max-h-[180px]';
+    'nodrag nowheel shrink-0 overflow-y-auto border-t border-border-subtle bg-surface-nested/50 px-3 py-2 max-h-[var(--max-height-eval-scorecard)]';
   const rootPanel = 'nodrag shrink-0 bg-transparent px-0 py-0';
 
   const nonBrowserFails = summary.hardFails.filter((hf) => hf.source !== 'browser');

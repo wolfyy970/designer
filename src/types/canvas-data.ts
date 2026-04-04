@@ -11,6 +11,28 @@ type NodeData<T> = Record<string, unknown> & T;
 /** Section nodes (designBrief, existingDesign, etc.) store data in spec-store */
 export type SectionNodeData = NodeData<Record<string, never>>;
 
+/** Placeholder cards for optional sections not yet on the canvas */
+export type SectionGhostTargetType =
+  | 'existingDesign'
+  | 'researchContext'
+  | 'objectivesMetrics'
+  | 'designConstraints';
+
+const SECTION_GHOST_TARGET_TYPE_SET = new Set<string>([
+  'existingDesign',
+  'researchContext',
+  'objectivesMetrics',
+  'designConstraints',
+]);
+
+export function isSectionGhostTargetType(v: string): v is SectionGhostTargetType {
+  return SECTION_GHOST_TARGET_TYPE_SET.has(v);
+}
+
+export type SectionGhostData = NodeData<{
+  targetType: SectionGhostTargetType;
+}>;
+
 export type CompilerNodeData = NodeData<{
   hypothesisCount?: number;
 }>;

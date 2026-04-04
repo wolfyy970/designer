@@ -105,7 +105,7 @@ export function PromptStudioPanel({
                 type="button"
                 onClick={onSave}
                 disabled={saveMutation.isPending}
-                className="flex items-center gap-1 rounded-md bg-fg px-2.5 py-1 text-micro font-medium text-bg hover:bg-fg/90 disabled:opacity-50"
+                className="flex items-center gap-1 rounded-md bg-fg px-2.5 py-1 text-micro font-medium text-bg hover:bg-fg-on-primary-hover disabled:opacity-50"
               >
                 <Save size={12} />
                 Save
@@ -136,7 +136,7 @@ export function PromptStudioPanel({
       {saveAck && (
         <div
           role="status"
-          className="mb-2 rounded-md border border-success/40 bg-success/12 px-3 py-2 text-sm text-fg-secondary"
+          className="mb-2 rounded-md border border-success-border-muted bg-success-surface px-3 py-2 text-sm text-fg-secondary"
         >
           <span className="font-medium text-success">New version saved.</span>{' '}
           <span className="text-fg-secondary">
@@ -200,7 +200,7 @@ export function PromptStudioPanel({
             value={displayValue}
             onChange={(e) => onDraftChange(e.target.value)}
             spellCheck={false}
-            className="min-h-[200px] flex-1 resize-none rounded-md border border-border px-3 py-2 font-mono text-xs leading-relaxed text-fg-secondary input-focus"
+            className="min-h-[var(--min-height-prompt-textarea)] flex-1 resize-none rounded-md border border-border px-3 py-2 font-mono text-xs leading-relaxed text-fg-secondary input-focus"
           />
         </div>
 
@@ -239,7 +239,7 @@ export function PromptStudioPanel({
               readOnly
               value={referenceText}
               spellCheck={false}
-              className="min-h-[200px] flex-1 resize-none rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs leading-relaxed text-fg-muted"
+              className="min-h-[var(--min-height-prompt-textarea)] flex-1 resize-none rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs leading-relaxed text-fg-muted"
             />
           </div>
         ) : (
@@ -263,15 +263,15 @@ export function PromptStudioPanel({
                 ))}
               </div>
             )}
-            <div className="min-h-[200px] flex-1 overflow-auto rounded-md border border-border bg-surface font-mono text-xs leading-relaxed">
+            <div className="min-h-[var(--min-height-prompt-textarea)] flex-1 overflow-auto rounded-md border border-border bg-surface font-mono text-xs leading-relaxed">
               {diffLines.map((ln, i) => (
                 <div
                   key={i}
                   className={
                     ln.type === 'add'
-                      ? 'bg-success/15 text-fg-secondary'
+                      ? 'bg-success-highlight text-fg-secondary'
                       : ln.type === 'remove'
-                        ? 'bg-error/15 text-fg-secondary line-through'
+                        ? 'bg-error-highlight text-fg-secondary line-through'
                         : 'text-fg-muted'
                   }
                 >

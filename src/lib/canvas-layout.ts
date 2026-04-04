@@ -1,3 +1,4 @@
+import type { SectionGhostData, SectionGhostTargetType } from '../types/canvas-data';
 import type { CanvasNodeType, WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 
 type CanvasNode = WorkspaceNode;
@@ -6,6 +7,39 @@ export const SECTION_NODE_TYPES = new Set<CanvasNodeType>([
   'designBrief', 'existingDesign', 'researchContext',
   'objectivesMetrics', 'designConstraints',
 ]);
+
+/**
+ * Canonical vertical order for optional input sections (ghosts + real nodes in layer 0).
+ * Research → objectives → constraints → existing design.
+ */
+export const OPTIONAL_SECTION_SLOTS: readonly SectionGhostTargetType[] = [
+  'researchContext',
+  'objectivesMetrics',
+  'designConstraints',
+  'existingDesign',
+];
+
+/** Prefix for stable ghost node ids; keep in sync with onNodesChange remove guard. */
+export const SECTION_GHOST_ID_PREFIX = 'ghost-section-' as const;
+
+export function sectionGhostStableId(slot: SectionGhostTargetType): string {
+  return `${SECTION_GHOST_ID_PREFIX}${slot}`;
+}
+
+/** Unknown slot / missing targetType sorts after known slots in a tier. */
+const OPTIONAL_SLOT_UNKNOWN = 99;
+
+/** Auto-layout layer 0: explicit tiers (brief &lt; reals &lt; ghosts &lt; model). */
+const LAYER0_ORDER_BRIEF = 1;
+const LAYER0_REAL_OPTIONAL_BASE = 10;
+const LAYER0_GHOST_BASE = 100;
+const LAYER0_MODEL = 1000;
+const LAYER0_FALLBACK = 500;
+
+export function optionalSectionSlotIndex(type: string): number {
+  const i = (OPTIONAL_SECTION_SLOTS as readonly string[]).indexOf(type);
+  return i === -1 ? OPTIONAL_SLOT_UNKNOWN : i;
+}
 
 // ── Layout constants ────────────────────────────────────────────────
 
@@ -16,7 +50,13 @@ const NODE_W_VARIANT = 480;
 export const GRID_SIZE = 20;
 const NODE_SPACING = 60;
 const FALLBACK_H: Record<string, number> = {
-  section: 400, compiler: 220, designSystem: 300, hypothesis: 440, variant: 400, model: 180,
+  section: 400,
+  sectionGhost: 272,
+  compiler: 220,
+  designSystem: 300,
+  hypothesis: 440,
+  variant: 400,
+  model: 180,
 };
 export const DEFAULT_COL_GAP = 160;
 export const MIN_COL_GAP = 80;
@@ -28,11 +68,66 @@ export const DEFAULT_CANVAS_Y = 300;
 
 /** Get a node's measured height, or a reasonable estimate */
 function nodeH(node: CanvasNode): number {
-  return (node.measured?.height as number | undefined) ?? (
-    SECTION_NODE_TYPES.has(node.type as CanvasNodeType)
-      ? FALLBACK_H.section
-      : FALLBACK_H[node.type as string] ?? 200
-  );
+  const measured = node.measured?.height as number | undefined;
+  if (measured != null) return measured;
+  if (node.type === 'sectionGhost') return FALLBACK_H.sectionGhost;
+  if (SECTION_NODE_TYPES.has(node.type as CanvasNodeType)) return FALLBACK_H.section;
+  return FALLBACK_H[node.type as string] ?? 200;
+}
+
+/** Fallback sort for layer 0; section + model ordering is owned by `layoutTypeOrder` tiers, not this map. */
+const TYPE_ORDER_LAYER: Record<string, number> = {
+  compiler: 6,
+  designSystem: 7,
+  hypothesis: 8,
+  variant: 9,
+};
+
+/**
+ * Sort key for auto-layout layer 0: brief top, real optional sections next (canonical order),
+ * ghosts below reals, model last.
+ */
+export function layoutTypeOrder(n: CanvasNode): number {
+  if (n.type === 'designBrief') return LAYER0_ORDER_BRIEF;
+  if (n.type === 'sectionGhost') {
+    const t = (n.data as SectionGhostData).targetType;
+    return LAYER0_GHOST_BASE + optionalSectionSlotIndex(t ?? '');
+  }
+  if (n.type === 'model') return LAYER0_MODEL;
+  if (
+    n.type === 'researchContext' ||
+    n.type === 'objectivesMetrics' ||
+    n.type === 'designConstraints' ||
+    n.type === 'existingDesign'
+  ) {
+    return LAYER0_REAL_OPTIONAL_BASE + optionalSectionSlotIndex(n.type);
+  }
+  return TYPE_ORDER_LAYER[n.type as string] ?? LAYER0_FALLBACK;
+}
+
+/**
+ * Strip ephemeral section ghosts and re-append placeholders for each optional section
+ * not represented by a real node and not dismissed. Positions are placeholders; run auto-layout after.
+ */
+export function reconcileSectionGhostNodes(
+  nodes: WorkspaceNode[],
+  dismissedSlots: readonly SectionGhostTargetType[] = [],
+): WorkspaceNode[] {
+  const dismissed = new Set<string>(dismissedSlots);
+  const base = nodes.filter((n) => n.type !== 'sectionGhost');
+  const have = new Set(base.map((n) => n.type));
+  const ghosts: WorkspaceNode[] = [];
+  for (const slot of OPTIONAL_SECTION_SLOTS) {
+    if (have.has(slot)) continue;
+    if (dismissed.has(slot)) continue;
+    ghosts.push({
+      id: sectionGhostStableId(slot),
+      type: 'sectionGhost',
+      position: { x: 0, y: 0 },
+      data: { targetType: slot },
+    });
+  }
+  return [...base, ...ghosts];
 }
 
 function nodeWidth(node: CanvasNode): number {
@@ -225,15 +320,7 @@ export function computeAutoLayout(
   if (nonEmptyLayers.length === 0) return nodes;
 
   // 4. Sort nodes within each layer by barycenter
-  const TYPE_ORDER: Record<string, number> = {
-    designBrief: 0, existingDesign: 1, researchContext: 2,
-    objectivesMetrics: 3, designConstraints: 4, model: 5,
-    compiler: 6, designSystem: 7, hypothesis: 8, variant: 9,
-  };
-
-  nonEmptyLayers[0].sort((a, b) =>
-    (TYPE_ORDER[a.type as string] ?? 99) - (TYPE_ORDER[b.type as string] ?? 99)
-  );
+  nonEmptyLayers[0].sort((a, b) => layoutTypeOrder(a) - layoutTypeOrder(b));
 
   for (let li = 1; li < nonEmptyLayers.length; li++) {
     const prevLayer = nonEmptyLayers[li - 1];

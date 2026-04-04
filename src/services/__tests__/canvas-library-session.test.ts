@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   mockCompilerReset: vi.fn(),
   mockGenerationReset: vi.fn(),
   mockResetCanvas: vi.fn(),
+  mockDomainReset: vi.fn(),
+  mockMaterializeOptionalSectionNodesFromSpec: vi.fn(),
 }));
 
 const activeSpec: DesignSpec = {
@@ -88,7 +90,16 @@ vi.mock('../../stores/generation-store.ts', () => ({
 
 vi.mock('../../stores/canvas-store.ts', () => ({
   useCanvasStore: {
-    getState: () => ({ resetCanvas: mocks.mockResetCanvas }),
+    getState: () => ({
+      resetCanvas: mocks.mockResetCanvas,
+      materializeOptionalSectionNodesFromSpec: mocks.mockMaterializeOptionalSectionNodesFromSpec,
+    }),
+  },
+}));
+
+vi.mock('../../stores/workspace-domain-store.ts', () => ({
+  useWorkspaceDomainStore: {
+    getState: () => ({ reset: mocks.mockDomainReset }),
   },
 }));
 
@@ -102,26 +113,42 @@ describe('canvas-library-session', () => {
   it('activateSavedSpecById checkpoints then loads when found', () => {
     const saved = { ...activeSpec, id: 'other' };
     mocks.mockGetSavedSpec.mockReturnValue(saved);
-    expect(activateSavedSpecById('other')).toBe(true);
+    expect(activateSavedSpecById('other')).toEqual({ ok: true });
     expect(mocks.mockSaveSpecToLibrary).toHaveBeenCalledWith(activeSpec);
+    expect(mocks.mockDomainReset).toHaveBeenCalledOnce();
     expect(mocks.mockCompilerReset).toHaveBeenCalledOnce();
     expect(mocks.mockGenerationReset).toHaveBeenCalledOnce();
     expect(mocks.mockResetCanvas).toHaveBeenCalledOnce();
     expect(mocks.mockLoadCanvas).toHaveBeenCalledWith(saved);
+    expect(mocks.mockMaterializeOptionalSectionNodesFromSpec).toHaveBeenCalledWith(saved);
   });
 
-  it('activateSavedSpecById returns false and skips reset when missing', () => {
+  it('activateSavedSpecById with skipCheckpoint does not save current spec before load', () => {
+    const saved = { ...activeSpec, id: 'active-1' };
+    mocks.mockGetSavedSpec.mockReturnValue(saved);
+    expect(activateSavedSpecById('active-1', { skipCheckpoint: true })).toEqual({ ok: true });
+    expect(mocks.mockSaveSpecToLibrary).not.toHaveBeenCalled();
+    expect(mocks.mockDomainReset).toHaveBeenCalledOnce();
+    expect(mocks.mockLoadCanvas).toHaveBeenCalledWith(saved);
+    expect(mocks.mockMaterializeOptionalSectionNodesFromSpec).toHaveBeenCalledWith(saved);
+  });
+
+  it('activateSavedSpecById returns not_found and skips reset when missing', () => {
     mocks.mockGetSavedSpec.mockReturnValue(null);
-    expect(activateSavedSpecById('missing')).toBe(false);
+    expect(activateSavedSpecById('missing')).toEqual({ ok: false, reason: 'not_found' });
     expect(mocks.mockSaveSpecToLibrary).toHaveBeenCalledWith(activeSpec);
     expect(mocks.mockLoadCanvas).not.toHaveBeenCalled();
+    expect(mocks.mockDomainReset).not.toHaveBeenCalled();
     expect(mocks.mockCompilerReset).not.toHaveBeenCalled();
   });
 
   it('startNewCanvasAfterCheckpoint resets stores and creates new canvas', () => {
     startNewCanvasAfterCheckpoint('Fresh');
     expect(mocks.mockSaveSpecToLibrary).toHaveBeenCalledWith(activeSpec);
+    expect(mocks.mockDomainReset).toHaveBeenCalledOnce();
     expect(mocks.mockCompilerReset).toHaveBeenCalledOnce();
+    expect(mocks.mockGenerationReset).toHaveBeenCalledOnce();
+    expect(mocks.mockResetCanvas).toHaveBeenCalledOnce();
     expect(mocks.mockCreateNewCanvas).toHaveBeenCalledWith('Fresh');
   });
 });

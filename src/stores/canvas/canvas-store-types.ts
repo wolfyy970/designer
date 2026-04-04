@@ -13,6 +13,8 @@ import type {
   WorkspaceViewport,
 } from '../../types/workspace-graph';
 import type { EdgeStatus } from '../../constants/canvas';
+import type { SectionGhostTargetType } from '../../types/canvas-data';
+import type { DesignSpec } from '../../types/spec';
 
 /** Full canvas Zustand store shape — slices compose into this in `canvas-store.ts`. */
 export interface CanvasStore {
@@ -31,6 +33,10 @@ export interface CanvasStore {
   variantNodeIdMap: Map<string, string>;
   connectingFrom: { nodeType: CanvasNodeType; handleType: 'source' | 'target' } | null;
   pendingFitViewAfterTemplate: boolean;
+  /** Persisted: optional section ghost slots the user hid (re-add from + menu). */
+  dismissedSectionGhostSlots: SectionGhostTargetType[];
+  /** Session-only: show tip to use toolbar after hiding a ghost. Omitted from persist partialize. */
+  sectionGhostToolbarNudge: boolean;
   consumePendingFitView: () => void;
 
   onNodesChange: (changes: Parameters<typeof applyWorkspaceNodeChanges>[0]) => void;
@@ -43,6 +49,10 @@ export interface CanvasStore {
   toggleAutoLayout: () => void;
 
   addNode: (type: CanvasNodeType, position?: { x: number; y: number }) => void;
+  /** After loading a spec from the library/import, add optional section nodes that have spec content (avoids bogus ghosts). */
+  materializeOptionalSectionNodesFromSpec: (spec: DesignSpec) => void;
+  dismissSectionGhostSlot: (targetType: SectionGhostTargetType) => void;
+  clearSectionGhostToolbarNudge: () => void;
   removeNode: (nodeId: string) => void;
   removeEdge: (edgeId: string) => void;
   updateNodeData: (nodeId: string, data: Partial<CanvasNodeData>) => void;

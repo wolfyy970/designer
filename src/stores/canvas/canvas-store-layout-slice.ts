@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { CanvasNodeType } from '../../types/workspace-graph';
 import { generateId } from '../../lib/utils';
-import { columnX, computeAutoLayout, snap } from '../../lib/canvas-layout';
+import { columnX, computeAutoLayout, reconcileSectionGhostNodes, snap } from '../../lib/canvas-layout';
 import { buildEdgeId, EDGE_TYPES, EDGE_STATUS } from '../../constants/canvas';
 import { PREREQUISITE_DEFAULTS } from '../../lib/constants';
 import { hydrateDomainFromCanvasGraph } from '../workspace-domain-store';
@@ -26,6 +26,9 @@ export const createLayoutSlice: StateCreator<
         nodes: state.nodes as { id: string; type: CanvasNodeType; data: Record<string, unknown> }[],
         edges: state.edges,
       });
+      set({
+        nodes: reconcileSectionGhostNodes(get().nodes, get().dismissedSectionGhostSlots),
+      });
       if (get().autoLayout) get().applyAutoLayout();
       return;
     }
@@ -35,27 +38,28 @@ export const createLayoutSlice: StateCreator<
     const modelId = `model-${generateId()}`;
     const compilerId = `compiler-${generateId()}`;
 
+    const coreNodes = [
+      {
+        id: briefId,
+        type: 'designBrief' as const,
+        position: snap({ x: col.sections, y: 300 }),
+        data: {},
+      },
+      {
+        id: modelId,
+        type: 'model' as const,
+        position: snap({ x: col.compiler, y: 100 }),
+        data: { ...PREREQUISITE_DEFAULTS['model'] },
+      },
+      {
+        id: compilerId,
+        type: 'compiler' as const,
+        position: snap({ x: col.compiler, y: 400 }),
+        data: {},
+      },
+    ];
     set({
-      nodes: [
-        {
-          id: briefId,
-          type: 'designBrief',
-          position: snap({ x: col.sections, y: 300 }),
-          data: {},
-        },
-        {
-          id: modelId,
-          type: 'model',
-          position: snap({ x: col.compiler, y: 100 }),
-          data: { ...PREREQUISITE_DEFAULTS['model'] },
-        },
-        {
-          id: compilerId,
-          type: 'compiler',
-          position: snap({ x: col.compiler, y: 400 }),
-          data: {},
-        },
-      ],
+      nodes: reconcileSectionGhostNodes(coreNodes, get().dismissedSectionGhostSlots),
       edges: [
         {
           id: buildEdgeId(briefId, compilerId),
@@ -78,6 +82,7 @@ export const createLayoutSlice: StateCreator<
       nodes: get().nodes as { id: string; type: CanvasNodeType; data: Record<string, unknown> }[],
       edges: get().edges,
     });
+    if (get().autoLayout) get().applyAutoLayout();
   },
 
   resetCanvas: () => {
@@ -90,6 +95,8 @@ export const createLayoutSlice: StateCreator<
       lineageNodeIds: new Set(),
       lineageEdgeIds: new Set(),
       pendingFitViewAfterTemplate: false,
+      dismissedSectionGhostSlots: [],
+      sectionGhostToolbarNudge: false,
     });
     get().initializeCanvas();
   },
@@ -104,5 +111,7 @@ export const createLayoutSlice: StateCreator<
       lineageNodeIds: new Set(),
       lineageEdgeIds: new Set(),
       pendingFitViewAfterTemplate: false,
+      dismissedSectionGhostSlots: [],
+      sectionGhostToolbarNudge: false,
     }),
 });

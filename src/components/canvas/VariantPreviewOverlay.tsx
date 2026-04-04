@@ -206,8 +206,8 @@ export default function VariantPreviewOverlay() {
     return (
       <div className="flex flex-1 flex-col overflow-hidden">
         {label && (
-          <div className="shrink-0 border-b border-white/10 px-4 py-1.5">
-            <span className="text-micro text-white/60">{label}</span>
+          <div className="shrink-0 border-b border-preview-overlay-hairline px-4 py-1.5">
+            <span className="text-micro text-preview-overlay-text-muted">{label}</span>
             <span className="ml-2 text-xs font-medium text-white">
               {stratName}
               {r.runNumber != null && (
@@ -220,7 +220,7 @@ export default function VariantPreviewOverlay() {
             </span>
           </div>
         )}
-        <div className="flex-1 overflow-hidden bg-white">
+        <div className="flex-1 overflow-hidden bg-preview-canvas">
           {hasPayload || isLoading ? (
             <ExpandedVariantIframe
               files={panelFiles}
@@ -243,15 +243,15 @@ export default function VariantPreviewOverlay() {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-overlay-heavy">
       {/* Top bar */}
-      <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-2.5">
+      <div className="flex shrink-0 items-center justify-between border-b border-preview-overlay-hairline px-5 py-2.5">
         <div className="flex items-center gap-4">
           {/* Cross-variant navigation */}
           {variantNodeIds.length > 1 && (
-            <div className="flex items-center gap-1 text-white/60">
+            <div className="flex items-center gap-1 text-preview-overlay-text-muted">
               <button
                 onClick={goToPrevVariant}
                 disabled={!hasPrevVariant}
-                className="rounded p-1 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
+                className="rounded p-1 transition-colors hover:bg-media-chrome-hover hover:text-white disabled:opacity-30"
                 title="Previous design (←)"
               >
                 <ChevronLeft size={18} />
@@ -262,7 +262,7 @@ export default function VariantPreviewOverlay() {
               <button
                 onClick={goToNextVariant}
                 disabled={!hasNextVariant}
-                className="rounded p-1 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
+                className="rounded p-1 transition-colors hover:bg-media-chrome-hover hover:text-white disabled:opacity-30"
                 title="Next design (→)"
               >
                 <ChevronRight size={18} />
@@ -274,17 +274,17 @@ export default function VariantPreviewOverlay() {
             <h2 className="text-sm font-semibold text-white">
               {strategy?.name ?? 'Variant Preview'}
               {!pinnedRunId && isActiveBest && (
-                <span className="ml-2 rounded bg-success/15 px-1.5 py-px text-badge font-medium text-success">
+                <span className="ml-2 rounded bg-success-highlight px-1.5 py-px text-badge font-medium text-success">
                   Best current
                 </span>
               )}
               {pinnedRunId && (
-                <span className="ml-2 text-xs font-normal text-white/40">
+                <span className="ml-2 text-xs font-normal text-preview-overlay-text-faint">
                   (Archived)
                 </span>
               )}
             </h2>
-            <p className="text-xs text-white/40">
+            <p className="text-xs text-preview-overlay-text-faint">
               {result.metadata?.model}
               {result.metadata?.durationMs != null && (
                 <> &middot; {(result.metadata.durationMs / 1000).toFixed(1)}s</>
@@ -300,22 +300,22 @@ export default function VariantPreviewOverlay() {
 
           {/* Version navigation (within the same variant) */}
           {stackTotal > 1 && (
-            <div className="flex items-center gap-1 rounded-md border border-white/10 px-1.5 py-0.5 text-white/60">
+            <div className="flex items-center gap-1 rounded-md border border-preview-overlay-hairline px-1.5 py-0.5 text-preview-overlay-text-muted">
               <button
                 onClick={goNewer}
                 disabled={stackIndex <= 0}
-                className="rounded p-0.5 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
+                className="rounded p-0.5 transition-colors hover:bg-media-chrome-hover hover:text-white disabled:opacity-30"
                 title="Newer version"
               >
                 <ChevronLeft size={14} />
               </button>
-              <span className="text-[10px] tabular-nums">
+              <span className="text-nano tabular-nums">
                 v{stackIndex + 1}/{stackTotal}
               </span>
               <button
                 onClick={goOlder}
                 disabled={stackIndex >= stackTotal - 1}
-                className="rounded p-0.5 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
+                className="rounded p-0.5 transition-colors hover:bg-media-chrome-hover hover:text-white disabled:opacity-30"
                 title="Older version"
               >
                 <ChevronRight size={14} />
@@ -333,7 +333,7 @@ export default function VariantPreviewOverlay() {
                   <button
                     type="button"
                     onClick={() => setUserBest(variantStrategyId, null)}
-                    className="flex items-center gap-1.5 rounded-md border border-white/20 px-3 py-1.5 text-xs text-warning transition-colors hover:border-white/40 hover:text-fg"
+                    className="flex items-center gap-1.5 rounded-md border border-preview-overlay-control-border px-3 py-1.5 text-xs text-warning transition-colors hover:border-preview-overlay-control-border-hover hover:text-fg"
                     title="Use evaluator ranking again"
                   >
                     <Star size={14} className="fill-current" />
@@ -344,7 +344,7 @@ export default function VariantPreviewOverlay() {
                   <button
                     type="button"
                     onClick={() => setUserBest(variantStrategyId, result.id)}
-                    className="flex items-center gap-1.5 rounded-md border border-white/20 px-3 py-1.5 text-xs text-white/70 transition-colors hover:border-white/40 hover:text-white"
+                    className="flex items-center gap-1.5 rounded-md border border-preview-overlay-control-border px-3 py-1.5 text-xs text-preview-overlay-text-soft transition-colors hover:border-preview-overlay-control-border-hover hover:text-white"
                     title="Prefer this version over evaluator ranking"
                   >
                     <Star size={14} />
@@ -356,7 +356,7 @@ export default function VariantPreviewOverlay() {
           {!compareId && otherResults.length > 0 && (
             <button
               onClick={() => setCompareId(otherResults[0].id)}
-              className="flex items-center gap-1.5 rounded-md border border-white/20 px-3 py-1.5 text-xs text-white/70 transition-colors hover:border-white/40 hover:text-white"
+              className="flex items-center gap-1.5 rounded-md border border-preview-overlay-control-border px-3 py-1.5 text-xs text-preview-overlay-text-soft transition-colors hover:border-preview-overlay-control-border-hover hover:text-white"
             >
               <Columns2 size={14} />
               Compare
@@ -365,14 +365,14 @@ export default function VariantPreviewOverlay() {
           {compareId && (
             <button
               onClick={() => setCompareId(null)}
-              className="flex items-center gap-1.5 rounded-md border border-white/20 px-3 py-1.5 text-xs text-white/70 transition-colors hover:border-white/40 hover:text-white"
+              className="flex items-center gap-1.5 rounded-md border border-preview-overlay-control-border px-3 py-1.5 text-xs text-preview-overlay-text-soft transition-colors hover:border-preview-overlay-control-border-hover hover:text-white"
             >
               Exit Compare
             </button>
           )}
           <button
             onClick={close}
-            className="rounded-md p-1.5 text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+            className="rounded-md p-1.5 text-media-chrome-text-dim transition-colors hover:bg-media-chrome-hover hover:text-white"
             title="Close (Esc)"
           >
             <X size={20} />
@@ -385,13 +385,13 @@ export default function VariantPreviewOverlay() {
         {compareId && compareResult ? (
           <>
             {renderPanel(result, code, codeLoading, files, 'Original')}
-            <div className="w-px bg-white/10" />
+            <div className="w-px bg-preview-overlay-hairline" />
             <div className="flex flex-1 flex-col overflow-hidden">
-              <div className="shrink-0 border-b border-white/10 px-4 py-1.5">
+              <div className="shrink-0 border-b border-preview-overlay-hairline px-4 py-1.5">
                 <select
                   value={compareId}
                   onChange={(e) => setCompareId(e.target.value)}
-                  className="rounded border border-white/20 bg-transparent px-2 py-0.5 text-micro text-white/70 outline-none"
+                  className="rounded border border-preview-overlay-control-border bg-transparent px-2 py-0.5 text-micro text-preview-overlay-text-soft outline-none"
                 >
                   {otherResults.map((r) => {
                     const s = findVariantStrategy(dimensionMaps, r.variantStrategyId);

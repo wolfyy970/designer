@@ -112,6 +112,8 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
     requestPermanentDelete({
       title: variantDeleteCopy.title,
       description: variantDeleteCopy.description,
+      confirmLabel: variantDeleteCopy.confirmLabel,
+      cancelLabel: variantDeleteCopy.cancelLabel,
       onConfirm: removeFromCanvas,
     });
   }, [variantDeleteCopy, removeFromCanvas, requestPermanentDelete]);
@@ -149,10 +151,12 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
   }, [result, versionKey, completedStack, stack, setSelectedVersion, deleteResult]);
 
   const confirmDeleteVersion = useCallback(() => {
-    const { title, description } = variantVersionDeleteCopy();
+    const { title, description, confirmLabel, cancelLabel } = variantVersionDeleteCopy();
     requestPermanentDelete({
       title,
       description,
+      confirmLabel,
+      cancelLabel,
       onConfirm: () => {
         void handleDeleteVersion();
       },
@@ -271,7 +275,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
       selected={!!selected}
       width="w-node-variant"
       status={status}
-      className={`relative flex h-full min-h-[420px] flex-col${isArchived ? ' opacity-75' : ''} ${stackClass}`}
+      className={`relative flex h-full min-h-[var(--min-height-variant-node)] flex-col${isArchived ? ' opacity-75' : ''} ${stackClass}`}
       handleColor={hasCode ? 'green' : 'amber'}
     >
       <VariantToolbar
@@ -333,12 +337,12 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
                 phase={result.agenticPhase}
                 evaluationStatus={result.evaluationStatus}
               />
-              <p className="text-center text-[11px] text-fg-secondary">
+              <p className="text-center text-micro text-fg-secondary">
                 Generating in workspace — open the side panel for tasks, activity, and preview.
               </p>
               <button
                 type="button"
-                className="nodrag nowheel rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-[11px] font-medium text-accent transition-colors hover:bg-accent/20"
+                className="nodrag nowheel rounded-md border border-accent-border-muted bg-accent-surface px-3 py-1.5 text-micro font-medium text-accent transition-colors hover:bg-accent-surface-hover"
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -403,7 +407,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
                 srcDoc={htmlContent}
                 sandbox="allow-scripts"
                 title={`Variant: ${variantName}`}
-                className="absolute left-0 top-0 border-0 bg-white"
+                className="absolute left-0 top-0 border-0 bg-preview-canvas"
                 style={{
                   width: `${100 / zoom}%`,
                   height: `${100 / zoom}%`,
@@ -425,7 +429,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
                 <button
                   key={tab}
                   onPointerDown={() => setActiveTab(tab)}
-                  className={`nodrag px-3 py-1.5 text-[10px] font-medium capitalize transition-colors ${
+                  className={`nodrag px-3 py-1.5 text-nano font-medium capitalize transition-colors ${
                     activeTab === tab
                       ? 'border-b border-accent text-fg'
                       : 'text-fg-muted hover:text-fg-secondary'
@@ -441,7 +445,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
                 <ArtifactPreviewFrame
                   files={currentFiles}
                   title={`Variant: ${variantName}`}
-                  className="absolute left-0 top-0 border-0 bg-white"
+                  className="absolute left-0 top-0 border-0 bg-preview-canvas"
                   style={{
                     width: `${100 / zoom}%`,
                     height: `${100 / zoom}%`,
@@ -457,7 +461,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
               <div className="flex flex-1 overflow-hidden">
                 <div className="w-28 shrink-0 border-r border-border-subtle bg-surface flex flex-col">
                   <div className="px-2 py-1.5 border-b border-border-subtle">
-                    <span className="text-[9px] font-medium uppercase tracking-wider text-fg-faint">Files</span>
+                    <span className="text-badge font-medium uppercase tracking-wider text-fg-faint">Files</span>
                   </div>
                   <FileExplorer
                     files={currentFiles!}
@@ -468,7 +472,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
                   />
                 </div>
                 <div className="nodrag nowheel flex-1 overflow-auto bg-bg">
-                  <pre className="min-h-full p-3 font-mono text-[10px] leading-relaxed text-fg-secondary whitespace-pre-wrap">
+                  <pre className="min-h-full p-3 font-mono text-nano leading-relaxed text-fg-secondary whitespace-pre-wrap">
                     {activeCodeFile && currentFiles?.[activeCodeFile]}
                   </pre>
                 </div>
