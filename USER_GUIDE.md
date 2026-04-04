@@ -44,11 +44,11 @@ The **Langfuse** tab does not load traces into the app; it links to the **Langfu
 
 **Settings** (gear) → **Prompts** opens **Prompt Studio** for versioned system prompts. Changes are **not** auto-saved — click **Save** or use ⌘S / Ctrl+S. A confirmation shows the stored **version**.
 
-Templates are stored in **Langfuse**; the technical names (`compilerSystem`, `variant`, …) are listed with plain-English explanations in [LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md). **`pnpm db:seed`** creates **missing** Langfuse prompts only (Prompt Studio stays canonical after that). To reset all prompts from the repo, run **`pnpm langfuse:sync-prompts`**. Agent **skills** are not part of seed — they load from the database via Prisma.
+Templates are stored in **Langfuse**; the technical names (`compilerSystem`, `variant`, …) are listed with plain-English explanations in [LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md). **`pnpm db:seed`** creates **missing** Langfuse prompts only (Prompt Studio stays canonical after that). To reset all prompts from the repo, run **`pnpm langfuse:sync-prompts`**. Agent **skills** are **not** Langfuse prompts — they live in the repo’s **`skills/`** tree and are discovered at agentic session start (see [ARCHITECTURE.md](ARCHITECTURE.md) / [PRODUCT.md](PRODUCT.md)).
 
 ## Canvas Workflow
 
-The canvas (`/canvas`) is the default interface. Nodes connect left-to-right.
+The canvas (`/canvas`) is the default interface. Nodes connect left-to-right. The **build stamp** in the header (version · Eastern time) and Husky **patch** bumps are documented in [CLAUDE.md](CLAUDE.md) — including restarting Vite to refresh the stamp after commits.
 
 ### 1. Fill in Input Nodes
 

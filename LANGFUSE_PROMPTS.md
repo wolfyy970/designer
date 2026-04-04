@@ -73,7 +73,7 @@ Three **separate rubrics** score the artifact for **design quality**, **strategy
 |----------------------|----------------------------------|
 | Strategies are vague or JSON is malformed | `compilerSystem`, `compilerUser` |
 | Single-shot HTML off-brief or off-style | `genSystemHtml`, `variant` |
-| Agent doesn’t plan, files are messy, or tools misused | `genSystemHtmlAgentic` (+ **Skills** in Prisma, not Langfuse) |
+| Agent doesn’t plan, files are messy, or tools misused | `genSystemHtmlAgentic` (+ **Skills** in repo `skills/`, not Langfuse) |
 | Extract misses tokens or invents structure | `designSystemExtract` |
 | Agent “forgets” after long runs | `agentCompactionSystem` |
 | Agent tries npm/Vite/host-repo workflows | `sandboxAgentsContext` (+ sealed Pi `cwd` / resource loader; see ARCHITECTURE) |
