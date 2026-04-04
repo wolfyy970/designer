@@ -13,7 +13,6 @@ export const STORAGE_KEYS = {
 
   // localStorage (manual)
   CANVASES: 'auto-designer-canvases',
-  API_KEYS: 'auto-designer-api-keys',
   MIGRATION_FLAG: 'auto-designer-migrated-idb',
 
   // IndexedDB database names (idb-keyval)
@@ -31,7 +30,6 @@ export const PERSISTED_LOCAL_STORAGE_KEY_NAMES = [
   'GENERATION',
   'PROMPTS',
   'CANVASES',
-  'API_KEYS',
   'MIGRATION_FLAG',
 ] as const satisfies ReadonlyArray<keyof typeof STORAGE_KEYS>;
 

@@ -9,12 +9,11 @@ import LogViewer from './LogViewer';
 import { parsePromptKey } from '../../lib/prompt-log-mapping';
 import type { PromptKey } from '../../stores/prompt-store';
 import { scheduleLibraryTitleSyncIfEntryExists } from '../../services/canvas-library-session';
+import { appReleaseLabel } from '../../lib/app-release';
 
 export default function CanvasHeader() {
   const title = useSpecStore((s) => s.spec.title);
   const setTitle = useSpecStore((s) => s.setTitle);
-  const autoLayout = useCanvasStore((s) => s.autoLayout);
-  const toggleAutoLayout = useCanvasStore((s) => s.toggleAutoLayout);
   const resetCanvas = useCanvasStore((s) => s.resetCanvas);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -80,17 +79,14 @@ export default function CanvasHeader() {
     <>
       <div className="absolute top-0 left-0 right-0 z-10 flex h-header items-center justify-between border-b border-border bg-bg/90 px-4 backdrop-blur-sm">
         {/* Left: App identity */}
-        <div className="flex w-0 min-w-0 flex-1 items-center gap-3">
+        <div className="flex w-0 min-w-0 flex-1 items-center gap-2 sm:gap-3">
           <span className="font-logo text-base font-medium tracking-wide text-fg shrink-0">AutoDesigner</span>
-          <label className="flex cursor-pointer items-center gap-1.5 text-xs text-fg-secondary select-none hover:text-fg shrink-0">
-            <input
-              type="checkbox"
-              checked={autoLayout}
-              onChange={toggleAutoLayout}
-              className="accent-accent"
-            />
-            Auto Layout
-          </label>
+          <span
+            className="min-w-0 truncate text-nano text-fg-muted tabular-nums"
+            title={appReleaseLabel()}
+          >
+            {appReleaseLabel()}
+          </span>
         </div>
 
         {/* Center: Document name */}

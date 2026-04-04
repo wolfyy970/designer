@@ -14,7 +14,7 @@ Add your API key to `.env.local`:
 OPENROUTER_API_KEY=sk-or-...
 ```
 
-This key stays server-side (Vite proxy). Alternatively, enter an OpenRouter key via the Settings panel (gear icon in header) — keys entered there are stored in localStorage.
+This key stays server-side only (the Hono API reads it; Vite proxies `/api` in dev).
 
 For LM Studio vision models, optionally set:
 ```
@@ -133,7 +133,7 @@ To iterate on results:
 
 ### Auto-Layout
 
-Toggle the **Auto Layout** checkbox in the header. When on:
+Open **Settings** (gear) → **General** and toggle **Auto layout**. When on:
 - All nodes are positioned automatically based on their connections
 - Nodes are not draggable (prevents accidental misalignment)
 - Layout updates after compilation, generation, adding/removing nodes, or new connections

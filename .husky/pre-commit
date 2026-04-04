@@ -1,0 +1,2 @@
+pnpm exec tsx scripts/bump-patch-version.ts
+git add package.json

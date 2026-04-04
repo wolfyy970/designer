@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { STORAGE_KEYS } from '../../lib/storage-keys';
 import Modal from './Modal';
 import PromptEditor from './PromptEditor';
 import type { PromptKey } from '../../stores/prompt-store';
+import { useCanvasStore } from '../../stores/canvas-store';
 
 interface SettingsModalProps {
   open: boolean;
@@ -15,25 +15,6 @@ interface SettingsModalProps {
 
 type Tab = 'general' | 'prompts';
 
-const KEYS_STORAGE = STORAGE_KEYS.API_KEYS;
-
-function loadKeys(): { openrouter: string } {
-  const raw = localStorage.getItem(KEYS_STORAGE);
-  if (!raw) return { openrouter: '' };
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== 'object' || parsed === null) return { openrouter: '' };
-    const obj = parsed as Record<string, unknown>;
-    return { openrouter: typeof obj.openrouter === 'string' ? obj.openrouter : '' };
-  } catch {
-    return { openrouter: '' };
-  }
-}
-
-function saveKeys(keys: { openrouter: string }) {
-  localStorage.setItem(KEYS_STORAGE, JSON.stringify(keys));
-}
-
 export default function SettingsModal({
   open,
   onClose,
@@ -41,28 +22,14 @@ export default function SettingsModal({
   initialPromptKey,
 }: SettingsModalProps) {
   const [tab, setTab] = useState<Tab>('general');
-  const [openrouterKey, setOpenrouterKey] = useState(() => loadKeys().openrouter);
+  const autoLayout = useCanvasStore((s) => s.autoLayout);
+  const toggleAutoLayout = useCanvasStore((s) => s.toggleAutoLayout);
   const wasOpenRef = useRef(false);
 
   useEffect(() => {
     if (open && !wasOpenRef.current && initialTab) setTab(initialTab);
     wasOpenRef.current = open;
   }, [open, initialTab]);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const keys = loadKeys();
-    setOpenrouterKey((prev) => {
-      const newValue = keys.openrouter;
-      return prev !== newValue ? newValue : prev;
-    });
-  }, [open]);
-
-  const handleSave = () => {
-    saveKeys({ openrouter: openrouterKey });
-    onClose();
-  };
 
   return (
     <Modal
@@ -97,38 +64,22 @@ export default function SettingsModal({
       </div>
 
       {tab === 'general' && (
-        <div className="space-y-4">
-          <p className="text-xs text-fg-secondary">
-            All API calls go through OpenRouter. One key for everything — compiler
-            and generation. Set it here or in{' '}
-            <code className="text-xs">.env.local</code> as{' '}
-            <code className="text-xs">VITE_OPENROUTER_API_KEY</code>.
-          </p>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-fg-secondary">
-              OpenRouter API Key
-            </label>
+        <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">
+          <label className="flex cursor-pointer items-start gap-2.5 select-none">
             <input
-              type="password"
-              value={openrouterKey}
-              onChange={(e) => setOpenrouterKey(e.target.value)}
-              placeholder="sk-or-..."
-              className="w-full rounded-md border border-border px-3 py-2 text-sm input-focus"
+              type="checkbox"
+              checked={autoLayout}
+              onChange={toggleAutoLayout}
+              className="accent-accent mt-0.5 shrink-0"
             />
-            <p className="mt-1 text-xs text-fg-muted">
-              Get one at openrouter.ai — gives access to Claude, GPT-4o, Gemini,
-              and more.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleSave}
-            className="w-full rounded-md bg-fg px-4 py-2 text-sm font-medium text-bg hover:bg-fg/90 pointer"
-          >
-            Save
-          </button>
+            <span>
+              <span className="block text-sm font-medium text-fg">Auto layout</span>
+              <span className="mt-0.5 block text-xs text-fg-secondary">
+                When on, nodes follow the graph layout automatically and are not draggable.
+                Updates after compile, generate, and connection changes.
+              </span>
+            </span>
+          </label>
         </div>
       )}
 

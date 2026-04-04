@@ -42,7 +42,7 @@ The primary interface is a visual node-graph canvas (`/canvas`, the default rout
 
 Nodes connect left-to-right. Auto-layout arranges everything based on connections. Variants can connect back to Existing Design for iterative feedback loops.
 
-The header also opens **Settings** (API keys; **Prompt Studio** saves prompts only on **Save** / ⌘S) and **Observability** (LLM + trace logs — primarily for development). Details: [USER_GUIDE.md](USER_GUIDE.md).
+The header also opens **Settings** (General preferences and **Prompt Studio** — prompts save only on **Save** / ⌘S) and **Observability** (LLM + trace logs — primarily for development). Details: [USER_GUIDE.md](USER_GUIDE.md).
 
 ## Scripts
 
