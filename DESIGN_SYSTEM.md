@@ -2,7 +2,19 @@
 
 **Scope:** Browser UI colors and dense typography. **Source of truth for values:** `src/index.css` (`@theme` block and the short comment above it). This file describes **semantics and how to use tokens**; do not copy hex values here — change CSS once, grep the repo for drift.
 
-**Stack:** Tailwind CSS v4 reads `@theme` custom properties as utilities (e.g. `bg-warning-subtle`, `text-file-html`).
+**Stack:** Tailwind CSS v4 reads `@theme` custom properties as utilities (e.g. `bg-warning-subtle`, `text-file-html`). Body/UI sans-serif, monospace, and the canvas header wordmark are wired in `@theme` (see **Typefaces** below).
+
+---
+
+## Typefaces
+
+| Role | `@theme` / utilities | Packages (`src/index.css` imports) |
+|------|----------------------|-------------------------------------|
+| **Body / UI** | `--font-sans` → default `font-sans` | `@fontsource-variable/space-grotesk` (primary); `@fontsource-variable/inter` remains loaded as fallback |
+| **Code** | `--font-mono` | `@fontsource-variable/jetbrains-mono` |
+| **Header wordmark** | `--font-logo` → `font-logo` (e.g. `CanvasHeader`) | `@fontsource/orbitron` weight **500** only |
+
+Do not list font file names elsewhere — change imports and `--font-*` in `src/index.css` once; this table stays semantic.
 
 ---
 

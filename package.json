@@ -22,6 +22,8 @@
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
+    "@fontsource-variable/space-grotesk": "^5.2.10",
+    "@fontsource/orbitron": "^5.2.8",
     "@hono/node-server": "^1.19.9",
     "@langfuse/client": "^5.0.2",
     "@langfuse/otel": "^5.0.2",

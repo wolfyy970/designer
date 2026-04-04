@@ -67,7 +67,7 @@ The header also opens **Settings** (API keys; **Prompt Studio** saves prompts on
 | [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) | Narrative: canvas, prompts, agentic loop, evaluation |
 | [PRODUCT.md](PRODUCT.md) | Feature-level description: modes, nodes, providers |
 | [USER_GUIDE.md](USER_GUIDE.md) | Setup and day-to-day canvas workflow |
-| [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) | SPA design tokens: accent vs status, typography, file-role colors (`src/index.css`) |
+| [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) | SPA design tokens: accent vs status, typography, typefaces, file-role colors (`src/index.css`) |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Technical reference: routes, stores, data flow, Pi adapter boundary |
 | [docker/langfuse/README.md](docker/langfuse/README.md) | Optional **self-hosted** Langfuse via Docker (default is Langfuse Cloud) |
 | [DOCUMENTATION.md](DOCUMENTATION.md) | How this doc set is organized (hub = this README) |
@@ -75,4 +75,4 @@ The header also opens **Settings** (API keys; **Prompt Studio** saves prompts on
 
 ## Tech Stack
 
-Vite + React 19 + TypeScript, Zustand (state), Tailwind CSS v4 (styling), @xyflow/react v12 (canvas), react-router-dom v7 (routing), @tanstack/react-query (async state), Zod (schema validation), Vitest (testing). Agentic mode: `@mariozechner/pi-coding-agent` with **`just-bash`**; native Pi file tools are mapped to the virtual project in `server/services/pi-sdk/` so the host filesystem stays isolated. See [ARCHITECTURE.md](ARCHITECTURE.md).
+Vite + React 19 + TypeScript, Zustand (state), Tailwind CSS v4 (styling; UI typefaces in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)), @xyflow/react v12 (canvas), react-router-dom v7 (routing), @tanstack/react-query (async state), Zod (schema validation), Vitest (testing). Agentic mode: `@mariozechner/pi-coding-agent` with **`just-bash`**; native Pi file tools are mapped to the virtual project in `server/services/pi-sdk/` so the host filesystem stays isolated. See [ARCHITECTURE.md](ARCHITECTURE.md).

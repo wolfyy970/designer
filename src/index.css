@@ -3,8 +3,10 @@
 
 /* Streamdown (Vercel) — include utility classes used by bundled components */
 @source "../node_modules/streamdown/dist/**/*.js";
+@import "@fontsource-variable/space-grotesk";
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource/orbitron/500.css";
 
 /* ── Design System Tokens ────────────────────────────────────────────── */
 /*
@@ -16,8 +18,9 @@
 
 @theme {
   /* Fonts */
-  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+  --font-sans: "Space Grotesk Variable", "Space Grotesk", "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  --font-logo: "Orbitron", system-ui, sans-serif;
 
   /* Custom font sizes (eliminate magic numbers) */
   --text-micro: 0.6875rem;  /* 11px */

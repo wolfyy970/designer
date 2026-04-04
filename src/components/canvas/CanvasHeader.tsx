@@ -81,7 +81,7 @@ export default function CanvasHeader() {
       <div className="absolute top-0 left-0 right-0 z-10 flex h-header items-center justify-between border-b border-border bg-bg/90 px-4 backdrop-blur-sm">
         {/* Left: App identity */}
         <div className="flex w-0 min-w-0 flex-1 items-center gap-3">
-          <span className="text-sm font-semibold text-fg shrink-0">Auto Designer</span>
+          <span className="font-logo text-base font-medium tracking-wide text-fg shrink-0">AutoDesigner</span>
           <label className="flex cursor-pointer items-center gap-1.5 text-xs text-fg-secondary select-none hover:text-fg shrink-0">
             <input
               type="checkbox"
