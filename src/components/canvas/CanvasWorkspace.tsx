@@ -32,11 +32,13 @@ import { useNodeDeletion } from './hooks/useNodeDeletion';
 import { useFeedbackLoopConnection } from './hooks/useFeedbackLoopConnection';
 import { PermanentDeleteConfirmProvider } from '../../contexts/PermanentDeleteConfirmProvider';
 import { useAppConfig } from '../../hooks/useAppConfig';
+import { useSyncEvaluatorDefaultsFromConfig } from '../../hooks/useSyncEvaluatorDefaultsFromConfig';
 import { reconcileLockdownCanvasState } from '../../lib/lockdown-reconcile';
 
 function CanvasInner() {
   useCanvasOrchestrator();
   useNodeDeletion();
+  useSyncEvaluatorDefaultsFromConfig();
 
   const { data: appConfig } = useAppConfig();
   const lockdown = appConfig?.lockdown === true;

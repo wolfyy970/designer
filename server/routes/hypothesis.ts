@@ -97,6 +97,7 @@ hypothesis.post('/generate', async (c) => {
         providerId: cred.providerId,
         modelId: cred.modelId,
         correlationId: `${baseCorrelation}:lane-${laneIndex}`,
+        promptOverrides: body.promptOverrides,
       });
       await executeGenerateStreamSafe(stream, streamBody, abortSignal, {
         allocId,

@@ -7,10 +7,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { env } from '../env.ts';
+import { LEGACY_PROMPT_KEY_ALIASES } from '../../src/lib/prompts/defaults.ts';
 import type { PromptKey } from './prompts/defaults.ts';
 import { PROMPT_KEYS } from './prompts/defaults.ts';
 
 const KEY_SET = new Set<string>(PROMPT_KEYS);
+
+function resolveLegacySqlitePromptKey(raw: string): PromptKey | null {
+  if (KEY_SET.has(raw)) return raw as PromptKey;
+  const mapped = LEGACY_PROMPT_KEY_ALIASES[raw as keyof typeof LEGACY_PROMPT_KEY_ALIASES];
+  if (mapped && KEY_SET.has(mapped)) return mapped;
+  return null;
+}
 
 /** Max rows / DB size guardrails (prompt bodies can be large). */
 const MAX_ROWS = 64;
@@ -81,8 +89,9 @@ export async function readLatestPromptBodiesFromLegacySqlite(
     const out: Partial<Record<PromptKey, string>> = {};
     for (const row of rows) {
       if (!row.promptKey || typeof row.body !== 'string') continue;
-      if (!KEY_SET.has(row.promptKey)) continue;
-      out[row.promptKey as PromptKey] = row.body;
+      const key = resolveLegacySqlitePromptKey(row.promptKey);
+      if (!key) continue;
+      out[key] = row.body;
     }
     return out;
   } catch {

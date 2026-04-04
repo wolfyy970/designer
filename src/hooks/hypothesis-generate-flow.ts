@@ -32,6 +32,8 @@ import {
 import type { CanvasStore } from '../stores/canvas/canvas-store-types';
 import type { CompiledPrompt } from '../types/compiler';
 import type { GenerationResult } from '../types/provider';
+import { resolveEvaluatorSettings } from './resolveEvaluatorSettings';
+import { getActivePromptOverrides, usePromptOverridesStore } from '../stores/prompt-overrides-store';
 
 export interface GenerationProgress {
   completed: number;
@@ -94,6 +96,8 @@ export async function runHypothesisGenerateFlow({
   const runId = crypto.randomUUID();
 
   const domain = useWorkspaceDomainStore.getState();
+  const evalSettings = resolveEvaluatorSettings(nodeId);
+  const promptOverrides = getActivePromptOverrides(usePromptOverridesStore.getState().overrides);
   const workspacePayload: HypothesisGenerateApiPayload = {
     hypothesisNodeId: nodeId,
     variantStrategy: strategy,
@@ -108,6 +112,9 @@ export async function runHypothesisGenerateFlow({
     designSystems: domain.designSystems,
     defaultCompilerProvider: DEFAULT_COMPILER_PROVIDER,
     correlationId: runId,
+    agenticMaxRevisionRounds: evalSettings.maxRevisionRounds,
+    agenticMinOverallScore: evalSettings.minOverallScore ?? undefined,
+    ...(promptOverrides ? { promptOverrides } : {}),
   };
   warnIfWorkspaceSnapshotInvalid(workspacePayload.snapshot, 'useHypothesisGeneration');
 

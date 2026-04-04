@@ -6,7 +6,11 @@ import type {
   EvaluatorRubricId,
   EvaluatorWorkerReport,
 } from '../../../types/evaluation';
-import { EVALUATOR_RUBRIC_IDS, EVALUATOR_WORKER_COUNT } from '../../../types/evaluation';
+import {
+  EVALUATOR_RUBRIC_IDS,
+  EVALUATOR_WORKER_COUNT,
+  isEvaluatorWorkerDegraded,
+} from '../../../types/evaluation';
 import { EvaluationScorecard } from './EvaluationScorecard.tsx';
 
 const RUBRIC_TAB_LABEL: Record<EvaluatorRubricId, string> = {
@@ -20,6 +24,16 @@ function averageRubricScore(report: EvaluatorWorkerReport): number | null {
   const vals = Object.values(report.scores).map((s) => s.score);
   if (vals.length === 0) return null;
   return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+const LIVE_EVAL_FAIL_DETAIL_MAX = 120;
+
+function liveWorkerFailureSnippet(rep: EvaluatorWorkerReport): string {
+  const d = rep.findings[0]?.detail?.trim();
+  if (d) return d.length > LIVE_EVAL_FAIL_DETAIL_MAX ? `${d.slice(0, LIVE_EVAL_FAIL_DETAIL_MAX)}…` : d;
+  const m = rep.hardFails[0]?.message?.trim();
+  if (m) return m.length > LIVE_EVAL_FAIL_DETAIL_MAX ? `${m.slice(0, LIVE_EVAL_FAIL_DETAIL_MAX)}…` : m;
+  return 'Evaluator worker failed';
 }
 
 function LiveEvalProgressCard(props: {
@@ -45,26 +59,31 @@ function LiveEvalProgressCard(props: {
         <ul className="divide-y divide-border-subtle/60 px-0">
           {EVALUATOR_RUBRIC_IDS.map((rubric) => {
             const rep = liveEvalWorkers?.[rubric];
+            const degraded = rep ? isEvaluatorWorkerDegraded(rep) : false;
             return (
-              <li
-                key={rubric}
-                className="flex items-center justify-between gap-2 px-3 py-2 text-badge"
-              >
-                <span className="font-medium text-fg-secondary">{RUBRIC_TAB_LABEL[rubric]}</span>
-                {rep ? (
-                  <span className="flex items-center gap-2 tabular-nums text-fg-muted">
-                    <span className="font-mono text-accent">
-                      {(averageRubricScore(rep) ?? 0).toFixed(1)}
+              <li key={rubric} className="flex flex-col gap-1 px-3 py-2 text-badge">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-fg-secondary">{RUBRIC_TAB_LABEL[rubric]}</span>
+                  {rep ? (
+                    <span className="flex items-center gap-2 tabular-nums text-fg-muted">
+                      <span className="font-mono text-accent">
+                        {(averageRubricScore(rep) ?? 0).toFixed(1)}
+                      </span>
+                      {degraded ? (
+                        <span className="text-error">Worker failed</span>
+                      ) : rep.hardFails.length > 0 ? (
+                        <span className="text-warning">Hard fails</span>
+                      ) : (
+                        <span className="text-fg-faint">Done</span>
+                      )}
                     </span>
-                    {rep.hardFails.length > 0 ? (
-                      <span className="text-warning">Hard fails</span>
-                    ) : (
-                      <span className="text-fg-faint">Done</span>
-                    )}
-                  </span>
-                ) : (
-                  <Loader2 size={14} className="shrink-0 animate-spin text-accent" />
-                )}
+                  ) : (
+                    <Loader2 size={14} className="shrink-0 animate-spin text-accent" />
+                  )}
+                </div>
+                {rep && degraded ? (
+                  <p className="line-clamp-2 text-nano leading-snug text-error">{liveWorkerFailureSnippet(rep)}</p>
+                ) : null}
               </li>
             );
           })}

@@ -14,6 +14,8 @@ interface PromptSidebarProps {
   selectedKey: PromptKey;
   onSelectKey: (key: PromptKey) => void;
   shortLabel: (key: PromptKey) => string;
+  /** Prompts with a non-empty local override in the browser */
+  localOverrideKeys: PromptKey[];
   hasAnyOverrides: boolean;
   onResetAll: () => void;
   onExportAll: () => void;
@@ -27,12 +29,13 @@ export function PromptSidebar({
   selectedKey,
   onSelectKey,
   shortLabel: labelFor,
+  localOverrideKeys,
   hasAnyOverrides,
   onResetAll,
   onExportAll,
 }: PromptSidebarProps) {
   return (
-    <div className="flex w-52 shrink-0 flex-col border-r border-border-subtle pr-3">
+    <div className="flex w-[var(--width-sidebar)] shrink-0 flex-col border-r border-border-subtle pr-3">
       <input
         type="search"
         placeholder="Search prompts…"
@@ -43,11 +46,10 @@ export function PromptSidebar({
       <div className="flex-1 space-y-3 overflow-y-auto">
         {filteredGroups.map((group) => (
           <div key={group.label}>
-            <p className="mb-1 text-nano font-semibold uppercase tracking-wider text-fg-muted">
-              {group.label}
-            </p>
+            <p className="label mb-1">{group.label}</p>
             {group.keys.map((key) => {
-              const modified = allPrompts?.find((p) => p.key === key)?.isDefault === false;
+              const modified = localOverrideKeys.includes(key);
+              const langfuseDrift = allPrompts?.find((p) => p.key === key)?.isDefault === false;
               const active = key === selectedKey;
               return (
                 <button
@@ -63,7 +65,14 @@ export function PromptSidebar({
                   <span className="flex-1 truncate">{labelFor(key)}</span>
                   {modified && (
                     <span
-                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                      title="Local override in this browser"
+                      className="inline-block size-2 shrink-0 rounded-full bg-file-css"
+                    />
+                  )}
+                  {!modified && langfuseDrift && (
+                    <span
+                      title="Production prompt differs from database baseline"
+                      className={`inline-block size-2 shrink-0 rounded-full ${
                         active ? 'bg-accent' : 'bg-accent-segment-idle'
                       }`}
                     />
@@ -80,7 +89,7 @@ export function PromptSidebar({
           <button
             type="button"
             onClick={onResetAll}
-            className="flex w-full items-center justify-center gap-1 rounded-md border border-border px-2 py-1.5 text-nano text-fg-secondary hover:bg-surface"
+            className="flex w-full items-center justify-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs text-fg-secondary hover:bg-surface"
           >
             <RotateCcw size={10} />
             Reset All
@@ -89,7 +98,7 @@ export function PromptSidebar({
         <button
           type="button"
           onClick={() => void onExportAll()}
-          className="flex w-full items-center justify-center gap-1 rounded-md border border-border px-2 py-1.5 text-nano text-fg-secondary hover:bg-surface"
+          className="flex w-full items-center justify-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs text-fg-secondary hover:bg-surface"
         >
           <Download size={10} />
           Export JSON

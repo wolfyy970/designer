@@ -148,9 +148,16 @@ export function parseModelJsonObject<T>(
   return schema.parse(parsed);
 }
 
+const EVAL_DEGRADED_LOG_MAX = 400;
+
 /** Fallback when a single evaluator worker throws or returns invalid JSON */
 export function buildDegradedReport(rubric: EvaluatorRubricId, error: unknown): EvaluatorWorkerReport {
   const message = normalizeError(error);
+  const logBody =
+    message.length > EVAL_DEGRADED_LOG_MAX
+      ? `${message.slice(0, EVAL_DEGRADED_LOG_MAX)}…`
+      : message;
+  console.warn('[eval:worker-degraded]', { rubric, message: logBody });
   return {
     rubric,
     scores: {
@@ -338,9 +345,9 @@ export async function runEvaluationWorkers(
     );
 
     const [sysDesign, sysStrategy, sysImpl] = await Promise.all([
-      input.getPromptBody('evalDesignSystem'),
-      input.getPromptBody('evalStrategySystem'),
-      input.getPromptBody('evalImplementationSystem'),
+      input.getPromptBody('evaluator-design-quality'),
+      input.getPromptBody('evaluator-strategy-fidelity'),
+      input.getPromptBody('evaluator-implementation'),
     ]);
 
     const evalLogCtx: Pick<LlmLogContext, 'correlationId' | 'signal'> = {

@@ -10,12 +10,12 @@ describe('buildAgenticSystemContext', () => {
     return fs.mkdtemp(path.join(os.tmpdir(), 'ad-ctx-empty-skills-'));
   }
 
-  it('omits sandbox AGENTS.md when sandboxAgentsContext is empty or whitespace', async () => {
+  it('omits sandbox AGENTS.md when agents-md-file is empty or whitespace', async () => {
     const skillsRoot = await emptySkillsRoot();
     try {
       const getPromptBody = vi.fn(async (key: string) => {
-        if (key === 'genSystemHtmlAgentic') return 'BASE';
-        if (key === 'sandboxAgentsContext') return '  \n  ';
+        if (key === 'designer-agentic-system') return 'BASE';
+        if (key === 'agents-md-file') return '  \n  ';
         return '';
       });
 
@@ -30,12 +30,12 @@ describe('buildAgenticSystemContext', () => {
     }
   });
 
-  it('seeds AGENTS.md from trimmed sandboxAgentsContext when non-empty', async () => {
+  it('seeds AGENTS.md from trimmed agents-md-file when non-empty', async () => {
     const skillsRoot = await emptySkillsRoot();
     try {
       const getPromptBody = vi.fn(async (key: string) => {
-        if (key === 'genSystemHtmlAgentic') return 'BASE';
-        if (key === 'sandboxAgentsContext') return '  hello agent  ';
+        if (key === 'designer-agentic-system') return 'BASE';
+        if (key === 'agents-md-file') return '  hello agent  ';
         return '';
       });
 
@@ -49,12 +49,12 @@ describe('buildAgenticSystemContext', () => {
     }
   });
 
-  it('uses genSystemHtmlAgentic body only as system prompt (no skill catalog)', async () => {
+  it('uses designer-agentic-system body only as system prompt (no skill catalog)', async () => {
     const skillsRoot = await emptySkillsRoot();
     try {
       const getPromptBody = vi.fn(async (key: string) => {
-        if (key === 'genSystemHtmlAgentic') return 'BASE';
-        if (key === 'sandboxAgentsContext') return '';
+        if (key === 'designer-agentic-system') return 'BASE';
+        if (key === 'agents-md-file') return '';
         return '';
       });
 
@@ -85,8 +85,8 @@ Skill body`,
         'utf8',
       );
       const getPromptBody = vi.fn(async (key: string) => {
-        if (key === 'genSystemHtmlAgentic') return 'BASE';
-        if (key === 'sandboxAgentsContext') return '';
+        if (key === 'designer-agentic-system') return 'BASE';
+        if (key === 'agents-md-file') return '';
         return '';
       });
       const out = await buildAgenticSystemContext({ getPromptBody, skillsRoot: tmp });
@@ -119,8 +119,8 @@ Body`,
         'utf8',
       );
       const getPromptBody = vi.fn(async (key: string) => {
-        if (key === 'genSystemHtmlAgentic') return 'BASE';
-        if (key === 'sandboxAgentsContext') return '';
+        if (key === 'designer-agentic-system') return 'BASE';
+        if (key === 'agents-md-file') return '';
         return '';
       });
       const out = await buildAgenticSystemContext({ getPromptBody, skillsRoot: tmp });

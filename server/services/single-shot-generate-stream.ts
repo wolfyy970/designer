@@ -1,4 +1,5 @@
 import { getPromptBody } from '../db/prompts.ts';
+import type { PromptKey } from '../lib/prompts/defaults.ts';
 import { extractCode, extractCodeStreaming } from '../../src/lib/extract-code.ts';
 import { loggedGenerateChatStream } from '../lib/llm-call-logger.ts';
 import type { ChatMessage } from '../../src/types/provider.ts';
@@ -28,6 +29,7 @@ export async function executeSingleShotGenerateStream(options: {
   correlationId?: string;
   laneIndex?: number;
   laneEndMode: 'done' | 'lane_done';
+  resolvePromptBody?: (key: PromptKey) => Promise<string>;
 }): Promise<void> {
   const {
     write,
@@ -40,9 +42,11 @@ export async function executeSingleShotGenerateStream(options: {
     correlationId,
     laneIndex,
     laneEndMode,
+    resolvePromptBody,
   } = options;
 
-  const systemPrompt = await getPromptBody('genSystemHtml');
+  const resolve = resolvePromptBody ?? getPromptBody;
+  const systemPrompt = await resolve('designer-direct-system');
   await write(SSE_EVENT_NAMES.progress, { status: 'Generating design…' });
 
   const messages: ChatMessage[] = [

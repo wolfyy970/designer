@@ -21,7 +21,9 @@ export default function CanvasHeader() {
   const [showCanvases, setShowCanvases] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'prompts' | undefined>();
+  const [settingsInitialTab, setSettingsInitialTab] = useState<
+    'general' | 'prompts' | 'evaluator' | undefined
+  >();
   const [settingsPromptKey, setSettingsPromptKey] = useState<PromptKey | undefined>();
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -79,10 +81,12 @@ export default function CanvasHeader() {
     <>
       <div className="absolute top-0 left-0 right-0 z-10 flex h-header items-center justify-between border-b border-border bg-header-scrim px-4 backdrop-blur-sm">
         {/* Left: App identity */}
-        <div className="flex w-0 min-w-0 flex-1 items-center gap-2 sm:gap-3">
-          <span className="font-logo text-base font-medium tracking-wide text-fg shrink-0">AutoDesigner</span>
+        <div className="flex w-0 min-w-0 flex-1 items-baseline gap-2 sm:gap-3">
+          <span className="shrink-0 font-logo text-base font-medium leading-none tracking-wide text-fg">
+            AutoDesigner
+          </span>
           <span
-            className="min-w-0 truncate text-nano text-fg-muted tabular-nums"
+            className="min-w-0 truncate text-pico leading-none text-fg-muted tabular-nums"
             title={appReleaseLabel()}
           >
             {appReleaseLabel()}

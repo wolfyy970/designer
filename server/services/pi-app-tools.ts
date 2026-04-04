@@ -8,6 +8,10 @@ import type { ExtensionContext, ToolDefinition } from './pi-sdk/types.ts';
 import type { TodoItem } from '../../src/types/provider.ts';
 import { SANDBOX_PROJECT_ROOT } from './agent-bash-sandbox.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
+import {
+  isAllowedGoogleFontStylesheetUrl,
+  isAllowedGoogleFontsExternalRef,
+} from '../../src/lib/google-fonts-allowlist.ts';
 import { buildUseSkillToolDescription, SKILL_FILENAME } from '../lib/skill-discovery.ts';
 import type { SkillCatalogEntry } from '../lib/skill-schema.ts';
 
@@ -228,11 +232,32 @@ export function createValidateHtmlTool(bash: Bash): ToolDefinition {
         if (rawRef.startsWith('/')) return 'absolute';
         return 'relative';
       };
-      const stylesheetRefs = [...content.matchAll(/<link\s+[^>]*rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*\/?>/gi)]
-        .map((match) => match[1] ?? '');
-      const scriptRefs = [...content.matchAll(/<script\s+[^>]*src=["']([^"']+)["'][^>]*><\/script>/gi)]
-        .map((match) => match[1] ?? '');
-      for (const ref of [...stylesheetRefs, ...scriptRefs]) {
+      const stylesheetRefs = [
+        ...content.matchAll(/<link\s+[^>]*rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*\/?>/gi),
+      ].map((match) => match[1] ?? '');
+      const scriptRefs = [
+        ...content.matchAll(/<script\s+[^>]*src=["']([^"']+)["'][^>]*><\/script>/gi),
+      ].map((match) => match[1] ?? '');
+
+      for (const ref of stylesheetRefs) {
+        const kind = classifyRef(ref);
+        if (kind === 'external') {
+          if (isAllowedGoogleFontStylesheetUrl(ref)) continue;
+          issues.push(`External asset reference found: ${ref}`);
+          continue;
+        }
+        if (kind === 'absolute') {
+          issues.push(`Use relative asset paths instead of root-absolute paths: ${ref}`);
+          continue;
+        }
+        const normalized = normalizeAssetRef(ref);
+        if (!normalized) continue;
+        if (!(await hasProjectFile(bash, normalized))) {
+          issues.push(`Referenced asset not found in workspace: ${ref}`);
+        }
+      }
+
+      for (const ref of scriptRefs) {
         const kind = classifyRef(ref);
         if (kind === 'external') {
           issues.push(`External asset reference found: ${ref}`);
@@ -246,6 +271,31 @@ export function createValidateHtmlTool(bash: Bash): ToolDefinition {
         if (!normalized) continue;
         if (!(await hasProjectFile(bash, normalized))) {
           issues.push(`Referenced asset not found in workspace: ${ref}`);
+        }
+      }
+
+      /** External @import in inline CSS (Google Fonts CSS API / gstatic allowlisted only). */
+      const extractCssImportUrls = (css: string): string[] => {
+        const urls: string[] = [];
+        const urlParen = /@import\s+url\s*\(\s*["']?([^"')]+)["']?\s*\)\s*;?/gi;
+        const quoted = /@import\s+["']([^"']+)["']\s*;?/gi;
+        let m: RegExpExecArray | null;
+        while ((m = urlParen.exec(css)) !== null) {
+          const u = m[1]?.trim();
+          if (u) urls.push(u);
+        }
+        while ((m = quoted.exec(css)) !== null) {
+          const u = m[1]?.trim();
+          if (u) urls.push(u);
+        }
+        return urls;
+      };
+      for (const styleMatch of content.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
+        const css = styleMatch[1] ?? '';
+        for (const importUrl of extractCssImportUrls(css)) {
+          if (classifyRef(importUrl) !== 'external') continue;
+          if (isAllowedGoogleFontsExternalRef(importUrl)) continue;
+          issues.push(`External @import in <style> not allowed: ${importUrl}`);
         }
       }
 

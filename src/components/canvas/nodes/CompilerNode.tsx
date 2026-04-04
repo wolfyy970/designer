@@ -23,6 +23,7 @@ import { processingOrFilled } from '../../../lib/node-status';
 import { isPlaceholderHypothesis } from '../../../lib/hypothesis-node-utils';
 import { EDGE_STATUS } from '../../../constants/canvas';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
+import { getActivePromptOverrides, usePromptOverridesStore } from '../../../stores/prompt-overrides-store';
 import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
 import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
@@ -121,6 +122,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
     const placeholderIds = addPlaceholderHypotheses(id, hypothesisCount);
 
     try {
+      const promptOverrides = getActivePromptOverrides(usePromptOverridesStore.getState().overrides);
       const map = await apiCompile({
         spec: partialSpec,
         providerId: providerId!,
@@ -128,6 +130,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
         referenceDesigns,
         supportsVision,
         promptOptions: { count: hypothesisCount, existingStrategies },
+        ...(promptOverrides ? { promptOverrides } : {}),
       });
       removePlaceholders(placeholderIds);
       appendVariantsToNode(id, map);

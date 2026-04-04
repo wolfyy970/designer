@@ -68,9 +68,9 @@ describe.skipIf(!sqliteMod)('readLatestPromptBodiesFromLegacySqlite', () => {
 
   it('returns latest body per known promptKey and ignores unknown keys', async () => {
     const bodies = await readLatestPromptBodiesFromLegacySqlite(dbPath);
-    expect(bodies.compilerSystem).toBe('v2-latest');
-    expect(bodies.variant).toBe('variant-only');
-    expect(bodies.compilerUser).toBeUndefined();
+    expect(bodies['hypotheses-generator-system']).toBe('v2-latest');
+    expect(bodies['designer-hypothesis-inputs']).toBe('variant-only');
+    expect(bodies['incubator-user-inputs']).toBeUndefined();
     expect((bodies as Record<string, string>).unknownKey).toBeUndefined();
   });
 
@@ -106,6 +106,6 @@ describe.skipIf(!sqliteMod)('readLatestPromptBodiesFromLegacySqlite', () => {
     );
     db.close();
     const bodies = await readLatestPromptBodiesFromLegacySqlite(tiePath);
-    expect(bodies.compilerUser).toBe('newer-by-id');
+    expect(bodies['incubator-user-inputs']).toBe('newer-by-id');
   });
 });

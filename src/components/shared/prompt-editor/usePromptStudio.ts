@@ -1,30 +1,30 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PROMPT_META, type PromptKey } from '../../../stores/prompt-store';
 import { lineDiff } from '../../../lib/prompt-diff';
-import { fetchPromptHistory, fetchPromptVersionBody } from '../../../api/client';
-import { PROMPT_GROUPS, shortLabel, validatePrompt } from './validate-prompt';
+import { PROMPT_KEYS } from '../../../lib/prompts/defaults';
+import { validatePrompt, PROMPT_GROUPS, shortLabel } from './validate-prompt';
 import { FEEDBACK_DISMISS_MS } from '../../../lib/constants';
+import { usePromptOverridesStore } from '../../../stores/prompt-overrides-store';
 
-const PROMPT_SAVE_ACK_MS = Math.max(FEEDBACK_DISMISS_MS * 2, 4000);
-
-type PutPromptResponse = {
-  version: number;
-  key?: string;
-  baselineBody?: string;
-};
+const LOCAL_SAVE_ACK_MS = Math.max(FEEDBACK_DISMISS_MS * 2, 4000);
 
 export function usePromptStudio(initialPromptKey?: PromptKey) {
-  const [selectedKey, setSelectedKey] = useState<PromptKey>(initialPromptKey ?? 'compilerSystem');
+  const [selectedKey, setSelectedKey] = useState<PromptKey>(
+    initialPromptKey ?? 'hypotheses-generator-system',
+  );
   const [search, setSearch] = useState('');
-  const [compareKind, setCompareKind] = useState<'default' | 'version'>('default');
-  const [compareVersion, setCompareVersion] = useState<number | null>(null);
   const [studioView, setStudioView] = useState<'split' | 'unified'>('split');
 
   const rootRef = useRef<HTMLDivElement>(null);
   const saveAckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queryClient = useQueryClient();
-  const [saveAck, setSaveAck] = useState<{ version: number; label: string } | null>(null);
+  const [saveAck, setSaveAck] = useState<{ label: string } | null>(null);
+
+  const overrides = usePromptOverridesStore((s) => s.overrides);
+  const setOverride = usePromptOverridesStore((s) => s.setOverride);
+  const clearOverride = usePromptOverridesStore((s) => s.clearOverride);
+  const clearAllOverrides = usePromptOverridesStore((s) => s.clearAll);
 
   useEffect(() => {
     if (initialPromptKey) setSelectedKey(initialPromptKey);
@@ -53,76 +53,37 @@ export function usePromptStudio(initialPromptKey?: PromptKey) {
     refetchOnWindowFocus: true,
   });
 
-  const { data: history = [] } = useQuery({
-    queryKey: ['prompt-history', selectedKey],
-    queryFn: () => fetchPromptHistory(selectedKey),
-    staleTime: 0,
-    refetchOnWindowFocus: true,
-  });
-
-  useEffect(() => {
-    if (compareKind !== 'version') return;
-    if (compareVersion != null) return;
-    const first = history[0]?.version;
-    if (first != null) setCompareVersion(first);
-  }, [compareKind, compareVersion, history]);
-
-  const versionQuery = useQuery({
-    queryKey: ['prompt-version', selectedKey, compareVersion],
-    queryFn: () => fetchPromptVersionBody(selectedKey, compareVersion!),
-    enabled: compareKind === 'version' && compareVersion != null,
-    staleTime: 0,
-    refetchOnWindowFocus: true,
-  });
-
-  const mutation = useMutation({
-    mutationFn: (body: string) =>
-      fetch(`/api/prompts/${selectedKey}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body }),
-      }).then(async (r) => {
-        const json = (await r.json()) as PutPromptResponse & { error?: string };
-        if (!r.ok) throw new Error(json.error ?? `Failed to save prompt ${selectedKey}`);
-        return json;
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['prompt', selectedKey] });
-      queryClient.invalidateQueries({ queryKey: ['prompts'] });
-      queryClient.invalidateQueries({ queryKey: ['prompt-history', selectedKey] });
-      queryClient.invalidateQueries({ queryKey: ['prompt-version', selectedKey] });
-    },
-  });
-
-  const resetMutation = useMutation({
-    mutationFn: (key: PromptKey) =>
-      fetch(`/api/prompts/${key}/revert-baseline`, { method: 'POST' }).then(async (r) => {
-        const json = await r.json();
-        if (!r.ok) throw new Error(json.error ?? `Failed to reset prompt ${key}`);
-        return json;
-      }),
-    onSuccess: (_data, key) => {
-      queryClient.invalidateQueries({ queryKey: ['prompt', key] });
-      queryClient.invalidateQueries({ queryKey: ['prompts'] });
-      queryClient.invalidateQueries({ queryKey: ['prompt-history', key] });
-      queryClient.invalidateQueries({ queryKey: ['prompt-version', key] });
-    },
-  });
-
   const savedBody = data?.body ?? '';
-  const [draft, setDraft] = useState<string | null>(null);
-  const displayValue = draft !== null ? draft : savedBody;
+  const committedLocal = overrides[selectedKey];
+  const effectiveCommitted = committedLocal ?? savedBody;
 
-  const dirty = draft !== null && draft !== savedBody;
-  const isModified = data?.isDefault === false;
-  const hasAnyOverrides = allPrompts?.some((p) => !p.isDefault) ?? false;
+  const [draft, setDraft] = useState<string | null>(null);
+  const displayValue = draft !== null ? draft : effectiveCommitted;
+
+  const dirty = displayValue !== effectiveCommitted;
+  const hasLocalOverride = !!(committedLocal != null && committedLocal.trim().length > 0);
+
+  const hasAnyOverrides = useMemo(
+    () =>
+      PROMPT_KEYS.some((k) => {
+        const v = overrides[k];
+        return v != null && v.trim().length > 0;
+      }),
+    [overrides],
+  );
+
+  const localOverrideKeys = useMemo(
+    () =>
+      PROMPT_KEYS.filter((k) => {
+        const v = overrides[k];
+        return v != null && v.trim().length > 0;
+      }),
+    [overrides],
+  );
+
   const meta = PROMPT_META.find((m) => m.key === selectedKey)!;
 
-  const referenceText = useMemo(() => {
-    if (compareKind === 'default') return data?.baselineBody ?? '';
-    if (compareVersion == null) return '';
-    return versionQuery.data?.body ?? '';
-  }, [compareKind, compareVersion, data?.baselineBody, versionQuery.data?.body]);
+  const referenceText = data?.baselineBody ?? '';
 
   const diffLines = useMemo(
     () => lineDiff(referenceText, displayValue),
@@ -154,18 +115,16 @@ export function usePromptStudio(initialPromptKey?: PromptKey) {
       clearTimeout(saveAckTimerRef.current);
       saveAckTimerRef.current = null;
     }
-    setCompareKind('default');
-    setCompareVersion(null);
     setSearch('');
   }, []);
 
-  const flashSaveAck = useCallback((version: number, label: string) => {
+  const flashSaveAck = useCallback((label: string) => {
     if (saveAckTimerRef.current) clearTimeout(saveAckTimerRef.current);
-    setSaveAck({ version, label });
+    setSaveAck({ label });
     saveAckTimerRef.current = setTimeout(() => {
       saveAckTimerRef.current = null;
       setSaveAck(null);
-    }, PROMPT_SAVE_ACK_MS);
+    }, LOCAL_SAVE_ACK_MS);
   }, []);
 
   useEffect(() => {
@@ -176,14 +135,10 @@ export function usePromptStudio(initialPromptKey?: PromptKey) {
 
   const saveNow = useCallback(() => {
     if (!dirty) return;
-    const label = meta.label;
-    mutation.mutate(displayValue, {
-      onSuccess: (json) => {
-        setDraft(null);
-        flashSaveAck(json.version, label);
-      },
-    });
-  }, [dirty, displayValue, mutation, flashSaveAck, meta.label]);
+    setOverride(selectedKey, displayValue);
+    setDraft(null);
+    flashSaveAck(meta.label);
+  }, [dirty, displayValue, setOverride, selectedKey, flashSaveAck, meta.label]);
 
   useEffect(() => {
     const el = rootRef.current;
@@ -212,21 +167,19 @@ export function usePromptStudio(initialPromptKey?: PromptKey) {
     return () => el.removeEventListener('keydown', onKey);
   }, [flatFiltered, handleSelectKey, saveNow, selectedKey]);
 
-  const handleDiscard = () => setDraft(null);
+  /** Revert in-editor edits to the last committed text (local override or server). */
+  const handleDiscardEdits = () => setDraft(null);
 
-  const handleCompareKindChange = useCallback((v: 'default' | 'version') => {
-    setCompareKind(v);
-    if (v === 'default') setCompareVersion(null);
-  }, []);
-
-  const handleReset = () => {
+  /** Remove local override for this prompt and show the server baseline. */
+  const handleClearLocalOverride = () => {
+    clearOverride(selectedKey);
     setDraft(null);
-    resetMutation.mutate(selectedKey);
   };
 
   const handleResetAll = () => {
-    const keys = (allPrompts ?? []).filter((p) => !p.isDefault).map((p) => p.key as PromptKey);
-    for (const key of keys) resetMutation.mutate(key);
+    clearAllOverrides();
+    setDraft(null);
+    void queryClient.invalidateQueries({ queryKey: ['prompts'] });
   };
 
   const handleExportAll = async () => {
@@ -235,7 +188,20 @@ export function usePromptStudio(initialPromptKey?: PromptKey) {
       body: string;
       isDefault: boolean;
     }[];
-    const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' });
+    const snapshot = usePromptOverridesStore.getState().overrides;
+    const merged = rows.map((r) => {
+      const k = r.key as PromptKey;
+      const local = snapshot[k];
+      const hasLocal = local != null && local.trim().length > 0;
+      return {
+        key: r.key,
+        body: hasLocal ? local! : r.body,
+        serverBody: r.body,
+        isDefault: r.isDefault,
+        locallyOverridden: hasLocal,
+      };
+    });
+    const blob = new Blob([JSON.stringify(merged, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `auto-designer-prompts-${new Date().toISOString().slice(0, 10)}.json`;
@@ -268,18 +234,11 @@ export function usePromptStudio(initialPromptKey?: PromptKey) {
     setStudioView,
     dirty,
     saveNow,
-    handleDiscard,
-    handleReset,
-    mutation,
-    resetMutation,
-    isModified,
+    handleDiscardEdits,
+    handleClearLocalOverride,
+    hasLocalOverride,
+    localOverrideKeys,
     meta,
-    compareKind,
-    handleCompareKindChange,
-    compareVersion,
-    setCompareVersion,
-    history,
-    versionQuery,
     data,
     displayValue,
     setDraft,

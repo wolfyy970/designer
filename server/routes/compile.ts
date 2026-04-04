@@ -4,7 +4,7 @@ import { DesignSpecSchema } from '../../src/types/spec.ts';
 import type { CompilerPromptOptions } from '../../src/lib/prompts/compiler-user.ts';
 import { VariantStrategySchema } from '../lib/hypothesis-schemas.ts';
 import { compileSpec } from '../services/compiler.ts';
-import { getPromptBody } from '../db/prompts.ts';
+import { createResolvePromptBody, sanitizePromptOverrides } from '../lib/prompt-overrides.ts';
 import { apiJsonError } from '../lib/api-json-error.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import { clampProviderModel } from '../lib/lockdown-model.ts';
@@ -27,6 +27,7 @@ const CompileRequestSchema = z.object({
   })).optional(),
   supportsVision: z.boolean().optional(),
   promptOptions: CompilerPromptOptionsSchema.optional(),
+  promptOverrides: z.record(z.string(), z.string()).optional(),
 });
 
 compile.post('/', async (c) => {
@@ -35,9 +36,10 @@ compile.post('/', async (c) => {
   const pinned = clampProviderModel(parsed.data.providerId, parsed.data.modelId);
   const body = { ...parsed.data, providerId: pinned.providerId, modelId: pinned.modelId };
 
+  const resolvePrompt = createResolvePromptBody(sanitizePromptOverrides(body.promptOverrides));
   const [systemPrompt, userPromptTemplate] = await Promise.all([
-    getPromptBody('compilerSystem'),
-    getPromptBody('compilerUser'),
+    resolvePrompt('hypotheses-generator-system'),
+    resolvePrompt('incubator-user-inputs'),
   ]);
 
   try {

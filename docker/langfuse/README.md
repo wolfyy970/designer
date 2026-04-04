@@ -36,7 +36,7 @@ After Langfuse is up and env keys are set:
 pnpm db:seed
 ```
 
-**`pnpm db:seed`** creates **missing** prompts (or adds a label when versions exist but the deployment label is unset). It does **not** change prompts you edited in Prompt Studio. **`pnpm langfuse:sync-prompts`** runs seed with `LANGFUSE_SEED_SYNC` so every key’s labeled body is replaced when it differs from the import source.
+**`pnpm db:seed`** creates **missing** prompts (or adds a label when versions exist but the deployment label is unset). It does **not** bulk-overwrite existing labeled versions. The in-app **Prompt Studio** does not push saves to Langfuse; use **`pnpm langfuse:sync-prompts`** (or **`PUT /api/prompts/:key`**) when you intend to change shared production bodies. **`pnpm langfuse:sync-prompts`** runs seed with `LANGFUSE_SEED_SYNC` so every key’s labeled body is replaced when it differs from the import source.
 
 When **creating** new prompt rows, bodies come from `LANGFUSE_PROMPT_IMPORT_SQLITE` (SQLite file with legacy `PromptVersion` rows) if set; else a `file:` **`DATABASE_URL`** pointing at that same SQLite shape; else `src/lib/prompts/shared-defaults.ts`.
 

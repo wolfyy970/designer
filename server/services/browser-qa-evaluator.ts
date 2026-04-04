@@ -116,6 +116,82 @@ function checkAssetIntegrity(
   };
 }
 
+/** Minimal DOM node stub so `querySelector(...).addEventListener` does not throw in the VM. */
+function createDomElementStub(): Record<string, unknown> {
+  const stub: Record<string, unknown> = {
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => true,
+    setAttribute: () => {},
+    getAttribute: () => null,
+    hasAttribute: () => false,
+    appendChild: (n: unknown) => n,
+    removeChild: () => {},
+    insertBefore: (n: unknown) => n,
+    style: {},
+    textContent: '',
+    innerHTML: '',
+    innerText: '',
+    focus: () => {},
+    blur: () => {},
+    click: () => {},
+    matches: () => false,
+    closest: () => null,
+    parentElement: null,
+    parentNode: null,
+    children: [],
+    childNodes: [],
+    nextElementSibling: null,
+    getBoundingClientRect: () => ({ x: 0, y: 0, top: 0, left: 0, width: 0, height: 0, right: 0, bottom: 0 }),
+  };
+  stub.querySelector = () => createDomElementStub();
+  stub.querySelectorAll = () => createEmptyNodeList();
+  stub.getElementById = () => createDomElementStub();
+  return stub;
+}
+
+function createEmptyNodeList(): {
+  length: number;
+  forEach: () => void;
+  item: () => null;
+  [Symbol.iterator]: () => Iterator<never>;
+} {
+  return {
+    length: 0,
+    forEach() {},
+    item: () => null,
+    *[Symbol.iterator]() {},
+  };
+}
+
+function createBrowserQaSandboxDocument() {
+  const elStub = createDomElementStub();
+  const bodyStub = createDomElementStub();
+  const headStub = createDomElementStub();
+  const noop = () => {};
+  const documentMock = {
+    addEventListener(type: string, fn: unknown) {
+      if (type === 'DOMContentLoaded' && typeof fn === 'function') {
+        try {
+          (fn as (...args: unknown[]) => void)();
+        } catch {
+          /* surfaced via runInContext if sync init throws */
+        }
+      }
+    },
+    removeEventListener: noop,
+    querySelector: () => elStub,
+    querySelectorAll: () => createEmptyNodeList(),
+    getElementById: () => elStub,
+    createElement: () => createDomElementStub(),
+    createTextNode: () => ({}),
+    body: bodyStub,
+    head: headStub,
+    documentElement: elStub,
+  };
+  return documentMock;
+}
+
 function checkJsRuntime(html: string): { score: number; notes: string; errors: string[] } {
   const scripts = extractScriptBodies(html);
   if (scripts.length === 0) {
@@ -125,18 +201,23 @@ function checkJsRuntime(html: string): { score: number; notes: string; errors: s
   const consoleErrors: string[] = [];
   const runtimeErrors: string[] = [];
 
+  const documentMock = createBrowserQaSandboxDocument();
+  const fireMaybe = (fn: unknown) => {
+    if (typeof fn === 'function') {
+      try {
+        (fn as (...args: unknown[]) => void)();
+      } catch {
+        /* runInContext will surface throws from inline scripts */
+      }
+    }
+  };
   const sandbox = createContext({
-    window: {},
-    document: {
-      addEventListener: () => {},
-      querySelector: () => null,
-      querySelectorAll: () => [],
-      getElementById: () => null,
-      createElement: () => ({ style: {}, appendChild: () => {}, setAttribute: () => {} }),
-      createTextNode: () => ({}),
-      body: { appendChild: () => {}, style: {}, innerHTML: '' },
-      head: { appendChild: () => {} },
+    document: documentMock,
+    /** Global/window listeners (global object === window after self-reference below). */
+    addEventListener(type: string, fn: unknown) {
+      if (type === 'load') fireMaybe(fn);
     },
+    removeEventListener: () => {},
     navigator: { userAgent: 'node-browser-qa' },
     location: { href: 'about:blank', protocol: 'http:', hostname: 'localhost' },
     history: { pushState: () => {}, replaceState: () => {} },

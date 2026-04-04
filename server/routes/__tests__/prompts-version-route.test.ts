@@ -22,11 +22,11 @@ describe('GET /api/prompts/:key/versions/:versionNum', () => {
       body: 'hello',
       createdAt: '2024-01-02T00:00:00.000Z',
     });
-    const res = await app.request('http://localhost/api/prompts/compilerSystem/versions/2');
+    const res = await app.request('http://localhost/api/prompts/hypotheses-generator-system/versions/2');
     expect(res.status).toBe(200);
     const json = (await res.json()) as Record<string, unknown>;
     expect(json).toMatchObject({
-      key: 'compilerSystem',
+      key: 'hypotheses-generator-system',
       version: 2,
       body: 'hello',
       createdAt: '2024-01-02T00:00:00.000Z',
@@ -35,12 +35,12 @@ describe('GET /api/prompts/:key/versions/:versionNum', () => {
 
   it('returns 404 when version row is missing', async () => {
     getVersionBody.mockResolvedValue(null);
-    const res = await app.request('http://localhost/api/prompts/compilerSystem/versions/99');
+    const res = await app.request('http://localhost/api/prompts/hypotheses-generator-system/versions/99');
     expect(res.status).toBe(404);
   });
 
   it('returns 400 for invalid version and does not query backend', async () => {
-    const res = await app.request('http://localhost/api/prompts/compilerSystem/versions/0');
+    const res = await app.request('http://localhost/api/prompts/hypotheses-generator-system/versions/0');
     expect(res.status).toBe(400);
     expect(getVersionBody).not.toHaveBeenCalled();
   });

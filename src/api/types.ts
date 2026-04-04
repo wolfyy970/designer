@@ -23,6 +23,8 @@ export interface CompileRequest {
     count?: number;
     existingStrategies?: VariantStrategy[];
   };
+  /** Local Prompt Studio drafts — applied only for this request on the server. */
+  promptOverrides?: Record<string, string>;
 }
 
 export type CompileResponse = DimensionMap;
@@ -37,6 +39,7 @@ export interface HypothesisWorkspaceApiPayload {
   modelProfiles: Record<string, DomainModelProfile>;
   designSystems: Record<string, DomainDesignSystemContent>;
   defaultCompilerProvider: string;
+  promptOverrides?: Record<string, string>;
 }
 
 export interface HypothesisPromptBundleResponse {
@@ -135,6 +138,7 @@ export interface DesignSystemExtractRequest {
   images: ReferenceImage[];
   providerId: string;
   modelId: string;
+  promptOverrides?: Record<string, string>;
 }
 
 export interface DesignSystemExtractResponse {

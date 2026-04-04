@@ -79,6 +79,7 @@ export type RunTraceKind =
   | 'files_planned'
   | 'file_written'
   | 'evaluation_progress'
+  | 'evaluation_worker'
   | 'evaluation_report'
   | 'revision_round'
   | 'checkpoint'
@@ -98,6 +99,8 @@ export interface RunTraceEvent {
   toolName?: string;
   path?: string;
   status?: 'info' | 'success' | 'warning' | 'error';
+  /** Extra context (e.g. evaluator worker failure message) for observability UI */
+  detail?: string;
 }
 
 /** One PI model turn's streamed reasoning (collapsible timeline). */

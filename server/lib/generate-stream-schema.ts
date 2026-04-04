@@ -29,6 +29,7 @@ export const GenerateStreamBodySchema = z.object({
   evaluatorModelId: z.string().optional(),
   agenticMaxRevisionRounds: z.number().int().min(0).max(20).optional(),
   agenticMinOverallScore: z.number().min(0).max(5).optional(),
+  promptOverrides: z.record(z.string(), z.string()).optional(),
 });
 
 export type GenerateStreamBody = z.infer<typeof GenerateStreamBodySchema>;

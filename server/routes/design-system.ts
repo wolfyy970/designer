@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { ReferenceImage } from '../../src/types/spec.ts';
-import { getPromptBody } from '../db/prompts.ts';
+import { createResolvePromptBody, sanitizePromptOverrides } from '../lib/prompt-overrides.ts';
 import { apiJsonError } from '../lib/api-json-error.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import { loggedCallLLM } from '../lib/llm-call-logger.ts';
@@ -18,6 +18,7 @@ const ExtractRequestSchema = z.object({
   }).passthrough()),
   providerId: z.string().min(1),
   modelId: z.string().min(1),
+  promptOverrides: z.record(z.string(), z.string()).optional(),
 });
 
 designSystem.post('/extract', async (c) => {
@@ -26,9 +27,10 @@ designSystem.post('/extract', async (c) => {
   const pinned = clampProviderModel(parsed.data.providerId, parsed.data.modelId);
   const body = { ...parsed.data, providerId: pinned.providerId, modelId: pinned.modelId };
 
+  const resolvePrompt = createResolvePromptBody(sanitizePromptOverrides(body.promptOverrides));
   const [systemPrompt, userPrompt] = await Promise.all([
-    getPromptBody('designSystemExtract'),
-    getPromptBody('designSystemExtractUser'),
+    resolvePrompt('design-system-extract-system'),
+    resolvePrompt('design-system-extract-user-input'),
   ]);
 
   try {

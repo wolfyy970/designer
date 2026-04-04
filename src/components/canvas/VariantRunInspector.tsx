@@ -320,6 +320,7 @@ export default function VariantRunInspector() {
                 <AgenticHarnessStripe
                   phase={result.agenticPhase}
                   evaluationStatus={result.evaluationStatus}
+                  progressMessage={result.progressMessage}
                 />
                 <GeneratingFooter
                   plan={result.liveFilesPlan}

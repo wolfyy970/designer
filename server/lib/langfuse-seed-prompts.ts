@@ -16,6 +16,7 @@ import { env } from '../env.ts';
 import { getLangfuseAppClient, isLangfuseAppConfigured } from './langfuse-app-client.ts';
 import { parseTextPromptGet, promptListIndicatesVersions } from './langfuse-prompt-dto.ts';
 import { loadLegacyPromptBodiesForSeed } from './legacy-sqlite-prompts.ts';
+import { LEGACY_PROMPT_KEY_ALIASES } from '../../src/lib/prompts/defaults.ts';
 import { PROMPT_KEYS } from './prompts/defaults.ts';
 import { PROMPT_DEFAULTS } from '../../src/lib/prompts/shared-defaults.ts';
 
@@ -81,6 +82,22 @@ export async function seedLangfusePromptsFromDefaults(options?: SeedLangfuseProm
 
   const lf = getLangfuseAppClient();
   const label = env.LANGFUSE_PROMPT_LABEL;
+
+  for (const [legacyName, newKey] of Object.entries(LEGACY_PROMPT_KEY_ALIASES)) {
+    const newExists = await promptHasAnyVersion(lf, newKey);
+    if (newExists) continue;
+    const legacyExists = await promptHasAnyVersion(lf, legacyName);
+    if (!legacyExists) continue;
+    let body = await getLabeledTextPromptBodyViaApi(lf, legacyName, label);
+    if (body === null) body = PROMPT_DEFAULTS[newKey];
+    await lf.prompt.create({
+      name: newKey,
+      type: 'text',
+      prompt: body,
+      labels: [label],
+    });
+    console.log(`Migrated Langfuse prompt: ${legacyName} → ${newKey}`);
+  }
 
   for (const key of PROMPT_KEYS) {
     const targetBody = legacyBodies[key] ?? PROMPT_DEFAULTS[key];

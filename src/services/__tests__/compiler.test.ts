@@ -4,7 +4,7 @@ import { PROMPT_DEFAULTS } from '../../lib/prompts/shared-defaults';
 import type { DesignSpec, SpecSectionId, ReferenceImage } from '../../types/spec';
 import type { DimensionMap, VariantStrategy } from '../../types/compiler';
 
-const VARIANT_TEMPLATE = PROMPT_DEFAULTS['variant'];
+const VARIANT_TEMPLATE = PROMPT_DEFAULTS['designer-hypothesis-inputs'];
 
 function makeSection(id: SpecSectionId, content = '') {
   return {

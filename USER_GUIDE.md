@@ -46,9 +46,13 @@ The **Langfuse** tab does not load traces into the app; it links to the **Langfu
 
 ## System prompts (Settings → Prompts)
 
-**Settings** (gear) → **Prompts** opens **Prompt Studio** for versioned system prompts. Changes are **not** auto-saved — click **Save** or use ⌘S / Ctrl+S. A confirmation shows the stored **version**.
+**Settings** (gear) → **Prompts** opens **Prompt Studio**. The editor **loads** the current production prompt from the server (**Langfuse** when configured, otherwise shared defaults). **Save** / ⌘S stores your draft **in this browser only** (local persistence) and attaches it as **`promptOverrides` on Incubator compile, hypothesis generation, and Design System extract** — it does **not** write a new Langfuse version. Compare/diff uses the **database baseline** from the API. Use **Clear local override** / **Reset all** to drop browser drafts. To change **shared** production text in Langfuse, use **`pnpm langfuse:sync-prompts`** (from repo bodies) or the Langfuse UI / **`PUT /api/prompts/:key`** (automation); see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Templates are stored in **Langfuse**; the technical names (`compilerSystem`, `variant`, …) are listed with plain-English explanations in [LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md). **`pnpm db:seed`** creates **missing** Langfuse prompts only (Prompt Studio stays canonical after that). To reset all prompts from the repo, run **`pnpm langfuse:sync-prompts`**. Agent **skills** are **not** Langfuse prompts — they live in the repo’s **`skills/`** tree and are discovered at agentic session start (see [ARCHITECTURE.md](ARCHITECTURE.md) / [PRODUCT.md](PRODUCT.md)).
+Prompt keys are **kebab-case** (e.g. `hypotheses-generator-system`, `designer-hypothesis-inputs`); plain-English map: [LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md). **`pnpm db:seed`** creates **missing** Langfuse prompts only. Agent **skills** are **not** Langfuse prompts — they live in the repo’s **`skills/`** tree (see [ARCHITECTURE.md](ARCHITECTURE.md) / [PRODUCT.md](PRODUCT.md)).
+
+## Agentic evaluator loop (Settings → Evaluator)
+
+**Settings** (gear) → **Evaluator** sets **global defaults** for agentic runs: **maximum revision rounds** (cap on evaluator-driven revision passes) and an optional **target quality score** (early exit when overall score reaches that value with no hard fails). Values apply to the next **Generate** / **Run agent** on a hypothesis. Operator-level env defaults (`AGENTIC_MAX_REVISION_ROUNDS`, `AGENTIC_MIN_OVERALL_SCORE`) are served in **`GET /api/config`** and seed the UI once before you customize; see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Canvas Workflow
 
@@ -100,7 +104,7 @@ Each hypothesis has built-in generation controls at the bottom. Connect a Model 
 
 **Agentic:** Switch Mode to **Agentic**, choose a thinking level (None / Light / Deep), then **Run agent**. The agent plans files, writes/edits/validates them, and streams progress to the variant. The **server** then runs **evaluation** (LLM rubrics plus browser QA), and may run **additional revision passes** until scores settle or limits are hit — see **[PRODUCT.md](PRODUCT.md)** for the full pipeline.
 
-Agentic runs take longer (often several minutes) but produce more considered designs. When a run completes, the variant shows an **evaluation summary** and, if Playwright is installed, a small **browser capture** under Runtime QA.
+Agentic runs take longer (often several minutes) but produce more considered designs. When a run completes, the variant shows an **evaluation summary** and, if Playwright is installed, a small **browser capture** under Runtime QA. Generated HTML may use **Google Fonts** only via `fonts.googleapis.com` / `fonts.gstatic.com` (needs network in your browser for preview); other CDNs stay disallowed — see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 **Output format hint:** If your compiled strategy dimensions include a value for **format** (or `output_format`), it is sent as evaluation context so the server can pick matching **skills** for the agent. Details live in PRODUCT / ARCHITECTURE — you do not need to set this unless you use those dimensions.
 

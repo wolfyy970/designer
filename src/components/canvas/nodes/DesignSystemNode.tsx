@@ -6,6 +6,7 @@ import { normalizeError } from '../../../lib/error-utils';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import type { DesignSystemNodeData } from '../../../types/canvas-data';
 import { extractDesignSystem } from '../../../api/client';
+import { getActivePromptOverrides, usePromptOverridesStore } from '../../../stores/prompt-overrides-store';
 import { readFileAsReferenceImage } from '../../../lib/image-utils';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
 import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
@@ -74,10 +75,12 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
     setExtracting(true);
     setExtractError(null);
     try {
+      const promptOverrides = getActivePromptOverrides(usePromptOverridesStore.getState().overrides);
       const response = await extractDesignSystem({
         images,
         providerId: providerId!,
         modelId: modelId!,
+        ...(promptOverrides ? { promptOverrides } : {}),
       });
       const result = response.result;
 

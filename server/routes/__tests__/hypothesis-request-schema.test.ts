@@ -65,4 +65,20 @@ describe('HypothesisWorkspaceCoreSchema', () => {
     );
     expect(r.success).toBe(false);
   });
+
+  it('accepts optional promptOverrides map', () => {
+    const r = HypothesisWorkspaceCoreSchema.safeParse(
+      minimalCore({
+        promptOverrides: {
+          'designer-hypothesis-inputs': 'local template',
+          noiseKey: 'ignored server-side',
+        },
+      }),
+    );
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.promptOverrides?.['designer-hypothesis-inputs']).toBe('local template');
+      expect(r.data.promptOverrides?.noiseKey).toBe('ignored server-side');
+    }
+  });
 });

@@ -95,7 +95,7 @@ export function GeneratingFooter({
   const primaryLine = isEvaluating
     ? (evaluationStatus || progressMessage || 'Running evaluators…')
     : isRevising
-      ? (evaluationStatus || progressMessage || 'Revising…')
+      ? (progressMessage || evaluationStatus || 'Applying feedback from evaluators…')
       : hasPlan
         ? `${written} / ${total} files`
         : noPlanBuildingLine;

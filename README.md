@@ -43,7 +43,7 @@ The primary interface is a visual node-graph canvas (`/canvas`, the default rout
 
 Nodes connect left-to-right. Auto-layout arranges everything based on connections. Variants can connect back to Existing Design for iterative feedback loops.
 
-The header also opens **Settings** (General preferences, **Prompt Studio** — prompts save only on **Save** / ⌘S; in **development**, a **design tokens kitchen sink** modal on the General tab) and **Observability** (LLM + trace logs — primarily for development). Details: [USER_GUIDE.md](USER_GUIDE.md) and [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
+The header also opens **Settings** (General preferences; **Prompt Studio** under Prompts — **Save** / ⌘S stores drafts in **this browser** and sends them as **per-request overrides** on compile / generate / extract; baseline text still comes from **Langfuse** via the API. In **development**, a **design tokens kitchen sink** modal is on the General tab) and **Observability** (LLM + trace logs — primarily for development). Details: [USER_GUIDE.md](USER_GUIDE.md) and [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 
 ## Scripts
 
@@ -56,7 +56,7 @@ The header also opens **Settings** (General preferences, **Prompt Studio** — p
 | `pnpm build` | Type-check and production build |
 | `pnpm test` | Vitest unit tests (Playwright merge test excluded in config; see [CLAUDE.md](CLAUDE.md)) |
 | `pnpm lint` | Run ESLint |
-| `pnpm db:seed` | Bootstrap **missing** Langfuse text prompts only (`scripts/seed-langfuse.ts`); does **not** overwrite Prompt Studio edits. Use `pnpm langfuse:sync-prompts` to reset bodies from `shared-defaults` / optional legacy SQLite import |
+| `pnpm db:seed` | Bootstrap **missing** Langfuse text prompts only (`scripts/seed-langfuse.ts`); does **not** overwrite existing labeled versions in Langfuse. Use `pnpm langfuse:sync-prompts` to reset bodies from `shared-defaults` / optional legacy SQLite import |
 | `pnpm langfuse:sync-prompts` | **`LANGFUSE_SEED_SYNC`**: push every prompt’s labeled version to match `shared-defaults` / legacy SQLite import (overwrites drift) |
 | `pnpm knip` | Optional unused-export report (not run in CI by default) |
 

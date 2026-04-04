@@ -57,6 +57,11 @@ function TraceEntry({
         <span className={`text-xs font-semibold ${tone}`}>{trace.kind.replaceAll('_', ' ')}</span>
         <div className="min-w-0 flex-1">
           <div className="text-xs text-fg">{trace.label}</div>
+          {trace.detail ? (
+            <p className="mt-1 text-nano leading-snug whitespace-pre-wrap break-words text-fg-muted">
+              {trace.detail}
+            </p>
+          ) : null}
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-nano text-fg-muted">
             <span>
               {title}

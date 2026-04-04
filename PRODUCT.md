@@ -37,7 +37,7 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 - **Version stacking** — Results accumulate across generation runs. Each variant shows version badges (v1, v2, ...) with ChevronLeft/Right navigation to browse previous versions.
 - **Agentic eval rounds (workspace)** — When a run has multiple evaluation rounds (build + revisions), the **variant run workspace** (side panel) can show **Eval round** on **Design** and **Evaluation** tabs; per-round file trees are stored in IndexedDB (`{resultId}:round:{n}`) so earlier revisions remain viewable without bloating localStorage metadata.
 - **Observability (dev)** — Header modal listing **LLM** calls and **trace** events from the API session; optional NDJSON on disk when enabled (see [ARCHITECTURE.md](ARCHITECTURE.md)).
-- **Prompt Studio** — Settings → Prompts: edit DB-backed system prompts; **Save** / ⌘S commits a new **version** (no automatic save).
+- **Prompt Studio** — Settings → Prompts: edit prompts against the **server baseline**; **Save** / ⌘S persists drafts **in the browser** and sends **`promptOverrides`** on compile / generate / extract (no automatic save; does not create Langfuse versions from the UI).
 - **Optional section slots** — Fresh canvases can show **ghost** placeholders for inputs not in the minimal default. Loading a **Canvas Manager** entry **materializes** optional section nodes when the persisted spec has non-empty text or images for those sections (see `src/lib/spec-materialize-sections.ts`).
 - **Design tokens kitchen sink** (development only) — Settings → General opens a modal reference for `@theme` tokens and patterns; full-page route `/dev/design-tokens`. Documented in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 
@@ -57,7 +57,7 @@ Each hypothesis-model pair produces a variant via one of two modes. Server route
 
 ### Single-Shot Mode
 
-The server sends the compiled variant prompt (hypothesis + spec context) to the LLM with the `genSystemHtml` system prompt, in one call. The response is extracted as a complete, self-contained HTML document with inline CSS and JS. Code streams back via SSE and renders immediately.
+The server sends the compiled variant prompt (hypothesis + spec context) to the LLM with the `designer-direct-system` system prompt, in one call. The response is extracted as a complete, self-contained HTML document with inline CSS and JS. Code streams back via SSE and renders immediately.
 
 **Parallel generation.** Multiple hypotheses generate simultaneously. Progress and completion update independently per variant.
 
@@ -88,9 +88,9 @@ Enabled by choosing **Agentic** in Mode on a Hypothesis node; use **Run agent** 
 
 **Thinking** (Hypothesis node). When the connected model advertises reasoning support: **None / Light / Deep** map to API levels *off* / *minimal* / *medium*. Other levels exist in the stack but are not exposed in this UI.
 
-**Prompts.** Compile, variant, single-shot and agentic system prompts, evaluators, design-system extract, and agent compaction templates are stored in **Langfuse** and edited in **Prompt Studio** (**Settings → Prompts**); save commits a new version. Stable key names and plain-English descriptions: **[LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)**. Loop limits (e.g. max revision rounds) are server-configured unless overridden via API/env — there is no dedicated canvas control yet.
+**Prompts.** **Production** text for compile, variant, single-shot, agentic, evaluators, design-system extract, and agent compaction templates lives in **Langfuse** (or shared defaults when Langfuse is off). **Prompt Studio** (**Settings → Prompts**) edits against that baseline but **saves local browser drafts** only, applied per request via **`promptOverrides`** — see **[LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)** for keys and **[USER_GUIDE.md](USER_GUIDE.md)** for workflow. Loop limits (e.g. max revision rounds) are server-configured unless overridden via API/env — there is no dedicated canvas control yet.
 
-## Prompt Studio (Langfuse)
+## Prompt keys (catalog)
 
 Do not duplicate the prompt catalog here — use **[LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)** for the list of keys and when each runs.
 

@@ -44,6 +44,8 @@ export const HypothesisWorkspaceCoreSchema = z.object({
   modelProfiles: z.record(z.string(), DomainModelProfileSchema),
   designSystems: z.record(z.string(), DomainDesignSystemContentSchema),
   defaultCompilerProvider: z.string().min(1),
+  /** Ephemeral per-request prompt bodies from the browser (local experimentation). */
+  promptOverrides: z.record(z.string(), z.string()).optional(),
 });
 
 export const PromptBundleRequestSchema = HypothesisWorkspaceCoreSchema;

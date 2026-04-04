@@ -48,7 +48,7 @@ describe.skipIf(!sqliteMod)('loadLegacyPromptBodiesForSeed', () => {
     vi.resetModules();
     const { loadLegacyPromptBodiesForSeed } = await import('../legacy-sqlite-prompts.ts');
     const out = await loadLegacyPromptBodiesForSeed(dir);
-    expect(out.bodies.compilerSystem).toBe('seed-from-legacy-db');
+    expect(out.bodies['hypotheses-generator-system']).toBe('seed-from-legacy-db');
     expect(out.sourceLabel).toBeDefined();
   });
 
@@ -58,7 +58,7 @@ describe.skipIf(!sqliteMod)('loadLegacyPromptBodiesForSeed', () => {
     vi.resetModules();
     const { loadLegacyPromptBodiesForSeed } = await import('../legacy-sqlite-prompts.ts');
     const out = await loadLegacyPromptBodiesForSeed(dir);
-    expect(out.bodies.compilerSystem).toBe('seed-from-legacy-db');
+    expect(out.bodies['hypotheses-generator-system']).toBe('seed-from-legacy-db');
   });
 
   it('returns empty bodies when no legacy source is configured', async () => {

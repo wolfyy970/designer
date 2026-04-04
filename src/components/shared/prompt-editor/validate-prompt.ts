@@ -28,7 +28,7 @@ export function validatePrompt(key: PromptKey, value: string): Diagnostic[] {
     }
   }
 
-  if (key === 'compilerSystem' && !value.toLowerCase().includes('json')) {
+  if (key === 'hypotheses-generator-system' && !value.toLowerCase().includes('json')) {
     diagnostics.push({
       level: 'warning',
       message:
@@ -36,7 +36,7 @@ export function validatePrompt(key: PromptKey, value: string): Diagnostic[] {
     });
   }
 
-  if (key === 'genSystemHtml' && !value.toLowerCase().includes('html')) {
+  if (key === 'designer-direct-system' && !value.toLowerCase().includes('html')) {
     diagnostics.push({
       level: 'warning',
       message:
@@ -48,13 +48,19 @@ export function validatePrompt(key: PromptKey, value: string): Diagnostic[] {
 }
 
 export const PROMPT_GROUPS: { label: string; keys: PromptKey[] }[] = [
-  { label: 'Incubator', keys: ['compilerSystem', 'compilerUser'] },
-  { label: 'Designer', keys: ['variant', 'genSystemHtml', 'genSystemHtmlAgentic'] },
-  { label: 'Design System', keys: ['designSystemExtract', 'designSystemExtractUser'] },
-  { label: 'Agent', keys: ['agentCompactionSystem', 'sandboxAgentsContext'] },
+  { label: 'Incubator', keys: ['hypotheses-generator-system', 'incubator-user-inputs'] },
+  {
+    label: 'Designer',
+    keys: ['designer-hypothesis-inputs', 'designer-direct-system', 'designer-agentic-system'],
+  },
+  {
+    label: 'Design System',
+    keys: ['design-system-extract-system', 'design-system-extract-user-input'],
+  },
+  { label: 'Agent', keys: ['agent-context-compaction', 'agents-md-file'] },
   {
     label: 'Evaluator',
-    keys: ['evalDesignSystem', 'evalStrategySystem', 'evalImplementationSystem'],
+    keys: ['evaluator-design-quality', 'evaluator-strategy-fidelity', 'evaluator-implementation'],
   },
 ];
 

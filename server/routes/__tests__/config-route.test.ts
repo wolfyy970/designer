@@ -14,6 +14,10 @@ describe('GET /api/config', () => {
       expect(body.lockdownProviderId).toBe(LOCKDOWN_PROVIDER_ID);
       expect(body.lockdownModelId).toBe(LOCKDOWN_MODEL_ID);
       expect(typeof body.lockdownModelLabel).toBe('string');
+      expect(typeof body.agenticMaxRevisionRounds).toBe('number');
+      expect(
+        body.agenticMinOverallScore === null || typeof body.agenticMinOverallScore === 'number',
+      ).toBe(true);
     } finally {
       if (prev === undefined) delete process.env.LOCKDOWN;
       else process.env.LOCKDOWN = prev;
@@ -27,7 +31,12 @@ describe('GET /api/config', () => {
       const res = await app.request('http://localhost/api/config');
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
-      expect(body).toEqual({ lockdown: false });
+      expect(body.lockdown).toBe(false);
+      expect(typeof (body as Record<string, unknown>).agenticMaxRevisionRounds).toBe('number');
+      expect(
+        (body as Record<string, unknown>).agenticMinOverallScore === null ||
+          typeof (body as Record<string, unknown>).agenticMinOverallScore === 'number',
+      ).toBe(true);
     } finally {
       if (prev === undefined) delete process.env.LOCKDOWN;
       else process.env.LOCKDOWN = prev;

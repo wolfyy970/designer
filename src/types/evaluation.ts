@@ -51,6 +51,11 @@ export interface EvaluatorWorkerReport {
   artifacts?: BrowserEvalArtifacts;
 }
 
+/** True when the worker failed (LLM/parse/infrastructure) rather than returning a normal rubric result. */
+export function isEvaluatorWorkerDegraded(report: EvaluatorWorkerReport): boolean {
+  return report.hardFails.some((h) => h.code === 'evaluator_worker_error');
+}
+
 export interface AggregatedHardFail extends EvalHardFail {
   source: EvaluatorRubricId;
 }
@@ -74,6 +79,17 @@ export interface EvaluationRoundSnapshot {
   implementation?: EvaluatorWorkerReport;
   browser?: EvaluatorWorkerReport;
   aggregate: AggregatedEvaluationReport;
+}
+
+/** Any rubric in this round hit a degraded worker path (see `isEvaluatorWorkerDegraded`). */
+export function evaluationRoundSnapshotHasDegradedWorker(
+  snapshot: Pick<EvaluationRoundSnapshot, 'design' | 'strategy' | 'implementation' | 'browser'>,
+): boolean {
+  for (const id of EVALUATOR_RUBRIC_IDS) {
+    const rep = snapshot[id];
+    if (rep && isEvaluatorWorkerDegraded(rep)) return true;
+  }
+  return false;
 }
 
 /** Lightweight checkpoint persisted alongside provenance for observability */

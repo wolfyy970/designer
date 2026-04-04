@@ -123,6 +123,7 @@ prompts.get('/:key/versions/:versionNum', async (c) => {
 });
 
 // POST /api/prompts/:key/revert-baseline — new version restoring version 1 body
+// Not used by the in-app Prompt Studio (local overrides only); kept for CLI / admin / Langfuse repair.
 prompts.post('/:key/revert-baseline', async (c) => {
   const key = c.req.param('key') as PromptKey;
   if (!PROMPT_KEYS.includes(key)) return apiJsonError(c, 404, 'Unknown prompt key');
@@ -181,6 +182,7 @@ prompts.get('/:key', async (c) => {
 });
 
 // PUT /api/prompts/:key — create new version (promotes label)
+// Not used by the in-app Prompt Studio (local overrides only); kept for CLI / admin / automation.
 prompts.put('/:key', async (c) => {
   const key = c.req.param('key') as PromptKey;
   if (!PROMPT_KEYS.includes(key)) return apiJsonError(c, 404, 'Unknown prompt key');

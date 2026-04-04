@@ -1,18 +1,18 @@
 // ── Prompt keys / metadata (runtime copy lives in DB only) ───────────
 
 export type PromptKey =
-  | 'compilerSystem'
-  | 'compilerUser'
-  | 'genSystemHtml'
-  | 'genSystemHtmlAgentic'
-  | 'variant'
-  | 'designSystemExtract'
-  | 'designSystemExtractUser'
-  | 'agentCompactionSystem'
-  | 'sandboxAgentsContext'
-  | 'evalDesignSystem'
-  | 'evalStrategySystem'
-  | 'evalImplementationSystem';
+  | 'hypotheses-generator-system'
+  | 'incubator-user-inputs'
+  | 'designer-direct-system'
+  | 'designer-agentic-system'
+  | 'designer-hypothesis-inputs'
+  | 'design-system-extract-system'
+  | 'design-system-extract-user-input'
+  | 'agent-context-compaction'
+  | 'agents-md-file'
+  | 'evaluator-design-quality'
+  | 'evaluator-strategy-fidelity'
+  | 'evaluator-implementation';
 
 export interface PromptMeta {
   key: PromptKey;
@@ -23,15 +23,16 @@ export interface PromptMeta {
 
 export const PROMPT_META: PromptMeta[] = [
   {
-    key: 'compilerSystem',
-    label: 'Incubator — System',
+    key: 'hypotheses-generator-system',
+    label: 'Incubator — Hypotheses generator (system)',
     description:
-      'System prompt for the Incubator (compiler). Defines the role, task, output format, and guidelines for producing dimension maps.',
+      'System prompt for the Incubator compile step: read the five-section spec and return a JSON dimension map (dimensions, ranges, variant strategies).',
   },
   {
-    key: 'compilerUser',
-    label: 'Incubator — User',
-    description: 'User prompt template for the Incubator. Provides the spec data to analyze.',
+    key: 'incubator-user-inputs',
+    label: 'Incubator — Spec inputs (user)',
+    description:
+      'User prompt template for the Incubator. Interpolates brief, constraints, research, objectives, and images as the data payload.',
     variables: [
       'SPEC_TITLE',
       'DESIGN_BRIEF',
@@ -43,21 +44,22 @@ export const PROMPT_META: PromptMeta[] = [
     ],
   },
   {
-    key: 'genSystemHtml',
-    label: 'Designer — System',
+    key: 'designer-direct-system',
+    label: 'Designer — Direct / single-shot (system)',
     description:
-      'System prompt for design generation. The model receives this plus the hypothesis/spec context and returns a complete self-contained HTML document.',
+      'System prompt for Direct mode: return one self-contained HTML document with inline CSS and allowlisted Google Fonts only.',
   },
   {
-    key: 'genSystemHtmlAgentic',
-    label: 'Designer — System (Agentic)',
+    key: 'designer-agentic-system',
+    label: 'Designer — Agentic (system)',
     description:
-      'System prompt for agentic multi-file design generation. Instructs the agent to reason about the hypothesis before writing files, then self-critique and revise.',
+      'System prompt for Agentic mode: mission, tools, workflow, self-critique, and design-quality bar for the multi-file agent.',
   },
   {
-    key: 'variant',
-    label: 'Designer — User',
-    description: 'User prompt template for design generation. Provides the hypothesis and spec context.',
+    key: 'designer-hypothesis-inputs',
+    label: 'Designer — Hypothesis (user)',
+    description:
+      'User prompt for Direct and Agentic generation: hypothesis, dimension values, and full spec context for the specific design to build.',
     variables: [
       'STRATEGY_NAME',
       'HYPOTHESIS',
@@ -73,43 +75,64 @@ export const PROMPT_META: PromptMeta[] = [
     ],
   },
   {
-    key: 'designSystemExtract',
-    label: 'Design System — Extract (system)',
+    key: 'design-system-extract-system',
+    label: 'Design system extract — System',
     description:
-      'System prompt for extracting design tokens, components, and patterns from uploaded design system screenshots.',
+      'System prompt for screenshot extraction: analyze UI images and return structured JSON design tokens and patterns.',
   },
   {
-    key: 'designSystemExtractUser',
-    label: 'Design System — Extract (user)',
-    description: 'User message paired with screenshots for design-system extraction (no template variables).',
+    key: 'design-system-extract-user-input',
+    label: 'Design system extract — User',
+    description: 'Short user message paired with screenshots for extraction (no template variables).',
   },
   {
-    key: 'agentCompactionSystem',
+    key: 'agent-context-compaction',
     label: 'Agent — Context compaction',
     description:
-      'System prompt for LLM summarization when the agentic session context window is compacted. Defines checkpoint structure.',
+      'When the agentic session truncates history, defines how to summarize prior work into a checkpoint (Goal, Progress, Decisions, Next Steps).',
   },
   {
-    key: 'sandboxAgentsContext',
-    label: 'Agent — Sandbox context',
+    key: 'agents-md-file',
+    label: 'Agent — AGENTS.md seed',
     description:
-      'Seeded as AGENTS.md in the virtual workspace. Environment limits for the design agent (static HTML/CSS/JS, no npm/Vite/build tools).',
+      'Seeded as AGENTS.md in the virtual workspace: static HTML/CSS/JS limits, no npm or frameworks, Google Fonts only, etc.',
   },
   {
-    key: 'evalDesignSystem',
+    key: 'evaluator-design-quality',
     label: 'Evaluator — Design quality',
     description:
-      'System prompt for the design-quality evaluator (originality, coherence, craft, usability). Output must be JSON per contract.',
+      'Rubric for subjective design critique: design_quality, originality, craft, usability (1–5). JSON output per contract.',
   },
   {
-    key: 'evalStrategySystem',
-    label: 'Evaluator — Strategy / KPI',
+    key: 'evaluator-strategy-fidelity',
+    label: 'Evaluator — Strategy fidelity',
     description:
-      'System prompt for hypothesis, KPI, constraint, and design-system adherence scoring. Output must be JSON per contract.',
+      'Rubric for hypothesis, KPI, constraint, and design-system adherence. JSON output per contract.',
   },
   {
-    key: 'evalImplementationSystem',
+    key: 'evaluator-implementation',
     label: 'Evaluator — Implementation',
-    description: 'System prompt for static HTML/CSS/JS structural review. Output must be JSON per contract.',
+    description: 'Rubric for static HTML/CSS/JS engineering review. JSON output per contract.',
   },
 ];
+
+export const PROMPT_KEYS: PromptKey[] = PROMPT_META.map((m) => m.key);
+
+/**
+ * Legacy Langfuse / SQLite prompt names before kebab-case rename.
+ Still accepted by `parsePromptKey` (e.g. deep links). Used by seed migration and legacy DB import.
+ */
+export const LEGACY_PROMPT_KEY_ALIASES = {
+  compilerSystem: 'hypotheses-generator-system',
+  compilerUser: 'incubator-user-inputs',
+  genSystemHtml: 'designer-direct-system',
+  genSystemHtmlAgentic: 'designer-agentic-system',
+  variant: 'designer-hypothesis-inputs',
+  designSystemExtract: 'design-system-extract-system',
+  designSystemExtractUser: 'design-system-extract-user-input',
+  agentCompactionSystem: 'agent-context-compaction',
+  sandboxAgentsContext: 'agents-md-file',
+  evalDesignSystem: 'evaluator-design-quality',
+  evalStrategySystem: 'evaluator-strategy-fidelity',
+  evalImplementationSystem: 'evaluator-implementation',
+} as const satisfies Record<string, PromptKey>;

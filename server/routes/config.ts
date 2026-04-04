@@ -9,14 +9,19 @@ import {
 const configRoute = new Hono();
 
 configRoute.get('/', (c) => {
+  const evaluator = {
+    agenticMaxRevisionRounds: env.AGENTIC_MAX_REVISION_ROUNDS,
+    agenticMinOverallScore: env.AGENTIC_MIN_OVERALL_SCORE ?? null,
+  };
   if (!env.LOCKDOWN) {
-    return c.json({ lockdown: false });
+    return c.json({ lockdown: false, ...evaluator });
   }
   return c.json({
     lockdown: true,
     lockdownProviderId: LOCKDOWN_PROVIDER_ID,
     lockdownModelId: LOCKDOWN_MODEL_ID,
     lockdownModelLabel: LOCKDOWN_MODEL_LABEL,
+    ...evaluator,
   });
 });
 

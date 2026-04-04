@@ -404,6 +404,12 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
         handled = true;
         handleCompactionStart(ctx);
         return;
+      // Pi session framing-only events (no app SSE); treat as handled so we don't spam dev logs.
+      case 'message_start':
+      case 'message_end':
+      case 'turn_end':
+        handled = true;
+        return;
       default:
         break;
     }

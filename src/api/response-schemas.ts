@@ -170,12 +170,16 @@ export const DesignSystemExtractResponseSchema = z.object({
   result: z.string(),
 });
 
+
 /** GET /api/config */
 export const AppConfigResponseSchema = z.object({
   lockdown: z.boolean(),
   lockdownProviderId: z.string().optional(),
   lockdownModelId: z.string().optional(),
   lockdownModelLabel: z.string().optional(),
+  /** Server operator default; client Settings may override per session. */
+  agenticMaxRevisionRounds: z.number().int().min(0).max(20),
+  agenticMinOverallScore: z.number().min(0).max(5).nullable(),
 });
 
 export type AppConfigResponse = z.infer<typeof AppConfigResponseSchema>;

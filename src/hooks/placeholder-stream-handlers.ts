@@ -14,8 +14,10 @@ import {
   traceRowCheckpoint,
   traceRowEvaluationProgress,
   traceRowEvaluationReport,
+  traceRowEvaluationWorker,
   traceRowRevisionRound,
 } from './placeholder-trace-rows';
+import { evaluationRoundSnapshotHasDegradedWorker, isEvaluatorWorkerDegraded } from '../types/evaluation';
 import { normalizeError } from '../lib/error-utils';
 
 function streamDevDebug(placeholderId: string, message: string, data?: Record<string, unknown>): void {
@@ -134,7 +136,12 @@ export function createPlaceholderStreamCallbacks(options: {
           typeof score === 'number' && Number.isFinite(score) ? score.toFixed(1) : '—';
         const hardFailsLen = agg.hardFails?.length ?? 0;
         pushTrace(
-          traceRowEvaluationReport(normalized.round, scoreLabel, hardFailsLen),
+          traceRowEvaluationReport(
+            normalized.round,
+            scoreLabel,
+            hardFailsLen,
+            evaluationRoundSnapshotHasDegradedWorker(normalized),
+          ),
         );
         state.liveEvalWorkers = {};
         updateResult(placeholderId, {
@@ -157,10 +164,15 @@ export function createPlaceholderStreamCallbacks(options: {
       }
     },
     onEvaluationWorkerDone: (round, rubric, workerReport) => {
-      streamDevDebug(placeholderId, 'onEvaluationWorkerDone', { round, rubric });
+      streamDevDebug(placeholderId, 'onEvaluationWorkerDone', {
+        round,
+        rubric,
+        degraded: isEvaluatorWorkerDegraded(workerReport),
+      });
       if (round !== state.evalRoundLive) return;
       state.liveEvalWorkers = { ...state.liveEvalWorkers, [rubric]: workerReport };
       updateResult(placeholderId, { liveEvalWorkers: { ...state.liveEvalWorkers } });
+      pushTrace(traceRowEvaluationWorker(round, rubric, workerReport));
     },
     onRevisionRound: (round, brief) => {
       streamDevDebug(placeholderId, 'onRevisionRound', { round, briefLen: brief.length });

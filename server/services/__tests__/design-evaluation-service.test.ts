@@ -176,10 +176,19 @@ describe('isEvalSatisfied', () => {
 
 describe('buildDegradedReport', () => {
   it('marks rubric and includes worker error hardFail', () => {
-    const r = buildDegradedReport('strategy', new Error('boom'));
-    expect(r.rubric).toBe('strategy');
-    expect(r.hardFails.some((h) => h.code === 'evaluator_worker_error')).toBe(true);
-    expect(r.scores.evaluator_unavailable?.score).toBe(0);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const r = buildDegradedReport('strategy', new Error('boom'));
+      expect(r.rubric).toBe('strategy');
+      expect(r.hardFails.some((h) => h.code === 'evaluator_worker_error')).toBe(true);
+      expect(r.scores.evaluator_unavailable?.score).toBe(0);
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[eval:worker-degraded]',
+        expect.objectContaining({ rubric: 'strategy', message: expect.stringContaining('boom') }),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
 

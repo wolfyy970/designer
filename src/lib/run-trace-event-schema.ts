@@ -13,6 +13,7 @@ const runTraceKindSchema = z.enum([
   'files_planned',
   'file_written',
   'evaluation_progress',
+  'evaluation_worker',
   'evaluation_report',
   'revision_round',
   'checkpoint',
@@ -31,4 +32,5 @@ export const runTraceEventSchema = z.object({
   toolName: z.string().optional(),
   path: z.string().optional(),
   status: z.enum(['info', 'success', 'warning', 'error']).optional(),
+  detail: z.string().optional(),
 });

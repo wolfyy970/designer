@@ -9,8 +9,8 @@ import {
   workspaceSnapshotWireToGraph,
   type HypothesisGenerationContext,
 } from '../../src/workspace/hypothesis-generation-pure.ts';
-import { getPromptBody } from '../db/prompts.ts';
 import { compileVariantPrompts } from '../services/compiler.ts';
+import { createResolvePromptBody, sanitizePromptOverrides } from './prompt-overrides.ts';
 import { generateId, now } from '../../src/lib/utils.ts';
 
 import { applyLockdownToHypothesisContext } from './lockdown-model.ts';
@@ -42,7 +42,8 @@ export async function buildHypothesisWorkspaceBundle(
   if (!ctxRaw) return null;
   const ctx = applyLockdownToHypothesisContext(ctxRaw);
 
-  const variantTemplate = await getPromptBody('variant');
+  const resolvePrompt = createResolvePromptBody(sanitizePromptOverrides(body.promptOverrides));
+  const variantTemplate = await resolvePrompt('designer-hypothesis-inputs');
   const filteredMap = {
     id: generateId(),
     specId: ctx.spec.id,

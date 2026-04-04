@@ -33,6 +33,7 @@ import {
   LOCKDOWN_MODEL_LABEL,
   LOCKDOWN_PROVIDER_ID,
 } from '../lib/lockdown-model';
+import { DEFAULT_EVALUATOR_SETTINGS } from '../types/evaluator-settings';
 import type { ZodError, ZodType } from 'zod';
 import {
   CompileResponseSchema,
@@ -110,6 +111,8 @@ export function getPlaceholderAppConfig(): AppConfigResponse {
     lockdownProviderId: LOCKDOWN_PROVIDER_ID,
     lockdownModelId: LOCKDOWN_MODEL_ID,
     lockdownModelLabel: LOCKDOWN_MODEL_LABEL,
+    agenticMaxRevisionRounds: DEFAULT_EVALUATOR_SETTINGS.maxRevisionRounds,
+    agenticMinOverallScore: DEFAULT_EVALUATOR_SETTINGS.minOverallScore,
   };
 }
 

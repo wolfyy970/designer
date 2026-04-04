@@ -30,20 +30,22 @@ export default function ModelSelector({
 
   // Auto-select first model when models load and nothing selected
   useEffect(() => {
+    if (disabled) return;
     if (models && models.length > 0 && !selectedModelId) {
       onChange(models[0].id);
     }
-  }, [models, selectedModelId, onChange]);
+  }, [disabled, models, selectedModelId, onChange]);
 
   // If selected model isn't in new list (provider changed), reset
   useEffect(() => {
+    if (disabled) return;
     if (models && models.length > 0 && selectedModelId) {
       const found = models.some((m) => m.id === selectedModelId);
       if (!found) {
         onChange(models[0].id);
       }
     }
-  }, [models, selectedModelId, onChange]);
+  }, [disabled, models, selectedModelId, onChange]);
 
   const filtered = useMemo(() => {
     if (!models) return [];
@@ -129,6 +131,15 @@ export default function ModelSelector({
     ? search
     : selectedModel?.name || selectedModelId || '';
 
+  const inputDisabled = disabled || isLoading;
+
+  useEffect(() => {
+    if (disabled) {
+      setIsOpen(false);
+      setSearch('');
+    }
+  }, [disabled]);
+
   return (
     <div className="nodrag nowheel" ref={containerRef}>
       <label className="mb-1 block text-xs font-medium text-fg-secondary">
@@ -141,17 +152,19 @@ export default function ModelSelector({
             type="text"
             value={displayValue}
             onChange={(e) => {
+              if (disabled) return;
               setSearch(e.target.value);
               if (!isOpen) setIsOpen(true);
             }}
             onFocus={() => {
+              if (disabled) return;
               setIsOpen(true);
               setSearch('');
             }}
             onKeyDown={handleKeyDown}
             placeholder={isLoading ? 'Loading models...' : 'Search models...'}
-            disabled={isLoading}
-            className="w-full rounded-md border border-border bg-bg py-2 pl-2.5 pr-7 text-xs text-fg-secondary input-focus disabled:opacity-60"
+            disabled={inputDisabled}
+            className="w-full rounded-md border border-border bg-bg py-2 pl-2.5 pr-7 text-xs text-fg-secondary input-focus disabled:cursor-not-allowed disabled:opacity-60"
           />
           <span className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 text-fg-muted">
             {!isOpen && selectedModel?.supportsVision && (

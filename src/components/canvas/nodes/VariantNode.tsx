@@ -265,6 +265,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
           <VariantNodeGenerating
             result={result}
             elapsed={elapsed}
+            isWorkspaceOpen={isWorkspaceOpen}
             onOpenWorkspace={() => setRunInspectorVariant(id)}
           />
         )}

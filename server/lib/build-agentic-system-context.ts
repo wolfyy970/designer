@@ -1,6 +1,6 @@
 /**
  * Fresh agentic system prompt + sandbox AGENTS.md seed from Langfuse
- * (`genSystemHtmlAgentic` + `sandboxAgentsContext`), plus repo-backed Agent Skills.
+ * (`designer-agentic-system` + `agents-md-file`), plus repo-backed Agent Skills.
  * Call once per PI session boundary so Prompt Studio edits and skill picks apply to the next build or revision.
  */
 import type { PromptKey } from './prompts/defaults.ts';
@@ -25,8 +25,8 @@ export async function buildAgenticSystemContext(input: {
   /** Full catalog entries for `use_skill` tool (same set as pre-seed). */
   skillCatalog: SkillCatalogEntry[];
 }> {
-  const baseAgenticPrompt = await input.getPromptBody('genSystemHtmlAgentic');
-  const agentsContext = (await input.getPromptBody('sandboxAgentsContext')).trim();
+  const baseAgenticPrompt = await input.getPromptBody('designer-agentic-system');
+  const agentsContext = (await input.getPromptBody('agents-md-file')).trim();
   const sandboxSeedFiles: Record<string, string> = {};
   if (agentsContext.length > 0) {
     sandboxSeedFiles['AGENTS.md'] = agentsContext;

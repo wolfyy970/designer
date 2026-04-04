@@ -7,7 +7,7 @@ import { runAgenticWithEvaluation } from './agentic-orchestrator.ts';
 import type { GenerateStreamBody } from '../lib/generate-stream-schema.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { agenticOrchestratorEventToSse } from '../lib/agentic-sse-map.ts';
-import { getPromptBody } from '../db/prompts.ts';
+import { createResolvePromptBody, sanitizePromptOverrides } from '../lib/prompt-overrides.ts';
 import { createWriteGate, type WriteGate } from '../lib/sse-write-gate.ts';
 import { executeSingleShotGenerateStream } from './single-shot-generate-stream.ts';
 
@@ -41,6 +41,7 @@ async function executeGenerateStream(
 ): Promise<void> {
   const { allocId, laneIndex, laneEndMode = 'done', writeGate, correlationId } = options;
   const gate = writeGate ?? { enqueue: (fn) => fn() };
+  const resolvePrompt = createResolvePromptBody(sanitizePromptOverrides(body.promptOverrides));
 
   const wrap = (data: Record<string, unknown>): Record<string, unknown> =>
     laneIndex !== undefined ? { ...data, laneIndex } : data;
@@ -83,7 +84,7 @@ async function executeGenerateStream(
       evaluatorModelId: body.evaluatorModelId,
       maxRevisionRounds: body.agenticMaxRevisionRounds ?? env.AGENTIC_MAX_REVISION_ROUNDS,
       minOverallScore: body.agenticMinOverallScore ?? env.AGENTIC_MIN_OVERALL_SCORE,
-      getPromptBody,
+      getPromptBody: resolvePrompt,
       onStream: writeAgentic,
     });
     if (agenticResult?.checkpoint) {
@@ -122,6 +123,7 @@ async function executeGenerateStream(
       correlationId,
       laneIndex,
       laneEndMode,
+      resolvePromptBody: resolvePrompt,
     });
   };
 
