@@ -8,6 +8,8 @@ export async function readSseEventStream(
 ): Promise<void> {
   const decoder = new TextDecoder();
   let buffer = '';
+  /** Must persist across TCP chunks so `data:` lines always pair with the preceding `event:` line. */
+  let currentEvent = '';
 
   while (true) {
     const { done, value } = await reader.read();
@@ -17,7 +19,6 @@ export async function readSseEventStream(
     const lines = buffer.split('\n');
     buffer = lines.pop() ?? '';
 
-    let currentEvent = '';
     for (const line of lines) {
       if (line.startsWith('event: ')) {
         currentEvent = line.slice(7).trim();

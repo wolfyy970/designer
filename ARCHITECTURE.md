@@ -393,6 +393,8 @@ Single source of truth for string literals shared across the codebase. Eliminate
 | `canvas-layout.ts` | Sugiyama-style layout (`computeLayout`) |
 | `extract-code.ts` | LLM response code-block extraction |
 | `error-utils.ts` | `normalizeError` — consistent error normalization |
+| `sse-diagnostics.ts` | Dev-only `SseStreamDiagnostics` — event counters, drop tracker, `window.__SSE_DIAG` |
+| `sse-reader.ts` | Shared SSE framing: `readSseEventStream` — pairs `event:`/`data:` lines across TCP chunks |
 | `constants.ts` | UI timing constants (`FIT_VIEW_DURATION_MS`, `AUTO_LAYOUT_DEBOUNCE_MS`, etc.) |
 
 ## Key Design Decisions
@@ -411,7 +413,7 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 **Why `src/constants/`.** String literals for node types, edge types, and generation statuses appear across stores, hooks, components, and edge/node definitions. A dedicated constants layer eliminates magic strings and ensures TypeScript narrows to exact union types at every call site.
 
-**Why SSE for generation.** Each variant is a separate SSE stream. Single-shot events: `progress`, `code`, `done`. Agentic events additionally include `activity`, `plan`, and `file`. The client manages sequencing across variants.
+**Why SSE for generation.** Each variant is a separate SSE stream. Single-shot events: `progress`, `code`, `done`. Agentic events additionally include `activity`, `plan`, and `file`. The client manages sequencing across variants. **Dev diagnostics:** `SseStreamDiagnostics` (client, `src/lib/sse-diagnostics.ts`) tracks event counts, drops, and timing per stream — inspect via `window.__SSE_DIAG` in the browser console. Server-side `generate-execution` logs a write-count summary at stream close. `pi-session-event-bridge` uses `safeBridgeEmit` so async failures are logged instead of silently swallowed, and unknown Pi event types print in dev.
 
 **Why URL-backed preview.** Agentic runs produce a **virtual file tree**. The API serves it at **`/api/preview/sessions/:id/...`** so iframe **`src`** uses real relative URLs (multi-page `a href` works). Sessions are ephemeral (TTL), not durable storage.
 

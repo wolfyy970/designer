@@ -22,6 +22,11 @@ import type {
 import { normalizeError, parseApiErrorBody } from '../lib/error-utils';
 import { safeParseGenerateSSEEvent } from '../lib/generate-sse-event-schema';
 import { readSseEventStream } from '../lib/sse-reader';
+import {
+  attachSseDiagWindow,
+  createSseStreamDiagnostics,
+  type SseStreamDiagnostics,
+} from '../lib/sse-diagnostics';
 import type { ZodError, ZodType } from 'zod';
 import {
   CompileResponseSchema,
@@ -243,9 +248,11 @@ function dispatchGenerateStreamEvent(
   currentEvent: string,
   data: Record<string, unknown>,
   callbacks: GenerateStreamCallbacks,
+  diag?: SseStreamDiagnostics,
 ): void {
   const result = safeParseGenerateSSEEvent(currentEvent, data);
   if (!result.ok) {
+    diag?.recordDrop('zod', currentEvent);
     callbacks.onParseError?.(currentEvent, data, result.error);
     if (import.meta.env.DEV) {
       console.warn('[generate SSE] invalid payload', currentEvent, result.error.flatten(), data);
@@ -253,6 +260,7 @@ function dispatchGenerateStreamEvent(
     return;
   }
   dispatchParsedGenerateStreamEvent(result.event, callbacks);
+  diag?.recordReceived(currentEvent);
 }
 
 export async function fetchHypothesisPromptBundle(
@@ -292,37 +300,64 @@ export async function generateHypothesisStream(
   const reader = response.body?.getReader();
   if (!reader) throw new Error('No response body');
 
-  await readSseEventStream(reader, async (currentEvent, raw) => {
-    try {
-      const parsed = parseHypothesisSseJson(raw);
-      if (parsed == null) {
+  const diag = createSseStreamDiagnostics();
+  attachSseDiagWindow(diag);
+
+  try {
+    await readSseEventStream(reader, async (currentEvent, raw) => {
+      try {
+        if (currentEvent.trim() === '') {
+          diag.recordDrop('empty_event_name', raw.slice(0, 120));
+          return;
+        }
+        const parsed = parseHypothesisSseJson(raw);
+        if (parsed == null) {
+          diag.recordDrop('invalid_json', currentEvent);
+          if (import.meta.env.DEV) {
+            console.warn('[generate SSE] non-object or invalid JSON line', currentEvent);
+          }
+          return;
+        }
+        if (currentEvent === 'lane_done') {
+          diag.recordReceived('lane_done');
+          const idx = parsed.laneIndex;
+          if (typeof idx === 'number' && lanes[idx]) {
+            await lanes[idx].finalizeAfterStream();
+          }
+          return;
+        }
+        if (currentEvent === 'done') {
+          diag.recordReceived('done');
+          return;
+        }
+        const { laneIndex, rest } = stripLaneIndex(parsed);
+        if (
+          import.meta.env.DEV &&
+          typeof laneIndex !== 'number' &&
+          lanes.length > 1 &&
+          currentEvent !== 'done'
+        ) {
+          console.debug('[sse:diag] laneIndex missing; using lane 0 fallback', currentEvent);
+        }
+        const cbs =
+          typeof laneIndex === 'number' && lanes[laneIndex]
+            ? lanes[laneIndex].callbacks
+            : lanes[0]?.callbacks;
+        if (cbs) {
+          dispatchGenerateStreamEvent(currentEvent, rest, cbs, diag);
+        } else {
+          diag.recordDrop('no_callbacks', currentEvent);
+        }
+      } catch {
+        diag.recordDrop('handler_throw', currentEvent);
         if (import.meta.env.DEV) {
-          console.warn('[generate SSE] non-object or invalid JSON line', currentEvent);
+          console.warn('[generate SSE] handler error', currentEvent);
         }
-        return;
       }
-      if (currentEvent === 'lane_done') {
-        const idx = parsed.laneIndex;
-        if (typeof idx === 'number' && lanes[idx]) {
-          await lanes[idx].finalizeAfterStream();
-        }
-        return;
-      }
-      if (currentEvent === 'done') {
-        return;
-      }
-      const { laneIndex, rest } = stripLaneIndex(parsed);
-      const cbs =
-        typeof laneIndex === 'number' && lanes[laneIndex]
-          ? lanes[laneIndex].callbacks
-          : lanes[0]?.callbacks;
-      if (cbs) dispatchGenerateStreamEvent(currentEvent, rest, cbs);
-    } catch {
-      if (import.meta.env.DEV) {
-        console.warn('[generate SSE] malformed JSON line', currentEvent);
-      }
-    }
-  });
+    });
+  } finally {
+    diag.logClose();
+  }
 }
 
 // ── Models ──────────────────────────────────────────────────────────

@@ -7,8 +7,22 @@ import type {
 } from '../types/evaluation';
 import type { GenerationResult, RunTraceEvent, ThinkingTurnSlice } from '../types/provider';
 
+/** Dev-only RAF coalescing stats (see finalize `logDevSummary`). */
+export interface RafDevStats {
+  name: string;
+  /** Times `schedule` started a new requestAnimationFrame. */
+  schedules: number;
+  /** Times the flush callback ran (from rAF or `flushPending`). */
+  framesExecuted: number;
+  /** Times `cancelOnly` discarded a pending frame without flushing. */
+  cancelDiscards: number;
+}
+
 /** Batches rapid stream updates to one React commit per animation frame. */
-export function batchedRafUpdater(flush: () => void): {
+export function batchedRafUpdater(
+  flush: () => void,
+  stats?: RafDevStats,
+): {
   schedule: () => void;
   cancelOnly: () => void;
   /** If a frame was scheduled, cancel it and run flush once (sync). */
@@ -18,13 +32,16 @@ export function batchedRafUpdater(flush: () => void): {
   return {
     schedule() {
       if (rafId !== null) return;
+      if (stats && import.meta.env.DEV) stats.schedules += 1;
       rafId = requestAnimationFrame(() => {
         rafId = null;
+        if (stats && import.meta.env.DEV) stats.framesExecuted += 1;
         flush();
       });
     },
     cancelOnly() {
       if (rafId !== null) {
+        if (stats && import.meta.env.DEV) stats.cancelDiscards += 1;
         cancelAnimationFrame(rafId);
         rafId = null;
       }
@@ -33,6 +50,7 @@ export function batchedRafUpdater(flush: () => void): {
       if (rafId === null) return;
       cancelAnimationFrame(rafId);
       rafId = null;
+      if (stats && import.meta.env.DEV) stats.framesExecuted += 1;
       flush();
     },
   };
@@ -45,6 +63,8 @@ export interface PlaceholderRafBatchers {
   thinking: PlaceholderRafBatch;
   code: PlaceholderRafBatch;
   streamingTool: PlaceholderRafBatch;
+  /** Dev: log RAF batching stats for this session (call after `flushPending` in finalize). */
+  logDevSummary?: () => void;
 }
 
 export function createPlaceholderRafBatchers(
@@ -52,6 +72,26 @@ export function createPlaceholderRafBatchers(
   placeholderId: string,
   updateResult: (id: string, patch: Partial<GenerationResult>) => void,
 ): PlaceholderRafBatchers {
+  const short = placeholderId.slice(0, 8);
+  const mkStats = (name: string): RafDevStats | undefined =>
+    import.meta.env.DEV ? { name, schedules: 0, framesExecuted: 0, cancelDiscards: 0 } : undefined;
+  const activityStats = mkStats('activity');
+  const thinkingStats = mkStats('thinking');
+  const codeStats = mkStats('code');
+  const streamingToolStats = mkStats('streamingTool');
+
+  const logDevSummary =
+    import.meta.env.DEV
+      ? () => {
+          console.debug(`[raf:${short}]`, {
+            activity: activityStats,
+            thinking: thinkingStats,
+            code: codeStats,
+            streamingTool: streamingToolStats,
+          });
+        }
+      : undefined;
+
   return {
     activity: batchedRafUpdater(() => {
       updateResult(placeholderId, {
@@ -59,19 +99,19 @@ export function createPlaceholderRafBatchers(
         activityByTurn: { ...state.activityByTurn },
         lastActivityAt: Date.now(),
       });
-    }),
+    }, activityStats),
     thinking: batchedRafUpdater(() => {
       updateResult(placeholderId, {
         thinkingTurns: [...state.thinkingTurns],
         lastActivityAt: Date.now(),
       });
-    }),
+    }, thinkingStats),
     code: batchedRafUpdater(() => {
       updateResult(placeholderId, {
         liveCode: state.pendingLiveCode,
         lastActivityAt: Date.now(),
       });
-    }),
+    }, codeStats),
     streamingTool: batchedRafUpdater(() => {
       const pending = state.streamingToolPending;
       if (!pending) return;
@@ -81,7 +121,8 @@ export function createPlaceholderRafBatchers(
         streamingToolChars: pending.streamedChars,
         lastActivityAt: Date.now(),
       });
-    }),
+    }, streamingToolStats),
+    logDevSummary,
   };
 }
 

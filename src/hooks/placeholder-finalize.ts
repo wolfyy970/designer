@@ -45,6 +45,7 @@ export function createPlaceholderFinalizeAfterStream(options: {
     raf.activity.flushPending();
     raf.code.flushPending();
     raf.streamingTool.cancelOnly();
+    raf.logDevSummary?.();
     state.streamingToolPending = undefined;
     updateResult(placeholderId, {
       ...clearTransientResultFields(),

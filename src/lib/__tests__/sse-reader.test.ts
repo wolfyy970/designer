@@ -16,6 +16,15 @@ function chunksReader(chunks: string[]): ReadableStreamDefaultReader<Uint8Array>
 }
 
 describe('readSseEventStream', () => {
+  it('pairs when event line and data line arrive in separate read chunks', async () => {
+    const received: { ev: string; data: string }[] = [];
+    const reader = chunksReader(['event: activity\n', 'data: {"entry":"hi"}\n']);
+    await readSseEventStream(reader, (ev, data) => {
+      received.push({ ev, data });
+    });
+    expect(received).toEqual([{ ev: 'activity', data: '{"entry":"hi"}' }]);
+  });
+
   it('pairs event and data lines across chunk boundaries', async () => {
     const received: { ev: string; data: string }[] = [];
     const reader = chunksReader(['event: pro', 'gress\ndata: {"a":1}\n', 'event: code\ndata: {}\n']);

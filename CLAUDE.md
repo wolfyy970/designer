@@ -104,6 +104,13 @@ Do not treat `shared-defaults.ts` as a standalone file you can edit in isolation
 
 **TypeScript strict** — Unused imports and variables fail the build.
 
+### SSE pipeline diagnostics (dev)
+In development, every agentic generation stream writes structured `console.debug` entries across the pipeline:
+- **Server:** `[bridge]` for event-bridge errors/unhandled types; `[write-gate]` for SSE write failures; `[generate:SSE]` write-count summary at stream close.
+- **Client:** `SseStreamDiagnostics` (`src/lib/sse-diagnostics.ts`) counts events and drops — inspect via `window.__SSE_DIAG`; `[stream:<id>]` per-callback logs in `placeholder-stream-handlers.ts`; `[raf:<id>]` batcher stats at finalize.
+
+All diagnostics are tree-shaken in production or gated behind `import.meta.env.DEV` / `env.isDev`.
+
 ### Errors and optional telemetry
 User-visible failures should use [`normalizeError`](src/lib/error-utils.ts) (and related helpers) so messages stay consistent. Optional debug POSTs to a local ingest URL must go through [`debugAgentIngest`](server/lib/debug-agent-ingest.ts) (server: `DEBUG_AGENT_INGEST=1`) or [`src/lib/debug-agent-ingest.ts`](src/lib/debug-agent-ingest.ts) (browser: dev + `VITE_DEBUG_AGENT_INGEST=1`) — they no-op by default. Avoid bare `.catch(() => {})` on real work; swallowing is only acceptable inside that guarded ingest or similarly optional side channels.
 

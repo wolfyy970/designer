@@ -121,9 +121,18 @@ export interface LivenessSlice {
   streamingToolChars?: number;
   agenticPhase?: AgenticPhase;
   evaluationStatus?: string;
+  /** startedAt of the most recent open thinking turn (endedAt == null), if any. */
+  activeThinkingStartedAt?: number;
 }
 
 export function pickLivenessSlice(result: GenerationResult): LivenessSlice {
+  const turns = result.thinkingTurns;
+  let openTurn: ThinkingTurnSlice | undefined;
+  if (turns) {
+    for (let i = turns.length - 1; i >= 0; i--) {
+      if (turns[i].endedAt == null) { openTurn = turns[i]; break; }
+    }
+  }
   return {
     progressMessage: result.progressMessage,
     lastAgentFileAt: result.lastAgentFileAt,
@@ -136,6 +145,7 @@ export function pickLivenessSlice(result: GenerationResult): LivenessSlice {
     streamingToolChars: result.streamingToolChars,
     agenticPhase: result.agenticPhase,
     evaluationStatus: result.evaluationStatus,
+    activeThinkingStartedAt: openTurn?.startedAt,
   };
 }
 

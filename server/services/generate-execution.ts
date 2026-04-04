@@ -26,7 +26,11 @@ export function createWriteGate(): WriteGate {
   return {
     enqueue(fn: () => Promise<void>): Promise<void> {
       const next = tail.then(fn);
-      tail = next.catch(() => {});
+      tail = next.catch((e: unknown) => {
+        if (env.isDev && e != null) {
+          console.error('[write-gate]', e);
+        }
+      });
       return next;
     },
   };
@@ -60,7 +64,13 @@ async function executeGenerateStream(
   const wrap = (data: Record<string, unknown>): Record<string, unknown> =>
     laneIndex !== undefined ? { ...data, laneIndex } : data;
 
+  const sseWriteAudit =
+    env.isDev && body.mode === 'agentic'
+      ? { byType: {} as Record<string, number>, skippedAbort: 0, t0: Date.now() }
+      : null;
+
   const write = async (event: string, data: Record<string, unknown>) => {
+    if (sseWriteAudit) sseWriteAudit.byType[event] = (sseWriteAudit.byType[event] ?? 0) + 1;
     const payload = JSON.stringify(wrap(data));
     await gate.enqueue(async () => {
       await stream.writeSSE({ data: payload, event, id: allocId() });
@@ -69,7 +79,10 @@ async function executeGenerateStream(
 
   if (body.mode === 'agentic') {
     const writeAgentic = async (event: AgenticOrchestratorEvent) => {
-      if (abortSignal.aborted) return;
+      if (abortSignal.aborted) {
+        if (sseWriteAudit) sseWriteAudit.skippedAbort += 1;
+        return;
+      }
       if (event.type === 'phase') {
         await write('phase', { phase: event.phase });
         return;
@@ -169,6 +182,13 @@ async function executeGenerateStream(
       await write('lane_done', { laneIndex });
     } else {
       await write('done', {});
+    }
+    if (sseWriteAudit) {
+      console.debug('[generate:SSE] agentic write summary', {
+        byType: sseWriteAudit.byType,
+        skippedAbort: sseWriteAudit.skippedAbort,
+        durationMs: Date.now() - sseWriteAudit.t0,
+      });
     }
     return;
   }

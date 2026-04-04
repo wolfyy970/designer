@@ -25,10 +25,20 @@ export interface PiSessionBridgeContext {
   pendingToolCallsRef?: { current: number };
 }
 
+/** Fire-and-forget async `onEvent` without unhandled rejections (e.g. SSE write failures). */
+function safeBridgeEmit(ctx: PiSessionBridgeContext, event: AgentRunEvent): void {
+  void Promise.resolve(ctx.onEvent(event)).catch((e) => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[bridge] onEvent failed', e);
+    }
+  });
+}
+
 function emitFirstTokenIfNeeded(ctx: PiSessionBridgeContext): void {
   if (ctx.waitingForFirstToken.current) {
     ctx.waitingForFirstToken.current = false;
-    void ctx.onEvent(
+    safeBridgeEmit(
+      ctx,
       ctx.trace('model_first_token', 'First streamed model token received', {
         phase: 'building',
         status: 'success',
@@ -124,12 +134,15 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
   const streamingToolByIndex = new Map<number, StreamingToolAcc>();
   syncPendingToolProbe(ctx, toolStartMs);
   return session.subscribe((event: AgentSessionEvent) => {
+    let handled = false;
     if (event.type === 'turn_start') {
+      handled = true;
       bumpStreamActivity(ctx);
       ctx.modelTurnId.current += 1;
-      void ctx.onEvent({ type: 'progress', payload: 'Model turn…' });
+      safeBridgeEmit(ctx, { type: 'progress', payload: 'Model turn…' });
       ctx.waitingForFirstToken.current = true;
-      void ctx.onEvent(
+      safeBridgeEmit(
+        ctx,
         ctx.trace('model_turn_start', 'Model turn started', {
           phase: 'building',
         }),
@@ -148,6 +161,7 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
     }
 
     if (event.type === 'message_update') {
+      handled = true;
       const e = event.assistantMessageEvent;
       if (e.type === 'text_delta' && e.delta) {
         emitFirstTokenIfNeeded(ctx);
@@ -156,7 +170,7 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
           bumpStreamActivity(ctx);
           const logId = ctx.turnLogRef.current;
           if (logId) appendLlmCallResponse(logId, delta);
-          void ctx.onEvent({ type: 'activity', payload: delta });
+          safeBridgeEmit(ctx, { type: 'activity', payload: delta });
         }
       } else if (e.type === 'thinking_delta' && e.delta) {
         emitFirstTokenIfNeeded(ctx);
@@ -165,7 +179,7 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
           bumpStreamActivity(ctx);
           const logId = ctx.turnLogRef.current;
           if (logId) appendLlmCallResponse(logId, delta);
-          void ctx.onEvent({
+          safeBridgeEmit(ctx, {
             type: 'thinking',
             payload: delta,
             turnId: ctx.modelTurnId.current,
@@ -183,7 +197,7 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
           streamedChars: 0,
           lastEmitAt: now,
         });
-        void ctx.onEvent({
+        safeBridgeEmit(ctx, {
           type: 'streaming_tool',
           toolName,
           streamedChars: 0,
@@ -212,7 +226,7 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
         const t = Date.now();
         if (t - acc.lastEmitAt >= STREAMING_TOOL_EMIT_INTERVAL_MS) {
           acc.lastEmitAt = t;
-          void ctx.onEvent({
+          safeBridgeEmit(ctx, {
             type: 'streaming_tool',
             toolName: acc.toolName,
             streamedChars: acc.streamedChars,
@@ -230,7 +244,7 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
         const toolPath = toolPathFromToolCall(tc) ?? acc?.toolPath;
         const streamedChars = acc?.streamedChars ?? 0;
         streamingToolByIndex.delete(idx);
-        void ctx.onEvent({
+        safeBridgeEmit(ctx, {
           type: 'streaming_tool',
           toolName,
           streamedChars,
@@ -242,6 +256,7 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
     }
 
     if (event.type === 'tool_execution_start') {
+      handled = true;
       bumpStreamActivity(ctx);
       const tn = event.toolName;
       const rawArgs = event.args as Record<string, unknown> | undefined;
@@ -266,14 +281,15 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
       });
       syncPendingToolProbe(ctx, toolStartMs);
       ctx.toolPathByCallId.set(event.toolCallId, path);
-      void ctx.onEvent(
+      safeBridgeEmit(
+        ctx,
         ctx.trace('tool_started', path ? `${tn} → ${path}` : `Started ${tn}`, {
           phase: 'building',
           toolName: tn,
           path,
         }),
       );
-      void ctx.onEvent({
+      safeBridgeEmit(ctx, {
         type: 'progress',
         payload: toolStartProgressPayload(tn, path, pattern, command),
       });
@@ -281,6 +297,7 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
     }
 
     if (event.type === 'tool_execution_end') {
+      handled = true;
       bumpStreamActivity(ctx);
       const started = toolStartMs.get(event.toolCallId);
       const durationMs = started != null ? Date.now() - started : undefined;
@@ -302,7 +319,8 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
       syncPendingToolProbe(ctx, toolStartMs);
       if (event.isError) {
         const path = ctx.toolPathByCallId.get(event.toolCallId);
-        void ctx.onEvent(
+        safeBridgeEmit(
+          ctx,
           ctx.trace('tool_failed', `Tool failed: ${event.toolName}`, {
             phase: 'building',
             toolName: event.toolName,
@@ -310,13 +328,14 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
             status: 'error',
           }),
         );
-        void ctx.onEvent({
+        safeBridgeEmit(ctx, {
           type: 'progress',
           payload: `Tool failed: ${event.toolName}`,
         });
       } else {
         const path = ctx.toolPathByCallId.get(event.toolCallId);
-        void ctx.onEvent(
+        safeBridgeEmit(
+          ctx,
           ctx.trace('tool_finished', `Finished ${event.toolName}`, {
             phase: 'building',
             toolName: event.toolName,
@@ -329,12 +348,18 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
     }
 
     if (event.type === 'compaction_start') {
-      void ctx.onEvent({ type: 'progress', payload: 'Compacting context…' });
-      void ctx.onEvent(
+      handled = true;
+      safeBridgeEmit(ctx, { type: 'progress', payload: 'Compacting context…' });
+      safeBridgeEmit(
+        ctx,
         ctx.trace('compaction', 'Compacting context window', {
           phase: 'building',
         }),
       );
+    }
+
+    if (!handled && process.env.NODE_ENV !== 'production') {
+      console.debug('[bridge] unhandled Pi event type:', (event as { type?: string }).type);
     }
   });
 }
