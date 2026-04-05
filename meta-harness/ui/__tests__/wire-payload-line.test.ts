@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { oneLinePreviewTail, wireDetailSnippet, wirePayloadLine } from '../state.ts';
+import { oneLinePreviewTail, wireDetailSnippet, wirePayloadLine } from '../wire-formatters.ts';
 
 describe('wirePayloadLine (meta-harness TUI)', () => {
   it('formats compile_result hypothesis count', () => {

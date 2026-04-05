@@ -120,7 +120,6 @@ export type HydrateOptions = {
   promptOverrides?: Record<string, string>;
   supportsVision?: boolean;
   agenticMaxRevisionRounds?: number;
-  agenticMinOverallScore?: number;
   /** Merged with server defaults; used for agentic evaluation overall score only. */
   rubricWeights?: Record<string, number>;
   evaluatorProviderId?: string;
@@ -138,12 +137,11 @@ export type HydrateCompileRequestOptions = {
   promptOverrides?: Record<string, string>;
 };
 
-/** Build POST /api/compile JSON body from a simplified benchmark file. */
-export function hydrateCompileRequest(
-  raw: unknown,
+/** Build POST /api/compile JSON body from an already-validated simplified test case. */
+export function hydrateCompileRequestFromParsed(
+  simplified: SimplifiedMetaHarnessTestCase,
   options: HydrateCompileRequestOptions,
 ): Record<string, unknown> {
-  const simplified = SimplifiedMetaHarnessTestCaseSchema.parse(raw);
   const spec = buildDesignSpecFromSimplified(simplified.spec);
   const count =
     simplified.compile?.hypothesisCount ?? options.defaultHypothesisCount ?? 5;
@@ -159,12 +157,19 @@ export function hydrateCompileRequest(
   };
 }
 
-/** Parse simplified JSON then validate full hypothesis generate request shape. */
-export function hydrateMetaHarnessTestCase(
+/** Build POST /api/compile JSON body from a simplified benchmark file. */
+export function hydrateCompileRequest(
   raw: unknown,
+  options: HydrateCompileRequestOptions,
+): Record<string, unknown> {
+  return hydrateCompileRequestFromParsed(SimplifiedMetaHarnessTestCaseSchema.parse(raw), options);
+}
+
+/** Build hypothesis generate body from an already-validated simplified test case. */
+export function hydrateMetaHarnessTestCaseFromParsed(
+  simplified: SimplifiedMetaHarnessTestCase,
   options: HydrateOptions,
 ): z.infer<typeof HypothesisGenerateRequestSchema> {
-  const simplified = SimplifiedMetaHarnessTestCaseSchema.parse(raw);
   const designSpec = buildDesignSpecFromSimplified(simplified.spec);
   const strategy = options.strategyOverride ?? simplified.strategy;
   if (!strategy) {
@@ -205,9 +210,6 @@ export function hydrateMetaHarnessTestCase(
     ...(options.agenticMaxRevisionRounds !== undefined
       ? { agenticMaxRevisionRounds: options.agenticMaxRevisionRounds }
       : {}),
-    ...(options.agenticMinOverallScore !== undefined
-      ? { agenticMinOverallScore: options.agenticMinOverallScore }
-      : {}),
     ...(options.rubricWeights && Object.keys(options.rubricWeights).length > 0
       ? { rubricWeights: options.rubricWeights }
       : {}),
@@ -216,4 +218,12 @@ export function hydrateMetaHarnessTestCase(
   };
 
   return HypothesisGenerateRequestSchema.parse(body);
+}
+
+/** Parse simplified JSON then validate full hypothesis generate request shape. */
+export function hydrateMetaHarnessTestCase(
+  raw: unknown,
+  options: HydrateOptions,
+): z.infer<typeof HypothesisGenerateRequestSchema> {
+  return hydrateMetaHarnessTestCaseFromParsed(SimplifiedMetaHarnessTestCaseSchema.parse(raw), options);
 }

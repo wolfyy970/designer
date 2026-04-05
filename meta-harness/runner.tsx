@@ -6,7 +6,11 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { render } from 'ink';
 import { repoRoot } from './paths.ts';
-import { DEFAULT_COMPILE_MODEL, META_HARNESS_HEALTH_TIMEOUT_MS } from './constants.ts';
+import {
+  DEFAULT_COMPILE_MODEL,
+  INK_TTY_PREP_SEQUENCE,
+  META_HARNESS_HEALTH_TIMEOUT_MS,
+} from './constants.ts';
 import {
   filterTestFilesBySubstrings,
   loadConfig,
@@ -97,12 +101,13 @@ export async function main(): Promise<void> {
 
   const useInk = process.stdout.isTTY && !args.plain;
   if (useInk) {
-    const { waitUntilExit } = render(<App args={args} />, { exitOnCtrlC: true });
+    process.stdout.write(INK_TTY_PREP_SEQUENCE);
+    const { waitUntilExit } = render(<App args={args} config={cfg} />, { exitOnCtrlC: true });
     await waitUntilExit();
     return;
   }
 
-  await runMetaHarnessEngine(args, createPlainCallbacks(args));
+  await runMetaHarnessEngine(args, createPlainCallbacks(args), { config: cfg });
 }
 
 main().catch((err) => {

@@ -26,4 +26,16 @@ describe('loadRichCandidateHistory', () => {
     expect(out).toContain('baseline');
     expect(out).toContain('2.500');
   });
+
+  it('ignores corrupt aggregate.json (no crash)', async () => {
+    const session = await mkdtemp(path.join(tmpdir(), 'mh-rich-bad-agg-'));
+    const c0 = path.join(session, 'candidate-1');
+    await mkdir(c0, { recursive: true });
+    await writeFile(path.join(c0, 'aggregate.json'), '{ not valid aggregate', 'utf8');
+    await writeFile(path.join(c0, 'prompt-overrides.json'), JSON.stringify({}), 'utf8');
+
+    const out = await loadRichCandidateHistory(session, 5);
+    expect(out).toContain('candidate-1');
+    expect(out).toContain('mean: —');
+  });
 });

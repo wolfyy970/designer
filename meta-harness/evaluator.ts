@@ -8,9 +8,10 @@ import type { AggregatedEvaluationReport } from '../src/types/evaluation.ts';
 import { readSseEventStream } from '../src/lib/sse-reader.ts';
 import { parseSseJsonObject } from './sse-utils.ts';
 import { ARTIFACT, EVAL_META_JSON_POLL_MS, EVAL_META_JSON_WAIT_MS } from './constants.ts';
+import { mergeHttpTimeoutSignal } from './openrouter-client.ts';
 import { EvalRunMetaSchema } from './schemas.ts';
 
-export type HypothesisEvalResult = {
+type HypothesisEvalResult = {
   baseCorrelationId: string;
   laneCorrelationId: string;
   overallScore: number | null;
@@ -48,6 +49,8 @@ export async function runHypothesisEvalFromMetaHarness(options: {
   body: Record<string, unknown>;
   evalRunsBaseDir: string;
   signal?: AbortSignal;
+  /** POST /hypothesis/generate full-read timeout (merged with `signal` when set). */
+  hypothesisGenerateTimeoutMs?: number;
   /** Default 60s — waiting for eval-runs disk flush after SSE ends. */
   evalLogWaitMs?: number;
   onWireEvent?: (event: string, payload: unknown) => void;
@@ -74,7 +77,7 @@ export async function runHypothesisEvalFromMetaHarness(options: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: options.signal,
+    signal: mergeHttpTimeoutSignal(options.signal, options.hypothesisGenerateTimeoutMs),
   });
 
   if (!res.ok) {

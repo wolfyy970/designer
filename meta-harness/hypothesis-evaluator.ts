@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { DesignSpec } from '../src/types/spec.ts';
 import type { HypothesisStrategy } from '../src/types/compiler.ts';
 
-import { OPENROUTER_CHAT_URL } from './constants.ts';
+import { fetchOpenRouterChatJson } from './openrouter-client.ts';
 
 const RUBRIC_KEYS = [
   'specificity',
@@ -88,6 +88,8 @@ type ScoreHypothesisOptions = {
   specContext: string;
   hypothesis: HypothesisStrategy;
   signal?: AbortSignal;
+  /** When `signal` is omitted (rubric timeout disabled), caps this OpenRouter request */
+  openRouterChatTimeoutMs?: number;
 };
 
 type ScoreHypothesisResult = {
@@ -107,29 +109,24 @@ export async function scoreHypothesisWithRubric(options: ScoreHypothesisOptions)
     'Reply with ONLY a JSON object containing the six numeric keys listed in the system message.',
   ].join('\n');
 
-  const res = await fetch(OPENROUTER_CHAT_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${options.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+  const json = (await fetchOpenRouterChatJson({
+    apiKey: options.apiKey,
+    requestBody: {
       model: options.model,
       messages: [
         { role: 'system', content: SYSTEM_INSTRUCTIONS },
         { role: 'user', content: user },
       ],
       temperature: 0.2,
-    }),
+    },
     signal: options.signal,
-  });
-
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new Error(`OpenRouter hypothesis rubric ${res.status}: ${t.slice(0, 600)}`);
-  }
-
-  const json = (await res.json()) as {
+    timeoutMs:
+      options.signal == null &&
+      options.openRouterChatTimeoutMs != null &&
+      options.openRouterChatTimeoutMs > 0
+        ? options.openRouterChatTimeoutMs
+        : undefined,
+  })) as {
     choices?: Array<{ message?: { content?: string | null } }>;
   };
   const content = json.choices?.[0]?.message?.content;

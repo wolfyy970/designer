@@ -1,6 +1,7 @@
 import Gradient from 'ink-gradient';
 import { Box, Text } from 'ink';
 import { useEffect, useState } from 'react';
+import { HEADER_CLOCK_INTERVAL_MS } from '../constants.ts';
 import { dimText } from './theme.ts';
 import type { RunnerState } from './state.ts';
 
@@ -18,7 +19,7 @@ function formatElapsed(ms: number): string {
 export function Header({ state }: { state: RunnerState }) {
   const [clockMs, setClockMs] = useState(() => Date.now());
   useEffect(() => {
-    const id = setInterval(() => setClockMs(Date.now()), 1000);
+    const id = setInterval(() => setClockMs(Date.now()), HEADER_CLOCK_INTERVAL_MS);
     return () => clearInterval(id);
   }, []);
   const elapsed = clockMs - state.runStartedAt;

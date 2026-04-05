@@ -41,6 +41,8 @@ export type RunnerCallbacks = {
     stopReason: string | null,
     elapsedMs: number,
     error?: string,
+    /** Explicit outcome; when omitted, UI may infer from `error` / `score`. */
+    outcome?: 'scored' | 'unscored' | 'error',
   ) => void;
   onSkippedTestCase?: (filePath: string, message: string) => void;
   onIterationDone: (info: {

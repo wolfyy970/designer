@@ -28,7 +28,7 @@ describe('session helpers', () => {
       cfg,
       iterations: 2,
     });
-    expect(sessionFolderName.startsWith('session-')).toBe(true);
+    expect(sessionFolderName).toMatch(/^session-design-\d{4}-\d{2}-\d{2}T/);
     const sj = path.join(sessionDir, 'session.json');
     const raw = JSON.parse(await readFile(sj, 'utf8')) as {
       mode?: string;

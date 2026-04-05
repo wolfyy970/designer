@@ -7,7 +7,7 @@ import { EVALUATOR_RUBRIC_IDS } from '../src/types/evaluation.ts';
 import { resolveRubricWeights } from '../server/lib/evaluation-revision-gate.ts';
 import type { MetaHarnessMode } from './modes.ts';
 import { repoRoot } from './paths.ts';
-import { OPENROUTER_CHAT_URL } from './constants.ts';
+import { fetchOpenRouterChatJson } from './openrouter-client.ts';
 import {
   formatRubricWeightsContext,
   loadCurrentSkills,
@@ -19,7 +19,7 @@ import {
 import { openRouterToolsForMode, systemPromptForMode } from './proposer-prompts.ts';
 import { dispatchTool, type ProposerContext } from './proposer-tools.ts';
 
-export type ProposerResult = {
+type ProposerResult = {
   reasoning: string;
   promptOverrides: Record<string, string>;
   /** Effective rubric blend for agentic eval (omitted when unchanged). */
@@ -53,6 +53,8 @@ export async function runMetaHarnessProposer(options: {
   candidateLabel: string;
   maxToolRounds: number;
   signal?: AbortSignal;
+  /** Per round-trip; default from config / constants */
+  openRouterChatTimeoutMs?: number;
   onToolCall?: (round: number, toolName: string, summary: string) => void;
 }): Promise<ProposerResult> {
   const root = repoRoot();
@@ -97,7 +99,7 @@ export async function runMetaHarnessProposer(options: {
     contextBlock,
     '---',
     '',
-    'Based on the history above, make one focused change (prompt, skill, and/or rubric weights), then call submit_candidate.',
+    'Based on the history above, decide **refine-on-leader** vs **explore** (see system prompt), make one focused change using your mode’s edit surfaces, then call submit_candidate.',
   ].join('\n');
 
   const tools = openRouterToolsForMode(options.mode);
@@ -113,27 +115,17 @@ export async function runMetaHarnessProposer(options: {
     lastRound = round + 1;
     if (ctx.submitted) break;
 
-    const res = await fetch(OPENROUTER_CHAT_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${options.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    const json = (await fetchOpenRouterChatJson({
+      apiKey: options.apiKey,
+      requestBody: {
         model: options.model,
         messages,
         tools,
         tool_choice: 'auto',
-      }),
+      },
       signal: options.signal,
-    });
-
-    if (!res.ok) {
-      const t = await res.text().catch(() => '');
-      throw new Error(`OpenRouter ${res.status}: ${t.slice(0, 800)}`);
-    }
-
-    const json = (await res.json()) as {
+      timeoutMs: options.openRouterChatTimeoutMs,
+    })) as {
       choices?: Array<{ message?: { content?: string | null; tool_calls?: OpenAiToolCall[] } }>;
     };
     const message = json.choices?.[0]?.message;

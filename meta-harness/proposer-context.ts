@@ -8,6 +8,7 @@ import { PROMPT_DEFAULTS } from '../src/lib/prompts/shared-defaults.ts';
 import { resolveRubricWeights } from '../server/lib/evaluation-revision-gate.ts';
 import { ARTIFACT } from './constants.ts';
 import type { MetaHarnessMode } from './modes.ts';
+import { AggregateJsonSchema, BestCandidateJsonSchema } from './schemas.ts';
 
 /** Prompt keys the proposer should pre-inject per mode (the edit surfaces). */
 export const MODE_PROMPT_KEYS: Record<MetaHarnessMode, PromptKey[]> = {
@@ -145,14 +146,14 @@ export async function loadRichCandidateHistory(sessionHistoryDir: string, max = 
     let meanLabel = '—';
     let cid = -1;
     try {
-      const agg = JSON.parse(await readFile(path.join(cd, 'aggregate.json'), 'utf8')) as {
-        meanScore?: unknown;
-        candidateId?: unknown;
-      };
-      if (typeof agg.meanScore === 'number' && Number.isFinite(agg.meanScore)) {
-        meanLabel = agg.meanScore.toFixed(3);
+      const rawAgg = JSON.parse(await readFile(path.join(cd, 'aggregate.json'), 'utf8')) as unknown;
+      const agg = AggregateJsonSchema.safeParse(rawAgg);
+      if (agg.success) {
+        if (typeof agg.data.meanScore === 'number' && Number.isFinite(agg.data.meanScore)) {
+          meanLabel = agg.data.meanScore.toFixed(3);
+        }
+        if (typeof agg.data.candidateId === 'number') cid = agg.data.candidateId;
       }
-      if (typeof agg.candidateId === 'number') cid = agg.candidateId;
     } catch {
       /* ignore */
     }
@@ -249,11 +250,20 @@ export async function loadPreviousSessionBests(
     try {
       const raw = JSON.parse(
         await readFile(path.join(historyRootDir, sess, 'best-candidate.json'), 'utf8'),
-      ) as { meanScore?: number; candidateId?: number; updatedAt?: string };
-      const mean = typeof raw.meanScore === 'number' ? raw.meanScore.toFixed(3) : '—';
-      const cid = typeof raw.candidateId === 'number' ? String(raw.candidateId) : '—';
-      const upd = typeof raw.updatedAt === 'string' ? raw.updatedAt.slice(0, 19) : '—';
-      rows.push(`| ${sess} | ${mean} | ${cid} | ${upd} | ${promo} |`);
+      ) as unknown;
+      const bc = BestCandidateJsonSchema.safeParse(raw);
+      if (bc.success) {
+        const mean =
+          typeof bc.data.meanScore === 'number' && Number.isFinite(bc.data.meanScore)
+            ? bc.data.meanScore.toFixed(3)
+            : '—';
+        const cid = typeof bc.data.candidateId === 'number' ? String(bc.data.candidateId) : '—';
+        const upd =
+          typeof bc.data.updatedAt === 'string' ? bc.data.updatedAt.slice(0, 19) : '—';
+        rows.push(`| ${sess} | ${mean} | ${cid} | ${upd} | ${promo} |`);
+      } else {
+        rows.push(`| ${sess} | — | — | — | ${promo} |`);
+      }
     } catch {
       rows.push(`| ${sess} | — | — | — | ${promo} |`);
     }

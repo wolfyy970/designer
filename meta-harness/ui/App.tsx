@@ -1,8 +1,10 @@
 import { Box, useApp, useInput } from 'ink';
 import { useEffect, useReducer, useRef } from 'react';
+import { INK_EXIT_DELAY_MS } from '../constants.ts';
 import {
   runMetaHarnessEngine,
   type MetaHarnessCliArgs,
+  type MetaHarnessConfig,
 } from '../runner-core.ts';
 import { ActivityLog } from './ActivityLog.tsx';
 import { Header } from './Header.tsx';
@@ -15,7 +17,7 @@ import { createInitialState, reduceRunnerState } from './state.ts';
 import type { RunnerAction } from './state.ts';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
 
-export function App({ args }: { args: MetaHarnessCliArgs }) {
+export function App({ args, config }: { args: MetaHarnessCliArgs; config: MetaHarnessConfig }) {
   const { exit } = useApp();
   const [state, dispatch] = useReducer(reduceRunnerState, undefined, createInitialState);
   const stopRef = useRef(false);
@@ -40,7 +42,9 @@ export function App({ args }: { args: MetaHarnessCliArgs }) {
       };
 
       try {
-        await runMetaHarnessEngine(args, {
+        await runMetaHarnessEngine(
+          args,
+          {
           onPreflight: (info) => dispatchAction({ type: 'PREFLIGHT', payload: info }),
           onBaselineStart: () => dispatchAction({ type: 'BASELINE_START' }),
           onIterationStart: (candidateId, iteration, total) =>
@@ -57,8 +61,8 @@ export function App({ args }: { args: MetaHarnessCliArgs }) {
             dispatchAction({ type: 'WIRE', testName, event, payload }),
           onTestCaseHeartbeat: (testName, elapsedSec) =>
             dispatchAction({ type: 'HEARTBEAT', testName, elapsedSec }),
-          onTestCaseDone: (name, score, stopReason, elapsedMs, error) =>
-            dispatchAction({ type: 'TEST_DONE', name, score, stopReason, elapsedMs, error }),
+          onTestCaseDone: (name, score, stopReason, elapsedMs, error, outcome) =>
+            dispatchAction({ type: 'TEST_DONE', name, score, stopReason, elapsedMs, error, outcome }),
           onSkippedTestCase: (filePath, message) =>
             dispatchAction({ type: 'SKIPPED_TEST', filePath, message }),
           onCompileStart: (testName, hypothesisCount) =>
@@ -97,14 +101,16 @@ export function App({ args }: { args: MetaHarnessCliArgs }) {
               promotionReportRelPath,
             }),
           shouldStop,
-        });
+        },
+          { config },
+        );
       } catch (e) {
         dispatchAction({
           type: 'SET_ERROR',
           message: e instanceof Error ? e.message : String(e),
         });
       } finally {
-        await new Promise((r) => setTimeout(r, 250));
+        await new Promise((r) => setTimeout(r, INK_EXIT_DELAY_MS));
         if (mounted) exit();
       }
     };
@@ -113,7 +119,7 @@ export function App({ args }: { args: MetaHarnessCliArgs }) {
     return () => {
       mounted = false;
     };
-  }, [args, exit]);
+  }, [args, config, exit]);
 
   return (
     <ErrorBoundary>

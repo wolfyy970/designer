@@ -12,13 +12,15 @@ import {
 } from './promotion-report.ts';
 import { loadConfig, type MetaHarnessCliArgs, type MetaHarnessConfig } from './config.ts';
 import { writeBestCandidate, createMetaHarnessSession, nextCandidateId, listTestCaseFiles } from './session.ts';
-import {
-  runTestCasesEvaluation,
-  writeCandidateChangelogAndAggregate,
-} from './candidate-eval.ts';
+import { runTestCasesEvaluation } from './candidate-eval.ts';
+import { writeCandidateChangelogAndAggregate } from './candidate-artifacts.ts';
 import { filterTestFilesBySubstrings } from './config.ts';
 import type { RunnerCallbacks } from './runner-types.ts';
-import { ARTIFACT, DEFAULT_COMPILE_MODEL } from './constants.ts';
+import {
+  ARTIFACT,
+  DEFAULT_COMPILE_MODEL,
+  DEFAULT_OPENROUTER_CHAT_TIMEOUT_MS,
+} from './constants.ts';
 
 export type { MetaHarnessMode } from './modes.ts';
 export type { PromotionSummary } from './promotion-report.ts';
@@ -34,11 +36,17 @@ export type { RunnerCallbacks, RunnerPreflightInfo } from './runner-types.ts';
 export { listTestCaseFiles } from './session.ts';
 export { runCompileStep } from './compile-step.ts';
 
+/** Optional engine tuning; pass `config` to avoid loading disk config twice. */
+export type RunMetaHarnessEngineOptions = {
+  config?: MetaHarnessConfig;
+};
+
 export async function runMetaHarnessEngine(
   args: MetaHarnessCliArgs,
   callbacks: RunnerCallbacks,
+  options?: RunMetaHarnessEngineOptions,
 ): Promise<void> {
-  const cfg = await loadConfig();
+  const cfg = options?.config ?? (await loadConfig());
   const root = repoRoot();
   const metaHarnessDir = path.join(root, 'meta-harness');
   const historyRoot = path.join(metaHarnessDir, 'history');
@@ -75,6 +83,8 @@ export async function runMetaHarnessEngine(
       ? cfg.hypothesisEvalModel.trim()
       : cfg.proposerModel;
   const compileHypothesisCountDefault = cfg.compileHypothesisCount ?? 5;
+  const openRouterChatTimeoutMs =
+    cfg.openRouterChatTimeoutMs ?? DEFAULT_OPENROUTER_CHAT_TIMEOUT_MS;
 
   const apiKey = process.env.OPENROUTER_API_KEY ?? '';
   if (!args.evalOnly && !apiKey) {
@@ -158,6 +168,7 @@ export async function runMetaHarnessEngine(
         evalRunsBaseDir: evalRunsBase,
         candidateLabel: label,
         maxToolRounds: cfg.proposerMaxToolRounds,
+        openRouterChatTimeoutMs,
         onToolCall(round, toolName, summary) {
           callbacks.onProposerToolCall(round, toolName, summary);
         },

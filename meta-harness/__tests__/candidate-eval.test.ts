@@ -59,4 +59,71 @@ describe('runTestCasesEvaluation JSON guard', () => {
     expect(skipped.some((s) => s.path === bad)).toBe(true);
     expect(skipped.some((s) => s.path === ugly)).toBe(true);
   });
+
+  it('skips when name does not match filename basename', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mh-ceval-name-'));
+    const tf = path.join(root, 'correct-name.json');
+    await writeFile(
+      tf,
+      JSON.stringify({
+        name: 'wrong',
+        spec: {
+          title: 'T',
+          sections: {
+            'design-brief': 'b',
+            'existing-design': '',
+            'research-context': '',
+            'objectives-metrics': '',
+            'design-constraints': '',
+          },
+        },
+        model: { providerId: 'openrouter', modelId: 'x/y' },
+      }),
+      'utf8',
+    );
+
+    const skipped: Array<{ path: string; msg: string }> = [];
+    const cfg: MetaHarnessConfig = {
+      apiBaseUrl: 'http://127.0.0.1:3001/api',
+      iterations: 1,
+      proposerModel: 'm',
+      proposerMaxToolRounds: 3,
+      defaultCompilerProvider: 'openrouter',
+    };
+    const args: MetaHarnessCliArgs = {
+      mode: 'compile',
+      once: false,
+      evalOnly: true,
+      dryRun: false,
+      plain: true,
+      testFilters: [],
+    };
+
+    const candidateDir = path.join(root, 'candidate');
+    await mkdir(candidateDir, { recursive: true });
+
+    await runTestCasesEvaluation({
+      args,
+      cfg,
+      candidateId: 1,
+      promptOverrides: {},
+      testFiles: [tf],
+      evalRunsBase: path.join(root, 'eval-runs'),
+      compileProvider: 'openrouter',
+      compileModel: 'm',
+      hypothesisEvalModel: 'm',
+      compileHypothesisCountDefault: 2,
+      apiKey: '',
+      candidateDir,
+      callbacks: {
+        onSkippedTestCase(filePath: string, message: string) {
+          skipped.push({ path: filePath, msg: message });
+        },
+      } as unknown as RunnerCallbacks,
+    });
+
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0]!.path).toBe(tf);
+    expect(skipped[0]!.msg).toContain('name field must match');
+  });
 });

@@ -443,7 +443,7 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 ## Meta-harness (optional CLI)
 
-The **`meta-harness/`** package is a repo-local **Node CLI** (`pnpm meta-harness`, see root `package.json`) that exercises the same **`/api/*`** flows as the canvas (compile, hypothesis generate + eval) using JSON fixtures, an OpenRouter-based **proposer**, and gitignored **`meta-harness/history/session-*/`** artifacts (per-session **`PROMOTION_REPORT.md`** at the session root). It is not bundled in the SPA build. Operator runbook: [meta-harness/README.md](meta-harness/README.md) and [meta-harness/META_HARNESS_OUTER_LOOP.md](meta-harness/META_HARNESS_OUTER_LOOP.md).
+The **`meta-harness/`** package is a repo-local **Node CLI** (`pnpm meta-harness`, see root `package.json`) that exercises the same **`/api/*`** flows as the canvas (compile, hypothesis generate + eval) using JSON fixtures, an OpenRouter-based **proposer**, and gitignored **`meta-harness/history/session-<mode>-*/`** artifacts (folder name includes **`compile` | `e2e` | `design`** before the timestamp; per-session **`PROMOTION_REPORT.md`** at the session root). It is not bundled in the SPA build. Operator runbook: [meta-harness/README.md](meta-harness/README.md) and [meta-harness/META_HARNESS_OUTER_LOOP.md](meta-harness/META_HARNESS_OUTER_LOOP.md).
 
 ## Adding a New Provider
 

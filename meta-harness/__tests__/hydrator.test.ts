@@ -5,9 +5,12 @@ import { describe, expect, it } from 'vitest';
 import { GENERATION_MODE } from '../../src/constants/generation.ts';
 import {
   hydrateCompileRequest,
+  hydrateCompileRequestFromParsed,
   hydrateMetaHarnessTestCase,
+  hydrateMetaHarnessTestCaseFromParsed,
   MH_HYPOTHESIS_NODE,
   MH_MODEL_NODE,
+  SimplifiedMetaHarnessTestCaseSchema,
 } from '../test-case-hydrator.ts';
 import type { HypothesisStrategy } from '../../src/types/compiler.ts';
 
@@ -102,6 +105,46 @@ describe('meta-harness test-case-hydrator', () => {
     });
     expect(body.strategy.id).toBe('picked-1');
     expect(body.domainHypothesis?.strategyId).toBe('picked-1');
+  });
+
+  it('FromParsed helpers match parse-then-hydrate', () => {
+    const raw = {
+      name: 'x',
+      spec: {
+        title: 'T',
+        sections: {
+          'design-brief': 'b',
+          'existing-design': '',
+          'research-context': '',
+          'objectives-metrics': '',
+          'design-constraints': '',
+        },
+      },
+      strategy: {
+        id: 's1',
+        name: 'S',
+        hypothesis: 'h',
+        rationale: 'r',
+        measurements: 'm',
+        dimensionValues: { format: 'html' },
+      },
+      model: { providerId: 'openrouter', modelId: 'x/y' },
+      compile: { hypothesisCount: 2 },
+    };
+    const parsed = SimplifiedMetaHarnessTestCaseSchema.parse(raw);
+    const compileA = hydrateCompileRequestFromParsed(parsed, { compileProvider: 'p', compileModel: 'm' });
+    const compileB = hydrateCompileRequest(raw, { compileProvider: 'p', compileModel: 'm' });
+    expect(compileA.promptOptions).toEqual(compileB.promptOptions);
+    expect(compileA.providerId).toBe(compileB.providerId);
+    expect(compileA.modelId).toBe(compileB.modelId);
+    expect((compileA.spec as { title: string }).title).toBe((compileB.spec as { title: string }).title);
+
+    const hypA = hydrateMetaHarnessTestCaseFromParsed(parsed, { defaultCompilerProvider: 'openrouter' });
+    const hypB = hydrateMetaHarnessTestCase(raw, { defaultCompilerProvider: 'openrouter' });
+    expect(hypA.strategy).toEqual(hypB.strategy);
+    expect(hypA.modelProfiles).toEqual(hypB.modelProfiles);
+    expect(hypA.spec.title).toBe(hypB.spec.title);
+    expect(hypA.hypothesisNodeId).toBe(hypB.hypothesisNodeId);
   });
 
   it('hydrateMetaHarnessTestCase requires strategy when no override', () => {

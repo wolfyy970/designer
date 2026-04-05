@@ -32,6 +32,8 @@ function statusGlyph(status: RunnerState['testRows'][0]['status'], isActive: boo
       return '›';
     case 'done':
       return '✓';
+    case 'unscored':
+      return '⚠';
     case 'error':
       return '✗';
     case 'skipped':

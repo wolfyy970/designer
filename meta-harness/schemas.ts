@@ -16,6 +16,10 @@ export const MetaHarnessConfigSchema = z.object({
   hypothesisEvalModel: z.string().optional(),
   compileHypothesisCount: z.number().finite().optional(),
   hypothesisRubricTimeoutMs: z.number().finite().optional(),
+  /** POST /api/hypothesis/generate (full SSE read) — default see constants.DEFAULT_HYPOTHESIS_GENERATE_TIMEOUT_MS */
+  hypothesisGenerateTimeoutMs: z.number().finite().optional(),
+  /** Each OpenRouter chat completion (proposer tool rounds; rubric unless overridden by signal) */
+  openRouterChatTimeoutMs: z.number().finite().optional(),
   supportsVision: z.boolean().optional(),
   agenticMaxRevisionRounds: z.number().finite().optional(),
 });

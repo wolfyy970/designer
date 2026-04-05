@@ -36,8 +36,9 @@ describe('resolveMode', () => {
     expect(resolveMode([], { ...baseCfg, mode: 'e2e' })).toBe('e2e');
   });
   it('defaults to design when neither set', () => {
-    const { mode: _m, ...noMode } = baseCfg;
-    expect(resolveMode([], noMode as MetaHarnessConfig)).toBe('design');
+    const noMode = { ...baseCfg };
+    delete noMode.mode;
+    expect(resolveMode([], noMode)).toBe('design');
   });
 });
 

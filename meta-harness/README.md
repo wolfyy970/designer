@@ -45,8 +45,18 @@ In a normal terminal, the runner uses an **Ink** (React-in-terminal) UI; `--plai
 
 - `config.json` — mode (`compile` / `e2e` / `design`), API URL, proposer model, iteration budget. The `--mode` CLI flag overrides the config value.
 - `test-cases/*.json` — benchmarks: **`spec` + `model`** always; **`strategy`** required for **`--mode=design`**; optional for **`compile`** / **`e2e`**. Optional **`compile.hypothesisCount`** sets compile output size (defaults in `config.json`). Example without strategy: `test-cases/spec-only-landing-saas.json`.
-- `history/` — per-session and per-candidate artifacts (gitignored). Each run creates **`history/session-…/`** with `session.json`, `best-candidate.json`, and **`PROMOTION_REPORT.md`** at the session root after a full run (it names the winning `candidate-*` inside that session). Under the session folder, each **`candidate-*`** holds `proposal.md`, `prompt-overrides.json`, `skills-snapshot/`, `test-results/`, `aggregate.json`, etc. When **`history/candidate-0/aggregate.json`** is missing (not `--eval-only`), the runner evaluates **`candidate-0`** as a **baseline** first—even if other `candidate-*` folders exist from an old run—then runs the configured **`iterations`** of propose+eval. If the proposer exhausts its tool budget without **`submit_candidate`** but did change prompts or skills, those edits are still evaluated for that candidate.
+- `history/` — per-session and per-candidate artifacts (gitignored). Each run creates **`history/session-<mode>-…/`** (compile / e2e / design prefix before the timestamp) with `session.json`, `best-candidate.json`, and **`PROMOTION_REPORT.md`** at the session root after a full run (it names the winning `candidate-*` inside that session). Under the session folder, each **`candidate-*`** holds `proposal.md`, `prompt-overrides.json`, `skills-snapshot/`, `test-results/`, `aggregate.json`, etc. When **`history/candidate-0/aggregate.json`** is missing (not `--eval-only`), the runner evaluates **`candidate-0`** as a **baseline** first—even if other `candidate-*` folders exist from an old run—then runs the configured **`iterations`** of propose+eval. If the proposer exhausts its tool budget without **`submit_candidate`** but did change prompts or skills, those edits are still evaluated for that candidate.
 
+**Also:** Optional HTTP timeouts and other `config.json` fields are in [META_HARNESS_OUTER_LOOP.md §2](./META_HARNESS_OUTER_LOOP.md). The Ink dashboard marks a finished test **unscored** (warning) when there is no usable score — distinct from **error**. The proposer’s system prompts (`proposer-prompts.ts`) require an explicit **refine-on-leader** vs **explore** choice each turn; evaluation uses only prompt/rubric overrides queued in that turn (not auto-merged from the session best).
+
+## Promoting prompts to Langfuse
+
+Harness overrides stay in **`history/…/prompt-overrides.json`** until you promote them. To align **Langfuse** with a winning (or other) candidate:
+
+1. Copy bodies into **`src/lib/prompts/shared-defaults.ts`** (`PROMPT_DEFAULTS`).
+2. Run **`pnpm langfuse:sync-prompts`** (with app Langfuse env vars set).
+
+Details, non-winner paths, and verification: [META_HARNESS_OUTER_LOOP.md §5.3](./META_HARNESS_OUTER_LOOP.md#53-promoting-prompt-overrides-to-langfuse).
 
 ## Live E2E (optional)
 

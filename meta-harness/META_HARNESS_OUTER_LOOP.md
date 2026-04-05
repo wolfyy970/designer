@@ -206,7 +206,7 @@ pnpm meta-harness
 
 The exact evaluate step depends on the mode you chose (section 3.1). Here is the full sequence:
 
-0. **New session directory**: Each run creates **`meta-harness/history/session-<ISO-timestamp>/`** with a **`session.json`** (mode, iterations, config snapshot). All candidates for that run live under that folder only — prior runs stay in sibling **`session-*`** folders (gitignored), so the proposer never confuses another run’s **`candidate-*`** with this one.
+0. **New session directory**: Each run creates **`meta-harness/history/session-<mode>-<ISO-timestamp>/`** (e.g. **`session-design-…`**, **`session-compile-…`**, **`session-e2e-…`**) with a **`session.json`** (mode, iterations, config snapshot). All candidates for that run live under that folder only — prior runs stay in sibling **`session-*`** folders (gitignored), so the proposer never confuses another run’s **`candidate-*`** with this one.
 1. **Baseline `candidate-0`** (when not `--eval-only`): Evaluates the **current repo** (empty prompt overrides, current `skills/`) as **`candidate-0 (baseline)`** inside the **new session directory** before any proposer runs. Baseline **always** runs for a new session (no resume skip across runs). Baseline does **not** count against **`iterations`** in `config.json`.
 2. **Proposer** (skipped if `--eval-only`): Calls OpenRouter with a mode-specific system prompt and tools. In compile mode, skills tools are disabled and only compile-related prompt keys are writable. Context includes **this session’s** prior **`candidate-*`** (scores, overrides, per-test **`summary.json`** rubric means, **`proposal.md`** excerpt) plus a **reference table** of prior sessions’ best scores from **`best-candidate.json`**. It may **write** `skills/<key>/SKILL.md`, **queue** `promptOverrides` for this candidate only, or **add** `meta-harness/test-cases/*.json`. It should finish with **`submit_candidate`** and a short **reasoning** written to **`session-…/candidate-N/proposal.md`**. If it **runs out of tool rounds** without calling **`submit_candidate`** but **did** queue prompt overrides or edit skills, those changes are **still applied** for that candidate with an auto-reason string; if it made **no** changes, the reasoning explains that (suggest checking history / tool budget).
 3. **Snapshot**: Copies the current **`skills/`** tree to **`session-…/candidate-N/skills-snapshot/`**.
@@ -340,15 +340,31 @@ Open that file for:
 
 The terminal also shows a **short line count** (how many prompts / skill paths / new tests) so you know whether to open the report before you leave the desk.
 
+### 5.3 Promoting prompt overrides to Langfuse
+
+When Langfuse is configured, **runtime** prompt text comes from Langfuse (labeled version), not from the repo alone. Meta-harness never writes to Langfuse; follow this path so Cloud/local Langfuse matches what you want to ship.
+
+1. **Get the bodies** — From **`PROMOTION_REPORT.md`** §2 (winner), or from **`meta-harness/history/session-…/candidate-<n>/prompt-overrides.json`** if you are promoting a **non-winning** candidate.
+2. **Update the repo source of truth** — Paste each key’s body into **`src/lib/prompts/shared-defaults.ts`** under **`PROMPT_DEFAULTS`** (same keys as Prompt Studio / Langfuse).
+3. **Push the labeled version to Langfuse** — From repo root, with **`LANGFUSE_*`** (and optional **`LANGFUSE_PROMPT_LABEL`**) set as in the main app:
+   ```bash
+   pnpm langfuse:sync-prompts
+   ```
+   Confirm the sync output lists each updated prompt key.
+4. **Sanity-check** — Restart the API if needed; optional: **`GET /api/prompts/:key`** or Prompt Studio to verify the new body.
+
+Skipping step 2 or 3 leaves **`shared-defaults.ts`** or Langfuse out of sync with the other; treat **edit defaults → sync** as one workflow (see root **CLAUDE.md**).
+
 ---
 
 ## 6. Adding or changing benchmark tasks
 
 1. Copy an existing file under `**test-cases/`**.
-2. Keep the required shape: `name`, `spec.title`, `spec.sections` (map of section id → string or `{ "content": "..." }`), `model` (`providerId`, `modelId`, optional `thinkingLevel`).
+2. **Name vs filename:** the JSON **`"name"`** field must match the file basename **without** `.json` (e.g. `foo.json` → `"name": "foo"`). A mismatch is skipped so the TUI rows, disk folders, and summaries cannot silently diverge.
+3. Keep the required shape: `name`, `spec.title`, `spec.sections` (map of section id → string or `{ "content": "..." }`), `model` (`providerId`, `modelId`, optional `thinkingLevel`).
    - **For `--mode=design`:** also include `strategy` (`id`, `name`, `hypothesis`, `rationale`, `measurements`, `dimensionValues`). Test cases **without** `strategy` are skipped in design mode.
    - **For `--mode=compile` / `--mode=e2e`:** `strategy` is **optional** (hypotheses come from the compile endpoint). Add an optional `compile` block: `{ "hypothesisCount": 5 }` to control how many hypotheses are requested.
-3. Run `**pnpm meta-harness --dry-run --mode=<your-mode>**` to ensure hydration passes.
+4. Run `**pnpm meta-harness --dry-run --mode=<your-mode>**` to ensure hydration passes.
 
 The proposer may also call `**add_test_case**`; new files must still pass `**SimplifiedMetaHarnessTestCaseSchema**`.
 

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { IncubationPlan } from '../../src/types/compiler.ts';
-import { runCompilePipeline } from '../candidate-eval.ts';
+import { runCompilePipeline } from '../compile-pipeline.ts';
 import type { MetaHarnessConfig } from '../schemas.ts';
 import type { RunnerCallbacks } from '../runner-types.ts';
+import { SimplifiedMetaHarnessTestCaseSchema } from '../test-case-hydrator.ts';
 
 const stubCallbacks = (): RunnerCallbacks =>
   ({
@@ -79,7 +80,7 @@ describe('runCompilePipeline', () => {
     };
 
     const out = await runCompilePipeline({
-      raw,
+      testCase: SimplifiedMetaHarnessTestCaseSchema.parse(raw),
       name: 'alpha',
       cfg,
       compileProvider: 'openrouter',
@@ -124,7 +125,7 @@ describe('runCompilePipeline', () => {
 
     await expect(
       runCompilePipeline({
-        raw,
+        testCase: SimplifiedMetaHarnessTestCaseSchema.parse(raw),
         name: 'n',
         cfg,
         compileProvider: 'openrouter',

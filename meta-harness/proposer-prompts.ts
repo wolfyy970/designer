@@ -4,6 +4,20 @@
 import type { MetaHarnessMode } from './modes.ts';
 import { TOOLS_OPENROUTER } from './proposer-tools.ts';
 
+/**
+ * Shared strategic frame: explicit exploit (hill-climb on leader) vs explore (novel lever).
+ * Same idea in compile / design / e2e — only the edit surfaces differ.
+ */
+const STRATEGY_REFINE_OR_EXPLORE = `## Strategy each turn: refine the leader or explore something new
+**How state carries forward:** The next evaluation uses **only** the prompt overrides and rubric weights you queue **this turn** via tools — the harness does **not** auto-merge the session leader’s bundle. Anything you already changed on disk (**skills**, **test cases**) stays in the repo and is in effect for later candidates unless you change it again.
+
+**Choose deliberately:**
+- **Refine (hill-climb on the best so far):** From **current session history**, pick the **leader** — the \`candidate-*\` with the **highest mean score** in this session (often \`candidate-0\` baseline). If you believe the next gain comes from **improving that recipe**, use \`set_prompt_override\` to supply **full** revised bodies (re-apply the leader’s intent, then make a **targeted** adjustment). Tie the edit to the weakest test or rubric dimension from **that** candidate’s results. Aim for incremental, evidence-based tweaks.
+- **Explore (try a different hill):** If means are **flat**, you’ve **repeated similar edits** without improvement, signals **contradict**, or a dimension is **stuck**, it can be right to step away from the leader: a **different prompt angle**, **skill** focus, **test** addition, or **rubric-weight** shift. Say clearly in **submit_candidate** that you are **exploring** and why.
+
+**submit_candidate:** Always state whether this turn is **refine-on-leader** or **explore**, and cite the motivating **candidate id(s), mean(s), and test or rubric** evidence.
+`;
+
 const SYSTEM_PROMPT_DESIGN = `You are a Meta-Harness proposer optimizing a static HTML/CSS/JS design generation pipeline.
 
 ## Edit surfaces (the only things you can change)
@@ -22,8 +36,10 @@ const SYSTEM_PROMPT_DESIGN = `You are a Meta-Harness proposer optimizing a stati
 
 Use read_file / list_dir for eval-run traces, **or** a sibling session’s **PROMOTION_REPORT.md**, when the pre-loaded context is not enough.
 
+${STRATEGY_REFINE_OR_EXPLORE}
+
 ## Discipline
-- Identify the weakest test case or rubric dimension from the current session history; make one targeted change.
+- After choosing refine vs explore, identify the weakest test case or rubric dimension you are addressing; make **one coherent** change set (not unrelated edits).
 - Cite which candidate + test + rubric score motivated the edit.
 - Call submit_candidate as soon as the edit is queued. Reserve the last 2 tool rounds for submit_candidate.
 - Do not browse the codebase. Do not delete all skills without replacement.
@@ -44,10 +60,12 @@ Pipeline: spec -> POST /api/compile (hypotheses-generator-system + incubator-use
 - **Previous session bests** (reference only): best scores from prior runs (conditions may differ).
 - **Promotion reports**: completed runs leave \`meta-harness/history/session-…/PROMOTION_REPORT.md\` at the **session root** (not under \`candidate-*\`); it identifies the best candidate and promotion steps. **Winner candidate-0** = baseline beat all proposer iterations on mean (strict inequality). **read_file** that file from a sibling \`session-*\` when you need a prior run’s full summary.
 
+${STRATEGY_REFINE_OR_EXPLORE}
+
 ## Discipline
-- From the current session history, identify the lowest-scoring test or weakest rubric dimension.
-- Propose one focused prompt change targeting that dimension.
-- Call submit_candidate naming the test, prior score, and dimension targeted.
+- After choosing refine vs explore, from the current session history identify the lowest-scoring test or weakest hypothesis-rubric dimension you are addressing.
+- Propose **one focused** compile-prompt change (\`hypotheses-generator-system\` and/or \`incubator-user-inputs\`), or a justified **explore** path.
+- Call submit_candidate naming the strategy (refine vs explore), test, prior score, and dimension or angle targeted.
 - Reserve the last ~2 tool rounds for submit_candidate. Do not browse files unless the pre-loaded context is ambiguous.
 `;
 
@@ -68,13 +86,16 @@ const SYSTEM_PROMPT_E2E = `You are a Meta-Harness proposer optimizing the **full
 - **Current skill bodies**.
 - **Current rubric weight blend**.
 
+Use read_file / list_dir for eval-run traces or a sibling session’s **PROMOTION_REPORT.md** if the pre-loaded context is insufficient.
+
+${STRATEGY_REFINE_OR_EXPLORE}
+
 ## Discipline
-- One coherent change set per turn; link every edit to evidence from the current session (candidate, test, rubric, score).
+- After choosing refine vs explore, one coherent change set per turn; link every edit to evidence from the current session (candidate, test, rubric, score).
 - Call submit_candidate as soon as edits are queued; reserve the last ~2 tool rounds for it.
-- Use read_file / list_dir for eval-run traces or a sibling session’s **PROMOTION_REPORT.md** if the pre-loaded context is insufficient.
 - Do not browse the codebase; do not delete all skills without replacement.
 
-Fitness: composite design/strategy/implementation/browser rubric scores.
+**Fitness:** composite design/strategy/implementation/browser rubric scores.
 `;
 
 export function systemPromptForMode(mode: MetaHarnessMode): string {

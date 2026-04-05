@@ -4,6 +4,9 @@ import type { ReactNode } from 'react';
 import { dimText } from './theme.ts';
 import type { RunnerState } from './state.ts';
 
+/** How many recent proposer tool rows the TUI shows (full history remains in state). */
+const RECENT_TOOL_ROWS = 5;
+
 function Section({ children }: { children: ReactNode }) {
   return (
     <Box flexDirection="column" gap={0}>
@@ -52,9 +55,9 @@ export function ProposerPanel({ state }: { state: RunnerState }) {
           {p.toolLog.length > 0 ? (
             <Box flexDirection="column" marginTop={0}>
               <Text color={dimText} bold>
-                recent tools
+                recent tools (last {RECENT_TOOL_ROWS})
               </Text>
-              {p.toolLog.slice(-6).map((e) => (
+              {p.toolLog.slice(-RECENT_TOOL_ROWS).map((e) => (
                 <Text key={`${e.round}-${e.tool}-${e.summary}`} color={dimText}>
                   {'  '}· {e.tool}
                   {e.summary ? ` ${e.summary}` : ''}

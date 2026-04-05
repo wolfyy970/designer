@@ -1,8 +1,9 @@
 import path from 'node:path';
 import type { PromotionSummary, RunnerPreflightInfo } from '../runner-core.ts';
 import type { MetaHarnessMode } from '../modes.ts';
+import { wireDetailSnippet, wirePayloadLine } from './wire-formatters.ts';
 
-export type TestRowStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped';
+export type TestRowStatus = 'pending' | 'running' | 'done' | 'unscored' | 'error' | 'skipped';
 
 export type TestRowState = {
   name: string;
@@ -97,6 +98,15 @@ function emptyTestRow(name: string): TestRowState {
   };
 }
 
+/**
+ * While any row is still pending or running, more test-case work may run for this candidate.
+ * Otherwise we're between tests and the runner is about to write changelog / end the batch.
+ */
+export function globalPhaseAfterTestWork(rows: TestRowState[]): 'evaluating' | 'finalizing candidate…' {
+  const workloadRemaining = rows.some((r) => r.status === 'pending' || r.status === 'running');
+  return workloadRemaining ? 'evaluating' : 'finalizing candidate…';
+}
+
 function initialProposer(): ProposerState {
   return {
     phase: 'idle',
@@ -160,107 +170,6 @@ function pushActivity(state: RunnerState, text: string): RunnerState {
   };
 }
 
-/** Collapse whitespace and show the last `maxChars` graphemes worth of one-line text (FIFO-style tail for TUI). */
-export function oneLinePreviewTail(text: string, maxChars: number): string {
-  const collapsed = text.replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim();
-  if (collapsed.length <= maxChars) return collapsed;
-  return `…${collapsed.slice(-maxChars)}`;
-}
-
-/** Bounded SSE detail line; avoids `JSON.stringify` of huge `code` payloads. */
-export function wireDetailSnippet(event: string, payload: unknown): string {
-  if (event === 'code') {
-    const p = payload as { code?: string } | null;
-    const raw = p?.code ?? '';
-    const n = raw.length;
-    if (n === 0) return '[code] 0 chars';
-    return `[code] ${n} chars · ${oneLinePreviewTail(raw, 96)}`;
-  }
-  const json = JSON.stringify(payload);
-  const cap = 120;
-  return `[${event}] ${json.length > cap ? `${json.slice(0, cap - 1)}…` : json}`;
-}
-
-/** Pure formatter for TUI “live line” text; exported for unit tests. */
-export function wirePayloadLine(event: string, payload: unknown): string {
-  if (event === 'phase') {
-    const p = payload as { phase?: string } | null;
-    return `phase: ${p?.phase ?? '?'}`;
-  }
-  if (event === 'progress') {
-    const p = payload as { status?: string } | null;
-    return p?.status ? `progress: ${p.status}` : 'progress';
-  }
-  if (event === 'activity') {
-    const p = payload as { entry?: string } | null;
-    const e = p?.entry?.trim() ?? '';
-    return e.length > 72 ? `activity: ${e.slice(0, 72)}…` : `activity: ${e || '…'}`;
-  }
-  if (event === 'thinking') {
-    const p = payload as { delta?: string } | null;
-    const d = p?.delta?.trim() ?? '';
-    return d.length > 64 ? `thinking: ${d.slice(0, 64)}…` : `thinking: ${d || '…'}`;
-  }
-  if (event === 'streaming_tool') {
-    const p = payload as {
-      toolName?: string;
-      streamedChars?: number;
-      done?: boolean;
-      toolPath?: string;
-    } | null;
-    const chars = p?.streamedChars ?? 0;
-    const k = chars >= 1000 ? `${(chars / 1000).toFixed(1)}k` : String(chars);
-    const path = p?.toolPath ? ` ${p.toolPath}` : '';
-    return `tool ${p?.toolName ?? '?'}${path} (${k} chars${p?.done ? ', done' : ''})`;
-  }
-  if (event === 'code') {
-    const p = payload as { code?: string } | null;
-    const raw = p?.code ?? '';
-    const n = raw.length;
-    const countLabel = n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-    const tail = n === 0 ? '' : ` · ${oneLinePreviewTail(raw, 40)}`;
-    return `code: ${countLabel} chars${tail}`;
-  }
-  if (event === 'file') {
-    const p = payload as { path?: string } | null;
-    return `file: ${p?.path ?? '?'}`;
-  }
-  if (event === 'skills_loaded') {
-    const p = payload as { skills?: unknown[] } | null;
-    const n = Array.isArray(p?.skills) ? p.skills.length : 0;
-    return `skills loaded: ${n}`;
-  }
-  if (event === 'skill_activated') {
-    const p = payload as { name?: string; key?: string } | null;
-    return `skill: ${p?.name ?? p?.key ?? '?'}`;
-  }
-  if (event === 'compile_result') {
-    const p = payload as { hypotheses?: unknown[] } | null;
-    const n = Array.isArray(p?.hypotheses) ? p.hypotheses.length : 0;
-    return `compile done: ${n} hypotheses`;
-  }
-  if (event === 'meta_json_wait') {
-    const p = payload as { elapsedSec?: number } | null;
-    return `waiting for eval meta.json… ${p?.elapsedSec ?? '?'}s`;
-  }
-  if (event === 'evaluation_report') {
-    const snap = payload as {
-      round?: number;
-      snapshot?: { aggregate?: { overallScore?: number; shouldRevise?: boolean } };
-    } | null;
-    const agg = snap?.snapshot?.aggregate;
-    if (agg) {
-      return `eval r${snap?.round ?? '?'}: score=${agg.overallScore?.toFixed(2) ?? '?'}${agg.shouldRevise ? ' → revising' : ''}`;
-    }
-    return 'evaluation_report';
-  }
-  if (event === 'revision_round') {
-    const rr = payload as { round?: number } | null;
-    return `revision r${rr?.round ?? '?'}…`;
-  }
-  return `${event}`;
-}
-
 function appendDetail(row: TestRowState, line: string, max = 14): TestRowState {
   const next = [...row.detailLines, line];
   return { ...row, detailLines: next.slice(-max) };
@@ -282,6 +191,7 @@ export type RunnerAction =
       stopReason: string | null;
       elapsedMs: number;
       error?: string;
+      outcome?: 'scored' | 'unscored' | 'error';
     }
   | {
       type: 'ITERATION_DONE';
@@ -483,16 +393,37 @@ export function reduceRunnerState(state: RunnerState, action: RunnerAction): Run
     }
     case 'TEST_DONE': {
       const elapsed = `${(action.elapsedMs / 1000).toFixed(1)}s`;
+      const inferredOutcome: 'scored' | 'unscored' | 'error' =
+        action.outcome ??
+        (action.error
+          ? 'error'
+          : typeof action.score === 'number' && Number.isFinite(action.score)
+            ? 'scored'
+            : 'unscored');
       const rows = state.testRows.map((r) => {
         if (r.name !== action.name) return r;
-        if (action.error) {
+        if (inferredOutcome === 'error') {
           return {
             ...r,
             status: 'error' as const,
             score: action.score,
             stopReason: action.stopReason,
             elapsedLabel: elapsed,
-            liveLine: action.error.slice(0, 80),
+            liveLine: (action.error ?? 'error').slice(0, 80),
+            phase: null,
+            startedAtMs: null,
+            lastHeartbeatSec: null,
+          };
+        }
+        if (inferredOutcome === 'unscored') {
+          return {
+            ...r,
+            status: 'unscored' as const,
+            score: action.score,
+            stopReason: action.stopReason,
+            elapsedLabel: elapsed,
+            liveLine: 'no score (incomplete eval)',
+            phase: null,
             startedAtMs: null,
             lastHeartbeatSec: null,
           };
@@ -503,30 +434,39 @@ export function reduceRunnerState(state: RunnerState, action: RunnerAction): Run
           score: action.score,
           stopReason: action.stopReason,
           elapsedLabel: elapsed,
+          liveLine: '',
+          phase: null,
           startedAtMs: null,
           lastHeartbeatSec: null,
         };
       });
-      const completed = rows.filter((r) => r.status === 'done' || r.status === 'error').length;
+      const completed = rows.filter(
+        (r) => r.status === 'done' || r.status === 'error' || r.status === 'unscored',
+      ).length;
       const scored = rows.filter(
         (r) => r.status === 'done' && typeof r.score === 'number' && Number.isFinite(r.score),
       );
       const mean =
         scored.length > 0 ? scored.reduce((a, r) => a + (r.score as number), 0) / scored.length : null;
+      const phaseAfterTest = state.quitRequested ? state.globalPhase : globalPhaseAfterTestWork(rows);
       let next: RunnerState = {
         ...state,
         testRows: rows,
         completedTests: completed,
         runningMean: mean,
         activeTestName: null,
+        globalPhase: phaseAfterTest,
       };
       const scoreStr = action.score != null ? action.score.toFixed(2) : 'null';
-      next = pushActivity(
-        next,
-        action.error
-          ? `ERROR ${action.name}: ${action.error.slice(0, 100)}`
-          : `${action.name} done (${elapsed}) score=${scoreStr} stop=${action.stopReason ?? '?'}`,
-      );
+      let activityLine: string;
+      if (inferredOutcome === 'error') {
+        activityLine = `ERROR ${action.name}: ${(action.error ?? 'unknown').slice(0, 100)}`;
+      } else if (inferredOutcome === 'unscored') {
+        activityLine = `${action.name} finished (${elapsed}) no score · stop=${action.stopReason ?? '?'}`;
+      } else {
+        activityLine = `${action.name} done (${elapsed}) score=${scoreStr} stop=${action.stopReason ?? '?'}`;
+      }
+      next = pushActivity(next, activityLine);
       return next;
     }
     case 'ITERATION_DONE': {
@@ -600,10 +540,20 @@ export function reduceRunnerState(state: RunnerState, action: RunnerAction): Run
       const guess = path.basename(action.filePath, '.json');
       const rows = state.testRows.map((r) =>
         r.name === guess
-          ? { ...r, status: 'skipped' as const, skipReason: action.message, liveLine: 'invalid JSON' }
+          ? {
+              ...r,
+              status: 'skipped' as const,
+              skipReason: action.message,
+              liveLine: 'invalid JSON',
+              phase: null,
+              startedAtMs: null,
+              lastHeartbeatSec: null,
+            }
           : r,
       );
-      let next = { ...state, testRows: rows };
+      const phase =
+        state.quitRequested || state.finished ? state.globalPhase : globalPhaseAfterTestWork(rows);
+      let next = { ...state, testRows: rows, globalPhase: phase };
       next = pushActivity(next, `skip invalid ${guess}: ${action.message.slice(0, 80)}`);
       return next;
     }

@@ -2,7 +2,7 @@
  * Console callbacks mirroring the pre-TUI meta-harness output.
  */
 import type { MetaHarnessCliArgs, PromotionSummary, RunnerCallbacks } from '../runner-core.ts';
-import { wirePayloadLine } from './state.ts';
+import { wirePayloadLine } from './wire-formatters.ts';
 import { PLAIN_HEARTBEAT_LOG_THROTTLE_MS } from '../constants.ts';
 
 function banner(msg: string) {
@@ -98,9 +98,17 @@ export function createPlainCallbacks(args: MetaHarnessCliArgs): RunnerCallbacks 
       lastHeartbeatLogMs.set(testName, now);
       console.log(`  … still running ${testName} (${elapsedSec}s)`);
     },
-    onTestCaseDone(name, score, stopReason, elapsedMsDur, error) {
-      if (error) {
-        console.warn(`  ERROR ${name}: ${error}`);
+    onTestCaseDone(name, score, stopReason, elapsedMsDur, error, outcome) {
+      const eff =
+        outcome ??
+        (error ? 'error' : typeof score === 'number' && Number.isFinite(score) ? 'scored' : 'unscored');
+      if (eff === 'error') {
+        console.warn(`  ERROR ${name}: ${error ?? 'unknown'}`);
+      } else if (eff === 'unscored') {
+        const sec = (elapsedMsDur / 1000).toFixed(1);
+        console.warn(
+          `  ${name} finished (${sec}s) no score (stream/meta incomplete) stop=${stopReason ?? '?'}`,
+        );
       } else {
         const sec = (elapsedMsDur / 1000).toFixed(1);
         console.log(`  ${name} done (${sec}s) score=${score?.toFixed(2) ?? 'null'} stop=${stopReason ?? '?'}`);

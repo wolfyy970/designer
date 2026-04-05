@@ -7,8 +7,9 @@ import type { MetaHarnessMode } from './modes.ts';
 import type { MetaHarnessConfig } from './schemas.ts';
 import { ARTIFACT } from './constants.ts';
 
-function newMetaHarnessSessionFolderName(): string {
-  return `session-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+function newMetaHarnessSessionFolderName(mode: MetaHarnessMode): string {
+  const iso = new Date().toISOString().replace(/[:.]/g, '-');
+  return `session-${mode}-${iso}`;
 }
 
 export async function createMetaHarnessSession(options: {
@@ -18,7 +19,7 @@ export async function createMetaHarnessSession(options: {
   iterations: number;
 }): Promise<{ sessionDir: string; sessionFolderName: string }> {
   await mkdir(options.historyRoot, { recursive: true });
-  const sessionFolderName = newMetaHarnessSessionFolderName();
+  const sessionFolderName = newMetaHarnessSessionFolderName(options.mode);
   const sessionDir = path.join(options.historyRoot, sessionFolderName);
   await mkdir(sessionDir, { recursive: true });
   await writeFile(
