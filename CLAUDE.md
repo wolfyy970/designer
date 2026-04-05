@@ -95,14 +95,14 @@ Single-shot / legacy React-in-iframe paths: generated code may render in `sandbo
 
 **`src/lib/prompts/shared-defaults.ts`** is the repo source of truth for prompt bodies. Langfuse is the **runtime** source of truth — when configured, the server reads prompts from Langfuse, **not** from `shared-defaults.ts`. The defaults are only used when Langfuse is not configured.
 
-**Every time you edit a prompt body in `shared-defaults.ts`, you MUST immediately run `pnpm langfuse:sync-prompts`** to push the change to the labeled Langfuse version. If you skip this step the edit is dead code in any Langfuse-enabled environment. There is no "do it later" — sync is part of the edit, not a follow-up.
+**Every time you edit a prompt body in `shared-defaults.ts`, you MUST immediately run `pnpm langfuse:sync-prompts`** so Langfuse gets the new text. Sync uses **`prompt.create`**: it **adds a new prompt version** and moves **`LANGFUSE_PROMPT_LABEL`** (default `production`) to it — **previous versions remain** in Langfuse for history/diffs (not an in-place overwrite). If you skip sync, the edit is dead code in any Langfuse-enabled environment. There is no "do it later" — sync is part of the edit, not a follow-up.
 
 ```bash
 # REQUIRED after any change to shared-defaults.ts prompt bodies:
 pnpm langfuse:sync-prompts
 ```
 
-Do not treat `shared-defaults.ts` as a standalone file you can edit in isolation. Editing a prompt means: change the body in `shared-defaults.ts` → run `langfuse:sync-prompts` → verify the sync output shows the key was updated.
+Do not treat `shared-defaults.ts` as a standalone file you can edit in isolation. Editing a prompt means: change the body in `shared-defaults.ts` → run `langfuse:sync-prompts` → verify the sync log shows **new Langfuse prompt version** lines for changed keys.
 
 ## Critical gotchas
 

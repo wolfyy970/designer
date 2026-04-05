@@ -3,11 +3,16 @@
  */
 import { readdir, readFile, writeFile, mkdir, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { z } from 'zod';
 import { PROMPT_KEYS, type PromptKey } from '../src/lib/prompts/defaults.ts';
 import type { EvaluatorRubricId } from '../src/types/evaluation.ts';
 import { EVALUATOR_RUBRIC_IDS } from '../src/types/evaluation.ts';
 import { resolveRubricWeights } from '../server/lib/evaluation-revision-gate.ts';
 import type { MetaHarnessMode } from './modes.ts';
+import type { OpenRouterFunctionTool } from './openrouter-client.ts';
+import { normalizeError } from '../src/lib/error-utils.ts';
+import { SEARCH_MAX_DEPTH, SEARCH_MAX_FILE_BYTES, SEARCH_MAX_HITS } from './constants.ts';
+import { debugMetaHarness } from './debug-log.ts';
 import { SimplifiedMetaHarnessTestCaseSchema } from './test-case-hydrator.ts';
 
 export type ProposerContext = {
@@ -26,6 +31,29 @@ export type ProposerContext = {
 };
 
 const COMPILE_PROMPT_KEYS = new Set<PromptKey>(['hypotheses-generator-system', 'incubator-user-inputs']);
+
+const ToolReadFileArgsSchema = z.object({ path: z.string() });
+const ToolListDirArgsSchema = z.object({ path: z.string() });
+const ToolSearchArgsSchema = z.object({ pattern: z.string(), under: z.string() });
+const ToolWriteSkillArgsSchema = z.object({ key: z.string(), content: z.string() });
+const ToolDeleteSkillArgsSchema = z.object({ key: z.string() });
+const ToolSetPromptOverrideArgsSchema = z.object({ key: z.string(), body: z.string() });
+const ToolAddTestCaseArgsSchema = z.object({ name: z.string(), json: z.string() });
+const ToolSubmitCandidateArgsSchema = z.object({ reasoning: z.string() });
+const ToolSetRubricWeightsArgsSchema = z
+  .object({
+    design: z.number().finite().nonnegative().optional(),
+    strategy: z.number().finite().nonnegative().optional(),
+    implementation: z.number().finite().nonnegative().optional(),
+    browser: z.number().finite().nonnegative().optional(),
+  })
+  .passthrough();
+
+/** Sanitize a single path segment (skill key, test-case basename) from tool JSON. */
+export function sanitizeProposerKey(raw: string): string | null {
+  const key = raw.trim().replace(/[^\w-]/g, '');
+  return key.length > 0 ? key : null;
+}
 
 function allowedReadRoots(ctx: ProposerContext): string[] {
   return [ctx.metaHarnessDir, ctx.skillsDir, ctx.evalRunsBaseDir];
@@ -47,7 +75,7 @@ async function toolReadFile(ctx: ProposerContext, args: { path: string }): Promi
   try {
     return await readFile(abs, 'utf8');
   } catch (e) {
-    return `Error reading file: ${e instanceof Error ? e.message : String(e)}`;
+    return `Error reading file: ${normalizeError(e)}`;
   }
 }
 
@@ -60,7 +88,7 @@ async function toolListDir(ctx: ProposerContext, args: { path: string }): Promis
     const entries = await readdir(abs, { withFileTypes: true });
     return entries.map((e) => `${e.isDirectory() ? 'd' : 'f'} ${String(e.name)}`).join('\n');
   } catch (e) {
-    return `Error: ${e instanceof Error ? e.message : String(e)}`;
+    return `Error: ${normalizeError(e)}`;
   }
 }
 
@@ -69,10 +97,10 @@ async function toolSearch(ctx: ProposerContext, args: { pattern: string; under: 
   if (!abs) return `Error: under path not allowed: ${args.under}`;
   const pattern = args.pattern.toLowerCase();
   const hits: string[] = [];
-  const maxHits = 40;
-  const maxBytes = 400_000;
+  const maxHits = SEARCH_MAX_HITS;
+  const maxBytes = SEARCH_MAX_FILE_BYTES;
   async function walk(dir: string, depth: number): Promise<void> {
-    if (hits.length >= maxHits || depth > 8) return;
+    if (hits.length >= maxHits || depth > SEARCH_MAX_DEPTH) return;
     let entries;
     try {
       entries = await readdir(dir, { withFileTypes: true });
@@ -89,8 +117,8 @@ async function toolSearch(ctx: ProposerContext, args: { pattern: string; under: 
           if (!st.isFile() || st.size > maxBytes) continue;
           const text = await readFile(p, 'utf8');
           if (text.toLowerCase().includes(pattern)) hits.push(p);
-        } catch {
-          /* skip */
+        } catch (e) {
+          debugMetaHarness('search file read skipped:', normalizeError(e));
         }
       }
     }
@@ -105,7 +133,7 @@ async function toolSearch(ctx: ProposerContext, args: { pattern: string; under: 
 }
 
 async function toolWriteSkill(ctx: ProposerContext, args: { key: string; content: string }): Promise<string> {
-  const key = args.key.trim().replace(/[^\w-]/g, '');
+  const key = sanitizeProposerKey(args.key);
   if (!key) return 'Error: invalid skill key';
   const dir = path.join(ctx.skillsDir, key);
   await mkdir(dir, { recursive: true });
@@ -116,7 +144,7 @@ async function toolWriteSkill(ctx: ProposerContext, args: { key: string; content
 }
 
 async function toolDeleteSkill(ctx: ProposerContext, args: { key: string }): Promise<string> {
-  const key = args.key.trim().replace(/[^\w-]/g, '');
+  const key = sanitizeProposerKey(args.key);
   if (!key) return 'Error: invalid skill key';
   const dir = path.join(ctx.skillsDir, key);
   try {
@@ -124,7 +152,7 @@ async function toolDeleteSkill(ctx: ProposerContext, args: { key: string }): Pro
     ctx.skillsMutated = true;
     return `Removed skills/${key}`;
   } catch (e) {
-    return `Error: ${e instanceof Error ? e.message : String(e)}`;
+    return `Error: ${normalizeError(e)}`;
   }
 }
 
@@ -142,7 +170,7 @@ function toolSetPromptOverride(ctx: ProposerContext, args: { key: string; body: 
 }
 
 async function toolAddTestCase(ctx: ProposerContext, args: { name: string; json: string }): Promise<string> {
-  const name = args.name.trim().replace(/[^\w-]/g, '');
+  const name = sanitizeProposerKey(args.name);
   if (!name) return 'Error: invalid test case name';
   let parsed: unknown;
   try {
@@ -169,7 +197,10 @@ function toolSubmitCandidate(ctx: ProposerContext, args: { reasoning: string }):
   return 'Candidate submitted. Stop proposing further edits in this turn.';
 }
 
-function toolSetRubricWeights(ctx: ProposerContext, args: Record<string, unknown>): string {
+function toolSetRubricWeights(
+  ctx: ProposerContext,
+  args: z.infer<typeof ToolSetRubricWeightsArgsSchema>,
+): string {
   const patch: Partial<Record<EvaluatorRubricId, number>> = {};
   for (const rid of EVALUATOR_RUBRIC_IDS) {
     const v = args[rid];
@@ -189,7 +220,7 @@ function toolSetRubricWeights(ctx: ProposerContext, args: Record<string, unknown
   );
 }
 
-export const TOOLS_OPENROUTER: unknown[] = [
+export const TOOLS_OPENROUTER: OpenRouterFunctionTool[] = [
   {
     type: 'function',
     function: {
@@ -335,24 +366,51 @@ export async function dispatchTool(
     return 'Error: invalid JSON arguments for tool';
   }
   switch (name) {
-    case 'read_file':
-      return toolReadFile(ctx, args as { path: string });
-    case 'list_dir':
-      return toolListDir(ctx, args as { path: string });
-    case 'search':
-      return toolSearch(ctx, args as { pattern: string; under: string });
-    case 'write_skill':
-      return toolWriteSkill(ctx, args as { key: string; content: string });
-    case 'delete_skill':
-      return toolDeleteSkill(ctx, args as { key: string });
-    case 'set_rubric_weights':
-      return toolSetRubricWeights(ctx, args);
-    case 'set_prompt_override':
-      return toolSetPromptOverride(ctx, args as { key: string; body: string });
-    case 'add_test_case':
-      return toolAddTestCase(ctx, args as { name: string; json: string });
-    case 'submit_candidate':
-      return toolSubmitCandidate(ctx, args as { reasoning: string });
+    case 'read_file': {
+      const p = ToolReadFileArgsSchema.safeParse(args);
+      if (!p.success) return `Error: invalid arguments for read_file: ${p.error.message}`;
+      return toolReadFile(ctx, p.data);
+    }
+    case 'list_dir': {
+      const p = ToolListDirArgsSchema.safeParse(args);
+      if (!p.success) return `Error: invalid arguments for list_dir: ${p.error.message}`;
+      return toolListDir(ctx, p.data);
+    }
+    case 'search': {
+      const p = ToolSearchArgsSchema.safeParse(args);
+      if (!p.success) return `Error: invalid arguments for search: ${p.error.message}`;
+      return toolSearch(ctx, p.data);
+    }
+    case 'write_skill': {
+      const p = ToolWriteSkillArgsSchema.safeParse(args);
+      if (!p.success) return `Error: invalid arguments for write_skill: ${p.error.message}`;
+      return toolWriteSkill(ctx, p.data);
+    }
+    case 'delete_skill': {
+      const p = ToolDeleteSkillArgsSchema.safeParse(args);
+      if (!p.success) return `Error: invalid arguments for delete_skill: ${p.error.message}`;
+      return toolDeleteSkill(ctx, p.data);
+    }
+    case 'set_rubric_weights': {
+      const p = ToolSetRubricWeightsArgsSchema.safeParse(args);
+      if (!p.success) return `Error: invalid arguments for set_rubric_weights: ${p.error.message}`;
+      return toolSetRubricWeights(ctx, p.data);
+    }
+    case 'set_prompt_override': {
+      const p = ToolSetPromptOverrideArgsSchema.safeParse(args);
+      if (!p.success) return `Error: invalid arguments for set_prompt_override: ${p.error.message}`;
+      return toolSetPromptOverride(ctx, p.data);
+    }
+    case 'add_test_case': {
+      const p = ToolAddTestCaseArgsSchema.safeParse(args);
+      if (!p.success) return `Error: invalid arguments for add_test_case: ${p.error.message}`;
+      return toolAddTestCase(ctx, p.data);
+    }
+    case 'submit_candidate': {
+      const p = ToolSubmitCandidateArgsSchema.safeParse(args);
+      if (!p.success) return `Error: invalid arguments for submit_candidate: ${p.error.message}`;
+      return toolSubmitCandidate(ctx, p.data);
+    }
     default:
       return `Unknown tool: ${name}`;
   }

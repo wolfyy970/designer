@@ -5,7 +5,7 @@ import {
   reduceRunnerState,
   type TestRowState,
 } from '../state.ts';
-import type { RunnerPreflightInfo } from '../../runner-core.ts';
+import type { RunnerPreflightInfo } from '../../runner-types.ts';
 
 const samplePreflight = (names: string[]): RunnerPreflightInfo => ({
   cfg: {

@@ -1,9 +1,14 @@
 /**
  * Manual promotion guide: markdown from the winning candidate's artifacts.
  */
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { normalizeError } from '../src/lib/error-utils.ts';
+import { ARTIFACT } from './constants.ts';
+import { debugMetaHarness } from './debug-log.ts';
 import type { MetaHarnessMode } from './modes.ts';
+import { parsePromptOverridesJsonString } from './schemas.ts';
+import { diffSkillTrees } from './skill-diff.ts';
 
 export type PromotionSummary = {
   candidateId: number;
@@ -33,91 +38,37 @@ type GeneratePromotionReportOptions = {
   currentTestCasesDir: string;
 };
 
-/** Recursively list relative file paths under dir (posix-style slashes). */
-async function walkFiles(absDir: string, relPrefix = ''): Promise<string[]> {
-  const out: string[] = [];
-  let entries;
-  try {
-    entries = await readdir(absDir, { withFileTypes: true });
-  } catch {
-    return out;
-  }
-  for (const e of entries) {
-    const rel = path.join(relPrefix, e.name);
-    const full = path.join(absDir, e.name);
-    if (e.isDirectory()) {
-      out.push(...(await walkFiles(full, rel)));
-    } else if (e.isFile()) {
-      out.push(rel.split(path.sep).join('/'));
-    }
-  }
-  return out.sort();
-}
-
-async function readBinary(p: string): Promise<Buffer | null> {
-  try {
-    return await readFile(p);
-  } catch {
-    return null;
-  }
-}
-
-type TreeDiff = {
-  added: string[];
-  deleted: string[];
-  modified: Array<{ relPath: string; snapshotBytes: number; liveBytes: number }>;
-  unchanged: number;
-};
-
-export async function diffSkillTrees(snapshotRoot: string, liveRoot: string): Promise<TreeDiff> {
-  const snapPaths = new Set(await walkFiles(snapshotRoot));
-  const livePaths = new Set(await walkFiles(liveRoot));
-
-  const added: string[] = [];
-  const deleted: string[] = [];
-  const modified: Array<{ relPath: string; snapshotBytes: number; liveBytes: number }> = [];
-  let unchanged = 0;
-
-  for (const rel of snapPaths) {
-    if (!livePaths.has(rel)) {
-      deleted.push(rel);
-      continue;
-    }
-    const a = await readBinary(path.join(snapshotRoot, rel));
-    const b = await readBinary(path.join(liveRoot, rel));
-    if (!a || !b) continue;
-    if (Buffer.compare(a, b) === 0) unchanged += 1;
-    else modified.push({ relPath: rel, snapshotBytes: a.length, liveBytes: b.length });
-  }
-  for (const rel of livePaths) {
-    if (!snapPaths.has(rel)) added.push(rel);
-  }
-  return { added, deleted, modified, unchanged };
-}
-
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   return `${(n / 1024).toFixed(1)} KB`;
 }
 
-async function buildPromotionSummary(
+type SkillTreeDiffResult = Awaited<ReturnType<typeof diffSkillTrees>>;
+
+type PromotionSummaryContext = {
+  summary: PromotionSummary;
+  tree: SkillTreeDiffResult;
+  promptOverrides: Record<string, string>;
+};
+
+async function buildPromotionSummaryWithContext(
   options: Pick<
     GeneratePromotionReportOptions,
     'repoRoot' | 'winningCandidateDir' | 'initialTestCaseNames' | 'currentTestCasesDir' | 'winningCandidateId' | 'winningMeanScore'
   >,
-): Promise<PromotionSummary> {
+): Promise<PromotionSummaryContext> {
   const { winningCandidateDir, repoRoot, initialTestCaseNames, currentTestCasesDir } = options;
 
   let promptOverrides: Record<string, string> = {};
   try {
-    const raw = await readFile(path.join(winningCandidateDir, 'prompt-overrides.json'), 'utf8');
-    promptOverrides = JSON.parse(raw) as Record<string, string>;
-  } catch {
-    /* empty */
+    const raw = await readFile(path.join(winningCandidateDir, ARTIFACT.promptOverridesJson), 'utf8');
+    promptOverrides = parsePromptOverridesJsonString(raw);
+  } catch (e) {
+    debugMetaHarness('promotion prompt-overrides read skipped:', normalizeError(e));
   }
   const promptOverrideKeys = Object.keys(promptOverrides).sort();
 
-  const snapshotSkills = path.join(winningCandidateDir, 'skills-snapshot');
+  const snapshotSkills = path.join(winningCandidateDir, ARTIFACT.skillsSnapshot);
   const liveSkills = path.join(repoRoot, 'skills');
   const tree = await diffSkillTrees(snapshotSkills, liveSkills);
 
@@ -127,8 +78,8 @@ async function buildPromotionSummary(
     for (const f of files) {
       if (f.endsWith('.json')) currentNames.add(path.basename(f, '.json'));
     }
-  } catch {
-    /* ignore */
+  } catch (e) {
+    debugMetaHarness('promotion test-cases dir read skipped:', normalizeError(e));
   }
   const testCasesAdded = [...currentNames].filter((n) => !initialTestCaseNames.has(n)).sort();
 
@@ -140,14 +91,18 @@ async function buildPromotionSummary(
     testCasesAdded.length > 0;
 
   return {
-    candidateId: options.winningCandidateId,
-    meanScore: options.winningMeanScore,
-    promptOverrideKeys,
-    skillsAdded: tree.added,
-    skillsModified: tree.modified.map((m) => m.relPath),
-    skillsDeleted: tree.deleted,
-    testCasesAdded,
-    hasChanges,
+    summary: {
+      candidateId: options.winningCandidateId,
+      meanScore: options.winningMeanScore,
+      promptOverrideKeys,
+      skillsAdded: tree.added,
+      skillsModified: tree.modified.map((m) => m.relPath),
+      skillsDeleted: tree.deleted,
+      testCasesAdded,
+      hasChanges,
+    },
+    tree,
+    promptOverrides,
   };
 }
 
@@ -156,22 +111,13 @@ export async function generatePromotionReportMarkdown(
 ): Promise<{ markdown: string; summary: PromotionSummary }> {
   const { repoRoot, winningCandidateDir, winningCandidateId, winningMeanScore, mode, candidateRows } = options;
 
-  const summary = await buildPromotionSummary(options);
-  const tree = await diffSkillTrees(path.join(winningCandidateDir, 'skills-snapshot'), path.join(repoRoot, 'skills'));
+  const { summary, tree, promptOverrides } = await buildPromotionSummaryWithContext(options);
 
   let proposalBody = '';
   try {
-    proposalBody = await readFile(path.join(winningCandidateDir, 'proposal.md'), 'utf8');
+    proposalBody = await readFile(path.join(winningCandidateDir, ARTIFACT.proposalMd), 'utf8');
   } catch {
-    proposalBody = '_No proposal.md found._\n';
-  }
-
-  let promptOverrides: Record<string, string> = {};
-  try {
-    const raw = await readFile(path.join(winningCandidateDir, 'prompt-overrides.json'), 'utf8');
-    promptOverrides = JSON.parse(raw) as Record<string, string>;
-  } catch {
-    /* */
+    proposalBody = `_No ${ARTIFACT.proposalMd} found._\n`;
   }
 
   const lines: string[] = [];
@@ -236,7 +182,7 @@ export async function generatePromotionReportMarkdown(
   lines.push('## 3. Skill changes (winner snapshot vs current `skills/`)');
   lines.push('');
   lines.push(
-    `Compared **\`${path.relative(repoRoot, path.join(winningCandidateDir, 'skills-snapshot'))}/\`** (what ran for this candidate) to **\`skills/\`** in the repo **right now** (after the full meta-harness run).`,
+    `Compared **\`${path.relative(repoRoot, path.join(winningCandidateDir, ARTIFACT.skillsSnapshot))}/\`** (what ran for this candidate) to **\`skills/\`** in the repo **right now** (after the full meta-harness run).`,
   );
   lines.push('');
   if (tree.added.length === 0 && tree.deleted.length === 0 && tree.modified.length === 0) {
@@ -253,7 +199,7 @@ export async function generatePromotionReportMarkdown(
       }
       lines.push('');
       lines.push(
-        `To align the repo with **this candidate’s** skills, copy from: \`${path.relative(repoRoot, path.join(winningCandidateDir, 'skills-snapshot'))}/\`.`,
+        `To align the repo with **this candidate’s** skills, copy from: \`${path.relative(repoRoot, path.join(winningCandidateDir, ARTIFACT.skillsSnapshot))}/\`.`,
       );
       lines.push('');
     }
@@ -294,7 +240,7 @@ export async function generatePromotionReportMarkdown(
   }
   if (tree.modified.length > 0 || tree.deleted.length > 0) {
     lines.push(
-      `${step}. Copy needed paths from \`${path.relative(repoRoot, path.join(winningCandidateDir, 'skills-snapshot'))}/\` into \`skills/\` (see section 3).`,
+      `${step}. Copy needed paths from \`${path.relative(repoRoot, path.join(winningCandidateDir, ARTIFACT.skillsSnapshot))}/\` into \`skills/\` (see section 3).`,
     );
     step += 1;
   } else if (tree.added.length > 0) {
@@ -306,20 +252,10 @@ export async function generatePromotionReportMarkdown(
   lines.push(`${step}. Run \`pnpm test\` and \`pnpm lint\`.`);
   lines.push('');
 
-  lines.push('## 6. Proposer reasoning (from `proposal.md`)');
+  lines.push(`## 6. Proposer reasoning (from \`${ARTIFACT.proposalMd}\`)`);
   lines.push('');
   lines.push(proposalBody.trimEnd());
   lines.push('');
 
   return { markdown: lines.join('\n'), summary };
-}
-
-/** True if directory exists. */
-export async function pathIsDir(p: string): Promise<boolean> {
-  try {
-    const s = await stat(p);
-    return s.isDirectory();
-  } catch {
-    return false;
-  }
 }

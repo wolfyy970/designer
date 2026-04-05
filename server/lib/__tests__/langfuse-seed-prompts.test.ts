@@ -41,7 +41,7 @@ describe('seedLangfusePromptsFromDefaults', () => {
     expect(promptCreate).toHaveBeenCalledTimes(PROMPT_KEYS.length);
   });
 
-  it('does not overwrite when labeled body drifts and sync is false', async () => {
+  it('does not create new Langfuse versions when labeled body drifts and sync is false', async () => {
     listMock.mockResolvedValue({ data: [{ versions: [1] }] });
     getMock.mockResolvedValue({ type: 'text', prompt: '__drift_not_in_repo_defaults__' });
 

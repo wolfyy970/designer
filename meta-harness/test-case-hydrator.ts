@@ -6,18 +6,14 @@ import { GENERATION_MODE } from '../src/constants/generation.ts';
 import { generateId, now } from '../src/lib/utils.ts';
 import type { DesignSpec, SpecSection } from '../src/types/spec.ts';
 import { HypothesisGenerateRequestSchema, ThinkingLevelSchema } from '../server/lib/hypothesis-schemas.ts';
+import { DEFAULT_HYPOTHESIS_COUNT, SECTION_KEYS } from './constants.ts';
+
+/** POST /api/hypothesis/generate JSON body produced by the meta-harness hydrator. */
+export type MetaHarnessHypothesisGenerateBody = z.infer<typeof HypothesisGenerateRequestSchema>;
 
 export const MH_MODEL_NODE = 'mh-model';
 export const MH_HYPOTHESIS_NODE = 'mh-hypothesis';
 const MH_INCUBATOR_ID = 'mh-incubator';
-
-const SECTION_KEYS = [
-  'design-brief',
-  'existing-design',
-  'research-context',
-  'objectives-metrics',
-  'design-constraints',
-] as const;
 
 const SimplifiedModelSchema = z.object({
   providerId: z.string().min(1),
@@ -114,7 +110,7 @@ export function buildDesignSpecFromSimplified(spec: SimplifiedMetaHarnessTestCas
   };
 }
 
-export type HydrateOptions = {
+type HydrateOptions = {
   defaultCompilerProvider: string;
   correlationId?: string;
   promptOverrides?: Record<string, string>;
@@ -128,7 +124,7 @@ export type HydrateOptions = {
   strategyOverride?: z.infer<typeof SimplifiedStrategySchema>;
 };
 
-export type HydrateCompileRequestOptions = {
+type HydrateCompileRequestOptions = {
   compileProvider: string;
   compileModel: string;
   supportsVision?: boolean;
@@ -144,7 +140,7 @@ export function hydrateCompileRequestFromParsed(
 ): Record<string, unknown> {
   const spec = buildDesignSpecFromSimplified(simplified.spec);
   const count =
-    simplified.compile?.hypothesisCount ?? options.defaultHypothesisCount ?? 5;
+    simplified.compile?.hypothesisCount ?? options.defaultHypothesisCount ?? DEFAULT_HYPOTHESIS_COUNT;
   return {
     spec,
     providerId: options.compileProvider,
@@ -169,7 +165,7 @@ export function hydrateCompileRequest(
 export function hydrateMetaHarnessTestCaseFromParsed(
   simplified: SimplifiedMetaHarnessTestCase,
   options: HydrateOptions,
-): z.infer<typeof HypothesisGenerateRequestSchema> {
+): MetaHarnessHypothesisGenerateBody {
   const designSpec = buildDesignSpecFromSimplified(simplified.spec);
   const strategy = options.strategyOverride ?? simplified.strategy;
   if (!strategy) {
@@ -224,6 +220,6 @@ export function hydrateMetaHarnessTestCaseFromParsed(
 export function hydrateMetaHarnessTestCase(
   raw: unknown,
   options: HydrateOptions,
-): z.infer<typeof HypothesisGenerateRequestSchema> {
+): MetaHarnessHypothesisGenerateBody {
   return hydrateMetaHarnessTestCaseFromParsed(SimplifiedMetaHarnessTestCaseSchema.parse(raw), options);
 }

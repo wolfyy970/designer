@@ -3,10 +3,15 @@
  * Target text per key: latest `PromptVersion` from legacy SQLite when configured / auto-detected, else `shared-defaults`.
  *
  * **Default (create-only):** Creates missing prompts + repairs a missing label; if a labeled version already
- * exists, **does not overwrite** — Prompt Studio is source of truth.
+ * exists, **does not push** — Prompt Studio is source of truth.
  *
  * **Sync mode** (`LANGFUSE_SEED_SYNC=1` or `seedLangfusePromptsFromDefaults({ sync: true })`): if the labeled
- * body differs from target text, adds a new Langfuse version and moves `LANGFUSE_PROMPT_LABEL` to it.
+ * body differs from target text, calls **`lf.prompt.create`** for that prompt **name** again. Langfuse stores
+ * this as a **new prompt version** (timeline / history); **`LANGFUSE_PROMPT_LABEL`** (e.g. `production`) moves
+ * to the new version. **Older versions are not deleted** — they remain in the Langfuse UI for comparison,
+ * same semantics as **`PUT /api/prompts/:key`** (which also uses `prompt.create`).
+ *
+ * There is no in-place “overwrite” of a single version blob; history is append-only from the app’s perspective.
  *
  * Uses `lf.api.prompts.list` / `lf.api.prompts.get` instead of `lf.prompt.get` so first-time seed does not spam
  * PromptManager 404 errors to the console.
@@ -62,7 +67,9 @@ export async function seedLangfusePromptsFromDefaults(options?: SeedLangfuseProm
   }
 
   if (sync) {
-    console.log('Langfuse seed: sync mode — labeled prompts will be updated when body differs from repo/SQLite.');
+    console.log(
+      'Langfuse seed: sync mode — when a body differs, creates a new prompt version and moves the label (older versions stay in Langfuse).',
+    );
   }
 
   const { bodies: legacyBodies, sourceLabel } = await loadLegacyPromptBodiesForSeed(process.cwd());
@@ -122,7 +129,7 @@ export async function seedLangfusePromptsFromDefaults(options?: SeedLangfuseProm
         prompt: targetBody,
         labels: [label],
       });
-      console.log(`Updated prompt in Langfuse: ${key} (no labeled version; added)`);
+      console.log(`New Langfuse prompt version: ${key} (no labeled version before; label attached)`);
       continue;
     }
 
@@ -142,6 +149,6 @@ export async function seedLangfusePromptsFromDefaults(options?: SeedLangfuseProm
       prompt: targetBody,
       labels: [label],
     });
-    console.log(`Updated prompt in Langfuse: ${key}`);
+    console.log(`New Langfuse prompt version: ${key} (label moved; prior versions unchanged in history)`);
   }
 }

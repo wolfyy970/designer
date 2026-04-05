@@ -47,7 +47,26 @@ describe('parseMetaHarnessArgv', () => {
     const a = parseMetaHarnessArgv(['--eval-only', '--plain', '--test=foo', '--test=bar'], baseCfg);
     expect(a.evalOnly).toBe(true);
     expect(a.plain).toBe(true);
+    expect(a.skipPromotionCheck).toBe(false);
     expect(a.testFilters).toEqual(['foo', 'bar']);
+  });
+
+  it('parses --skip-promotion-check', () => {
+    const a = parseMetaHarnessArgv(['--skip-promotion-check'], baseCfg);
+    expect(a.skipPromotionCheck).toBe(true);
+    expect(a.promoteOnly).toBe(false);
+  });
+
+  it('parses --improve as skip preflight', () => {
+    const a = parseMetaHarnessArgv(['--improve'], baseCfg);
+    expect(a.skipPromotionCheck).toBe(true);
+    expect(a.promoteOnly).toBe(false);
+  });
+
+  it('parses --promote', () => {
+    const a = parseMetaHarnessArgv(['--promote'], baseCfg);
+    expect(a.promoteOnly).toBe(true);
+    expect(a.skipPromotionCheck).toBe(false);
   });
 });
 

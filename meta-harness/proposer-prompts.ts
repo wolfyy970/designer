@@ -2,6 +2,7 @@
  * System prompts and OpenRouter tool lists per meta-harness mode.
  */
 import type { MetaHarnessMode } from './modes.ts';
+import type { OpenRouterFunctionTool } from './openrouter-client.ts';
 import { TOOLS_OPENROUTER } from './proposer-tools.ts';
 
 /**
@@ -104,10 +105,10 @@ export function systemPromptForMode(mode: MetaHarnessMode): string {
   return SYSTEM_PROMPT_DESIGN;
 }
 
-export function openRouterToolsForMode(mode: MetaHarnessMode): unknown[] {
+export function openRouterToolsForMode(mode: MetaHarnessMode): OpenRouterFunctionTool[] {
   if (mode !== 'compile') return TOOLS_OPENROUTER;
   return TOOLS_OPENROUTER.filter((t) => {
-    const n = (t as { function?: { name?: string } }).function?.name;
+    const n = t.function.name;
     return n !== 'write_skill' && n !== 'delete_skill' && n !== 'set_rubric_weights';
   });
 }

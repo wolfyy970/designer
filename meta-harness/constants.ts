@@ -2,6 +2,21 @@
  * Shared literals for meta-harness (URLs, timeouts, filenames).
  */
 
+/** Canonical spec section ids for simplified benchmarks + compile-mode rubric context (must stay aligned with `SpecSectionId`). */
+export const SECTION_KEYS = [
+  'design-brief',
+  'existing-design',
+  'research-context',
+  'objectives-metrics',
+  'design-constraints',
+] as const;
+
+/** Default `promptOptions.count` when config and test case omit a count. */
+export const DEFAULT_HYPOTHESIS_COUNT = 5;
+
+/** Engine/UI sentinel: no winning candidate / mean score yet. */
+export const NO_BEST_SENTINEL = -1;
+
 export const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 export const DEFAULT_COMPILE_MODEL = 'minimax/minimax-m2.5';
@@ -35,6 +50,24 @@ export const EVAL_META_JSON_POLL_MS = 400;
 /** Truncate compile error body in runCompileStep */
 export const COMPILE_ERROR_BODY_MAX = 800;
 
+/** Proposer `search` tool: max substring hits returned */
+export const SEARCH_MAX_HITS = 40;
+
+/** Proposer `search` tool: skip files larger than this (bytes) */
+export const SEARCH_MAX_FILE_BYTES = 400_000;
+
+/** Proposer `search` tool: max directory depth when walking */
+export const SEARCH_MAX_DEPTH = 8;
+
+/** Truncate `revisionBrief` in per-test summary.json written by meta-harness */
+export const REVISION_BRIEF_MAX_CHARS = 800;
+
+/** Snippet length in compile-mode rubric LLM parse / JSON error messages */
+export const RUBRIC_ERROR_SNIPPET_MAX = 200;
+
+/** Max chars of non-OK `/hypothesis/generate` response body embedded in evaluator errors */
+export const EVAL_FETCH_ERROR_BODY_MAX = 500;
+
 /** Plain-mode heartbeat log throttle */
 export const PLAIN_HEARTBEAT_LOG_THROTTLE_MS = 10_000;
 
@@ -59,4 +92,14 @@ export const ARTIFACT = {
   sessionJson: 'session.json',
   evalRunIdTxt: 'eval-run-id.txt',
   promotionReportMd: 'PROMOTION_REPORT.md',
+  /** Per-candidate copy of `skills/` at evaluation time (directory name, not a file). */
+  skillsSnapshot: 'skills-snapshot',
 } as const;
+
+/**
+ * Candidate-0 baseline passes **no** `promptOverrides` on `/api/*` requests, so prompts always come from
+ * the **running server** (Langfuse + in-process defaults), not from another session’s winning
+ * `prompt-overrides.json`. After you promote + sync, the next baseline matches that live layer; if you
+ * skip promotion, baseline still tracks **API** text, not the stale winner file on disk.
+ */
+export const META_HARNESS_BASELINE_PROMPT_OVERRIDES: Readonly<Record<string, string>> = Object.freeze({});

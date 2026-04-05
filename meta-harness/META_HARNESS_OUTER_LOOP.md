@@ -27,7 +27,7 @@ This is **not** the main web app—it is a script that talks to `**pnpm dev:serv
 | Source                                    | What it controls                                                                                                                                                                                               |
 | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `**meta-harness/config.json**` (required) | API URL, iteration count, proposer model + tool budget, provider defaults, optional inner revision cap, optional `evalRunsBaseDir`.                                                                            |
-| **Command line**                          | `**--mode**`, `**--dry-run**`, `**--eval-only**`, `**--once**`, `**--plain**`, `**--test=**` (see §3). Everything else comes from `config.json` or env.                                                                         |
+| **Command line**                          | `**--mode**`, `**--dry-run**`, `**--eval-only**`, `**--once**`, `**--plain**`, `**--promote**`, `**--improve**`, `**--skip-promotion-check**`, `**--test=**` (see §3). Everything else comes from `config.json` or env.                                                                         |
 | `**.env.local` / `.env**`                 | `OPENROUTER_API_KEY` (and the server’s keys when you run `dev:server`). Optional `OBSERVABILITY_LOG_DIR` / `LLM_LOG_DIR` so `**eval-runs/**` land where the runner expects (unless you set `evalRunsBaseDir`). |
 | `**meta-harness/test-cases/*.json**`      | Each file is one scenario: **`spec` + `model`** always; **`strategy`** required for default **`--mode=design`**; optional for **`compile`** / **`e2e`** (hypotheses come from `POST /api/compile`). See §3.1.   |
 
@@ -117,6 +117,10 @@ Use that last form when you set `OBSERVABILITY_LOG_DIR=/tmp/auto-designer-observ
 
 The script loads `**.env.local**` then `**.env**` before reading `**config.json**`.
 
+**Startup order:** if **`--promote`** → **`GET /api/health`** → **preflight only** → **exit** (no test-case load, no **`OPENROUTER_API_KEY`**). Otherwise: validate test cases → optional **`--dry-run` exit** → require **`OPENROUTER_API_KEY`** (unless **`--eval-only`** rules say otherwise) → **`GET /api/health`** → **preflight** (unless **`--dry-run`**, **`--skip-promotion-check`**, or **`--improve`**) → **Ink dashboard** or **`--plain`** engine.
+
+**Preflight (unpromoted winner):** walks recent **`meta-harness/history/session-*`** for `PROMOTION_REPORT.md` + `best-candidate.json`, compares the winner’s **`prompt-overrides.json`** to **`GET /api/prompts/:key`** (5s timeout per key) and **`skills-snapshot/`** to **`skills/`**. The **first** session (newest) with any drift is shown. **TTY:** Ink panel with unified diff lines. **`P`** writes drift into **`src/lib/prompts/shared-defaults.ts`** and **`skills/`**, runs **`pnpm langfuse:sync-prompts`** when Langfuse env is set (each changed key: **new** Langfuse prompt **version** via `prompt.create`; configured **label** moves forward; older versions stay in the UI for history), then either runs the harness (default) or exits (**`--promote`**). Failures log per step and exit **1**. **`S`** / **`Q`** exit without file changes. **`[`** / **`]`** prev/next item, **`j`** / **`k`** scroll. **Plain / CI:** prints diffs only (no auto-apply); **`--promote`** exits after diffs with a hint to use TTY for **`P`**. **`--promote` uses the same preflight scan as a default run**; post-review behavior differs. Scan errors only warn on full runs; **`--promote`** ends after the warning. **`--dry-run`** skips preflight. **`--improve`** = **`--skip-promotion-check`**. Detail table: [meta-harness/README.md § CLI flow](README.md#cli-flow-boundaries).
+
 **Flags:** there are no positional arguments, no `--model`, no `--url` on the CLI—change those in `**config.json`**. In an interactive terminal the runner opens an **Ink** dashboard; use `**--plain**` or redirect/pipe stdout to get classic line-by-line logs (CI, `tee`, etc.).
 
 ### 3.1 Modes (`--mode`)
@@ -170,6 +174,9 @@ pnpm meta-harness --plain
 | `--eval-only` | Skips OpenRouter **proposer**; `prompt-overrides.json` for that candidate is `{}`. **`compile`** still needs **`OPENROUTER_API_KEY`** for the rubric. **`design`** / **`e2e`** use the API for generation (keys per server lockdown). Skips the automatic **baseline** pass (see §4)—every iteration is eval-only. |
 | `--once`      | Sets iteration count to **1** for this invocation (ignores `iterations` in `config.json` for that run).                                 |
 | `--plain`     | Use line-based `console` output only (no Ink TUI).                                                                                      |
+| `--skip-promotion-check` | Skip the preflight scan for an unpromoted last-session winner (no diff UI / plain diff block). Same effect as **`--improve`**. |
+| `--improve`  | Alias for **`--skip-promotion-check`**: run the harness immediately without the unpromoted-winner check. |
+| `--promote`  | **Preflight only:** health + diff review (same as default preflight). **TTY + P:** apply winner to repo + Langfuse sync, then **exit** — no benchmarks, no proposer, no **`OPENROUTER_API_KEY`**. **Plain:** diffs only, no auto-apply. Not combinable with **`--dry-run`**. |
 
 
 ### 3.2 Example command combinations

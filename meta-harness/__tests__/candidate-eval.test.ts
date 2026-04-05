@@ -29,6 +29,8 @@ describe('runTestCasesEvaluation JSON guard', () => {
       evalOnly: true,
       dryRun: false,
       plain: true,
+      skipPromotionCheck: false,
+      promoteOnly: false,
       testFilters: [],
     };
 
@@ -96,6 +98,8 @@ describe('runTestCasesEvaluation JSON guard', () => {
       evalOnly: true,
       dryRun: false,
       plain: true,
+      skipPromotionCheck: false,
+      promoteOnly: false,
       testFilters: [],
     };
 

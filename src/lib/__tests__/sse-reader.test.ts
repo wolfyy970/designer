@@ -25,6 +25,15 @@ describe('readSseEventStream', () => {
     expect(received).toEqual([{ ev: 'activity', data: '{"entry":"hi"}' }]);
   });
 
+  it('buffers a split `event:` prefix until the full line completes', async () => {
+    const received: { ev: string; data: string }[] = [];
+    const reader = chunksReader(['eve', 'nt: tick\n', 'data: tock\n']);
+    await readSseEventStream(reader, (ev, data) => {
+      received.push({ ev, data });
+    });
+    expect(received).toEqual([{ ev: 'tick', data: 'tock' }]);
+  });
+
   it('pairs event and data lines across chunk boundaries', async () => {
     const received: { ev: string; data: string }[] = [];
     const reader = chunksReader(['event: pro', 'gress\ndata: {"a":1}\n', 'event: code\ndata: {}\n']);

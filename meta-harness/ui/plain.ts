@@ -1,13 +1,16 @@
 /**
  * Console callbacks mirroring the pre-TUI meta-harness output.
  */
-import type { MetaHarnessCliArgs, PromotionSummary, RunnerCallbacks } from '../runner-core.ts';
-import { wirePayloadLine } from './wire-formatters.ts';
+import type { MetaHarnessCliArgs } from '../config.ts';
+import type { PromotionSummary } from '../promotion-report.ts';
+import type { RunnerCallbacks } from '../runner-types.ts';
 import { PLAIN_HEARTBEAT_LOG_THROTTLE_MS } from '../constants.ts';
+import { bannerLine } from './format-helpers.ts';
+import { wirePayloadLine } from './wire-formatters.ts';
 
-function banner(msg: string) {
-  const line = '─'.repeat(Math.max(0, 60 - msg.length));
-  console.log(`\n${'─'.repeat(4)} ${msg} ${line}`);
+/** Plain-mode section header (thin wrapper — callers may import `bannerLine` from `format-helpers`). */
+function banner(msg: string): void {
+  bannerLine(msg);
 }
 
 export function createPlainCallbacks(args: MetaHarnessCliArgs): RunnerCallbacks {

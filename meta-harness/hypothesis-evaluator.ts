@@ -5,7 +5,8 @@ import { z } from 'zod';
 import type { DesignSpec } from '../src/types/spec.ts';
 import type { HypothesisStrategy } from '../src/types/compiler.ts';
 
-import { fetchOpenRouterChatJson } from './openrouter-client.ts';
+import { fetchOpenRouterChat } from './openrouter-client.ts';
+import { RUBRIC_ERROR_SNIPPET_MAX, SECTION_KEYS } from './constants.ts';
 
 const RUBRIC_KEYS = [
   'specificity',
@@ -27,18 +28,10 @@ const rubricResponseSchema = z.object({
 
 type HypothesisRubricScores = z.infer<typeof rubricResponseSchema>;
 
-const SECTION_ORDER = [
-  'design-brief',
-  'existing-design',
-  'research-context',
-  'objectives-metrics',
-  'design-constraints',
-] as const;
-
 /** Flatten design spec into markdown for evaluator context. */
 export function designSpecToEvalContext(spec: DesignSpec): string {
   const lines: string[] = [`# ${spec.title}`];
-  for (const key of SECTION_ORDER) {
+  for (const key of SECTION_KEYS) {
     const s = spec.sections[key];
     const c = s?.content?.trim() ?? '';
     if (c) lines.push(`\n## ${key.replace(/-/g, ' ')}\n${c}`);
@@ -109,7 +102,7 @@ export async function scoreHypothesisWithRubric(options: ScoreHypothesisOptions)
     'Reply with ONLY a JSON object containing the six numeric keys listed in the system message.',
   ].join('\n');
 
-  const json = (await fetchOpenRouterChatJson({
+  const json = await fetchOpenRouterChat({
     apiKey: options.apiKey,
     requestBody: {
       model: options.model,
@@ -126,23 +119,23 @@ export async function scoreHypothesisWithRubric(options: ScoreHypothesisOptions)
       options.openRouterChatTimeoutMs > 0
         ? options.openRouterChatTimeoutMs
         : undefined,
-  })) as {
-    choices?: Array<{ message?: { content?: string | null } }>;
-  };
-  const content = json.choices?.[0]?.message?.content;
+  });
+  const content = json.choices[0]!.message.content;
   if (typeof content !== 'string' || !content.trim()) {
     throw new Error('OpenRouter: empty content for hypothesis rubric');
   }
 
   const rawJson = extractJsonObject(content);
   if (!rawJson) {
-    throw new Error(`Could not parse JSON from rubric response: ${content.slice(0, 200)}`);
+    throw new Error(
+      `Could not parse JSON from rubric response: ${content.slice(0, RUBRIC_ERROR_SNIPPET_MAX)}`,
+    );
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawJson) as unknown;
   } catch {
-    throw new Error(`Invalid JSON in rubric response: ${rawJson.slice(0, 200)}`);
+    throw new Error(`Invalid JSON in rubric response: ${rawJson.slice(0, RUBRIC_ERROR_SNIPPET_MAX)}`);
   }
   const scores = rubricResponseSchema.parse(parsed);
   const mean =

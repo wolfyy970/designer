@@ -6,7 +6,7 @@ In **Langfuse** and **Prompt Studio**, templates are keyed by **kebab-case** ide
 
 The API’s `**getPromptBody`** (when Langfuse is configured) tries the **new** Langfuse name first, then the **legacy** name, so runs keep working until `pnpm db:seed` / `pnpm langfuse:sync-prompts` has created the kebab-case prompts.
 
-**Production source of truth for template text:** labeled versions in [Langfuse Cloud](https://langfuse.com/docs/deployment/cloud) (or self-hosted) — the server resolves prompts via **`getPromptBody`** at runtime. The repo’s `src/lib/prompts/shared-defaults.ts` is used when **creating** a missing prompt and as the **import source** for `**pnpm langfuse:sync-prompts**`. **Prompt Studio** in the app **reads** that baseline from **`GET /api/prompts`** but **does not write Langfuse** from Save; local drafts live in the browser and are sent as optional **`promptOverrides`** on compile / hypothesis / design-system requests (see [ARCHITECTURE.md](ARCHITECTURE.md)). `**pnpm db:seed**` bootstraps missing keys only; `**pnpm langfuse:sync-prompts**` forces every labeled prompt to match repo/SQLite (overwrites drift). `**pnpm db:seed**` also runs a **migration step** for legacy Langfuse names.
+**Production source of truth for template text:** labeled versions in [Langfuse Cloud](https://langfuse.com/docs/deployment/cloud) (or self-hosted) — the server resolves prompts via **`getPromptBody`** at runtime. The repo’s `src/lib/prompts/shared-defaults.ts` is used when **creating** a missing prompt and as the **import source** for `**pnpm langfuse:sync-prompts**`. **Prompt Studio** in the app **reads** that baseline from **`GET /api/prompts`** but **does not write Langfuse** from Save; local drafts live in the browser and are sent as optional **`promptOverrides`** on compile / hypothesis / design-system requests (see [ARCHITECTURE.md](ARCHITECTURE.md)). `**pnpm db:seed**` bootstraps missing keys only; `**pnpm langfuse:sync-prompts**` aligns every labeled prompt with repo/SQLite by calling **`prompt.create`** per changed key — Langfuse stores a **new version** and moves **`LANGFUSE_PROMPT_LABEL`** (e.g. `production`) to it; **older versions stay** in the UI for history. `**pnpm db:seed**` also runs a **migration step** for legacy Langfuse names.
 
 **In-app labels** (Prompt Studio sidebar) match `[PROMPT_META](src/lib/prompts/defaults.ts)` — use that file for **template variables** (e.g. `{{DESIGN_BRIEF}}`) per key.
 
@@ -94,7 +94,7 @@ Three **separate rubrics** score the artifact for **design quality**, **strategy
 | Agent “forgets” after long runs                       | `agent-context-compaction`                                                                      |
 | Agent tries npm/Vite/host-repo workflows              | `agents-md-file` (+ sealed Pi `cwd` / resource loader; see ARCHITECTURE)                        |
 | Scores don’t match what you care about                | `evaluator-design-quality`, `evaluator-strategy-fidelity`, `evaluator-implementation`           |
-| Need to **reset all** prompt bodies from repo/SQLite  | `pnpm langfuse:sync-prompts` (overwrites labeled versions); routine `pnpm db:seed` does **not** |
+| Need to **reset all** prompt bodies from repo/SQLite  | `pnpm langfuse:sync-prompts` (new Langfuse **versions** + label move; history retained); routine `pnpm db:seed` does **not** |
 
 
 ---

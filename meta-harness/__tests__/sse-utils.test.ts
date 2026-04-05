@@ -18,4 +18,9 @@ describe('parseSseJsonObject', () => {
   it('returns null for empty string', () => {
     expect(parseSseJsonObject('')).toBeNull();
   });
+
+  it('returns plain objects including lane-shaped payloads (lane stripping is evaluator concern)', () => {
+    const o = parseSseJsonObject('{"laneIndex":0,"foo":1}');
+    expect(o).toEqual({ laneIndex: 0, foo: 1 });
+  });
 });

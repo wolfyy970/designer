@@ -15,6 +15,10 @@ export type MetaHarnessCliArgs = {
   evalOnly: boolean;
   dryRun: boolean;
   plain: boolean;
+  /** Skip unpromoted-winner preflight scan (TTY diff review / plain diff output). Set by `--skip-promotion-check` or `--improve`. */
+  skipPromotionCheck: boolean;
+  /** Preflight / diff review only; exit before loading benchmarks or running the harness (no OpenRouter key required). */
+  promoteOnly: boolean;
   /** Substrings (OR) matched against each test case JSON basename without `.json`. */
   testFilters: string[];
 };
@@ -60,6 +64,8 @@ export function parseMetaHarnessArgv(argv: string[], cfg?: MetaHarnessConfig): M
     evalOnly: argv.includes('--eval-only'),
     dryRun: argv.includes('--dry-run'),
     plain: argv.includes('--plain'),
+    skipPromotionCheck: argv.includes('--skip-promotion-check') || argv.includes('--improve'),
+    promoteOnly: argv.includes('--promote'),
     testFilters: parseTestFiltersFromArgv(argv),
   };
 }

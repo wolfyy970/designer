@@ -3,18 +3,12 @@
  */
 import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { normalizeError } from '../src/lib/error-utils.ts';
 import { SimplifiedMetaHarnessTestCaseSchema } from './test-case-hydrator.ts';
 import type { MetaHarnessCliArgs, MetaHarnessConfig } from './config.ts';
 import type { RunnerCallbacks } from './runner-types.ts';
-import {
-  DEFAULT_HYPOTHESIS_GENERATE_TIMEOUT_MS,
-  DEFAULT_OPENROUTER_CHAT_TIMEOUT_MS,
-} from './constants.ts';
 import { validateTestCaseShapeForMode } from './candidate-artifacts.ts';
 import { runOneMetaHarnessTest } from './run-one-test.ts';
-
-export { runCompilePipeline } from './compile-pipeline.ts';
-export { writeCandidateChangelogAndAggregate } from './candidate-artifacts.ts';
 
 type TestCasesEvalParams = {
   args: MetaHarnessCliArgs;
@@ -63,11 +57,6 @@ export async function runTestCasesEvaluation(params: TestCasesEvalParams): Promi
   const rw =
     rubricWeights && Object.keys(rubricWeights).length > 0 ? rubricWeights : undefined;
 
-  const hypothesisGenerateTimeoutMs =
-    cfg.hypothesisGenerateTimeoutMs ?? DEFAULT_HYPOTHESIS_GENERATE_TIMEOUT_MS;
-  const openRouterChatTimeoutMs =
-    cfg.openRouterChatTimeoutMs ?? DEFAULT_OPENROUTER_CHAT_TIMEOUT_MS;
-
   for (let ti = 0; ti < testFiles.length; ti++) {
     if (callbacks.shouldStop?.()) break;
 
@@ -77,7 +66,7 @@ export async function runTestCasesEvaluation(params: TestCasesEvalParams): Promi
     try {
       raw = JSON.parse(await readFile(tf, 'utf8')) as unknown;
     } catch (e) {
-      callbacks.onSkippedTestCase?.(tf, e instanceof Error ? e.message : String(e));
+      callbacks.onSkippedTestCase?.(tf, normalizeError(e));
       continue;
     }
 
@@ -105,10 +94,7 @@ export async function runTestCasesEvaluation(params: TestCasesEvalParams): Promi
     callbacks.onTestCaseStart(ti, testFiles.length, name);
     const evalStart = Date.now();
 
-    const { overallScore, scored } = await runOneMetaHarnessTest({
-      args,
-      cfg,
-      testCase: parsed.data,
+    const { overallScore, scored } = await runOneMetaHarnessTest(args, cfg, parsed.data, {
       name,
       correlationId,
       evalStart,
@@ -119,8 +105,6 @@ export async function runTestCasesEvaluation(params: TestCasesEvalParams): Promi
       hypothesisEvalModel,
       compileHypothesisCountDefault,
       apiKey,
-      hypothesisGenerateTimeoutMs,
-      openRouterChatTimeoutMs,
       promptOverrides: po,
       rubricWeights: rw,
       callbacks,

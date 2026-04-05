@@ -3,41 +3,32 @@
  */
 import { cp, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { normalizeError } from '../src/lib/error-utils.ts';
 import { repoRoot, resolveEvalRunsBaseDir } from './paths.ts';
 import { runMetaHarnessProposer } from './proposer.ts';
+import { generatePromotionReportMarkdown, type CandidateScoreRow } from './promotion-report.ts';
+import { pathIsDir } from './skill-diff.ts';
 import {
-  generatePromotionReportMarkdown,
-  pathIsDir,
-  type CandidateScoreRow,
-} from './promotion-report.ts';
-import { loadConfig, type MetaHarnessCliArgs, type MetaHarnessConfig } from './config.ts';
+  filterTestFilesBySubstrings,
+  loadConfig,
+  type MetaHarnessCliArgs,
+  type MetaHarnessConfig,
+} from './config.ts';
 import { writeBestCandidate, createMetaHarnessSession, nextCandidateId, listTestCaseFiles } from './session.ts';
 import { runTestCasesEvaluation } from './candidate-eval.ts';
 import { writeCandidateChangelogAndAggregate } from './candidate-artifacts.ts';
-import { filterTestFilesBySubstrings } from './config.ts';
 import type { RunnerCallbacks } from './runner-types.ts';
 import {
   ARTIFACT,
   DEFAULT_COMPILE_MODEL,
+  DEFAULT_HYPOTHESIS_COUNT,
   DEFAULT_OPENROUTER_CHAT_TIMEOUT_MS,
+  META_HARNESS_BASELINE_PROMPT_OVERRIDES,
+  NO_BEST_SENTINEL,
 } from './constants.ts';
 
-export type { MetaHarnessMode } from './modes.ts';
-export type { PromotionSummary } from './promotion-report.ts';
-export type { MetaHarnessConfig, MetaHarnessCliArgs } from './config.ts';
-export {
-  loadConfig,
-  parseMetaHarnessArgv,
-  parseMetaHarnessModeFromArgv,
-  resolveMode,
-  filterTestFilesBySubstrings,
-} from './config.ts';
-export type { RunnerCallbacks, RunnerPreflightInfo } from './runner-types.ts';
-export { listTestCaseFiles } from './session.ts';
-export { runCompileStep } from './compile-step.ts';
-
 /** Optional engine tuning; pass `config` to avoid loading disk config twice. */
-export type RunMetaHarnessEngineOptions = {
+type RunMetaHarnessEngineOptions = {
   config?: MetaHarnessConfig;
 };
 
@@ -82,7 +73,7 @@ export async function runMetaHarnessEngine(
     cfg.hypothesisEvalModel && cfg.hypothesisEvalModel.trim().length > 0
       ? cfg.hypothesisEvalModel.trim()
       : cfg.proposerModel;
-  const compileHypothesisCountDefault = cfg.compileHypothesisCount ?? 5;
+  const compileHypothesisCountDefault = cfg.compileHypothesisCount ?? DEFAULT_HYPOTHESIS_COUNT;
   const openRouterChatTimeoutMs =
     cfg.openRouterChatTimeoutMs ?? DEFAULT_OPENROUTER_CHAT_TIMEOUT_MS;
 
@@ -113,9 +104,7 @@ export async function runMetaHarnessEngine(
     baselineWillRun: needsBaseline,
   });
 
-  let bestMean = -1;
-  let bestCand = -1;
-  const bestRef = { mean: bestMean, id: bestCand };
+  const bestRef = { mean: NO_BEST_SENTINEL, id: NO_BEST_SENTINEL };
   if (needsBaseline) {
     await runBaselineCandidate({
       root,
@@ -134,8 +123,6 @@ export async function runMetaHarnessEngine(
       candidateRows,
       bestRef,
     });
-    bestMean = bestRef.mean;
-    bestCand = bestRef.id;
   }
 
   for (let iter = 0; iter < iterations; iter++) {
@@ -208,15 +195,12 @@ export async function runMetaHarnessEngine(
       await writeFile(path.join(candidateDir, ARTIFACT.promptOverridesJson), '{}\n', 'utf8');
     }
 
-    const skillsDest = path.join(candidateDir, 'skills-snapshot');
-    await cp(path.join(root, 'skills'), skillsDest, { recursive: true });
-
-    const { meanScore, scores, testResultsDir } = await runTestCasesEvaluation({
+    await runEvaluatedCandidatePhase({
+      root,
+      historyDir,
       args,
       cfg,
-      candidateId,
-      promptOverrides,
-      rubricWeights,
+      callbacks,
       testFiles,
       evalRunsBase,
       compileProvider,
@@ -224,47 +208,22 @@ export async function runMetaHarnessEngine(
       hypothesisEvalModel,
       compileHypothesisCountDefault,
       apiKey,
-      candidateDir,
-      callbacks,
-    });
-
-    await writeCandidateChangelogAndAggregate({
-      candidateDir,
+      iterations,
+      candidateRows,
+      bestRef,
       candidateId,
-      meanScore,
-      scores,
-      testFiles,
-      testResultsDir,
+      candidateDir,
+      label,
       proposalMd,
       promptOverrides,
-      args,
-      aggregateIteration: iter + 1,
+      rubricWeights,
+      iteration: iter + 1,
       iterationLine: `${iter + 1} / ${iterations}`,
       includeProposerSection: true,
     });
-
-    candidateRows.push({ candidateId, meanScore, iteration: iter + 1 });
-
-    const improved = meanScore != null && meanScore > bestMean;
-    if (improved) {
-      bestMean = meanScore;
-      bestCand = candidateId;
-      await writeBestCandidate(historyDir, bestCand, bestMean);
-    }
-
-    callbacks.onIterationDone({
-      candidateId,
-      meanScore,
-      isBest: improved,
-      bestCandidateId: bestCand,
-      bestMeanScore: bestMean,
-      changelogRelPath: path.relative(root, path.join(candidateDir, ARTIFACT.changelogMd)),
-      label,
-      iteration: iter + 1,
-      totalIterations: iterations,
-    });
   }
 
+  const { mean: bestMean, id: bestCand } = bestRef;
   let promotionReportRelPath: string | undefined;
   if (
     bestCand >= 0 &&
@@ -288,14 +247,99 @@ export async function runMetaHarnessEngine(
       promotionReportRelPath = path.relative(root, reportAbs);
       callbacks.onPromotionReport?.(promotionReportRelPath, summary);
     } catch (e) {
-      console.warn(
-        '[meta-harness] Failed to write PROMOTION_REPORT.md:',
-        e instanceof Error ? e.message : String(e),
-      );
+      console.warn('[meta-harness] Failed to write PROMOTION_REPORT.md:', normalizeError(e));
     }
   }
 
   callbacks.onComplete(bestCand, bestMean, path.relative(root, historyDir), promotionReportRelPath);
+}
+
+/** Params for {@link runEvaluatedCandidatePhase} — exported for unit tests. */
+export type EvaluatedCandidatePhaseParams = {
+  root: string;
+  historyDir: string;
+  args: MetaHarnessCliArgs;
+  cfg: MetaHarnessConfig;
+  callbacks: RunnerCallbacks;
+  testFiles: string[];
+  evalRunsBase: string;
+  compileProvider: string;
+  compileModel: string;
+  hypothesisEvalModel: string;
+  compileHypothesisCountDefault: number;
+  apiKey: string;
+  iterations: number;
+  candidateRows: CandidateScoreRow[];
+  bestRef: { mean: number; id: number };
+  candidateId: number;
+  candidateDir: string;
+  label: string;
+  proposalMd: string;
+  promptOverrides: Record<string, string>;
+  rubricWeights?: Record<string, number>;
+  /** Row index for candidateRows / callback (`0` baseline, else loop index). */
+  iteration: number;
+  iterationLine: string;
+  includeProposerSection: boolean;
+};
+
+/** Shared: snapshot skills, run all test cases, write changelog/aggregate, update best, notify UI. */
+export async function runEvaluatedCandidatePhase(p: EvaluatedCandidatePhaseParams): Promise<void> {
+  const skillsDest = path.join(p.candidateDir, ARTIFACT.skillsSnapshot);
+  await cp(path.join(p.root, 'skills'), skillsDest, { recursive: true });
+
+  const { meanScore, scores, testResultsDir } = await runTestCasesEvaluation({
+    args: p.args,
+    cfg: p.cfg,
+    candidateId: p.candidateId,
+    promptOverrides: p.promptOverrides,
+    rubricWeights: p.rubricWeights,
+    testFiles: p.testFiles,
+    evalRunsBase: p.evalRunsBase,
+    compileProvider: p.compileProvider,
+    compileModel: p.compileModel,
+    hypothesisEvalModel: p.hypothesisEvalModel,
+    compileHypothesisCountDefault: p.compileHypothesisCountDefault,
+    apiKey: p.apiKey,
+    candidateDir: p.candidateDir,
+    callbacks: p.callbacks,
+  });
+
+  await writeCandidateChangelogAndAggregate({
+    candidateDir: p.candidateDir,
+    candidateId: p.candidateId,
+    meanScore,
+    scores,
+    testFiles: p.testFiles,
+    testResultsDir,
+    proposalMd: p.proposalMd,
+    promptOverrides: p.promptOverrides,
+    args: p.args,
+    aggregateIteration: p.iteration,
+    iterationLine: p.iterationLine,
+    includeProposerSection: p.includeProposerSection,
+  });
+
+  p.candidateRows.push({ candidateId: p.candidateId, meanScore, iteration: p.iteration });
+
+  const improved = meanScore != null && meanScore > p.bestRef.mean;
+  if (improved) {
+    p.bestRef.mean = meanScore;
+    p.bestRef.id = p.candidateId;
+    await writeBestCandidate(p.historyDir, p.bestRef.id, p.bestRef.mean);
+  }
+
+  p.callbacks.onIterationDone({
+    candidateId: p.candidateId,
+    meanScore,
+    isBest: improved,
+    bestCandidateId: p.bestRef.id,
+    bestMeanScore: p.bestRef.mean,
+    changelogRelPath: path.relative(p.root, path.join(p.candidateDir, ARTIFACT.changelogMd)),
+    label: p.label,
+    iteration: p.iteration,
+    totalIterations: p.iterations,
+  });
 }
 
 async function runBaselineCandidate(params: {
@@ -329,16 +373,14 @@ async function runBaselineCandidate(params: {
   await writeFile(path.join(candidateDir, ARTIFACT.proposalMd), baselineProposal, 'utf8');
   await writeFile(path.join(candidateDir, ARTIFACT.promptOverridesJson), '{}\n', 'utf8');
 
-  const skillsDest = path.join(candidateDir, 'skills-snapshot');
-  await cp(path.join(root, 'skills'), skillsDest, { recursive: true });
+  const promptOverrides: Record<string, string> = { ...META_HARNESS_BASELINE_PROMPT_OVERRIDES };
 
-  const promptOverrides: Record<string, string> = {};
-
-  const { meanScore, scores, testResultsDir } = await runTestCasesEvaluation({
+  await runEvaluatedCandidatePhase({
+    root,
+    historyDir,
     args,
     cfg,
-    candidateId,
-    promptOverrides,
+    callbacks,
     testFiles,
     evalRunsBase: params.evalRunsBase,
     compileProvider: params.compileProvider,
@@ -346,43 +388,16 @@ async function runBaselineCandidate(params: {
     hypothesisEvalModel: params.hypothesisEvalModel,
     compileHypothesisCountDefault: params.compileHypothesisCountDefault,
     apiKey,
-    candidateDir,
-    callbacks,
-  });
-
-  await writeCandidateChangelogAndAggregate({
-    candidateDir,
+    iterations,
+    candidateRows,
+    bestRef,
     candidateId,
-    meanScore,
-    scores,
-    testFiles,
-    testResultsDir,
+    candidateDir,
+    label,
     proposalMd: '',
     promptOverrides,
-    args,
-    aggregateIteration: 0,
+    iteration: 0,
     iterationLine: 'baseline (candidate-0; not counted against configured iterations)',
     includeProposerSection: false,
-  });
-
-  candidateRows.push({ candidateId, meanScore, iteration: 0 });
-
-  const improved = meanScore != null && meanScore > bestRef.mean;
-  if (improved) {
-    bestRef.mean = meanScore;
-    bestRef.id = candidateId;
-    await writeBestCandidate(historyDir, bestRef.id, bestRef.mean);
-  }
-
-  callbacks.onIterationDone({
-    candidateId,
-    meanScore,
-    isBest: improved,
-    bestCandidateId: bestRef.id,
-    bestMeanScore: bestRef.mean,
-    changelogRelPath: path.relative(root, path.join(candidateDir, ARTIFACT.changelogMd)),
-    label,
-    iteration: 0,
-    totalIterations: iterations,
   });
 }

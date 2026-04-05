@@ -37,9 +37,42 @@ pnpm meta-harness --mode=e2e
 
 # Classic log lines (no Ink dashboard) — useful for CI or piping to a file
 pnpm meta-harness --plain
+
+# Skip the preflight scan and run the harness immediately (same as --improve)
+pnpm meta-harness --skip-promotion-check
+
+# Skip preflight (shorthand)
+pnpm meta-harness --improve
+
+# Full promotion review only (same diff experience as default preflight; then exit — no benchmarks, no OPENROUTER key)
+pnpm meta-harness --promote
 ```
 
 In a normal terminal, the runner uses an **Ink** (React-in-terminal) UI; `--plain` keeps the previous `console.log` behavior.
+
+### CLI flow (boundaries)
+
+| Invocation | Health | Preflight (scan + diffs) | Harness (tests / proposer) |
+|------------|:------:|:------------------------:|:---------------------------:|
+| **`pnpm meta-harness`** (default) | yes | yes — **full** Ink or plain diffs | yes |
+| **`--improve`** or **`--skip-promotion-check`** | yes | **skipped** | yes |
+| **`--promote`** | yes | yes — **same full** experience as default | **no** (exits after review) |
+| **`--dry-run`** | no* | no | no (*exits after printing one hydrated payload) |
+
+**`--promote` is not a lite preflight.** It uses the same code path as the default preflight: same session scan, same unified diffs per prompt/skill, same `PreflightReview` / `printPlainPreflightSummary`. The only difference is you never load benchmarks or run the outer loop — useful when you only want the “should I promote?” review.
+
+### Preflight promotion check
+
+**When preflight runs (default or `--promote`):** the CLI scans recent **`history/session-*`** folders (newest first) for a completed session (`PROMOTION_REPORT.md` + `best-candidate.json`) whose winning **`prompt-overrides.json`** or **`skills-snapshot/`** still **differs** from what the API serves today and what’s on disk under **`skills/`**. If something is stale:
+
+- **TTY:** Ink **unified diffs** per item. **`P`** Promote: writes winner prompts into **`src/lib/prompts/shared-defaults.ts`**, applies skill drift into **`skills/`**, runs **`pnpm langfuse:sync-prompts`** when Langfuse env is set (each changed key gets a **new Langfuse prompt version**; the configured label moves forward; older versions remain in the Prompts UI), then continues (default run) or exits (**`--promote`**). **`S`** / **`Q`** exit without changing files. Scroll `j`/`k` or ↑/↓; items `[`/`]`. On failure, the CLI exits **1** with a per-step log.
+- **`--plain` / non-TTY:** full diffs printed to stdout — **no automatic apply** (use TTY + **P** or promote manually). Default run **continues** into the harness; **`--promote`** **exits** after diffs.
+
+**`--improve`** (or **`--skip-promotion-check`**) skips preflight and goes straight to the harness.
+
+**`--promote`** cannot be combined with **`--dry-run`**.
+
+If nothing is stale, one line is logged (default **continues**; **`--promote`** exits **0**). On a full run, scan failures warn and the harness still starts; with **`--promote`**, a scan failure warns and the CLI exits **0**.
 
 ## Layout
 
@@ -51,10 +84,7 @@ In a normal terminal, the runner uses an **Ink** (React-in-terminal) UI; `--plai
 
 ## Promoting prompts to Langfuse
 
-Harness overrides stay in **`history/…/prompt-overrides.json`** until you promote them. To align **Langfuse** with a winning (or other) candidate:
-
-1. Copy bodies into **`src/lib/prompts/shared-defaults.ts`** (`PROMPT_DEFAULTS`).
-2. Run **`pnpm langfuse:sync-prompts`** (with app Langfuse env vars set).
+Harness overrides stay in **`history/…/prompt-overrides.json`** until you promote them. With a **TTY** preflight, **`P`** updates **`shared-defaults.ts`**, **`skills/`**, and runs **`pnpm langfuse:sync-prompts`** when Langfuse is configured. **Plain** mode or manual runs: copy into **`PROMPT_DEFAULTS`** and run sync yourself (root **CLAUDE.md**).
 
 Details, non-winner paths, and verification: [META_HARNESS_OUTER_LOOP.md §5.3](./META_HARNESS_OUTER_LOOP.md#53-promoting-prompt-overrides-to-langfuse).
 

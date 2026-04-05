@@ -6,9 +6,18 @@ import path from 'node:path';
 import type { PromptKey } from '../src/lib/prompts/defaults.ts';
 import { PROMPT_DEFAULTS } from '../src/lib/prompts/shared-defaults.ts';
 import { resolveRubricWeights } from '../server/lib/evaluation-revision-gate.ts';
+import { normalizeError } from '../src/lib/error-utils.ts';
 import { ARTIFACT } from './constants.ts';
 import type { MetaHarnessMode } from './modes.ts';
-import { AggregateJsonSchema, BestCandidateJsonSchema } from './schemas.ts';
+import { debugMetaHarness } from './debug-log.ts';
+import { fetchPromptBody } from './prompt-fetch.ts';
+import {
+  AggregateJsonSchema,
+  BestCandidateJsonSchema,
+  parsePromptOverridesJsonString,
+  RubricWeightsJsonSchema,
+  TestCaseSummaryFileSchema,
+} from './schemas.ts';
 
 /** Prompt keys the proposer should pre-inject per mode (the edit surfaces). */
 export const MODE_PROMPT_KEYS: Record<MetaHarnessMode, PromptKey[]> = {
@@ -44,20 +53,6 @@ function oneLineExcerpt(text: string, maxChars: number): string {
   return `${one.slice(0, Math.max(0, maxChars - 1))}…`;
 }
 
-/** Labeled prompt body from GET /api/prompts/:key (Langfuse when configured). */
-async function fetchPromptBodyFromApi(apiBaseUrl: string, key: PromptKey): Promise<string | null> {
-  const base = apiBaseUrl.replace(/\/$/, '');
-  try {
-    const res = await fetch(`${base}/prompts/${encodeURIComponent(key)}`);
-    if (!res.ok) return null;
-    const data = (await res.json()) as { body?: unknown };
-    if (typeof data.body !== 'string' || data.body.length === 0) return null;
-    return data.body;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Load prompt bodies for edit-surface keys: live from the API (Langfuse-backed) when reachable,
  * else fall back to repo `PROMPT_DEFAULTS`.
@@ -73,7 +68,7 @@ export async function loadPromptBodies(
     if (overrides?.[key]) {
       body = overrides[key]!;
     } else {
-      const live = await fetchPromptBodyFromApi(apiBaseUrl, key);
+      const live = (await fetchPromptBody(apiBaseUrl, key)).body;
       body = live ?? PROMPT_DEFAULTS[key] ?? '(not found)';
     }
     lines.push(`\n### ${key}\n\`\`\`\n${body}\n\`\`\``);
@@ -81,7 +76,7 @@ export async function loadPromptBodies(
   return lines.join('\n');
 }
 
-export async function summarizePerTestResults(candidateDir: string): Promise<string[]> {
+async function summarizePerTestResults(candidateDir: string): Promise<string[]> {
   const trRoot = path.join(candidateDir, 'test-results');
   const lines: string[] = [];
   let subs: string[];
@@ -93,19 +88,22 @@ export async function summarizePerTestResults(candidateDir: string): Promise<str
   for (const sub of subs.sort()) {
     const sumPath = path.join(trRoot, sub, 'summary.json');
     try {
-      const raw = JSON.parse(await readFile(sumPath, 'utf8')) as {
-        overallScore?: unknown;
-        rubricMeans?: Record<string, number>;
-      };
+      const raw: unknown = JSON.parse(await readFile(sumPath, 'utf8'));
+      const summary = TestCaseSummaryFileSchema.safeParse(raw);
+      if (!summary.success) {
+        lines.push(`- **${sub}**: (invalid summary.json)`);
+        continue;
+      }
+      const data = summary.data;
       const score =
-        typeof raw.overallScore === 'number' && Number.isFinite(raw.overallScore)
-          ? Number(raw.overallScore).toFixed(2)
+        typeof data.overallScore === 'number' && Number.isFinite(data.overallScore)
+          ? Number(data.overallScore).toFixed(2)
           : '?';
-      const rm = raw.rubricMeans;
+      const rm = data.rubricMeans;
       let rubricFrag = '';
       if (rm && typeof rm === 'object') {
         rubricFrag = ` · rubrics: ${Object.entries(rm)
-          .map(([k, v]) => `${k}=${typeof v === 'number' && Number.isFinite(v) ? v.toFixed(2) : '?'}`)
+          .map(([k, v]) => `${k}=${Number.isFinite(v) ? v.toFixed(2) : '?'}`)
           .join(', ')}`;
       }
       lines.push(`- **${sub}**: overall ${score}${rubricFrag}`);
@@ -146,7 +144,7 @@ export async function loadRichCandidateHistory(sessionHistoryDir: string, max = 
     let meanLabel = '—';
     let cid = -1;
     try {
-      const rawAgg = JSON.parse(await readFile(path.join(cd, 'aggregate.json'), 'utf8')) as unknown;
+      const rawAgg = JSON.parse(await readFile(path.join(cd, ARTIFACT.aggregateJson), 'utf8')) as unknown;
       const agg = AggregateJsonSchema.safeParse(rawAgg);
       if (agg.success) {
         if (typeof agg.data.meanScore === 'number' && Number.isFinite(agg.data.meanScore)) {
@@ -154,8 +152,8 @@ export async function loadRichCandidateHistory(sessionHistoryDir: string, max = 
         }
         if (typeof agg.data.candidateId === 'number') cid = agg.data.candidateId;
       }
-    } catch {
-      /* ignore */
+    } catch (e) {
+      debugMetaHarness('rich history aggregate.json skipped:', normalizeError(e));
     }
 
     const header =
@@ -164,12 +162,10 @@ export async function loadRichCandidateHistory(sessionHistoryDir: string, max = 
 
     let overrides: Record<string, string> = {};
     try {
-      overrides = JSON.parse(await readFile(path.join(cd, 'prompt-overrides.json'), 'utf8')) as Record<
-        string,
-        string
-      >;
-    } catch {
-      /* ignore */
+      const raw = await readFile(path.join(cd, ARTIFACT.promptOverridesJson), 'utf8');
+      overrides = parsePromptOverridesJsonString(raw);
+    } catch (e) {
+      debugMetaHarness('rich history prompt-overrides skipped:', normalizeError(e));
     }
     const ovKeys = Object.keys(overrides);
     if (ovKeys.length === 0 && cid === 0) {
@@ -187,23 +183,25 @@ export async function loadRichCandidateHistory(sessionHistoryDir: string, max = 
     }
 
     try {
-      const rwRaw = await readFile(path.join(cd, 'rubric-weights.json'), 'utf8');
-      const rw = JSON.parse(rwRaw) as Record<string, number>;
-      section.push(`- Rubric weights: \`${JSON.stringify(rw)}\``);
-    } catch {
-      /* no rubric-weights.json */
+      const rwRaw = await readFile(path.join(cd, ARTIFACT.rubricWeightsJson), 'utf8');
+      const rwParsed = RubricWeightsJsonSchema.safeParse(JSON.parse(rwRaw));
+      if (rwParsed.success) {
+        section.push(`- Rubric weights: \`${JSON.stringify(rwParsed.data)}\``);
+      }
+    } catch (e) {
+      debugMetaHarness('rich history rubric-weights skipped:', normalizeError(e));
     }
 
     try {
-      let prop = await readFile(path.join(cd, 'proposal.md'), 'utf8');
+      let prop = await readFile(path.join(cd, ARTIFACT.proposalMd), 'utf8');
       const toolIdx = prop.indexOf('\n## Tool calls');
       if (toolIdx >= 0) prop = prop.slice(0, toolIdx);
       prop = prop.trim();
       if (prop.length > 0) {
         section.push(`- Proposer reasoning (excerpt): ${oneLineExcerpt(prop, PROPOSAL_REASONING_EXCERPT)}`);
       }
-    } catch {
-      /* no proposal */
+    } catch (e) {
+      debugMetaHarness('rich history proposal.md skipped:', normalizeError(e));
     }
 
     const perTest = await summarizePerTestResults(cd);
@@ -244,12 +242,12 @@ export async function loadPreviousSessionBests(
     try {
       await access(path.join(historyRootDir, sess, ARTIFACT.promotionReportMd));
       promo = 'yes';
-    } catch {
-      /* no report */
+    } catch (e) {
+      debugMetaHarness('session bests promotion report access skipped:', normalizeError(e));
     }
     try {
       const raw = JSON.parse(
-        await readFile(path.join(historyRootDir, sess, 'best-candidate.json'), 'utf8'),
+        await readFile(path.join(historyRootDir, sess, ARTIFACT.bestCandidateJson), 'utf8'),
       ) as unknown;
       const bc = BestCandidateJsonSchema.safeParse(raw);
       if (bc.success) {

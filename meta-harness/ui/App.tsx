@@ -1,11 +1,8 @@
 import { Box, useApp, useInput } from 'ink';
 import { useEffect, useReducer, useRef } from 'react';
 import { INK_EXIT_DELAY_MS } from '../constants.ts';
-import {
-  runMetaHarnessEngine,
-  type MetaHarnessCliArgs,
-  type MetaHarnessConfig,
-} from '../runner-core.ts';
+import type { MetaHarnessCliArgs, MetaHarnessConfig } from '../config.ts';
+import { runMetaHarnessEngine } from '../runner-core.ts';
 import { ActivityLog } from './ActivityLog.tsx';
 import { Header } from './Header.tsx';
 import { ProposerPanel } from './ProposerPanel.tsx';
@@ -15,6 +12,7 @@ import { Summary } from './Summary.tsx';
 import { TestCaseTable } from './TestCaseTable.tsx';
 import { createInitialState, reduceRunnerState } from './state.ts';
 import type { RunnerAction } from './state.ts';
+import { normalizeError } from '../../src/lib/error-utils.ts';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
 
 export function App({ args, config }: { args: MetaHarnessCliArgs; config: MetaHarnessConfig }) {
@@ -107,7 +105,7 @@ export function App({ args, config }: { args: MetaHarnessCliArgs; config: MetaHa
       } catch (e) {
         dispatchAction({
           type: 'SET_ERROR',
-          message: e instanceof Error ? e.message : String(e),
+          message: normalizeError(e),
         });
       } finally {
         await new Promise((r) => setTimeout(r, INK_EXIT_DELAY_MS));

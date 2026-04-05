@@ -38,7 +38,7 @@
 | **ARCHITECTURE.md** | System design, module boundaries, data flow | Architecture changes |
 | **CLAUDE.md** | Agent-focused commands, Husky semver patch bump, release banner/env | Workflow, hooks, or release-metadata behavior changes |
 | **docker/langfuse/README.md** | Optional self-hosted Langfuse (Docker) | Compose stack or seed path changes |
-| **meta-harness/README.md** (+ **META_HARNESS_OUTER_LOOP.md**) | Optional benchmark/proposer CLI, config, artifacts | CLI behavior, flags, `history/session-<mode>-*/` layout, promotion report, timeouts / TUI states / proposer strategy |
+| **meta-harness/README.md** (+ **META_HARNESS_OUTER_LOOP.md**) | Optional benchmark/proposer CLI, config, artifacts | CLI behavior, flags, `history/session-<mode>-*/` layout, promotion report, preflight unpromoted-winner check (diff UI), timeouts / TUI states / proposer strategy |
 | **DOCUMENTATION.md** | Meta: documentation philosophy and rules | Rarely |
 
 ---

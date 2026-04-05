@@ -3,7 +3,7 @@ import type { ActivityItem } from './state.ts';
 import { dimText } from './theme.ts';
 
 /** Visible lines in the TUI (newest first); full history stays in `RunnerState.activityItems`. */
-export const RUN_LOG_VISIBLE_MAX = 5;
+const RUN_LOG_VISIBLE_MAX = 5;
 
 function formatLogTime(atMs: number): string {
   const d = new Date(atMs);

@@ -1,7 +1,10 @@
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { diffSkillTrees, generatePromotionReportMarkdown } from '../promotion-report.ts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ARTIFACT } from '../constants.ts';
+import { generatePromotionReportMarkdown } from '../promotion-report.ts';
+import * as skillDiff from '../skill-diff.ts';
+import { diffSkillTrees } from '../skill-diff.ts';
 
 const tmpRoot = path.join(import.meta.dirname, '.tmp-promotion-report');
 
@@ -46,10 +49,10 @@ describe('generatePromotionReportMarkdown', () => {
     const repo = path.join(tmpRoot, 'repo');
     const winner = path.join(tmpRoot, 'c0');
     await mkdir(path.join(repo, 'skills'), { recursive: true });
-    await mkdir(path.join(winner, 'skills-snapshot'), { recursive: true });
+    await mkdir(path.join(winner, ARTIFACT.skillsSnapshot), { recursive: true });
     await mkdir(path.join(repo, 'meta-harness', 'test-cases'), { recursive: true });
-    await writeFile(path.join(winner, 'proposal.md'), '# Baseline\n', 'utf8');
-    await writeFile(path.join(winner, 'prompt-overrides.json'), '{}\n', 'utf8');
+    await writeFile(path.join(winner, ARTIFACT.proposalMd), '# Baseline\n', 'utf8');
+    await writeFile(path.join(winner, ARTIFACT.promptOverridesJson), '{}\n', 'utf8');
 
     const { markdown } = await generatePromotionReportMarkdown({
       repoRoot: repo,
@@ -67,5 +70,32 @@ describe('generatePromotionReportMarkdown', () => {
 
     expect(markdown).toContain('Interpreting a baseline win');
     expect(markdown).toContain('strictly higher');
+  });
+
+  it('calls diffSkillTrees only once per report', async () => {
+    const spy = vi.spyOn(skillDiff, 'diffSkillTrees');
+    const repo = path.join(tmpRoot, 'repo-once');
+    const winner = path.join(tmpRoot, 'won-once');
+    await mkdir(path.join(repo, 'skills'), { recursive: true });
+    await mkdir(path.join(winner, ARTIFACT.skillsSnapshot), { recursive: true });
+    await mkdir(path.join(repo, 'meta-harness', 'test-cases'), { recursive: true });
+    await writeFile(path.join(winner, ARTIFACT.proposalMd), '# Hi\n', 'utf8');
+    await writeFile(path.join(winner, ARTIFACT.promptOverridesJson), '{}\n', 'utf8');
+
+    try {
+      await generatePromotionReportMarkdown({
+        repoRoot: repo,
+        winningCandidateDir: winner,
+        winningCandidateId: 1,
+        winningMeanScore: 3,
+        mode: 'design',
+        candidateRows: [{ candidateId: 1, meanScore: 3, iteration: 1 }],
+        initialTestCaseNames: new Set(),
+        currentTestCasesDir: path.join(repo, 'meta-harness', 'test-cases'),
+      });
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

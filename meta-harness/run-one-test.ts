@@ -3,13 +3,14 @@
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { SimplifiedMetaHarnessTestCase } from './test-case-hydrator.ts';
+import type { MetaHarnessHypothesisGenerateBody, SimplifiedMetaHarnessTestCase } from './test-case-hydrator.ts';
 import {
   buildDesignSpecFromSimplified,
   hydrateMetaHarnessTestCaseFromParsed,
 } from './test-case-hydrator.ts';
 import { scoreHypothesisWithRubric, designSpecToEvalContext } from './hypothesis-evaluator.ts';
 import { runHypothesisEvalFromMetaHarness } from './evaluator.ts';
+import { normalizeError } from '../src/lib/error-utils.ts';
 import type { AggregatedEvaluationReport } from '../src/types/evaluation.ts';
 import { rubricMeansFromNormalizedScores } from '../server/lib/evaluation-revision-gate.ts';
 import type { MetaHarnessCliArgs, MetaHarnessConfig } from './config.ts';
@@ -18,14 +19,15 @@ import { runCompilePipeline } from './compile-pipeline.ts';
 import { hypothesisRubricAbortSignal, withTestCaseHeartbeat } from './eval-heartbeat.ts';
 import {
   ARTIFACT,
+  DEFAULT_HYPOTHESIS_GENERATE_TIMEOUT_MS,
   DEFAULT_HYPOTHESIS_RUBRIC_TIMEOUT_MS,
+  DEFAULT_OPENROUTER_CHAT_TIMEOUT_MS,
   EVAL_META_JSON_WAIT_MS,
+  REVISION_BRIEF_MAX_CHARS,
 } from './constants.ts';
 
-export type RunOneMetaHarnessTestParams = {
-  args: MetaHarnessCliArgs;
-  cfg: MetaHarnessConfig;
-  testCase: SimplifiedMetaHarnessTestCase;
+/** Per-test invocation state (everything not already on `cfg` / `args`). */
+type RunOneMetaHarnessTestRunContext = {
   name: string;
   correlationId: string;
   evalStart: number;
@@ -36,21 +38,21 @@ export type RunOneMetaHarnessTestParams = {
   hypothesisEvalModel: string;
   compileHypothesisCountDefault: number;
   apiKey: string;
-  hypothesisGenerateTimeoutMs: number;
-  openRouterChatTimeoutMs: number;
   promptOverrides?: Record<string, string>;
   rubricWeights?: Record<string, number>;
   callbacks: RunnerCallbacks;
 };
 
-export async function runOneMetaHarnessTest(params: RunOneMetaHarnessTestParams): Promise<{
+export async function runOneMetaHarnessTest(
+  args: MetaHarnessCliArgs,
+  cfg: MetaHarnessConfig,
+  testCase: SimplifiedMetaHarnessTestCase,
+  run: RunOneMetaHarnessTestRunContext,
+): Promise<{
   overallScore: number | null;
   scored: boolean;
 }> {
   const {
-    args,
-    cfg,
-    testCase,
     name,
     correlationId,
     evalStart,
@@ -61,12 +63,14 @@ export async function runOneMetaHarnessTest(params: RunOneMetaHarnessTestParams)
     hypothesisEvalModel,
     compileHypothesisCountDefault,
     apiKey,
-    hypothesisGenerateTimeoutMs,
-    openRouterChatTimeoutMs,
     promptOverrides: po,
     rubricWeights: rw,
     callbacks,
-  } = params;
+  } = run;
+
+  const hypothesisGenerateTimeoutMs =
+    cfg.hypothesisGenerateTimeoutMs ?? DEFAULT_HYPOTHESIS_GENERATE_TIMEOUT_MS;
+  const openRouterChatTimeoutMs = cfg.openRouterChatTimeoutMs ?? DEFAULT_OPENROUTER_CHAT_TIMEOUT_MS;
 
   let overallScore: number | null = null;
   let stopReason: string | null = null;
@@ -112,7 +116,7 @@ export async function runOneMetaHarnessTest(params: RunOneMetaHarnessTestParams)
               openRouterChatTimeoutMs,
             });
           } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
+            const msg = normalizeError(e);
             const timedOut =
               (e instanceof Error && (e.name === 'AbortError' || e.name === 'TimeoutError')) ||
               /aborted|timeout/i.test(msg);
@@ -142,7 +146,7 @@ export async function runOneMetaHarnessTest(params: RunOneMetaHarnessTestParams)
         requestedHypothesisCount: requestedCount,
       };
     } else {
-      let generateBody: Record<string, unknown>;
+      let generateBody: MetaHarnessHypothesisGenerateBody;
 
       if (args.mode === 'e2e') {
         const { plan } = await runCompilePipeline({
@@ -167,7 +171,7 @@ export async function runOneMetaHarnessTest(params: RunOneMetaHarnessTestParams)
           agenticMaxRevisionRounds: cfg.agenticMaxRevisionRounds,
           rubricWeights: rw,
           strategyOverride: picked,
-        }) as unknown as Record<string, unknown>;
+        });
       } else {
         generateBody = hydrateMetaHarnessTestCaseFromParsed(testCase, {
           defaultCompilerProvider: cfg.defaultCompilerProvider,
@@ -176,7 +180,7 @@ export async function runOneMetaHarnessTest(params: RunOneMetaHarnessTestParams)
           supportsVision: cfg.supportsVision,
           agenticMaxRevisionRounds: cfg.agenticMaxRevisionRounds,
           rubricWeights: rw,
-        }) as unknown as Record<string, unknown>;
+        });
       }
 
       const result = await runHypothesisEvalFromMetaHarness({
@@ -202,7 +206,7 @@ export async function runOneMetaHarnessTest(params: RunOneMetaHarnessTestParams)
       evalAggregate = result.finalAggregate;
     }
   } catch (e) {
-    errorMessage = e instanceof Error ? e.message : String(e);
+    errorMessage = normalizeError(e);
   }
 
   const oneResultDir = path.join(testResultsDir, name);
@@ -231,7 +235,7 @@ export async function runOneMetaHarnessTest(params: RunOneMetaHarnessTestParams)
     ...(compileSummary ? compileSummary : {}),
     ...(rubricMeans && Object.keys(rubricMeans).length > 0 ? { rubricMeans } : {}),
     ...(evalAggregate?.revisionBrief
-      ? { revisionBrief: evalAggregate.revisionBrief.slice(0, 800) }
+      ? { revisionBrief: evalAggregate.revisionBrief.slice(0, REVISION_BRIEF_MAX_CHARS) }
       : {}),
   };
   await writeFile(

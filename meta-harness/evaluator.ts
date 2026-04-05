@@ -3,13 +3,21 @@
  */
 import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { normalizeError } from '../src/lib/error-utils.ts';
+import { debugMetaHarness } from './debug-log.ts';
+import type { MetaHarnessHypothesisGenerateBody } from './test-case-hydrator.ts';
 import { SSE_EVENT_NAMES } from '../src/constants/sse-events.ts';
 import type { AggregatedEvaluationReport } from '../src/types/evaluation.ts';
 import { readSseEventStream } from '../src/lib/sse-reader.ts';
 import { parseSseJsonObject } from './sse-utils.ts';
-import { ARTIFACT, EVAL_META_JSON_POLL_MS, EVAL_META_JSON_WAIT_MS } from './constants.ts';
+import {
+  ARTIFACT,
+  EVAL_FETCH_ERROR_BODY_MAX,
+  EVAL_META_JSON_POLL_MS,
+  EVAL_META_JSON_WAIT_MS,
+} from './constants.ts';
 import { mergeHttpTimeoutSignal } from './openrouter-client.ts';
-import { EvalRunMetaSchema } from './schemas.ts';
+import { AggregatedEvaluationReportHarnessSchema, EvalRunMetaSchema } from './schemas.ts';
 
 type HypothesisEvalResult = {
   baseCorrelationId: string;
@@ -46,7 +54,7 @@ export async function waitForMetaJson(
 
 export async function runHypothesisEvalFromMetaHarness(options: {
   apiBaseUrl: string;
-  body: Record<string, unknown>;
+  body: MetaHarnessHypothesisGenerateBody;
   evalRunsBaseDir: string;
   signal?: AbortSignal;
   /** POST /hypothesis/generate full-read timeout (merged with `signal` when set). */
@@ -88,7 +96,7 @@ export async function runHypothesisEvalFromMetaHarness(options: {
       overallScore: null,
       stopReason: null,
       finalAggregate: null,
-      errorMessage: `HTTP ${res.status}: ${text.slice(0, 500)}`,
+      errorMessage: `HTTP ${res.status}: ${text.slice(0, EVAL_FETCH_ERROR_BODY_MAX)}`,
       evalRunDir: null,
       sseErrors,
     };
@@ -141,18 +149,22 @@ export async function runHypothesisEvalFromMetaHarness(options: {
     options.onWireEvent?.(ev, strip);
 
     if (ev === SSE_EVENT_NAMES.evaluation_report) {
-      const snapshot = strip.snapshot as { aggregate?: AggregatedEvaluationReport } | undefined;
-      if (snapshot?.aggregate) {
-        streamState.finalAggregate = snapshot.aggregate;
+      const snap = strip.snapshot;
+      if (snap && typeof snap === 'object' && snap !== null && 'aggregate' in snap) {
+        const rawAgg = (snap as { aggregate?: unknown }).aggregate;
+        const parsed = AggregatedEvaluationReportHarnessSchema.safeParse(rawAgg);
+        if (parsed.success) {
+          streamState.finalAggregate = parsed.data as unknown as AggregatedEvaluationReport;
+        }
       }
     }
 
     if (ev === SSE_EVENT_NAMES.checkpoint) {
       const sr = strip.stopReason;
       if (typeof sr === 'string') streamState.stopReason = sr;
-      const agg = strip.aggregate as AggregatedEvaluationReport | undefined;
-      if (agg && typeof agg.overallScore === 'number') {
-        streamState.finalAggregate = agg;
+      const parsedAgg = AggregatedEvaluationReportHarnessSchema.safeParse(strip.aggregate);
+      if (parsedAgg.success) {
+        streamState.finalAggregate = parsedAgg.data as unknown as AggregatedEvaluationReport;
       }
     }
   });
@@ -172,8 +184,8 @@ export async function runHypothesisEvalFromMetaHarness(options: {
           diskScore = parsedMeta.data.finalOverallScore;
         if (typeof parsedMeta.data.stopReason === 'string') diskStop = parsedMeta.data.stopReason;
       }
-    } catch {
-      /* ignore */
+    } catch (e) {
+      debugMetaHarness('eval-run meta.json read skipped:', normalizeError(e));
     }
   }
 

@@ -30,7 +30,7 @@ describe.skipIf(!live)('meta-harness live API (META_HARNESS_LIVE=1)', () => {
     const evalBase = resolveEvalRunsBaseDir('');
     const result = await runHypothesisEvalFromMetaHarness({
       apiBaseUrl: 'http://127.0.0.1:3001/api',
-      body: body as unknown as Record<string, unknown>,
+      body,
       evalRunsBaseDir: evalBase,
       evalLogWaitMs: 600_000,
     });

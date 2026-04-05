@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fetchOpenRouterChatJson, mergeHttpTimeoutSignal } from '../openrouter-client.ts';
+import {
+  fetchOpenRouterChat,
+  fetchOpenRouterChatJson,
+  mergeHttpTimeoutSignal,
+  parseOpenRouterChatResponse,
+} from '../openrouter-client.ts';
 import { OPENROUTER_HTTP_ERROR_BODY_MAX } from '../constants.ts';
 
 describe('openrouter-client', () => {
@@ -18,6 +23,21 @@ describe('openrouter-client', () => {
     expect(mergeHttpTimeoutSignal(undefined, undefined)).toBeUndefined();
     const ac = new AbortController();
     expect(mergeHttpTimeoutSignal(ac.signal, undefined)).toBe(ac.signal);
+  });
+
+  it('mergeHttpTimeoutSignal skips timeout when non-positive', () => {
+    const ac = new AbortController();
+    expect(mergeHttpTimeoutSignal(ac.signal, 0)).toBe(ac.signal);
+    expect(mergeHttpTimeoutSignal(ac.signal, -1)).toBe(ac.signal);
+  });
+
+  it('mergeHttpTimeoutSignal aborts when the caller signal aborts', () => {
+    const ac = new AbortController();
+    const merged = mergeHttpTimeoutSignal(ac.signal, 60_000);
+    expect(merged).toBeDefined();
+    expect(merged!.aborted).toBe(false);
+    ac.abort();
+    expect(merged!.aborted).toBe(true);
   });
 
   it('fetchOpenRouterChatJson throws on non-OK with truncated body', async () => {
@@ -58,6 +78,31 @@ describe('openrouter-client', () => {
     });
     expect(out).toEqual({ choices: [{ message: { content: '{}' } }] });
     expect(vi.mocked(fetch).mock.calls[0]![1]!.body).toContain('"model":"m"');
+  });
+
+  it('fetchOpenRouterChat parses and validates success body', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), { status: 200 }),
+    );
+    const out = await fetchOpenRouterChat({
+      apiKey: 'k',
+      requestBody: { model: 'm', messages: [{ role: 'user', content: 'hi' }] },
+    });
+    expect(out.choices[0]!.message.content).toBe('{}');
+  });
+
+  it('parseOpenRouterChatResponse accepts valid choices[0].message', () => {
+    const data = { choices: [{ message: { content: 'hi', tool_calls: undefined } }] };
+    expect(parseOpenRouterChatResponse(data).choices[0]!.message.content).toBe('hi');
+  });
+
+  it('parseOpenRouterChatResponse rejects empty choices', () => {
+    expect(() => parseOpenRouterChatResponse({ choices: [] })).toThrow('invalid response shape');
+  });
+
+  it('parseOpenRouterChatResponse rejects malformed payloads', () => {
+    expect(() => parseOpenRouterChatResponse(null)).toThrow('invalid response shape');
+    expect(() => parseOpenRouterChatResponse({ choices: 'no' })).toThrow('invalid response shape');
   });
 
   it('fetchOpenRouterChatJson aborts when timeout fires before response', async () => {

@@ -13,6 +13,15 @@ describe('session helpers', () => {
     expect(await nextCandidateId(root)).toBe(3);
   });
 
+  it('nextCandidateId ignores non-matching directory names', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mh-sess-'));
+    await mkdir(path.join(root, 'candidate-abc'));
+    await mkdir(path.join(root, 'candidate-12extra'));
+    await mkdir(path.join(root, 'not-candidate-99'));
+    await mkdir(path.join(root, 'candidate-5'));
+    expect(await nextCandidateId(root)).toBe(6);
+  });
+
   it('createMetaHarnessSession writes session.json', async () => {
     const historyRoot = await mkdtemp(path.join(tmpdir(), 'mh-hist-'));
     const cfg: MetaHarnessConfig = {

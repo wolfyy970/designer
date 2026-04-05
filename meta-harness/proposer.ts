@@ -2,12 +2,14 @@
  * OpenRouter tool-calling agent that proposes harness edits (skills, prompt overrides, test cases).
  */
 import path from 'node:path';
+import { normalizeError } from '../src/lib/error-utils.ts';
+import { debugMetaHarness } from './debug-log.ts';
 import type { EvaluatorRubricId } from '../src/types/evaluation.ts';
 import { EVALUATOR_RUBRIC_IDS } from '../src/types/evaluation.ts';
 import { resolveRubricWeights } from '../server/lib/evaluation-revision-gate.ts';
 import type { MetaHarnessMode } from './modes.ts';
 import { repoRoot } from './paths.ts';
-import { fetchOpenRouterChatJson } from './openrouter-client.ts';
+import { fetchOpenRouterChat } from './openrouter-client.ts';
 import {
   formatRubricWeightsContext,
   loadCurrentSkills,
@@ -28,12 +30,6 @@ type ProposerResult = {
   roundsUsed: number;
   /** Ordered log of tool calls made during this proposer turn. */
   toolLog: Array<{ round: number; tool: string; summary: string }>;
-};
-
-type OpenAiToolCall = {
-  id: string;
-  type: string;
-  function: { name: string; arguments: string };
 };
 
 export async function runMetaHarnessProposer(options: {
@@ -115,7 +111,7 @@ export async function runMetaHarnessProposer(options: {
     lastRound = round + 1;
     if (ctx.submitted) break;
 
-    const json = (await fetchOpenRouterChatJson({
+    const json = await fetchOpenRouterChat({
       apiKey: options.apiKey,
       requestBody: {
         model: options.model,
@@ -125,11 +121,8 @@ export async function runMetaHarnessProposer(options: {
       },
       signal: options.signal,
       timeoutMs: options.openRouterChatTimeoutMs,
-    })) as {
-      choices?: Array<{ message?: { content?: string | null; tool_calls?: OpenAiToolCall[] } }>;
-    };
-    const message = json.choices?.[0]?.message;
-    if (!message) throw new Error('OpenRouter: empty choices');
+    });
+    const message = json.choices[0]!.message;
 
     if (message.tool_calls?.length) {
       messages.push({
@@ -142,6 +135,7 @@ export async function runMetaHarnessProposer(options: {
         const tcArgs = tc.function?.arguments ?? '{}';
         let argSummary = '';
         try {
+          // Logging-only: tool UI snippet. Execution path validates via dispatchTool + Zod.
           const a = JSON.parse(tcArgs) as Record<string, unknown>;
           if (tcName === 'read_file' || tcName === 'list_dir') argSummary = String(a.path ?? '').slice(0, 80);
           else if (tcName === 'write_skill') argSummary = `skills/${a.key}/SKILL.md`;
@@ -158,8 +152,8 @@ export async function runMetaHarnessProposer(options: {
           else if (tcName === 'search') argSummary = `"${a.pattern}" in ${a.under}`;
           else if (tcName === 'add_test_case') argSummary = String(a.name ?? '');
           else if (tcName === 'submit_candidate') argSummary = String(a.reasoning ?? '').slice(0, 60);
-        } catch {
-          /* ignore */
+        } catch (e) {
+          debugMetaHarness('proposer tool-arg log parse skipped:', normalizeError(e));
         }
         toolLog.push({ round, tool: tcName, summary: argSummary });
         options.onToolCall?.(round, tcName, argSummary);
