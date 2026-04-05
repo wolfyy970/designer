@@ -61,6 +61,7 @@ The header also opens **Settings** (General preferences; **Prompt Studio** under
 | `pnpm db:seed` | Bootstrap **missing** Langfuse text prompts only (`scripts/seed-langfuse.ts`); does **not** overwrite existing labeled versions in Langfuse. Use `pnpm langfuse:sync-prompts` to reset bodies from `shared-defaults` / optional legacy SQLite import |
 | `pnpm langfuse:sync-prompts` | **`LANGFUSE_SEED_SYNC`**: push every prompt’s labeled version to match `shared-defaults` / legacy SQLite import (overwrites drift) |
 | `pnpm knip` | Optional unused-export report (not run in CI by default) |
+| `pnpm meta-harness` | Optional **meta-harness** CLI: benchmark/proposer outer loop against the local API ([meta-harness/README.md](meta-harness/README.md)) |
 
 ## Documentation
 
@@ -73,6 +74,7 @@ The header also opens **Settings** (General preferences; **Prompt Studio** under
 | [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) | SPA design tokens: accent vs status, typography, typefaces, file-role colors (`src/index.css`) |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Technical reference: routes, stores, data flow, Pi adapter boundary |
 | [docker/langfuse/README.md](docker/langfuse/README.md) | Optional **self-hosted** Langfuse via Docker (default is Langfuse Cloud) |
+| [meta-harness/README.md](meta-harness/README.md) | Optional meta-harness CLI for systematic API benchmarks and prompt/skill search ([META_HARNESS_OUTER_LOOP.md](meta-harness/META_HARNESS_OUTER_LOOP.md)) |
 | [DOCUMENTATION.md](DOCUMENTATION.md) | How this doc set is organized (hub = this README) |
 | [CLAUDE.md](CLAUDE.md) | Commands and conventions for AI-assisted development |
 

@@ -26,7 +26,7 @@ For a **plain-English map** of each Langfuse prompt name (`hypotheses-generator-
 | **Hypothesis prompt** | Per-hypothesis user-facing generation prompt template | Langfuse `designer-hypothesis-inputs` + `compileVariantPrompts()` on client; bundle API uses same template server-side |
 | **Single-shot system** | Constraints for one HTML response | Langfuse `designer-direct-system` |
 | **Agentic system** | Multi-file static artifact rules (entry `index.html`, local assets, etc.) | Langfuse `designer-agentic-system` (optional sandbox **`AGENTS.md`** from `agents-md-file`) |
-| **Skills** | Repo-backed Agent Skills packages | Files under repo-root **`skills/<key>/SKILL.md`**. Each Pi session embeds **`<available_skills>`** in the **`use_skill`** tool (non-**`manual`**) and pre-seeds packages under **`skills/<key>/…`** in **`just-bash`**; the agent calls **`use_skill`** or **`read_file`** when needed |
+| **Skills** | Repo-backed Agent Skills packages | Files under repo-root **`skills/<key>/SKILL.md`**. Each Pi session embeds **`<available_skills>`** in the **`use_skill`** tool (non-**`manual`**) and pre-seeds packages under **`skills/<key>/…`** in **`just-bash`**; the agent calls **`use_skill`** or **`read`** when needed |
 
 Evaluators use separate LLM rubrics (browser / design / strategy / implementation) orchestrated on the server — not the same prompts as the builder model.
 

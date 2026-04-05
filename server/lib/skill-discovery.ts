@@ -196,7 +196,7 @@ export function formatSkillsCatalogXml(
         ].join('\n')
       : [
           '  Skill packages are under skills/&lt;key&gt;/SKILL.md (your system prompt describes when to consult them).',
-          '  Match entries to the hypothesis and milestones; read_file only paths you will apply this run. Do not bulk-read every skill.',
+          '  Match entries to the hypothesis and milestones; read only paths you will apply this run. Do not bulk-read every skill.',
           '',
         ].join('\n');
   const lines = rows.map(

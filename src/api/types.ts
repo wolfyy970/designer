@@ -64,6 +64,11 @@ export interface HypothesisGenerateApiPayload extends HypothesisWorkspaceApiPayl
   evaluatorModelId?: string;
   agenticMaxRevisionRounds?: number;
   agenticMinOverallScore?: number;
+  /** Per-rubric weights (non-negative; server merges with defaults and renormalizes). */
+  rubricWeights?: Record<
+    'design' | 'strategy' | 'implementation' | 'browser',
+    number
+  >;
 }
 
 export type { GenerateSSEEvent } from '../lib/generate-sse-event-schema';

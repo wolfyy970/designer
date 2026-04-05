@@ -158,10 +158,19 @@ export async function runBrowserPlaywrightEval(
       });
     }
 
-    if (metrics.textLen < 10) {
+    // Hard-fail only when the viewport is effectively blank. Marginal text (slow hydration,
+    // loading spinners) is surfaced via playwright_visible_text score + findings instead of
+    // forcing an unrecoverable revision loop.
+    if (metrics.textLen < 1) {
       hardFails.push({
         code: 'playwright_empty_visible',
-        message: 'Rendered page has almost no visible text',
+        message: 'Rendered page has no visible text',
+      });
+    } else if (metrics.textLen < 10) {
+      findings.push({
+        severity: 'medium',
+        summary: 'Very little visible text after load',
+        detail: `innerText length ≈ ${metrics.textLen} (may be slow hydration or sparse UI)`,
       });
     }
 

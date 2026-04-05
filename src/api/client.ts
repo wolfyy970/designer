@@ -135,10 +135,110 @@ export async function fetchAppConfig(signal?: AbortSignal): Promise<AppConfigRes
   return r.data;
 }
 
-// ── Compile ─────────────────────────────────────────────────────────
+// ── Compile (SSE stream) ────────────────────────────────────────────
 
-export async function compile(req: CompileRequest): Promise<CompileResponse> {
-  return postParsed('/compile', req, CompileResponseSchema);
+export interface CompileStreamCallbacks {
+  onProgress?: (status: string) => void;
+  /** Throttled tail of raw model output (compiler JSON). */
+  onCode?: (preview: string) => void;
+  onCompileResult?: (plan: CompileResponse) => void;
+  onError?: (error: string) => void;
+  onDone?: () => void;
+}
+
+/**
+ * POST /api/compile — consumes SSE (`progress`, `code`, `compile_result`, `done`, `error`).
+ * Resolves with the incubation plan from the final `compile_result` event.
+ */
+export async function compileStream(
+  req: CompileRequest,
+  callbacks?: CompileStreamCallbacks,
+  signal?: AbortSignal,
+): Promise<CompileResponse> {
+  const response = await fetch(`${API_BASE}/compile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+    signal,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(parseApiErrorBody(text));
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('No response body');
+
+  let result: CompileResponse | undefined;
+  let streamError: string | undefined;
+
+  await readSseEventStream(reader, async (currentEvent, raw) => {
+    const ev = currentEvent.trim();
+    const parsed = parseHypothesisSseJson(raw);
+
+    if (ev === SSE_EVENT_NAMES.error) {
+      const msg =
+        parsed && typeof parsed.error === 'string'
+          ? parsed.error
+          : raw.length
+            ? raw
+            : 'Compilation failed';
+      streamError = msg;
+      callbacks?.onError?.(msg);
+      return;
+    }
+
+    if (ev === SSE_EVENT_NAMES.progress) {
+      const status = parsed && typeof parsed.status === 'string' ? parsed.status : undefined;
+      if (status) callbacks?.onProgress?.(status);
+      return;
+    }
+
+    if (ev === SSE_EVENT_NAMES.code) {
+      const code = parsed && typeof parsed.code === 'string' ? parsed.code : '';
+      if (code) callbacks?.onCode?.(code);
+      return;
+    }
+
+    if (ev === SSE_EVENT_NAMES.compile_result) {
+      if (!parsed) {
+        streamError = INVALID_SERVER_RESPONSE;
+        callbacks?.onError?.(streamError);
+        return;
+      }
+      const r = CompileResponseSchema.safeParse(parsed);
+      if (!r.success) {
+        streamError = INVALID_SERVER_RESPONSE;
+        callbacks?.onError?.(streamError);
+        if (import.meta.env.DEV) {
+          console.warn('[api] compile SSE compile_result unexpected shape', r.error.flatten());
+        }
+        return;
+      }
+      result = r.data;
+      callbacks?.onCompileResult?.(r.data);
+      return;
+    }
+
+    if (ev === SSE_EVENT_NAMES.done) {
+      callbacks?.onDone?.();
+      return;
+    }
+  });
+
+  if (streamError) {
+    throw new Error(normalizeError(streamError, 'Compilation failed'));
+  }
+  if (!result) {
+    throw new Error(INVALID_SERVER_RESPONSE);
+  }
+  return result;
+}
+
+/** Same body as {@link compileStream} but without per-event callbacks. */
+export async function compile(req: CompileRequest, signal?: AbortSignal): Promise<CompileResponse> {
+  return compileStream(req, undefined, signal);
 }
 
 // ── Generate (SSE) ──────────────────────────────────────────────────

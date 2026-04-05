@@ -31,6 +31,8 @@ const aggregatedEvaluationReportSchema = z.object({
   prioritizedFixes: z.array(z.string()),
   shouldRevise: z.boolean(),
   revisionBrief: z.string(),
+  /** Stripped before persist (server-only diagnostic). */
+  evaluatorTraces: z.record(z.string(), z.string()).optional(),
 });
 
 /** Persisted rounds omit `files` (stored in IndexedDB); worker slots stay loose for version tolerance. */
@@ -290,10 +292,28 @@ export const useGenerationStore = create<GenerationStore>()(
           delete persisted.streamingToolPath;
           delete persisted.streamingToolChars;
           delete persisted.liveEvalWorkers;
+          if (persisted.evaluationSummary) {
+            const es = { ...persisted.evaluationSummary };
+            delete es.evaluatorTraces;
+            persisted.evaluationSummary = es;
+          }
           if (persisted.evaluationRounds?.length) {
             persisted.evaluationRounds = persisted.evaluationRounds.map((er) => {
               const meta = { ...er };
               delete meta.files;
+              if (meta.aggregate) {
+                const agg = { ...meta.aggregate };
+                delete agg.evaluatorTraces;
+                meta.aggregate = agg;
+              }
+              for (const slot of ['design', 'strategy', 'implementation', 'browser'] as const) {
+                const w = meta[slot];
+                if (w && typeof w === 'object' && 'rawTrace' in w) {
+                  const { rawTrace: _t, ...rest } = w as { rawTrace?: string };
+                  void _t;
+                  meta[slot] = rest as typeof w;
+                }
+              }
               return meta;
             });
           }

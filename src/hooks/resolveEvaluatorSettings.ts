@@ -12,5 +12,6 @@ export function resolveEvaluatorSettings(hypothesisNodeId: string): EvaluatorSet
   return {
     maxRevisionRounds: s.maxRevisionRounds,
     minOverallScore: s.minOverallScore,
+    rubricWeights: { ...s.rubricWeights },
   };
 }

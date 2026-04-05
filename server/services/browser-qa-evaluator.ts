@@ -396,7 +396,11 @@ export function runBrowserQA(input: BrowserQAInput): EvaluatorWorkerReport {
   scores.asset_integrity = assets;
   if (assets.score < 5) {
     findings.push({ severity: 'high', summary: 'Missing asset references', detail: assets.notes });
-    hardFails.push({ code: 'missing_assets', message: assets.notes });
+    // Hard-fail only when integrity is badly broken (score ≤2 ≈ 2+ missing refs).
+    // A single missing script/CSS (score 3) should not trap the revision loop.
+    if (assets.score <= 2) {
+      hardFails.push({ code: 'missing_assets', message: assets.notes });
+    }
   }
 
   const runtime = checkJsRuntime(bundledHtml);

@@ -1,0 +1,24 @@
+{
+  "name": "spec-only-landing-saas",
+  "description": "Spec + model only — for --mode=compile or --mode=e2e (no fixed strategy). Skipped in default design mode.",
+  "spec": {
+    "title": "Northstar Analytics — product landing",
+    "sections": {
+      "design-brief": {
+        "content": "Northstar Analytics sells an embedded analytics SDK to product teams. Audience: technical PMs and engineering leads at Series B+ SaaS companies. Tone: confident, precise, not hype-y. Visual vibe: dark-friendly with a single accent (electric blue), generous whitespace, monospace for code snippets.\n\nAbove the fold must answer: what it is, who it is for, and primary CTA (book a technical demo). Include a short social proof strip (logos or testimonial quotes). Include a pricing section with three tiers (Starter / Team / Enterprise) even if copy is abbreviated."
+      },
+      "existing-design": { "content": "Greenfield; no existing brand beyond name and accent color." },
+      "research-context": { "content": "Buyers compare on time-to-integrate, data residency, and dashboard embed UX. Common objection: will this slow our app?" },
+      "objectives-metrics": { "content": "Increase qualified demo requests from technical evaluators. Success: clear primary CTA, proof of low-latency integration, trust indicators near pricing." },
+      "design-constraints": { "content": "Static HTML/CSS/JS only. No npm, no frameworks. Google Fonts allowlist only. One primary CTA color. Mobile-first layout." }
+    }
+  },
+  "compile": {
+    "hypothesisCount": 5
+  },
+  "model": {
+    "providerId": "openrouter",
+    "modelId": "minimax/minimax-m2.5",
+    "thinkingLevel": "minimal"
+  }
+}

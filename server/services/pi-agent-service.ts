@@ -142,7 +142,9 @@ export async function runDesignAgentSession(
     ] as ToolDefinition[],
     sessionManager: SessionManager.inMemory(),
     cwd: SANDBOX_PROJECT_ROOT,
-    resourceLoader: createSandboxResourceLoader(),
+    resourceLoader: createSandboxResourceLoader({
+      systemPrompt: params.systemPrompt.trim(),
+    }),
   });
 
   if (modelFallbackMessage && process.env.NODE_ENV !== 'production') {
@@ -158,8 +160,6 @@ export async function runDesignAgentSession(
     turnLogRef: llmTurnLogRef,
     correlationId: params.correlationId,
   });
-
-  session.agent.setSystemPrompt(params.systemPrompt.trim());
 
   const streamActivityAt = { current: Date.now() };
   const pendingToolCallsRef = { current: 0 };

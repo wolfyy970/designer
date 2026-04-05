@@ -1,3 +1,6 @@
+# Meta-harness outer-loop run artifacts
+meta-harness/history/
+
 # Logs
 logs
 *.log

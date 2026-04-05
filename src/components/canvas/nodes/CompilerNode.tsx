@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { useReactFlow, type NodeProps, type Node } from '@xyflow/react';
 import { RefreshCw, ArrowRight } from 'lucide-react';
 import { normalizeError } from '../../../lib/error-utils';
@@ -15,7 +15,7 @@ import {
 } from '../../../stores/canvas-store';
 import type { CompilerNodeData } from '../../../types/canvas-data';
 import type { HypothesisStrategy } from '../../../types/compiler';
-import { compile as apiCompile } from '../../../api/client';
+import { compileStream } from '../../../api/client';
 import { buildCompileInputs } from '../../../lib/canvas-graph';
 import { useWorkspaceDomainStore } from '../../../stores/workspace-domain-store';
 import { scheduleCanvasFitView } from '../../../lib/canvas-fit-view';
@@ -59,6 +59,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
   const { providerId, modelId, supportsVision } = useConnectedModel(id);
 
   const hypothesisCount = (data.hypothesisCount as number | undefined) ?? DEFAULT_COUNT;
+  const [compileLiveLine, setCompileLiveLine] = useState('');
 
   // Count connected input nodes (sections + variants)
   const connectedInputCount = useMemo(() => {
@@ -116,6 +117,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
     }
 
     setCompiling(true);
+    setCompileLiveLine('');
     setError(null);
     setEdgeStatusBySource(id, EDGE_STATUS.PROCESSING);
 
@@ -123,15 +125,27 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
 
     try {
       const promptOverrides = getActivePromptOverrides(usePromptOverridesStore.getState().overrides);
-      const map = await apiCompile({
-        spec: partialSpec,
-        providerId: providerId!,
-        modelId: modelId!,
-        referenceDesigns,
-        supportsVision,
-        promptOptions: { count: hypothesisCount, existingStrategies },
-        ...(promptOverrides ? { promptOverrides } : {}),
-      });
+      const map = await compileStream(
+        {
+          spec: partialSpec,
+          providerId: providerId!,
+          modelId: modelId!,
+          referenceDesigns,
+          supportsVision,
+          promptOptions: { count: hypothesisCount, existingStrategies },
+          ...(promptOverrides ? { promptOverrides } : {}),
+        },
+        {
+          onProgress: (status) => setCompileLiveLine(status),
+          onCode: (preview) => {
+            const n = preview.length;
+            const tail = preview.slice(-96);
+            setCompileLiveLine(
+              n > 96 ? `Streaming… ${n} chars · …${tail}` : `Streaming… ${n} chars`,
+            );
+          },
+        },
+      );
       removePlaceholders(placeholderIds);
       appendStrategiesToNode(id, map);
       syncAfterCompile(map.hypotheses, id);
@@ -142,6 +156,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
       setError(normalizeError(err, 'Compilation failed'));
       setEdgeStatusBySource(id, EDGE_STATUS.ERROR);
     } finally {
+      setCompileLiveLine('');
       setCompiling(false);
     }
   }, [
@@ -197,7 +212,13 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
       </NodeHeader>
 
       {/* Skeleton overlay while compiling */}
-      {isCompiling && <GeneratingSkeleton label="Incubating…" elapsed={elapsed} />}
+      {isCompiling && (
+        <GeneratingSkeleton
+          label="Incubating…"
+          detail={compileLiveLine || undefined}
+          elapsed={elapsed}
+        />
+      )}
 
       {/* Controls */}
       <div className="space-y-2 px-3 py-2.5">

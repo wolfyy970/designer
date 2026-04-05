@@ -8,6 +8,14 @@ export const EVALUATOR_RUBRIC_IDS = ['design', 'strategy', 'implementation', 'br
 
 export type EvaluatorRubricId = (typeof EVALUATOR_RUBRIC_IDS)[number];
 
+/** Default blend for overall score (must sum to 1). Shared by client Settings and server aggregation. */
+export const DEFAULT_RUBRIC_WEIGHTS: Record<EvaluatorRubricId, number> = {
+  design: 0.4,
+  strategy: 0.3,
+  implementation: 0.2,
+  browser: 0.1,
+};
+
 export const EVALUATOR_WORKER_COUNT = EVALUATOR_RUBRIC_IDS.length;
 
 export type AgenticStopReason = 'satisfied' | 'max_revisions' | 'aborted' | 'revision_failed';
@@ -39,6 +47,11 @@ export interface BrowserEvalArtifacts {
 /** Single rubric evaluator JSON output */
 export interface EvaluatorWorkerReport {
   rubric: EvaluatorRubricId;
+  /**
+   * Full LLM response text for LLM rubrics (reasoning + JSON). Omitted for deterministic browser worker.
+   * Not persisted to client localStorage (stripped in generation-store partialize).
+   */
+  rawTrace?: string;
   scores: Record<string, EvalCriterionScore>;
   findings: EvalFinding[];
   hardFails: EvalHardFail[];
@@ -68,6 +81,11 @@ export interface AggregatedEvaluationReport {
   prioritizedFixes: string[];
   shouldRevise: boolean;
   revisionBrief: string;
+  /**
+   * Per-LLM-rubric raw evaluator responses (typically design / strategy / implementation only).
+   * Not persisted to client localStorage.
+   */
+  evaluatorTraces?: Partial<Record<EvaluatorRubricId, string>>;
 }
 
 export interface EvaluationRoundSnapshot {

@@ -109,6 +109,7 @@ export async function runHypothesisGenerateFlow({
     correlationId: runId,
     agenticMaxRevisionRounds: evalSettings.maxRevisionRounds,
     agenticMinOverallScore: evalSettings.minOverallScore ?? undefined,
+    rubricWeights: evalSettings.rubricWeights,
     ...(supportsVision != null ? { supportsVision } : {}),
     ...(promptOverrides ? { promptOverrides } : {}),
   };

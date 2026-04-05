@@ -1,6 +1,7 @@
 /**
  * Agentic design build + parallel evaluators + bounded multi-round revision loop.
  */
+import { randomUUID } from 'node:crypto';
 import type { PromptKey } from '../../src/lib/prompts/defaults.ts';
 import type {
   AgenticCheckpoint,
@@ -31,10 +32,17 @@ import {
 } from './pi-agent-service.ts';
 import type { LoadedSkillSummary } from '../lib/skill-schema.ts';
 import { makeRunTraceEvent } from '../lib/run-trace.ts';
-import { buildRevisionUserContext } from '../lib/agentic-revision-user.ts';
+import {
+  buildEvaluatorTracesSection,
+  buildRevisionUserContext,
+  buildRoundHistorySection,
+  type EvaluationRoundHistoryEntry,
+} from '../lib/agentic-revision-user.ts';
+import { rubricMeansFromNormalizedScores } from '../lib/evaluation-revision-gate.ts';
 import { GENERATION_MODE } from '../../src/constants/generation.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import { env } from '../env.ts';
+import { writeAgenticEvalRunLog } from '../lib/eval-run-logger.ts';
 
 const AGENTIC_ROOT_SPAN_ID = '0000000000000001';
 
@@ -66,6 +74,8 @@ interface AgenticOrchestratorOptions {
   maxRevisionRounds: number;
   /** Optional early exit when overall score is high enough and there are no hard fails. */
   minOverallScore?: number;
+  /** Optional blend for overall score; merged with product defaults and normalized server-side. */
+  rubricWeights?: Partial<Record<EvaluatorRubricId, number>>;
   getPromptBody: (key: PromptKey) => Promise<string>;
   onStream: (e: AgenticOrchestratorEvent) => void | Promise<void>;
 }
@@ -115,6 +125,26 @@ async function emitSkillsLoaded(
   await emit(streamCtx, { type: 'skills_loaded', skills });
 }
 
+/** Omit server-only diagnostics from snapshots sent to the browser (SSE). */
+function stripEvaluationSnapshotForStream(s: EvaluationRoundSnapshot): EvaluationRoundSnapshot {
+  const stripWorker = (w?: EvaluatorWorkerReport): EvaluatorWorkerReport | undefined => {
+    if (!w) return w;
+    const { rawTrace: _rt, ...rest } = w;
+    void _rt;
+    return rest as EvaluatorWorkerReport;
+  };
+  const { evaluatorTraces: _et, ...aggRest } = s.aggregate;
+  void _et;
+  return {
+    ...s,
+    design: stripWorker(s.design),
+    strategy: stripWorker(s.strategy),
+    implementation: stripWorker(s.implementation),
+    browser: stripWorker(s.browser),
+    aggregate: aggRest,
+  };
+}
+
 async function runEvaluationRound(
   options: AgenticOrchestratorOptions,
   streamCtx: StreamEmissionContext,
@@ -148,7 +178,7 @@ async function runEvaluationRound(
     },
   });
 
-  const rawAgg = aggregateEvaluationReports(workers);
+  const rawAgg = aggregateEvaluationReports(workers, options.rubricWeights);
   const aggregate = enforceRevisionGate(rawAgg);
 
   const snapshot: EvaluationRoundSnapshot = {
@@ -161,8 +191,25 @@ async function runEvaluationRound(
     aggregate,
   };
 
-  await emit(streamCtx, { type: 'evaluation_report', round, snapshot });
+  await emit(streamCtx, {
+    type: 'evaluation_report',
+    round,
+    snapshot: stripEvaluationSnapshotForStream(snapshot),
+  });
   return snapshot;
+}
+
+function appendEvaluationRoundHistory(
+  snapshot: EvaluationRoundSnapshot,
+  history: EvaluationRoundHistoryEntry[],
+): void {
+  history.push({
+    round: snapshot.round,
+    rubricMeans: rubricMeansFromNormalizedScores(snapshot.aggregate.normalizedScores),
+    overallScore: snapshot.aggregate.overallScore,
+    hardFailCount: snapshot.aggregate.hardFails.length,
+    normalizedScores: { ...snapshot.aggregate.normalizedScores },
+  });
 }
 
 function buildCheckpoint(
@@ -356,20 +403,45 @@ async function runAgenticWithEvaluationImpl(
 
   let files = buildResult.files;
   const rounds: EvaluationRoundSnapshot[] = [];
+  const roundHistory: EvaluationRoundHistoryEntry[] = [];
+  const revisionPromptByEvalRound = new Map<number, string>();
   let revisionAttempts = 0;
   let lastRevisionBrief: string | undefined;
+
+  const finishWithLog = (result: AgenticOrchestratorResult): AgenticOrchestratorResult => {
+    const baseDir = env.OBSERVABILITY_LOG_BASE_DIR;
+    if (baseDir) {
+      void writeAgenticEvalRunLog({
+        baseDir,
+        runId: mergedOptions.build.correlationId ?? randomUUID(),
+        compiledPrompt: mergedOptions.compiledPrompt,
+        evaluationContext: mergedOptions.evaluationContext,
+        getPromptBody: mergedOptions.getPromptBody,
+        rounds: result.rounds,
+        revisionPromptByEvalRound,
+        stopReason: result.checkpoint.stopReason ?? 'unknown',
+        finalAggregate: result.finalAggregate,
+      }).catch((err) => {
+        if (env.isDev) console.warn('[eval-run-log]', normalizeError(err), err);
+      });
+    }
+    return result;
+  };
 
   await emit(streamCtx, { type: 'phase', phase: 'evaluating' });
   let evalRound = 1;
   let snapshot = await runEvaluationRound(mergedOptions, streamCtx, evalRound, files, parallel);
   rounds.push(snapshot);
+  appendEvaluationRoundHistory(snapshot, roundHistory);
 
   if (effectiveSignal.aborted) {
-    return agenticResult(files, rounds, snapshot, {
-      stopReason: 'aborted',
-      revisionAttempts,
-      revisionBriefApplied: lastRevisionBrief,
-    });
+    return finishWithLog(
+      agenticResult(files, rounds, snapshot, {
+        stopReason: 'aborted',
+        revisionAttempts,
+        revisionBriefApplied: lastRevisionBrief,
+      }),
+    );
   }
 
   const revisionUserInstructions = (await options.getPromptBody('designer-agentic-revision-user')).trim();
@@ -389,16 +461,25 @@ async function runAgenticWithEvaluationImpl(
       brief,
     });
 
-    const revisionUser = [
+    const tracesSection = buildEvaluatorTracesSection(snapshot.aggregate.evaluatorTraces);
+    const revisionParts = [
       buildRevisionUserContext(options.compiledPrompt, options.evaluationContext),
       revisionUserInstructions,
       '',
+      buildRoundHistorySection(roundHistory),
       '## Revision brief',
       brief,
+    ];
+    if (tracesSection.length > 0) {
+      revisionParts.push('', tracesSection);
+    }
+    revisionParts.push(
       '',
       '## Prioritized fixes',
       ...snapshot.aggregate.prioritizedFixes.map((f, i) => `${i + 1}. ${f}`),
-    ].join('\n');
+    );
+    const revisionUser = revisionParts.join('\n');
+    revisionPromptByEvalRound.set(snapshot.round, revisionUser);
 
     debugAgentIngest({
       hypothesisId: 'H7',
@@ -427,11 +508,13 @@ async function runAgenticWithEvaluationImpl(
         message: 'runDesignAgentSession (revision) aborted or null',
         data: { revisionAttempt: revisionAttempts + 1, aborted: !!effectiveSignal.aborted },
       });
-      return agenticResult(files, rounds, snapshot, {
-        stopReason,
-        revisionAttempts,
-        revisionBriefApplied: lastRevisionBrief,
-      });
+      return finishWithLog(
+        agenticResult(files, rounds, snapshot, {
+          stopReason,
+          revisionAttempts,
+          revisionBriefApplied: lastRevisionBrief,
+        }),
+      );
     }
 
     debugAgentIngest({
@@ -451,13 +534,16 @@ async function runAgenticWithEvaluationImpl(
     await emit(streamCtx, { type: 'phase', phase: 'evaluating' });
     snapshot = await runEvaluationRound(mergedOptions, streamCtx, evalRound, files, parallel);
     rounds.push(snapshot);
+    appendEvaluationRoundHistory(snapshot, roundHistory);
 
     if (effectiveSignal.aborted) {
-      return agenticResult(files, rounds, snapshot, {
-        stopReason: 'aborted',
-        revisionAttempts,
-        revisionBriefApplied: lastRevisionBrief,
-      });
+      return finishWithLog(
+        agenticResult(files, rounds, snapshot, {
+          stopReason: 'aborted',
+          revisionAttempts,
+          revisionBriefApplied: lastRevisionBrief,
+        }),
+      );
     }
   }
 
@@ -469,9 +555,11 @@ async function runAgenticWithEvaluationImpl(
       : 'max_revisions';
 
   await emit(streamCtx, { type: 'phase', phase: 'complete' });
-  return agenticResult(files, rounds, snapshot, {
-    stopReason,
-    revisionAttempts,
-    revisionBriefApplied: lastRevisionBrief,
-  });
+  return finishWithLog(
+    agenticResult(files, rounds, snapshot, {
+      stopReason,
+      revisionAttempts,
+      revisionBriefApplied: lastRevisionBrief,
+    }),
+  );
 }

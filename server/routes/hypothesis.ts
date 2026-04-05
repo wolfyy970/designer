@@ -84,6 +84,7 @@ hypothesis.post('/generate', async (c) => {
       evaluatorModelId: evaluatorClamp.evaluatorModelId,
       agenticMaxRevisionRounds: body.agenticMaxRevisionRounds,
       agenticMinOverallScore: body.agenticMinOverallScore,
+      rubricWeights: body.rubricWeights,
     };
 
     const runLane = async (

@@ -378,6 +378,28 @@ describe('runAgenticWithEvaluation', () => {
     expect(result?.checkpoint.revisionAttempts).toBe(0);
   });
 
+  it('runs revision when overall is below minOverallScore even if gate clears (shouldRevise false)', async () => {
+    mocks.runDesignAgentSession
+      .mockResolvedValueOnce({ files: { 'index.html': '<html></html>' }, todos: [] })
+      .mockResolvedValueOnce({ files: { 'index.html': '<html>rev</html>' }, todos: [] });
+
+    mocks.runEvaluationWorkers
+      .mockResolvedValueOnce(allHealthy())
+      .mockResolvedValueOnce(allHealthy());
+
+    const result = await runAgenticWithEvaluation({
+      ...baseOpts,
+      maxRevisionRounds: 1,
+      minOverallScore: 4.5,
+    });
+
+    expect(result).not.toBeNull();
+    expect(mocks.runDesignAgentSession).toHaveBeenCalledTimes(2);
+    expect(mocks.runEvaluationWorkers).toHaveBeenCalledTimes(2);
+    expect(result?.checkpoint.stopReason).toBe('max_revisions');
+    expect(result?.checkpoint.revisionAttempts).toBe(1);
+  });
+
   it('passes evaluator provider/model override to runEvaluationWorkers', async () => {
     mocks.runDesignAgentSession.mockResolvedValueOnce({
       files: { 'index.html': '<html></html>' },

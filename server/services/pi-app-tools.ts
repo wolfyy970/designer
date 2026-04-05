@@ -70,6 +70,7 @@ export function createTodoWriteTool(
     description:
       'Write or update your task list. Always provide the complete current state — full replacement. ' +
       'Todos survive context compaction.',
+    promptSnippet: 'Track task progress (survives context compaction)',
     parameters: todoWriteSchema,
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx: ExtensionContext) {
       const { todos } = params as { todos: TodoItem[] };
@@ -114,6 +115,7 @@ export function createUseSkillTool(
     name: 'use_skill',
     label: 'use_skill',
     description,
+    promptSnippet: 'Load skill instructions from the skills catalog',
     parameters: useSkillSchema,
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx: ExtensionContext) {
       const { name } = params as { name: string };
@@ -151,6 +153,7 @@ export function createValidateJsTool(bash: Bash): ToolDefinition {
     name: 'validate_js',
     label: 'validate_js',
     description: 'Check JS syntax with the Node parser. Prefer after substantive edits.',
+    promptSnippet: 'Check JS syntax with Node parser',
     parameters: validateJsSchema,
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx: ExtensionContext) {
       const { path } = params as { path: string };
@@ -190,6 +193,7 @@ export function createValidateHtmlTool(bash: Bash): ToolDefinition {
     label: 'validate_html',
     description:
       'Structural checks for HTML (DOCTYPE, landmark tags, balanced script/style, local asset refs — inline CSS/JS allowed).',
+    promptSnippet: 'Structural checks for HTML (DOCTYPE, landmarks, assets)',
     parameters: validateHtmlSchema,
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx: ExtensionContext) {
       const { path } = params as { path: string };

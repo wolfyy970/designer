@@ -1,14 +1,16 @@
 import { Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { DesignSpecSchema } from '../../src/types/spec.ts';
 import type { CompilerPromptOptions } from '../../src/lib/prompts/compiler-user.ts';
 import { HypothesisStrategySchema } from '../lib/hypothesis-schemas.ts';
-import { compileSpec } from '../services/compiler.ts';
+import { compileSpecStream } from '../services/compiler.ts';
 import { createResolvePromptBody, sanitizePromptOverrides } from '../lib/prompt-overrides.ts';
-import { apiJsonError } from '../lib/api-json-error.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import { clampProviderModel } from '../lib/lockdown-model.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
+import { createWriteGate } from '../lib/sse-write-gate.ts';
+import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 
 const compile = new Hono();
 
@@ -42,23 +44,48 @@ compile.post('/', async (c) => {
     resolvePrompt('incubator-user-inputs'),
   ]);
 
-  try {
-    const result = await compileSpec(
-      body.spec,
-      body.modelId,
-      body.providerId,
-      {
-        systemPrompt,
-        userPromptTemplate,
-        referenceDesigns: body.referenceDesigns,
-        supportsVision: body.supportsVision,
-        promptOptions: body.promptOptions,
-      },
-    );
-    return c.json(result);
-  } catch (err) {
-    return apiJsonError(c, 500, normalizeError(err));
-  }
+  return streamSSE(c, async (stream) => {
+    const abortSignal = c.req.raw.signal;
+    let seq = 0;
+    const allocId = () => String(seq++);
+    const gate = createWriteGate();
+    const correlationId = crypto.randomUUID();
+
+    const write = async (event: string, data: Record<string, unknown>): Promise<void> => {
+      const payload = JSON.stringify(data);
+      await gate.enqueue(async () => {
+        await stream.writeSSE({ data: payload, event, id: allocId() });
+      });
+    };
+
+    try {
+      await write(SSE_EVENT_NAMES.progress, { status: 'Compiling spec to hypotheses…' });
+      const result = await compileSpecStream(
+        body.spec,
+        body.modelId,
+        body.providerId,
+        {
+          systemPrompt,
+          userPromptTemplate,
+          referenceDesigns: body.referenceDesigns,
+          supportsVision: body.supportsVision,
+          promptOptions: body.promptOptions,
+        },
+        {
+          signal: abortSignal,
+          correlationId,
+          onProgressStatus: (status) => write(SSE_EVENT_NAMES.progress, { status }),
+          onAccumulatedDelta: (code) => write(SSE_EVENT_NAMES.code, { code }),
+        },
+      );
+      const planJson = JSON.parse(JSON.stringify(result)) as Record<string, unknown>;
+      await write(SSE_EVENT_NAMES.compile_result, planJson);
+      await write(SSE_EVENT_NAMES.done, {});
+    } catch (err) {
+      await write(SSE_EVENT_NAMES.error, { error: normalizeError(err) });
+      await write(SSE_EVENT_NAMES.done, {});
+    }
+  });
 });
 
 export default compile;

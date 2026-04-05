@@ -256,7 +256,7 @@ export function GeneratingFooter({
             <span className="pl-[18px] text-nano leading-snug text-warning">
               {firstFileWait
                 ? `Also: No files saved yet after ${elapsed}s — planning or drafting first write may be slow on this model.`
-                : `Also: No new file saved for ${fileStallSec}s — the model may still be streaming a large write_file argument (typical for big CSS/HTML). Check the activity log; use Stop if it is clearly stuck.`}
+                : `Also: No new file saved for ${fileStallSec}s — the model may still be streaming a large write or edit argument (typical for big CSS/HTML). Check the activity log; use Stop if it is clearly stuck.`}
             </span>
           )}
         </div>

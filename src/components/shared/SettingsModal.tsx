@@ -11,6 +11,14 @@ import {
   EVALUATOR_MAX_SCORE,
   EVALUATOR_MIN_SCORE,
 } from '../../types/evaluator-settings';
+import { EVALUATOR_RUBRIC_IDS, type EvaluatorRubricId } from '../../types/evaluation';
+
+const RUBRIC_LABELS: Record<EvaluatorRubricId, string> = {
+  design: 'Design quality',
+  strategy: 'Strategy fidelity',
+  implementation: 'Implementation',
+  browser: 'Browser / preflight',
+};
 
 interface SettingsModalProps {
   open: boolean;
@@ -137,8 +145,10 @@ export default function SettingsModal({
 function EvaluatorSettingsTab() {
   const maxRevisionRounds = useEvaluatorDefaultsStore((s) => s.maxRevisionRounds);
   const minOverallScore = useEvaluatorDefaultsStore((s) => s.minOverallScore);
+  const rubricWeights = useEvaluatorDefaultsStore((s) => s.rubricWeights);
   const setMaxRevisionRounds = useEvaluatorDefaultsStore((s) => s.setMaxRevisionRounds);
   const setMinOverallScore = useEvaluatorDefaultsStore((s) => s.setMinOverallScore);
+  const setRubricWeights = useEvaluatorDefaultsStore((s) => s.setRubricWeights);
 
   const scoreEnabled = minOverallScore != null;
 
@@ -147,8 +157,9 @@ function EvaluatorSettingsTab() {
       <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">
         <span className="block text-sm font-medium text-fg">Maximum revision rounds</span>
         <p className="mt-1 text-xs text-fg-secondary">
-          Agentic runs stop after this many evaluator-driven revision passes, even if quality has not reached your
-          target. The loop also stops sooner if evaluators report no further revisions needed (
+          Hard cap on evaluator-driven revision passes after the first build + evaluation. A run ends when either
+          this many rounds is used or an earlier success applies: with Target quality score on, that means the overall
+          score meets your minimum and there are no hard fails; with it off, that means the revision gate clears (
           <code className="rounded bg-surface px-1 font-mono text-nano">shouldRevise: false</code>
           ).
         </p>
@@ -176,8 +187,9 @@ function EvaluatorSettingsTab() {
           <span>
             <span className="block text-sm font-medium text-fg">Target quality score</span>
             <span className="mt-0.5 block text-xs text-fg-secondary">
-              When enabled, the loop can stop early when the overall evaluation score is at or above this value and
-              there are zero hard fails—even if a rubric still suggests revision. Score range matches server eval (0–5).
+              When enabled, stopping for success is based on this threshold (and no hard fails), not only on the
+              revision gate. The run still ends at the maximum revision rounds if the score is not reached in time.
+              Score range matches server eval (0–5).
             </span>
           </span>
         </label>
@@ -194,6 +206,38 @@ function EvaluatorSettingsTab() {
             />
           </div>
         ) : null}
+      </div>
+
+      <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">
+        <span className="block text-sm font-medium text-fg">Rubric weights</span>
+        <p className="mt-1 text-xs text-fg-secondary">
+          Relative importance of each rubric when computing the overall score (0–5 scale). Values need not sum to
+          1—they are renormalized automatically. Defaults: 40% design, 30% strategy, 20% implementation, 10%
+          browser.
+        </p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          {EVALUATOR_RUBRIC_IDS.map((rid) => (
+            <label key={rid} className="flex flex-col gap-0.5">
+              <span className="text-nano text-fg-secondary">{RUBRIC_LABELS[rid]}</span>
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.05}
+                value={rubricWeights[rid]}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (!Number.isFinite(v)) return;
+                  setRubricWeights({ [rid]: Math.max(0, v) });
+                }}
+                className="rounded-md border border-border bg-bg px-2 py-2 text-xs text-fg-secondary input-focus"
+              />
+            </label>
+          ))}
+        </div>
+        <p className="mt-2 text-nano text-fg-secondary">
+          Values you enter are renormalized so the four weights always sum to 1 for scoring.
+        </p>
       </div>
     </div>
   );

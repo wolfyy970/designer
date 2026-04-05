@@ -85,6 +85,7 @@ async function executeGenerateStream(
       evaluatorModelId: body.evaluatorModelId,
       maxRevisionRounds: body.agenticMaxRevisionRounds ?? env.AGENTIC_MAX_REVISION_ROUNDS,
       minOverallScore: body.agenticMinOverallScore ?? env.AGENTIC_MIN_OVERALL_SCORE,
+      rubricWeights: body.rubricWeights,
       getPromptBody: resolvePrompt,
       onStream: writeAgentic,
     });

@@ -23,4 +23,6 @@ export const SSE_EVENT_NAMES = {
   checkpoint: 'checkpoint',
   lane_done: 'lane_done',
   done: 'done',
+  /** POST /api/compile final incubation plan (after streaming deltas). */
+  compile_result: 'compile_result',
 } as const;

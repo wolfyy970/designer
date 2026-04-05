@@ -7,6 +7,27 @@ import {
 } from '../response-schemas';
 
 describe('CompileResponseSchema', () => {
+  it('accepts plan shaped like POST /api/compile SSE compile_result payload', () => {
+    const r = CompileResponseSchema.safeParse({
+      id: 'plan-sse',
+      specId: 's-sse',
+      dimensions: [],
+      hypotheses: [
+        {
+          id: 'h1',
+          name: 'N',
+          hypothesis: 'hyp',
+          rationale: 'r',
+          measurements: 'm',
+          dimensionValues: { axis: 'v' },
+        },
+      ],
+      generatedAt: '2026-01-01T00:00:00.000Z',
+      compilerModel: 'openrouter/x',
+    });
+    expect(r.success).toBe(true);
+  });
+
   it('accepts minimal incubation plan', () => {
     const r = CompileResponseSchema.safeParse({
       id: 'd1',

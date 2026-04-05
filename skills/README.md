@@ -7,7 +7,7 @@ At each agentic Pi session boundary, the API **walks this directory**, parses va
 - **Catalog:** Embeds **`<available_skills>`** in the Pi **`use_skill`** tool description (not the main system prompt) for every skill except **`when: manual`** (each row includes `key`, name, path, description).
 - **Sandbox:** Pre-seeds all of those packages (markdown body + eligible small reference files) under **`skills/<key>/…`** in **just-bash** before the agent runs.
 
-The agent should call **`use_skill`** with the skill **name** (directory key) when a description matches the hypothesis or milestones. **`read_file`** on `skills/…/SKILL.md` still works; **`use_skill`** is the preferred activation path.
+The agent should call **`use_skill`** with the skill **name** (directory key) when a description matches the hypothesis or milestones. **`read`** on `skills/…/SKILL.md` still works; **`use_skill`** is the preferred activation path.
 
 - **`when: auto`** / **`when: always`** — Included in the tool catalog and pre-seeded (`always` vs `auto` is metadata for authors; both are in the sandbox).
 - **`when: manual`** — Omitted from the catalog and seed until a future UI toggle includes them.

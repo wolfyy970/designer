@@ -10,6 +10,11 @@ import {
   EVALUATOR_MIN_SCORE,
   type EvaluatorSettings,
 } from '../types/evaluator-settings';
+import {
+  DEFAULT_RUBRIC_WEIGHTS,
+  EVALUATOR_RUBRIC_IDS,
+  type EvaluatorRubricId,
+} from '../types/evaluation.ts';
 
 export type EvaluatorDefaultsStore = EvaluatorSettings & {
   /**
@@ -19,6 +24,8 @@ export type EvaluatorDefaultsStore = EvaluatorSettings & {
   setMaxRevisionRounds: (n: number) => void;
   /** Pass null to disable quality early-exit */
   setMinOverallScore: (score: number | null) => void;
+  /** Merge partial weights, renormalize so the four sum to 1. */
+  setRubricWeights: (patch: Partial<Record<EvaluatorRubricId, number>>) => void;
   /** Apply server env defaults once (before user customizes or after fresh storage). */
   seedFromServerConfig: (config: Pick<AppConfigResponse, 'agenticMaxRevisionRounds' | 'agenticMinOverallScore'>) => void;
 };
@@ -36,11 +43,31 @@ function clampScore(n: number): number {
   return Math.min(EVALUATOR_MAX_SCORE, Math.max(EVALUATOR_MIN_SCORE, n));
 }
 
+function normalizeRubricWeights(
+  current: Record<EvaluatorRubricId, number>,
+  patch: Partial<Record<EvaluatorRubricId, number>>,
+): Record<EvaluatorRubricId, number> {
+  const out: Record<EvaluatorRubricId, number> = { ...current };
+  for (const rid of EVALUATOR_RUBRIC_IDS) {
+    const v = patch[rid];
+    if (v != null && Number.isFinite(v) && v >= 0) {
+      out[rid] = v;
+    }
+  }
+  const sum = EVALUATOR_RUBRIC_IDS.reduce((a, rid) => a + out[rid], 0);
+  if (sum <= 0) return { ...DEFAULT_RUBRIC_WEIGHTS };
+  for (const rid of EVALUATOR_RUBRIC_IDS) {
+    out[rid] = out[rid] / sum;
+  }
+  return out;
+}
+
 export const useEvaluatorDefaultsStore = create<EvaluatorDefaultsStore>()(
   persist(
     (set, get) => ({
       maxRevisionRounds: DEFAULT_EVALUATOR_SETTINGS.maxRevisionRounds,
       minOverallScore: DEFAULT_EVALUATOR_SETTINGS.minOverallScore,
+      rubricWeights: { ...DEFAULT_EVALUATOR_SETTINGS.rubricWeights },
       serverBaselineApplied: false,
 
       setMaxRevisionRounds: (n) =>
@@ -52,6 +79,11 @@ export const useEvaluatorDefaultsStore = create<EvaluatorDefaultsStore>()(
         set({
           minOverallScore: score == null ? null : clampScore(score),
         }),
+
+      setRubricWeights: (patch) =>
+        set((s) => ({
+          rubricWeights: normalizeRubricWeights(s.rubricWeights, patch),
+        })),
 
       seedFromServerConfig: (config) => {
         if (get().serverBaselineApplied) return;
@@ -67,10 +99,21 @@ export const useEvaluatorDefaultsStore = create<EvaluatorDefaultsStore>()(
     }),
     {
       name: STORAGE_KEYS.EVALUATOR_DEFAULTS,
-      version: 1,
+      version: 2,
+      migrate: (persisted, fromVersion) => {
+        const p = persisted as Partial<EvaluatorDefaultsStore>;
+        if (fromVersion < 2) {
+          return {
+            ...p,
+            rubricWeights: { ...DEFAULT_RUBRIC_WEIGHTS },
+          } as EvaluatorDefaultsStore;
+        }
+        return p as EvaluatorDefaultsStore;
+      },
       partialize: (s) => ({
         maxRevisionRounds: s.maxRevisionRounds,
         minOverallScore: s.minOverallScore,
+        rubricWeights: s.rubricWeights,
         serverBaselineApplied: s.serverBaselineApplied,
       }),
     },

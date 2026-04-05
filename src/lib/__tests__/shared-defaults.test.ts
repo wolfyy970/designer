@@ -50,9 +50,14 @@ describe('PROMPT_DEFAULTS', () => {
   it('designer-agentic-system references hypothesis-driven reasoning', () => {
     const p = PROMPT_DEFAULTS['designer-agentic-system'];
     expect(p).toContain('hypothesis');
-    expect(p).toContain('plan_files');
-    expect(p).toContain('write_file');
-    expect(p).toContain('read_file');
+    expect(p).not.toContain('plan_files');
+    expect(p).not.toContain('write_file');
+    expect(p).not.toContain('read_file');
+    expect(p).not.toContain('edit_file');
+    expect(p).toContain('write(');
+    expect(p).toContain('edit(');
+    expect(p).toContain('read(');
+    expect(p).toContain('bash(');
     expect(p).toContain('milestone');
     expect(p).toContain('mandatory_skill_check');
     expect(p).toContain('use_skill');
@@ -61,10 +66,9 @@ describe('PROMPT_DEFAULTS', () => {
   it('designer-agentic-system documents virtual workspace tools including ls and find', () => {
     const p = PROMPT_DEFAULTS['designer-agentic-system'];
     [
-      'plan_files',
-      'write_file',
-      'edit_file',
-      'read_file',
+      'write(',
+      'edit(',
+      'read(',
       'ls(',
       'find(',
       'todo_write',

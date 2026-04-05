@@ -72,6 +72,15 @@ export const HypothesisGenerateRequestSchema = HypothesisWorkspaceCoreObjectSche
   evaluatorModelId: z.string().optional(),
   agenticMaxRevisionRounds: z.number().int().min(0).max(20).optional(),
   agenticMinOverallScore: z.number().min(0).max(5).optional(),
+  rubricWeights: z
+    .object({
+      design: z.number().finite().nonnegative().optional(),
+      strategy: z.number().finite().nonnegative().optional(),
+      implementation: z.number().finite().nonnegative().optional(),
+      browser: z.number().finite().nonnegative().optional(),
+    })
+    .strict()
+    .optional(),
   correlationId: z.string().min(1).max(200).optional(),
 }).transform(coerceStrategy);
 

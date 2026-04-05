@@ -25,8 +25,11 @@ import { createPreviewSession, deletePreviewSession } from './preview-session-st
 import { encodeVirtualPathForUrl, resolvePreviewEntryPath } from '../../src/lib/preview-entry.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import {
-  REVISION_GATE_CRITICAL_SCORE_MAX,
   REVISION_GATE_LOW_AVERAGE_THRESHOLD,
+  computeWeightedOverallFromRubricMeans,
+  meanRubricScores,
+  resolveRubricWeights,
+  tieredAnyCriticalNormalizedScores,
 } from '../lib/evaluation-revision-gate.ts';
 import { extractLlmJsonObjectSegment } from '../lib/extract-llm-json.ts';
 
@@ -124,6 +127,14 @@ const SEVERITY_RANK: Record<EvalFinding['severity'], number> = {
   high: 0,
   medium: 1,
   low: 2,
+};
+
+/** Tie-break for prioritized fixes: design/strategy before implementation/browser at same severity. */
+const FINDING_SOURCE_PRIORITY: Record<EvaluatorRubricId, number> = {
+  design: 0,
+  strategy: 1,
+  implementation: 2,
+  browser: 3,
 };
 
 function truncateBlock(label: string, content: string): string {
@@ -276,7 +287,8 @@ async function runOneEvaluator(
       ...(logCtx.correlationId ? { correlationId: `${logCtx.correlationId}:eval:${rubric}` } : {}),
     },
   );
-  return parseModelJsonObject(response.raw, evaluatorWorkerReportSchema, normalizeEvaluatorWorkerPayload);
+  const parsed = parseModelJsonObject(response.raw, evaluatorWorkerReportSchema, normalizeEvaluatorWorkerPayload);
+  return { ...parsed, rawTrace: response.raw };
 }
 
 async function runEvaluatorWorker(
@@ -431,18 +443,29 @@ type WorkerBundle = {
 /**
  * Deterministic merge of four rubric reports into one revision brief (no LLM).
  */
-export function aggregateEvaluationReports(reports: WorkerBundle): AggregatedEvaluationReport {
+export function aggregateEvaluationReports(
+  reports: WorkerBundle,
+  rubricWeightOverride?: Partial<Record<EvaluatorRubricId, number>>,
+): AggregatedEvaluationReport {
   const normalizedScores: Record<string, number> = {};
+  const rubricMeans: Partial<Record<EvaluatorRubricId, number>> = {};
+
   for (const rubric of EVALUATOR_RUBRIC_IDS) {
+    rubricMeans[rubric] = meanRubricScores(reports[rubric].scores);
     for (const [criterion, { score }] of Object.entries(reports[rubric].scores)) {
       const key = `${rubric}_${criterion}`;
       normalizedScores[key] = score;
     }
   }
 
-  const scoreValues = Object.values(normalizedScores);
-  const overallScore =
-    scoreValues.length > 0 ? scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length : 0;
+  const weights = resolveRubricWeights(rubricWeightOverride);
+  const overallScore = computeWeightedOverallFromRubricMeans(rubricMeans, weights);
+
+  const evaluatorTraces: Partial<Record<EvaluatorRubricId, string>> = {};
+  for (const rubric of ['design', 'strategy', 'implementation'] as const) {
+    const t = reports[rubric].rawTrace;
+    if (t != null && t.length > 0) evaluatorTraces[rubric] = t;
+  }
 
   const hardFails: AggregatedHardFail[] = [];
   for (const rubric of EVALUATOR_RUBRIC_IDS) {
@@ -458,7 +481,11 @@ export function aggregateEvaluationReports(reports: WorkerBundle): AggregatedEva
       allFindings.push({ ...f, source: rubric });
     }
   }
-  allFindings.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
+  allFindings.sort((a, b) => {
+    const sev = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
+    if (sev !== 0) return sev;
+    return FINDING_SOURCE_PRIORITY[a.source] - FINDING_SOURCE_PRIORITY[b.source];
+  });
 
   const seenSummaries = new Set<string>();
   const findingFixes: string[] = [];
@@ -487,6 +514,7 @@ export function aggregateEvaluationReports(reports: WorkerBundle): AggregatedEva
     prioritizedFixes,
     shouldRevise: false,
     revisionBrief,
+    evaluatorTraces: Object.keys(evaluatorTraces).length > 0 ? evaluatorTraces : undefined,
   };
 }
 
@@ -497,40 +525,36 @@ interface IsEvalSatisfiedOptions {
 
 /**
  * Whether to stop the revision loop for this aggregate.
- * Primary: !shouldRevise after enforceRevisionGate.
- * Optional: minOverallScore + no hard fails (OR semantics with primary).
+ *
+ * - **No target score:** stop when `!shouldRevise` after {@link enforceRevisionGate}.
+ * - **Target score set (Settings → Evaluator):** stop only when there are **no hard fails**
+ *   and **overallScore >= minOverallScore**, even if the rubric model sets `shouldRevise: false`.
+ *   This matches the product expectation that a minimum bar must be met before “success.”
  */
 export function isEvalSatisfied(
   aggregate: AggregatedEvaluationReport,
   opts?: IsEvalSatisfiedOptions,
 ): boolean {
-  if (!aggregate.shouldRevise) return true;
+  if (aggregate.hardFails.length > 0) return false;
+
   const threshold = opts?.minOverallScore;
   if (threshold != null && Number.isFinite(threshold)) {
-    if (aggregate.hardFails.length === 0 && aggregate.overallScore >= threshold) {
-      return true;
-    }
+    return Number.isFinite(aggregate.overallScore) && aggregate.overallScore >= threshold;
   }
-  return false;
+
+  return !aggregate.shouldRevise;
 }
 
 /** Apply rule-based shouldRevise if aggregate model omits or is lenient */
 export function enforceRevisionGate(report: AggregatedEvaluationReport): AggregatedEvaluationReport {
-  const scores = Object.values(report.normalizedScores);
-  const avg =
-    scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : report.overallScore;
-  const anyCritical = scores.some((s) => s <= REVISION_GATE_CRITICAL_SCORE_MAX);
+  const anyCritical = tieredAnyCriticalNormalizedScores(report.normalizedScores);
   const hasHardFails = report.hardFails.length > 0;
-  const lowAverage = avg < REVISION_GATE_LOW_AVERAGE_THRESHOLD;
+  const weighted = Number.isFinite(report.overallScore) ? report.overallScore : 0;
+  const lowAverage = weighted < REVISION_GATE_LOW_AVERAGE_THRESHOLD;
   const shouldRevise = report.shouldRevise || hasHardFails || anyCritical || lowAverage;
   return {
     ...report,
     shouldRevise,
-    overallScore:
-      Number.isFinite(report.overallScore) && report.overallScore > 0
-        ? report.overallScore
-        : Number.isFinite(avg)
-          ? avg
-          : 0,
+    overallScore: weighted > 0 ? weighted : 0,
   };
 }

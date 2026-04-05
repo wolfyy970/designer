@@ -5,6 +5,7 @@
     "lib": [
       "ES2023"
     ],
+    "jsx": "react-jsx",
     "module": "ESNext",
     "types": [
       "node"
@@ -24,6 +25,7 @@
   },
   "include": [
     "server",
+    "meta-harness",
     "api",
     "src/types",
     "src/constants/canvas.ts",
@@ -40,6 +42,12 @@
     "src/lib/prompts/compiler-user.ts",
     "src/lib/prompts/variant-prompt.ts",
     "src/lib/extract-code.ts",
-    "src/lib/debug-agent-ingest-shared.ts"
+    "src/lib/debug-agent-ingest-shared.ts",
+    "src/lib/sse-reader.ts",
+    "src/types/spec.ts",
+    "src/types/evaluation.ts",
+    "src/lib/workspace-snapshot-schema.ts",
+    "src/lib/domain-design-system-schema.ts",
+    "src/api/response-schemas.ts"
   ]
 }

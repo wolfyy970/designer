@@ -16,6 +16,15 @@ const EvaluationContextSchema = z
   })
   .optional();
 
+const RubricWeightsPartialSchema = z
+  .object({
+    design: z.number().finite().nonnegative().optional(),
+    strategy: z.number().finite().nonnegative().optional(),
+    implementation: z.number().finite().nonnegative().optional(),
+    browser: z.number().finite().nonnegative().optional(),
+  })
+  .strict();
+
 export const GenerateStreamBodySchema = z.object({
   prompt: z.string().min(1),
   providerId: z.string().min(1),
@@ -33,6 +42,8 @@ export const GenerateStreamBodySchema = z.object({
   evaluatorModelId: z.string().optional(),
   agenticMaxRevisionRounds: z.number().int().min(0).max(20).optional(),
   agenticMinOverallScore: z.number().min(0).max(5).optional(),
+  /** Per-rubric weights merged with defaults and renormalized on the server. */
+  rubricWeights: RubricWeightsPartialSchema.optional(),
   promptOverrides: z.record(z.string(), z.string()).optional(),
 });
 

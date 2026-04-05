@@ -52,7 +52,7 @@ Prompt keys are **kebab-case** (e.g. `hypotheses-generator-system`, `designer-hy
 
 ## Agentic evaluator loop (Settings → Evaluator)
 
-**Settings** (gear) → **Evaluator** sets **global defaults** for agentic runs: **maximum revision rounds** (cap on evaluator-driven revision passes) and an optional **target quality score** (early exit when overall score reaches that value with no hard fails). Values apply to the next **Generate** / **Run agent** on a hypothesis. Operator-level env defaults (`AGENTIC_MAX_REVISION_ROUNDS`, `AGENTIC_MIN_OVERALL_SCORE`) are served in **`GET /api/config`** and seed the UI once before you customize; see [ARCHITECTURE.md](ARCHITECTURE.md).
+**Settings** (gear) → **Evaluator** sets **global defaults** for agentic runs: **maximum revision rounds** (cap on evaluator-driven revision passes) and an optional **target quality score**. When set, a run counts as successful only if the **weighted overall score** is **at or above** that target with **no hard fails**—the loop keeps revising (until the round cap) even when the rubrics would otherwise stop asking for changes. When the target is **off**, stopping follows the normal revision gate only. Values apply to the next **Generate** / **Run agent** on a hypothesis. Operator-level env defaults (`AGENTIC_MAX_REVISION_ROUNDS`, `AGENTIC_MIN_OVERALL_SCORE`) are served in **`GET /api/config`** and seed the UI once before you customize; see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Canvas Workflow
 
