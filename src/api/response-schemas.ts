@@ -155,6 +155,11 @@ export const DesignSystemExtractResponseSchema = z.object({
   result: z.string(),
 });
 
+/** POST /api/section/generate */
+export const SectionGenerateResponseSchema = z.object({
+  result: z.string(),
+});
+
 
 /** GET /api/config */
 export const AppConfigResponseSchema = z.object({

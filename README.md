@@ -1,8 +1,8 @@
 # Auto Designer
 
-A specification workspace that helps designers define design problem boundaries before AI generation. Specifications compile into hypothesis strategies that systematically explore the solution space. Each hypothesis generates as a complete design — either a single-shot HTML document or an agentic multi-file project with reasoning, self-critique, and revision passes.
+**Read the [North Star](PRODUCT.md#north-star) first.** Every decision in this repo serves that ambition.
 
-Designers write structured inputs. The incubator reasons about the exploration space. The generator produces renderable designs. Everything connects on a visual node-graph canvas.
+A design brief compiles into hypothesis strategies that systematically explore the solution space. Each hypothesis generates as a complete design — either a single-shot HTML document or an agentic multi-file project with reasoning, self-critique, and revision passes. Everything connects on a visual node-graph canvas.
 
 ## Quick Start
 
@@ -19,16 +19,18 @@ Both processes are required for local development. The Vite dev server proxies `
 
 **Screen width:** The canvas workspace needs a **desktop-class** layout. Browser viewports **narrower than 1024px** (typical phones and many tablets) show a full-screen message asking you to open the app on a laptop or desktop instead.
 
-**`EADDRINUSE` on port 3001:** Something is still bound to the API port — often a **background** `pnpm dev:server` left over from `pnpm dev:server & pnpm dev` after `Ctrl+C` (check `jobs` / `fg`; or free the port: `lsof -nP -iTCP:3001 -sTCP:LISTEN` then `kill <pid>`). Prefer **`pnpm dev:all`** or **two terminals** so you don’t stack servers.
+`**EADDRINUSE` on port 3001:** Something is still bound to the API port — often a **background** `pnpm dev:server` left over from `pnpm dev:server & pnpm dev` after `Ctrl+C` (check `jobs` / `fg`; or free the port: `lsof -nP -iTCP:3001 -sTCP:LISTEN` then `kill <pid>`). Prefer `**pnpm dev:all`** or **two terminals** so you don’t stack servers.
 
 ### API Configuration
 
-| Key | Where to get it | Required | What it does |
-|-----|----------------|----------|--------------|
-| `OPENROUTER_API_KEY` | [openrouter.ai](https://openrouter.ai) | For OpenRouter | Server-side only — proxied via Vite, never exposed to browser |
-| `LOCKDOWN` | N/A | Optional | When **unset or empty**, the API and UI use **OpenRouter + MiniMax M2.5** only (`minimax/minimax-m2.5`); model pickers are disabled. Set to `false`, `0`, `no`, or `off` (case-insensitive) to allow other providers/models. The SPA reads **`GET /api/config`** at runtime — restart the API after changing this. |
-| `VITE_LMSTUDIO_URL` | Local (default: `http://192.168.252.213:1234`) | For LM Studio | Local inference endpoint |
-| `VITE_LMSTUDIO_VISION_MODELS` | N/A | Optional | Comma-separated model ID substrings that support vision |
+
+| Key                           | Where to get it                                | Required       | What it does                                                                                                                                                                                                                                                                                                       |
+| ----------------------------- | ---------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `OPENROUTER_API_KEY`          | [openrouter.ai](https://openrouter.ai)         | For OpenRouter | Server-side only — proxied via Vite, never exposed to browser                                                                                                                                                                                                                                                      |
+| `LOCKDOWN`                    | N/A                                            | Optional       | When **unset or empty**, the API and UI use **OpenRouter + MiniMax M2.5** only (`minimax/minimax-m2.5`); model pickers are disabled. Set to `false`, `0`, `no`, or `off` (case-insensitive) to allow other providers/models. The SPA reads `**GET /api/config`** at runtime — restart the API after changing this. |
+| `VITE_LMSTUDIO_URL`           | Local (default: `http://192.168.252.213:1234`) | For LM Studio  | Local inference endpoint                                                                                                                                                                                                                                                                                           |
+| `VITE_LMSTUDIO_VISION_MODELS` | N/A                                            | Optional       | Comma-separated model ID substrings that support vision                                                                                                                                                                                                                                                            |
+
 
 With `LOCKDOWN` disabled, you can mix providers — e.g. OpenRouter for one node and LM Studio for another. See `.env.example` for defaults and optional keys.
 
@@ -36,7 +38,7 @@ With `LOCKDOWN` disabled, you can mix providers — e.g. OpenRouter for one node
 
 The primary interface is a visual node-graph canvas (`/canvas`, the default route):
 
-1. **Input nodes** (left) — Design Brief, Existing Design, Research Context, Objectives & Metrics, Design Constraints. On a fresh canvas, optional inputs may appear as **ghost placeholders**; opening **Canvas Manager** → **Load** materializes real section nodes when the saved spec already has text or images for those sections.
+1. **Input nodes** (left) — Design Brief, Existing Design, Research Context, Objectives & Metrics, Design Constraints. On a fresh canvas, optional inputs may appear as **ghost placeholders**; opening **Canvas Manager** → **Load** materializes real section nodes when the saved spec already has text or images for those sections. **Research Context**, **Objectives & Metrics**, and **Design Constraints** offer an optional **auto-generate** control (from the Design Brief and other filled sections) using the **first Model node** on the canvas and `POST /api/section/generate` — details in [USER_GUIDE.md](USER_GUIDE.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
 2. **Model node** — Connect to the Incubator or Hypotheses to configure which provider and model they use
 3. **Incubator** — Connect input nodes and a Model node, then click Generate to produce hypothesis strategies
 4. **Hypotheses** — Editable strategy cards. Connect a Model node, choose **Direct** (one-shot) or **Agentic**, then **Generate** or **Run agent**
@@ -49,35 +51,41 @@ The header also opens **Settings** (General preferences; **Prompt Studio** under
 
 ## Scripts
 
-| Command | What it does |
-|---------|-------------|
-| `pnpm dev` | Start Vite SPA dev server (port 5173) |
-| `pnpm dev:server` | Start Hono API server (port 3001) |
-| `pnpm dev:all` | Start API then Vite (waits for `/api/health` — avoids proxy race) |
-| `pnpm dev:kill` | Stop processes listening on ports 3001 (API) and 5173 (Vite) |
-| `pnpm build` | Type-check and production build |
-| `pnpm test` | Vitest unit tests (Playwright merge test excluded in config; see [CLAUDE.md](CLAUDE.md)) |
-| `pnpm lint` | Run ESLint |
-| `pnpm db:seed` | Bootstrap **missing** Langfuse text prompts only (`scripts/seed-langfuse.ts`); does **not** overwrite existing labeled versions in Langfuse. Use `pnpm langfuse:sync-prompts` to reset bodies from `shared-defaults` / optional legacy SQLite import |
-| `pnpm langfuse:sync-prompts` | **`LANGFUSE_SEED_SYNC`**: push every prompt’s labeled version to match `shared-defaults` / legacy SQLite import (overwrites drift) |
-| `pnpm knip` | Optional unused-export report (not run in CI by default) |
-| `pnpm meta-harness` | Optional **meta-harness** CLI: benchmark/proposer outer loop against the local API ([meta-harness/README.md](meta-harness/README.md)) |
+
+| Command                      | What it does                                                                                                                                                                                                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                   | Start Vite SPA dev server (port 5173)                                                                                                                                                                                                                |
+| `pnpm dev:server`            | Start Hono API server (port 3001)                                                                                                                                                                                                                    |
+| `pnpm dev:all`               | Start API then Vite (waits for `/api/health` — avoids proxy race)                                                                                                                                                                                    |
+| `pnpm dev:kill`              | Stop processes listening on ports 3001 (API) and 5173 (Vite)                                                                                                                                                                                         |
+| `pnpm build`                 | Type-check and production build                                                                                                                                                                                                                      |
+| `pnpm test`                  | Vitest unit tests (Playwright merge test excluded in config; see [AGENTS.md](AGENTS.md))                                                                                                                                                              |
+| `pnpm lint`                  | Run ESLint                                                                                                                                                                                                                                           |
+| `pnpm db:seed`               | Bootstrap **missing** Langfuse text prompts only (`scripts/seed-langfuse.ts`); does **not** overwrite existing labeled versions in Langfuse. Use `pnpm langfuse:sync-prompts` to reset bodies from `shared-defaults` / optional legacy SQLite import |
+| `pnpm langfuse:sync-prompts` | `**LANGFUSE_SEED_SYNC`**: push every prompt’s labeled version to match `shared-defaults` / legacy SQLite import (overwrites drift)                                                                                                                   |
+| `pnpm knip`                  | Optional unused-export report (not run in CI by default)                                                                                                                                                                                             |
+| `pnpm meta-harness`          | Optional **meta-harness** CLI: benchmark/proposer outer loop against the local API ([meta-harness/README.md](meta-harness/README.md))                                                                                                                |
+
 
 ## Documentation
 
-| Document | Purpose |
-|----------|---------|
-| [LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md) | Langfuse prompt **names** → what each is for (Prompt Studio) |
-| [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) | Narrative: canvas, prompts, agentic loop, evaluation |
-| [PRODUCT.md](PRODUCT.md) | Feature-level description: modes, nodes, providers |
-| [USER_GUIDE.md](USER_GUIDE.md) | Setup and day-to-day canvas workflow |
-| [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) | SPA design tokens: accent vs status, typography, typefaces, file-role colors (`src/index.css`) |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Technical reference: routes, stores, data flow, Pi adapter boundary |
-| [docker/langfuse/README.md](docker/langfuse/README.md) | Optional **self-hosted** Langfuse via Docker (default is Langfuse Cloud) |
-| [meta-harness/README.md](meta-harness/README.md) | Optional meta-harness CLI for systematic API benchmarks and prompt/skill search ([META_HARNESS_OUTER_LOOP.md](meta-harness/META_HARNESS_OUTER_LOOP.md)) |
-| [DOCUMENTATION.md](DOCUMENTATION.md) | How this doc set is organized (hub = this README) |
-| [CLAUDE.md](CLAUDE.md) | Commands and conventions for AI-assisted development |
+**AI coding agents:** Full repo conventions live in **[AGENTS.md](AGENTS.md)** (vendor-neutral name). **[CLAUDE.md](CLAUDE.md)** exists only so **Claude Code** auto-loads a pointer to **AGENTS.md**—do not maintain two copies of the same guidance.
+
+| Document                                               | Purpose                                                                                                                                                 |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [AGENTS.md](AGENTS.md)                                 | **Canonical** agent instructions: commands, architecture, Pi sandbox, Langfuse sync, gotchas                                                          |
+| [CLAUDE.md](CLAUDE.md)                                 | Stub for Claude Code → links **AGENTS.md**                                                                                                              |
+| [LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)             | Langfuse prompt **names** → what each is for (Prompt Studio)                                                                                            |
+| [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)               | Narrative: canvas, prompts, agentic loop, evaluation                                                                                                    |
+| [PRODUCT.md](PRODUCT.md)                               | **North Star** + feature-level description: modes, nodes, providers                                                                                     |
+| [USER_GUIDE.md](USER_GUIDE.md)                         | Setup and day-to-day canvas workflow                                                                                                                    |
+| [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)                   | SPA design tokens: accent vs status, typography, typefaces, file-role colors (`src/index.css`)                                                          |
+| [ARCHITECTURE.md](ARCHITECTURE.md)                     | Technical reference: routes, stores, data flow, Pi adapter boundary                                                                                     |
+| [docker/langfuse/README.md](docker/langfuse/README.md) | Optional **self-hosted** Langfuse via Docker (default is Langfuse Cloud)                                                                                |
+| [meta-harness/README.md](meta-harness/README.md)       | Optional meta-harness CLI for systematic API benchmarks and prompt/skill search ([META_HARNESS_OUTER_LOOP.md](meta-harness/META_HARNESS_OUTER_LOOP.md)) |
+| [DOCUMENTATION.md](DOCUMENTATION.md)                   | How this doc set is organized (hub = this README)                                                                                                       |
+
 
 ## Tech Stack
 
-Vite + React 19 + TypeScript, Zustand (state), Tailwind CSS v4 (styling; UI typefaces in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)), @xyflow/react v12 (canvas), react-router-dom v7 (routing), @tanstack/react-query (async state), Zod (schema validation), Vitest (testing). Agentic mode: `@mariozechner/pi-coding-agent` with **`just-bash`**; native Pi file tools are mapped to the virtual project in `server/services/pi-sdk/` so the host filesystem stays isolated. See [ARCHITECTURE.md](ARCHITECTURE.md).
+Vite + React 19 + TypeScript, Zustand (state), Tailwind CSS v4 (styling; UI typefaces in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)), @xyflow/react v12 (canvas), react-router-dom v7 (routing), @tanstack/react-query (async state), Zod (schema validation), Vitest (testing). Agentic mode: `@mariozechner/pi-coding-agent` with `**just-bash`**; native Pi file tools are mapped to the virtual project in `server/services/pi-sdk/` so the host filesystem stays isolated. See [ARCHITECTURE.md](ARCHITECTURE.md).

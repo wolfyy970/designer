@@ -9,6 +9,7 @@ import prompts from './routes/prompts.ts';
 import hypothesis from './routes/hypothesis.ts';
 import preview from './routes/preview.ts';
 import configRoute from './routes/config.ts';
+import sectionGenerate from './routes/section-generate.ts';
 
 const app = new Hono().basePath('/api');
 
@@ -34,5 +35,6 @@ app.route('/design-system', designSystem);
 app.route('/prompts', prompts);
 app.route('/hypothesis', hypothesis);
 app.route('/preview', preview);
+app.route('/section', sectionGenerate);
 
 export default app;

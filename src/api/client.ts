@@ -9,6 +9,8 @@ import type {
   ObservabilityLogsResponse,
   DesignSystemExtractRequest,
   DesignSystemExtractResponse,
+  SectionGenerateRequest,
+  SectionGenerateResponse,
   HypothesisWorkspaceApiPayload,
 } from './types';
 import type { RunTraceEvent, TodoItem } from '../types/provider';
@@ -38,6 +40,7 @@ import type { ZodError, ZodType } from 'zod';
 import {
   CompileResponseSchema,
   DesignSystemExtractResponseSchema,
+  SectionGenerateResponseSchema,
   HypothesisPromptBundleResponseSchema,
   ObservabilityLogsResponseSchema,
   ModelsResponseSchema,
@@ -592,4 +595,12 @@ export async function extractDesignSystem(
   req: DesignSystemExtractRequest,
 ): Promise<DesignSystemExtractResponse> {
   return postParsed('/design-system/extract', req, DesignSystemExtractResponseSchema);
+}
+
+// ── Section auto-generate ─────────────────────────────────────────────
+
+export async function generateSectionContent(
+  req: SectionGenerateRequest,
+): Promise<SectionGenerateResponse> {
+  return postParsed('/section/generate', req, SectionGenerateResponseSchema);
 }

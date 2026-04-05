@@ -1,6 +1,6 @@
 /**
  * Pre-commit: increment only the patch segment of package.json "version".
- * @see src/lib/semver-bump-patch.ts (tested); guards match bump-patch-version docs in CLAUDE.md.
+ * @see src/lib/semver-bump-patch.ts (tested); guards match bump-patch-version docs in AGENTS.md.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

@@ -8,6 +8,7 @@ import { useCompilerStore, findStrategy } from '../../stores/compiler-store';
 import type { RunTraceEvent } from '../../types/provider';
 import { runTraceEventSchema } from '../../lib/run-trace-event-schema';
 import type { PromptKey } from '../../stores/prompt-store';
+import { ToolTraceObservabilityBlocks } from '../shared/ToolTraceObservabilityBlocks';
 
 const LANGFUSE_UI_BASE =
   (import.meta.env.VITE_LANGFUSE_BASE_URL as string | undefined)?.replace(/\/$/, '') ??
@@ -51,17 +52,23 @@ function TraceEntry({
           ? 'text-success'
           : 'text-fg-secondary';
 
+  const isToolLifecycle =
+    trace.kind === 'tool_started' ||
+    trace.kind === 'tool_finished' ||
+    trace.kind === 'tool_failed';
+
   return (
     <div className="rounded-lg border border-border bg-surface-raised px-4 py-3">
       <div className="flex items-start gap-3">
         <span className={`text-xs font-semibold ${tone}`}>{trace.kind.replaceAll('_', ' ')}</span>
         <div className="min-w-0 flex-1">
           <div className="text-xs text-fg">{trace.label}</div>
-          {trace.detail ? (
+          {!isToolLifecycle && trace.detail ? (
             <p className="mt-1 text-nano leading-snug whitespace-pre-wrap break-words text-fg-muted">
               {trace.detail}
             </p>
           ) : null}
+          {isToolLifecycle ? <ToolTraceObservabilityBlocks trace={trace} className="mt-2" /> : null}
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-nano text-fg-muted">
             <span>
               {title}

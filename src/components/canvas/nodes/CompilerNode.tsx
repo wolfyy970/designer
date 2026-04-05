@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import { useReactFlow, type NodeProps, type Node } from '@xyflow/react';
-import { RefreshCw, ArrowRight } from 'lucide-react';
+import { ArrowRight, RefreshCw } from 'lucide-react';
 import { normalizeError } from '../../../lib/error-utils';
 import { useSpecStore } from '../../../stores/spec-store';
 import {
@@ -206,7 +206,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
     >
       <NodeHeader
         onRemove={onRemove}
-        description={`${connectedInputCount} input${connectedInputCount !== 1 ? 's' : ''} connected`}
+        description="Synthesizes your inputs into differentiated hypothesis strategies to explore."
       >
         <h3 className="text-xs font-semibold text-fg">Incubator</h3>
       </NodeHeader>
@@ -214,7 +214,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
       {/* Skeleton overlay while compiling */}
       {isCompiling && (
         <GeneratingSkeleton
-          label="Incubating…"
+          variant="contentOnly"
           detail={compileLiveLine || undefined}
           elapsed={elapsed}
         />
@@ -229,6 +229,11 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
         )}
 
         <div className={`${RF_INTERACTIVE} space-y-2`}>
+          <div className="flex items-center justify-between">
+            <span className="text-nano text-fg-muted">
+              {connectedInputCount} input{connectedInputCount !== 1 ? 's' : ''} connected
+            </span>
+          </div>
           {/* Hypothesis count selector */}
           <div className="flex items-center justify-between">
             <label className="text-nano text-fg-secondary">New hypotheses</label>
@@ -249,19 +254,23 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
           )}
 
           <button
+            type="button"
             onClick={handleCompile}
             disabled={isCompiling || !isReady}
+            aria-busy={isCompiling}
+            aria-label={isCompiling ? 'Incubating…' : 'Generate hypotheses'}
+            title={isCompiling ? 'Incubating…' : undefined}
             className="flex w-full items-center justify-center gap-1.5 rounded-md bg-fg px-3 py-2 text-xs font-medium text-bg transition-colors hover:bg-fg-on-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isCompiling ? (
               <>
-                <RefreshCw size={12} className="animate-spin" />
-                Generating...
+                <RefreshCw size={12} className="animate-spin" aria-hidden />
+                Incubating…
               </>
             ) : (
               <>
                 Generate
-                <ArrowRight size={12} />
+                <ArrowRight size={12} aria-hidden />
               </>
             )}
           </button>

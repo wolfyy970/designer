@@ -1,4 +1,24 @@
-# Product — What Exists Today
+# Product
+
+## North Star
+
+Auto Designer exists to **replace the UX designer**, not assist one.
+
+Given a problem statement and appropriate research, a brilliant designer synthesizes everything — user needs, competitive landscape, behavioral patterns, business constraints — and produces groundbreaking hypotheses that break conventions with something genuinely better. Then they execute those hypotheses into designs where every affordance is clear, every interaction is intuitive, time on task drops, and users never have to think. *Don't Make Me Think*, Nielsen Norman heuristics, information architecture, visual hierarchy — the entire discipline, applied at an expert level.
+
+That is what this application must do autonomously. The ambition is not parity with existing design; it is to **surpass** it. Every feature, every prompt, every evaluation rubric, and every architectural decision exists to deliver against that standard. If a capability does not move the system closer to producing work a brilliant designer would be proud of, it does not belong here.
+
+**Concretely, the pipeline has two jobs:**
+
+1. **Hypothesis generation** — From a design brief (plus research, objectives, and constraints), produce strategies that are genuinely differentiated: not reshuffled templates, not minor variations, but fundamentally different bets about what will work best for the stated audience and problem. The bar is creative and strategic, not just technically valid.
+
+2. **Design execution** — Turn each hypothesis into a rendered, usable artifact that implements the strategy with craft, clarity, and conviction. Typography, spacing, motion, content, interaction — all working together to embody the hypothesis so clearly that the design *is* the argument for why this approach works.
+
+Every subsystem — the incubator, the agentic builder, the evaluator, the revision loop, the skills, the prompts — is measured against these two jobs. Ship work that a senior designer would look at and think: *I wish I'd done that.*
+
+---
+
+## What Exists Today
 
 **Status:** Canvas interface complete. Single-shot and agentic generation operational with post-build evaluation, bounded revision rounds, and optional headless browser QA. Vision support implemented. Repo **Agent Skills** under **`skills/`** are discovered per Pi session, pre-seeded into the virtual workspace (all non-`manual`), and surfaced in the preview run UI; the model reads relevant skills on demand.
 
@@ -38,7 +58,8 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 - **Version stacking** — Results accumulate across generation runs. Each preview shows version badges (v1, v2, ...) with ChevronLeft/Right navigation to browse previous versions.
 - **Agentic eval rounds (workspace)** — When a run has multiple evaluation rounds (build + revisions), the **preview run workspace** (side panel) can show **Eval round** on **Design** and **Evaluation** tabs; per-round file trees are stored in IndexedDB (`{resultId}:round:{n}`) so earlier revisions remain viewable without bloating localStorage metadata.
 - **Observability (dev)** — Header modal listing **LLM** calls and **trace** events from the API session; optional NDJSON on disk when enabled (see [ARCHITECTURE.md](ARCHITECTURE.md)).
-- **Prompt Studio** — Settings → Prompts: edit prompts against the **server baseline**; **Save** / ⌘S persists drafts **in the browser** and sends **`promptOverrides`** on compile / generate / extract (no automatic save; does not create Langfuse versions from the UI).
+- **Prompt Studio** — Settings → Prompts: edit prompts against the **server baseline**; **Save** / ⌘S persists drafts **in the browser** and sends **`promptOverrides`** on compile / generate / extract / **section auto-generate** (no automatic save; does not create Langfuse versions from the UI).
+- **Section auto-generate** — On **Research Context**, **Objectives & Metrics**, and **Design Constraints**, optional **LLM-assisted drafting** from the Design Brief (and cross-section context) via **`POST /api/section/generate`**, using credentials from the **first Model** node when lockdown is off.
 - **Optional section slots** — Fresh canvases can show **ghost** placeholders for inputs not in the minimal default. Loading a **Canvas Manager** entry **materializes** optional section nodes when the persisted spec has non-empty text or images for those sections (see `src/lib/spec-materialize-sections.ts`).
 - **Design tokens kitchen sink** (development only) — Settings → General opens a modal reference for `@theme` tokens and patterns; full-page route `/dev/design-tokens`. Documented in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 

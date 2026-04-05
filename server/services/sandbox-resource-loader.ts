@@ -1,6 +1,6 @@
 /**
  * Pi resource loader for embedded agent sessions: does not read the host repo
- * (e.g. CLAUDE.md / AGENTS.md on disk). System prompt is supplied in-app so
+ * (e.g. root AGENTS.md for developers vs Langfuse virtual AGENTS.md in Pi). System prompt is supplied in-app so
  * AgentSession `_baseSystemPrompt` includes our designer-agentic text (survives
  * per-turn resets when customTools/extensions exist).
  */

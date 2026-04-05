@@ -84,7 +84,7 @@ If nothing is stale, one line is logged (default **continues**; **`--promote`** 
 
 ## Promoting prompts to Langfuse
 
-Harness overrides stay in **`history/…/prompt-overrides.json`** until you promote them. With a **TTY** preflight, **`P`** updates **`shared-defaults.ts`**, **`skills/`**, and runs **`pnpm langfuse:sync-prompts`** when Langfuse is configured. **Plain** mode or manual runs: copy into **`PROMPT_DEFAULTS`** and run sync yourself (root **CLAUDE.md**).
+Harness overrides stay in **`history/…/prompt-overrides.json`** until you promote them. With a **TTY** preflight, **`P`** updates **`shared-defaults.ts`**, **`skills/`**, and runs **`pnpm langfuse:sync-prompts`** when Langfuse is configured. **Plain** mode or manual runs: copy into **`PROMPT_DEFAULTS`** and run sync yourself (root **AGENTS.md**).
 
 Details, non-winner paths, and verification: [META_HARNESS_OUTER_LOOP.md §5.3](./META_HARNESS_OUTER_LOOP.md#53-promoting-prompt-overrides-to-langfuse).
 

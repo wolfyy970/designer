@@ -33,4 +33,8 @@ export const runTraceEventSchema = z.object({
   path: z.string().optional(),
   status: z.enum(['info', 'success', 'warning', 'error']).optional(),
   detail: z.string().optional(),
+  /** JSON snapshot of tool call arguments (server-truncated). */
+  toolArgs: z.string().optional(),
+  /** Truncated tool result body for observability (matches `detail` on tool_finished when set). */
+  toolResult: z.string().optional(),
 });

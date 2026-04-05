@@ -360,7 +360,7 @@ When Langfuse is configured, **runtime** prompt text comes from Langfuse (labele
    Confirm the sync output lists each updated prompt key.
 4. **Sanity-check** — Restart the API if needed; optional: **`GET /api/prompts/:key`** or Prompt Studio to verify the new body.
 
-Skipping step 2 or 3 leaves **`shared-defaults.ts`** or Langfuse out of sync with the other; treat **edit defaults → sync** as one workflow (see root **CLAUDE.md**).
+Skipping step 2 or 3 leaves **`shared-defaults.ts`** or Langfuse out of sync with the other; treat **edit defaults → sync** as one workflow (see root **AGENTS.md**).
 
 ---
 

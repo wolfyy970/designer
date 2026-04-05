@@ -1,6 +1,6 @@
 # System overview (end-to-end)
 
-This document is the **narrative** companion to [ARCHITECTURE.md](ARCHITECTURE.md): how prompts, the canvas, and the agentic engine fit together. For file-level maps and API tables, use ARCHITECTURE; for day-to-day usage, [USER_GUIDE.md](USER_GUIDE.md).
+This document is the **narrative** companion to [ARCHITECTURE.md](ARCHITECTURE.md): how prompts, the canvas, and the agentic engine fit together. Every subsystem described below serves the [North Star](PRODUCT.md#north-star). For file-level maps and API tables, use ARCHITECTURE; for day-to-day usage, [USER_GUIDE.md](USER_GUIDE.md).
 
 ---
 
@@ -58,5 +58,5 @@ Evaluators use separate LLM rubrics (browser / design / strategy / implementatio
 | API routes, stores, file map | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Feature list and modes | [PRODUCT.md](PRODUCT.md) |
 | Step-by-step canvas usage | [USER_GUIDE.md](USER_GUIDE.md) |
-| Repo commands / agent gotchas | [CLAUDE.md](CLAUDE.md) |
+| Repo commands / agent gotchas | [AGENTS.md](AGENTS.md) |
 | How we maintain docs | [DOCUMENTATION.md](DOCUMENTATION.md) |

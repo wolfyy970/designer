@@ -6,6 +6,10 @@ import type { AgentSessionEvent, AgentSession, AssistantMessage } from './pi-sdk
 import { appendLlmCallResponse } from '../log-store.ts';
 import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
 import { extractPiToolPathFromArguments, parsePiToolExecutionArgs } from '../lib/pi-tool-args.ts';
+import {
+  serializePiToolArgsForTrace,
+  serializePiToolResultForTrace,
+} from '../lib/pi-tool-trace.ts';
 import { stripProviderControlTokens } from '../lib/stream-sanitize.ts';
 import type { AgentRunEvent } from './pi-agent-run-types.ts';
 import type { RunTraceEvent } from '../../src/types/provider.ts';
@@ -291,12 +295,14 @@ function handleToolExecutionStart(ctx: PiSessionBridgeContext, maps: BridgeMaps,
   });
   syncPendingToolProbe(ctx, toolStartMs);
   ctx.toolPathByCallId.set(event.toolCallId, path);
+  const toolArgs = serializePiToolArgsForTrace(rawArgs);
   safeBridgeEmit(
     ctx,
     ctx.trace('tool_started', path ? `${tn} → ${path}` : `Started ${tn}`, {
       phase: 'building',
       toolName: tn,
       path,
+      ...(toolArgs != null ? { toolArgs } : {}),
     }),
   );
   safeBridgeEmit(ctx, {
@@ -327,6 +333,9 @@ function handleToolExecutionEnd(ctx: PiSessionBridgeContext, maps: BridgeMaps, e
     },
   });
   syncPendingToolProbe(ctx, toolStartMs);
+  const resultText = serializePiToolResultForTrace(event.result, event.isError);
+  const traceResultFields =
+    resultText != null ? { detail: resultText, toolResult: resultText } : {};
   if (event.isError) {
     const path = ctx.toolPathByCallId.get(event.toolCallId);
     safeBridgeEmit(
@@ -336,6 +345,7 @@ function handleToolExecutionEnd(ctx: PiSessionBridgeContext, maps: BridgeMaps, e
         toolName: event.toolName,
         path,
         status: 'error',
+        ...traceResultFields,
       }),
     );
     safeBridgeEmit(ctx, {
@@ -351,6 +361,7 @@ function handleToolExecutionEnd(ctx: PiSessionBridgeContext, maps: BridgeMaps, e
         toolName: event.toolName,
         path,
         status: 'success',
+        ...traceResultFields,
       }),
     );
   }

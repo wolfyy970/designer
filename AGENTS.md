@@ -1,0 +1,143 @@
+# AGENTS.md
+
+**Canonical instructions for AI coding agents** working in this repository—commands, architecture, Pi/just-bash sandbox behavior, Langfuse prompt workflow, and gotchas. Follows the vendor-neutral [AGENTS.md](https://agents.md) convention (Cursor, Codex, Windsurf, and similar tools commonly load this filename).
+
+**Claude Code** still discovers **`CLAUDE.md`** at the repo root first; that file is a **stub** pointing here. **Do not confuse** this document with Langfuse **`agents-md-file`**: that prompt is seeded as a **virtual** `AGENTS.md` under `/home/user/project` inside the **Pi design sandbox** only (output rules for generated artifacts), not this developer-facing file.
+
+## North Star
+
+Read [PRODUCT.md § North Star](PRODUCT.md#north-star) before making any design or architecture decision. If a change does not serve that ambition, question whether it belongs.
+
+## Release metadata
+
+**Patch** (`x.y.Z` last segment): auto-incremented on every local **`git commit`** by Husky (`.husky/pre-commit` → `scripts/bump-patch-version.ts`, logic in `src/lib/semver-bump-patch.ts`). **Major and minor** (`x.y`) change only when you edit **`version`** in root **`package.json`** manually (e.g. `0.4.0`); the next commit then bumps patch to `0.4.1`. Skip the bump for a one-off commit: `SKIP_PATCH_BUMP=1 git commit ...`. CI (`CI=true`) never runs the bump.
+
+The header’s **date/time** comes from **`git log -1 --format=%cI`** (committer time of `HEAD`) when Vite loads — no manual timestamp. If you ship a tree **without** `.git`, set optional **`releasedAt`** in `package.json` (ISO-8601); `vite.config.ts` falls back to it. Display is always **America/New_York** (EST/EDT) in the UI.
+
+**Version and timestamp in the header are baked in when Vite starts** (`vite.config.ts` `define`). After you change `package.json` or make a new `git commit`, **restart `pnpm dev`** / **`pnpm dev:all`** (or run `pnpm build` / `pnpm preview`) so the canvas header shows the updated `v…` and Eastern time — a running dev server does not pick up new values on its own.
+
+**`git commit --amend`** runs the hook again and bumps patch again; avoid amending often or use `SKIP_PATCH_BUMP=1` if the version was already correct for that commit.
+
+## Commands
+
+```bash
+# Development (API + Vite — avoids proxy ECONNREFUSED race)
+pnpm dev:all         # API first, then Vite after http://localhost:3001/api/health
+pnpm dev:kill        # Free ports 3001 and 5173 (stuck dev servers)
+# Or two terminals: pnpm dev:server  and  pnpm dev
+pnpm dev             # Vite frontend at http://localhost:5173 (strict port — localStorage origin)
+pnpm dev:server      # Hono API server at http://localhost:3001
+
+# Build & lint
+pnpm build           # tsc -b && vite build
+pnpm lint            # eslint
+
+# Tests
+pnpm test            # vitest run (one-shot)
+pnpm test:watch      # vitest (watch mode)
+pnpm vitest run src/lib/__tests__/extract-code.test.ts  # single test file
+```
+
+Vitest excludes `server/services/__tests__/browser-playwright-evaluator.test.ts` via `vite.config.ts` so the default suite stays hermetic; run that file explicitly when changing Playwright merge logic. Pi virtual FS tools are covered in `server/services/pi-sdk/__tests__/virtual-tools.test.ts`.
+
+## Architecture
+
+### Two-process dev setup
+The frontend (Vite, port **5173** only — `strictPort`) proxies `/api/*` to the API server (Hono/Node.js, port 3001). **Both must run together in development.** Prefer `pnpm dev:all` so Vite starts only after `/api/health` responds; otherwise the UI’s first `/api/*` calls may get `ECONNREFUSED` until the API is up (hard refresh fixes it). A different Vite port would be a **different browser origin** — saved canvas library / active spec localStorage would not carry over; free **5173** with `pnpm dev:kill` if Vite fails to bind. Avoid `pnpm dev:server & pnpm dev` unless you manage the background job: **`Ctrl+C` may not stop the background API**, leaving port **3001** in use (`EADDRINUSE` on the next start). Free it with `lsof -nP -iTCP:3001 -sTCP:LISTEN` / `kill`, or `jobs` → `fg` → `Ctrl+C`. API keys live on the server only — never exposed to the browser.
+
+### Server (`server/`)
+Hono app under `/api`: compile, generate (SSE), models, design-system extract, **prompts (Langfuse)**, logs (dev). See [ARCHITECTURE.md](ARCHITECTURE.md) for the route table. **`GET /api/config`** exposes `lockdown` (and pinned model fields when enabled). When **`LOCKDOWN`** is unset or empty, the server defaults to **locked** and clamps provider/model on compile, hypothesis, legacy generate, and design-system extract to **OpenRouter + `minimax/minimax-m2.5`**; set `LOCKDOWN=false` (or `0` / `no` / `off`) to allow client model selection.
+
+**Langfuse.** Prefer **Langfuse Cloud**: set `LANGFUSE_BASE_URL` to your region (`https://us.cloud.langfuse.com` or `https://cloud.langfuse.com` for EU), plus project **Public** and **Secret** keys; set **`VITE_LANGFUSE_BASE_URL`** to the same host so the Observability modal link opens the right UI. Optional self-hosted stack: [docker/langfuse](docker/langfuse) (mothballed for most flows). The API exports OpenTelemetry spans (`server/instrumentation.ts`, loaded from `server/dev.ts`) and records LLM generations from `server/lib/llm-call-logger.ts`. **Production** prompt text is read via **`getPromptBody`** from Langfuse (`LANGFUSE_PROMPT_LABEL`, default `production`) when configured. **Prompt Studio** loads that baseline via **`GET /api/prompts`**; **Save** persists drafts in **`prompt-overrides-store`** (localStorage) and attaches **`promptOverrides`** on compile / hypothesis / design-system requests — it does **not** call Langfuse **PUT** from the UI. **`PUT /api/prompts/:key`** and **revert-baseline** remain for CLI/admin. **`pnpm db:seed`** creates only **missing** prompts (repairs a missing label); it does **not** overwrite arbitrary labeled drift. To reset all labeled bodies from repo/SQLite: **`pnpm langfuse:sync-prompts`** (`LANGFUSE_SEED_SYNC=1`). Bodies when creating: optional legacy `LANGFUSE_PROMPT_IMPORT_SQLITE` or `file:` **`DATABASE_URL`** SQLite with `PromptVersion`; else `shared-defaults`.
+
+**Dev observability (run trace ring + NDJSON).** Client-forwarded run trace events still go through `server/lib/observability-sink.ts` and `GET /api/logs` (`trace` array). The **Observability** modal links to the Langfuse UI for full LLM traces; the **Run Trace** tab still polls `GET /api/logs` for the in-memory ring. `DELETE /api/logs` clears rings; NDJSON audit paths unchanged (`OBSERVABILITY_LOG_DIR` / `LLM_LOG_DIR`). Prompts and traces may contain sensitive text — treat log files as sensitive.
+
+Provider implementations are in `server/services/providers/` (OpenRouter + LM Studio). Both implement `generateChat()` and `listModels()`. **LM Studio runs on a remote machine at `192.168.252.213:1234`, not localhost.**
+
+### Frontend (`src/`)
+A single-page app with one route: `/canvas`. Everything else redirects there. **`ViewportGate`** in `App.tsx` wraps the app: below **1024px** CSS viewport width, users see a full-screen desktop-only message (`src/components/shared/ViewportGate.tsx`, breakpoint in `src/lib/viewport-gate.ts`).
+
+**Design tokens** — [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md); implementation `src/index.css` `@theme`. Use status colors for eval severity, not `accent`.
+
+**State management** — Zustand stores with `persist` middleware:
+- `workspace-domain-store` — canonical workflow relations (incubator wiring, hypotheses, model assignments, preview slots, mirrored DS/model payloads)
+- `canvas-store` — React Flow nodes, edges, viewport, layout (persist v16); kept in sync with domain via `workspace/domain-commands.ts`. Prefer `removeNode` for deletions so domain + compiler maps stay consistent; orchestrator-only graph filters must pair with `syncDomainForRemovedNode`.
+- `generation-store` — result metadata only; code is in IndexedDB (persist v5)
+- `spec-store` — 8-section spec document
+- `compiler-store` — `IncubationPlan` per incubator id + compiled prompts
+- `prompt-store` — Prompt Studio **metadata** / types (`PROMPT_META`, `PromptKey` re-exports)
+- `prompt-overrides-store` — local-only prompt draft bodies (`persist` → `STORAGE_KEYS.PROMPTS`); **`getActivePromptOverrides()`** for API payloads
+
+**Heavy data in IndexedDB** — generated code + provenance snapshots are stored via `idb-keyval` (`src/services/idb-storage.ts`), not localStorage. The generation store only persists metadata; code is stripped via `partialize`. GC runs 3s after App mount.
+
+### Canvas node-graph
+Uses `@xyflow/react` v12. The canvas has 10 node types in a 4-column layout:
+1. **Section nodes** (col 0) — `designBrief`, `existingDesign`, `researchContext`, `objectivesMetrics`, `designConstraints` — all rendered by the shared `SectionNode.tsx` component
+2. **Processing nodes** (col 1–2) — `compiler` (labeled "Incubator"), `designSystem`, `model`
+3. **Hypothesis nodes** (col 2) — strategy + format + **Generate** / **Run agent**; Mode **Direct** vs **Agentic**; reads provider/model from connected ModelNode
+4. **Preview nodes** (col 3) — sandboxed iframe previews of generated code; accumulate across runs (version stacking)
+
+**Model config** — Domain store records models per incubator and per hypothesis; `useConnectedModel(nodeId)` prefers that, then incoming model edges. There is no inline provider/model on processing nodes.
+
+**Canvas migrations** (`src/stores/canvas-migrations.ts`) run on every hydration via Zustand's `migrate` option. Current version: 20 (see `version` in `canvas-store.ts`). Any schema change to canvas node data requires a new migration function.
+
+### Generation flow
+**Hypothesis (Direct and Agentic):** User clicks **Generate** on a hypothesis → [`useHypothesisGeneration`](src/hooks/useHypothesisGeneration.ts) POSTs `/api/hypothesis/prompt-bundle` then `/api/hypothesis/generate` (multiplexed SSE). [`executeHypothesisGenerationRun`](src/hooks/hypothesis-generation-run.ts) wires lanes; [`createPlaceholderGenerationSession`](src/hooks/placeholder-generation-session.ts) handles deltas, files, traces, and finalize → IndexedDB + preview iframe. Direct mode streams single-shot code; agentic mode runs the Pi pipeline below through the same SSE contract.
+
+**Legacy `/api/generate`:** Still available on the server for non-canvas tools/tests; the canvas UI uses **only** the hypothesis routes (`/api/hypothesis/*`) above — not legacy generate client helpers.
+
+**Agentic (server):** With `mode: 'agentic'` → `runAgenticWithEvaluation` runs a Pi coding-agent session: **`server/services/pi-agent-service.ts`** uses `createAgentSession` with **`tools: []`** (no host-FS Pi tools) and **`customTools`** from **`server/services/pi-sdk/virtual-tools.ts`** (Pi `read` / `write` / `edit` / `ls` / `find` / `grep` mapped to **`just-bash`**) plus `pi-bash-tool`, `pi-app-tools` (`todo_write`, **`use_skill`** — skill catalog in tool description, **`validate_js`**, **`validate_html`**), then parallel evaluator workers (`design-evaluation-service.ts`): LLM rubrics + browser preflight (`browser-qa-evaluator.ts`), merged with optional Playwright when configured and Chromium is installed. Bounded revision rounds re-seed the agent with eval feedback. Repo-root **`skills/`** holds Agent Skills (`SKILL.md` per package); **`server/lib/skill-discovery.ts`** walks them at each Pi session boundary, **`buildAgenticSystemContext`** returns **`skillCatalog`** and **pre-seeds all non-`manual`** packages into **`skills/<key>/…`**. The orchestrator emits **`skills_loaded`** and **`skill_activated`** (after **`use_skill`**) for the UI. **Only `server/services/pi-sdk/`** should import `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent` directly.
+
+#### Pi design sandbox (three-layer contract)
+
+Confusing these layers causes bad prompts and false “tool not working” reports.
+
+1. **Layer 1 — VFS + just-bash** (`server/services/agent-bash-sandbox.ts`, `just-bash`): In-memory tree at **`/home/user/project`**; `bash.fs.*` and `bash.exec`. Optional runtimes (**network**, **python**, **javascript**) are **not** enabled in our constructor—do not document `npm`, `curl`, etc. as available unless you change that code.
+2. **Layer 2 — Pi `ToolDefinition`s** (`virtual-tools.ts`, `pi-bash-tool.ts`, `pi-app-tools.ts`): Same tool **names** and **parameter schemas** as Pi’s native tools; **`execute`** delegates to Layer 1. Model-facing **`description`** strings are merged from **`SANDBOX_TOOL_OVERRIDES`** (file tools + accurate sandbox copy). **`promptSnippet` / `promptGuidelines`** on tools are **not** injected into the system message when Pi uses a **`customPrompt`** (we pass Langfuse **`designer-agentic-system`** via `createSandboxResourceLoader.getSystemPrompt()`). Only **`description`** is reliably seen by the model **via the API tool schema** (JSON function definitions). See the comment above **`SANDBOX_TOOL_OVERRIDES`** in `virtual-tools.ts`.
+3. **Layer 3 — What the design LLM sees:** **System message** = **`designer-agentic-system`** (Langfuse / `shared-defaults.ts`) + **`Current date`** and **`Current working directory`** appended by Pi’s `buildSystemPrompt`—those two lines are **not** in Langfuse. **User message** = hypothesis/spec + hardcoded workspace root reminder in `pi-agent-service.ts`. **Langfuse `agents-md-file`** becomes a **virtual file** `AGENTS.md` in the sandbox (project/output rules); Pi’s `getAgentsFiles()` is empty, so that text is **not** auto-injected into the system prompt—the Pi agent must **`read`** it if you want it in context.
+
+**Scope:** Virtual file tools and just-bash apply **only** during **agentic Pi sessions** (initial build + each revision round in `agentic-orchestrator.ts`). **Direct** generation, **compile**, **evaluator** LLM calls, and **meta-harness** API tests do **not** mount this sandbox—they use other code paths. **`designer-agentic-system`** is the canonical Pi agent system prompt in Langfuse; keep environment truth in sync with `<sandbox_environment>` there and with tool **`description`**s.
+
+**Multi-file persistence:** Agentic file maps go to IndexedDB via `saveFiles()`; provenance can include evaluation rounds + checkpoint.
+
+**Provider concurrency:** OpenRouter runs hypothesis lanes in parallel; LM Studio runs sequentially (returns 500 on concurrent requests).
+
+### Iframe rendering
+**Agentic multi-file previews** register the virtual tree with **`POST /api/preview/sessions`** and load **`iframe src=/api/preview/sessions/{id}/…`** (Vite proxies `/api` to the Hono server). URL-backed preview uses `sandbox="allow-scripts allow-same-origin"` so relative asset and multi-page links resolve. **`bundleVirtualFS()`** remains a **`srcDoc` fallback** if registration fails. Server-side Playwright eval uses the same preview URL; set **`PREVIEW_PUBLIC_URL`** if the browser process cannot reach `http://127.0.0.1:$PORT`.
+
+Single-shot / legacy React-in-iframe paths: generated code may render in `sandbox="allow-scripts"` iframes. `wrapReactCode()` in `src/lib/iframe-utils.ts` prepares React components for browser Babel — it **must** strip `export default` and `import` statements because Babel standalone converts them to CommonJS but `exports` doesn't exist in a plain browser iframe.
+
+## Mandatory: prompt edits must sync to Langfuse
+
+**`src/lib/prompts/shared-defaults.ts`** is the repo source of truth for prompt bodies. Langfuse is the **runtime** source of truth — when configured, the server reads prompts from Langfuse, **not** from `shared-defaults.ts`. The defaults are only used when Langfuse is not configured.
+
+**Every time you edit a prompt body in `shared-defaults.ts`, you MUST immediately run `pnpm langfuse:sync-prompts`** so Langfuse gets the new text. Sync uses **`prompt.create`**: it **adds a new prompt version** and moves **`LANGFUSE_PROMPT_LABEL`** (default `production`) to it — **previous versions remain** in Langfuse for history/diffs (not an in-place overwrite). If you skip sync, the edit is dead code in any Langfuse-enabled environment. There is no "do it later" — sync is part of the edit, not a follow-up.
+
+```bash
+# REQUIRED after any change to shared-defaults.ts prompt bodies:
+pnpm langfuse:sync-prompts
+```
+
+Do not treat `shared-defaults.ts` as a standalone file you can edit in isolation. Editing a prompt means: change the body in `shared-defaults.ts` → run `langfuse:sync-prompts` → verify the sync log shows **new Langfuse prompt version** lines for changed keys.
+
+## Critical gotchas
+
+**Zustand v5 selectors** — `useSyncExternalStore` causes infinite re-renders if selectors return new arrays/objects. Never use `.filter()`, `.map()`, or derived collections directly in selectors. Subscribe to stable primitives and derive via `useMemo`. Zustand v5 removed the `equalityFn` second argument.
+
+**React Flow inside nodes** — Use `onPointerDown` (not `onMouseDown`) for interactive elements inside nodes; React Flow intercepts `mousedown` before it reaches children. Add `nodrag nowheel` CSS classes to any interactive element inside a node to prevent React Flow from capturing those events.
+
+**React 19 strict mode** — `useRef()` requires an explicit initial value: `useRef<T>(undefined)` or `useRef<T | null>(null)`.
+
+**TypeScript strict** — Unused imports and variables fail the build.
+
+### SSE pipeline diagnostics (dev)
+In development, every agentic generation stream writes structured `console.debug` entries across the pipeline:
+- **Server:** `[bridge]` for event-bridge errors/unhandled types; `[write-gate]` for SSE write failures; `[generate:SSE]` write-count summary at stream close.
+- **Client:** `SseStreamDiagnostics` (`src/lib/sse-diagnostics.ts`) counts events and drops — inspect via `window.__SSE_DIAG`; `[stream:<id>]` per-callback logs in `placeholder-stream-handlers.ts`; `[raf:<id>]` batcher stats at finalize.
+
+All diagnostics are tree-shaken in production or gated behind `import.meta.env.DEV` / `env.isDev`.
+
+### Errors and optional telemetry
+User-visible failures should use [`normalizeError`](src/lib/error-utils.ts) (and related helpers) so messages stay consistent. Optional debug POSTs to a local ingest URL must go through [`debugAgentIngest`](server/lib/debug-agent-ingest.ts) (server: `DEBUG_AGENT_INGEST=1`) or [`src/lib/debug-agent-ingest.ts`](src/lib/debug-agent-ingest.ts) (browser: dev + `VITE_DEBUG_AGENT_INGEST=1`) — they no-op by default. Avoid bare `.catch(() => {})` on real work; swallowing is only acceptable inside that guarded ingest or similarly optional side channels.
+
+**Experiment forking** — Changing provider/model/format on a HypothesisNode and clicking Generate pins old previews (`data.pinnedRunId`), disconnects them, shifts them 200px down, and creates new preview nodes. Pinned previews use scoped IndexedDB lookups keyed by `${sId}:${runId}`.

@@ -149,3 +149,26 @@ export interface DesignSystemExtractRequest {
 export interface DesignSystemExtractResponse {
   result: string;
 }
+
+// ── Section auto-generate (magic wand) ───────────────────────────────
+
+export type SectionGenerateTargetApiId =
+  | 'research-context'
+  | 'objectives-metrics'
+  | 'design-constraints';
+
+export interface SectionGenerateRequest {
+  sectionId: SectionGenerateTargetApiId;
+  designBrief: string;
+  existingDesign?: string;
+  researchContext?: string;
+  objectivesMetrics?: string;
+  designConstraints?: string;
+  providerId: string;
+  modelId: string;
+  promptOverrides?: Record<string, string>;
+}
+
+export interface SectionGenerateResponse {
+  result: string;
+}

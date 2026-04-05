@@ -32,7 +32,7 @@ Both processes are needed for local development.
 
 ## Observability (development)
 
-Open **Observability** from the canvas header. The **LLM** and **Run trace** tabs poll **`GET /api/logs`**: in-memory rings on the API server (plus optional local NDJSON in dev; see [ARCHITECTURE.md](ARCHITECTURE.md)). They are a **session/dev audit view**, not a full copy of nested traces.
+Open **Observability** from the canvas header. The **LLM** and **Run trace** tabs poll **`GET /api/logs`**: in-memory rings on the API server (plus optional local NDJSON in dev; see [ARCHITECTURE.md](ARCHITECTURE.md)). They are a **session/dev audit view**, not a full copy of nested traces. **Run trace** entries for Pi tool use can include truncated **`toolArgs`** / **`toolResult`** (and **`detail`**) on start/finish events for quick inspection.
 
 The **Langfuse** tab does not load traces into the app; it links to the **Langfuse UI** for full traces, generations, and spans. That requires `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL`, and **`VITE_LANGFUSE_BASE_URL`** set to the same host so the button opens the correct region.
 
@@ -46,7 +46,7 @@ The **Langfuse** tab does not load traces into the app; it links to the **Langfu
 
 ## System prompts (Settings → Prompts)
 
-**Settings** (gear) → **Prompts** opens **Prompt Studio**. The editor **loads** the current production prompt from the server (**Langfuse** when configured, otherwise shared defaults). **Save** / ⌘S stores your draft **in this browser only** (local persistence) and attaches it as **`promptOverrides` on Incubator compile, hypothesis generation, and Design System extract** — it does **not** write a new Langfuse version. Compare/diff uses the **database baseline** from the API. Use **Clear local override** / **Reset all** to drop browser drafts. To change **shared** production text in Langfuse, use **`pnpm langfuse:sync-prompts`** (from repo bodies) or the Langfuse UI / **`PUT /api/prompts/:key`** (automation); see [ARCHITECTURE.md](ARCHITECTURE.md).
+**Settings** (gear) → **Prompts** opens **Prompt Studio**. The editor **loads** the current production prompt from the server (**Langfuse** when configured, otherwise shared defaults). **Save** / ⌘S stores your draft **in this browser only** (local persistence) and attaches it as **`promptOverrides` on Incubator compile, hypothesis generation, Design System extract, and section auto-generate** — it does **not** write a new Langfuse version. Compare/diff uses the **database baseline** from the API. Use **Clear local override** / **Reset all** to drop browser drafts. To change **shared** production text in Langfuse, use **`pnpm langfuse:sync-prompts`** (from repo bodies) or the Langfuse UI / **`PUT /api/prompts/:key`** (automation); see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Prompt keys are **kebab-case** (e.g. `hypotheses-generator-system`, `designer-hypothesis-inputs`); plain-English map: [LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md). **`pnpm db:seed`** creates **missing** Langfuse prompts only. Agent **skills** are **not** Langfuse prompts — they live in the repo’s **`skills/`** tree (see [ARCHITECTURE.md](ARCHITECTURE.md) / [PRODUCT.md](PRODUCT.md)).
 
@@ -56,7 +56,7 @@ Prompt keys are **kebab-case** (e.g. `hypotheses-generator-system`, `designer-hy
 
 ## Canvas Workflow
 
-The canvas (`/canvas`) is the default interface. Nodes connect left-to-right. You need a **viewport at least 1024px wide**; narrower screens show a desktop-only message instead of the canvas (see [README.md](README.md)). The **build stamp** in the header (version · Eastern time) and Husky **patch** bumps are documented in [CLAUDE.md](CLAUDE.md) — including restarting Vite to refresh the stamp after commits.
+The canvas (`/canvas`) is the default interface. Nodes connect left-to-right. You need a **viewport at least 1024px wide**; narrower screens show a desktop-only message instead of the canvas (see [README.md](README.md)). The **build stamp** in the header (version · Eastern time) and Husky **patch** bumps are documented in [AGENTS.md](AGENTS.md) — including restarting Vite to refresh the stamp after commits.
 
 ### 1. Fill in Input Nodes
 
@@ -71,6 +71,8 @@ The canvas starts with a **Design Brief**, a **Model**, and an **Incubator** —
 Write in prose, not bullets. Precision is the product.
 
 **Optional inputs:** The default template focuses on Design Brief + Model + Incubator. Other sections may show as **ghost** prompts on the canvas until you add the node from the toolbar (or load a saved canvas whose spec already fills that section—see **Managing Canvases**).
+
+**Auto-generate (Research / Objectives / Constraints):** On those three section nodes, an **auto-generate** action (when shown) drafts or refines the section body from your **Design Brief** and any other spec sections you have already filled in. It uses the **first Model node** on the canvas (document order—the same fallback as auto-connect). **Lockdown** still pins provider/model server-side. Prompt Studio overrides apply via the three Langfuse keys `section-gen-research-context`, `section-gen-objectives-metrics`, and `section-gen-design-constraints` ([LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)).
 
 ### 2. Connect a Model Node
 

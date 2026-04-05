@@ -11,7 +11,6 @@ import { useHypothesisGeneration } from '../../../hooks/useHypothesisGeneration'
 import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
 import { useRequestPermanentDelete } from '../../../hooks/useRequestPermanentDelete';
 import { hypothesisDeleteCopy } from '../../../lib/canvas-permanent-delete-copy';
-import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
 import { processingOrFilled } from '../../../lib/node-status';
 import { GENERATION_MODE, GENERATION_STATUS } from '../../../constants/generation';
 import type { AgentMode } from '../../../types/workspace-domain';
@@ -39,6 +38,11 @@ const TAB_DEFS: { id: HypothesisEditorTab; label: string }[] = [
 ];
 
 type HypothesisNodeType = Node<HypothesisNodeData, 'hypothesis'>;
+
+function smallNumberToWord(n: number): string {
+  const words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+  return n <= 10 ? words[n]! : n.toString();
+}
 
 function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNodeType>) {
   const strategyId = data.refId ?? '';
@@ -71,8 +75,6 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
   const isGenerating = useGenerationStore((s) =>
     s.results.some((r) => r.strategyId === strategyId && r.status === GENERATION_STATUS.GENERATING),
   );
-
-  const elapsed = useElapsedTimer(isGenerating);
 
   const { handleGenerate, generationProgress, generationError } =
     useHypothesisGeneration({ nodeId, strategyId });
@@ -179,12 +181,6 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
 
   const hasModel = connectedModelCount > 0;
   const canGenerate = !!strategy.name.trim() && !!strategy.hypothesis.trim() && hasModel;
-
-  // Convert small numbers to words for better UX
-  const numberToWord = (n: number): string => {
-    const words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
-    return n <= 10 ? words[n] : n.toString();
-  };
 
   // Layer 2: inline readiness hint
   const hint = !isGenerating
@@ -319,14 +315,6 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
         </div>
       </div>
 
-      {/* Skeleton while generating */}
-      {isGenerating && (
-        <GeneratingSkeleton
-          label={agentMode === GENERATION_MODE.AGENTIC ? 'Agent running…' : 'Generating…'}
-          elapsed={elapsed}
-        />
-      )}
-
       {/* ── Generation Controls ──────────────────────────────── */}
       <div className="border-t border-border-subtle px-3 py-2.5">
         {generationError && (
@@ -385,29 +373,32 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
             <p className="mb-1.5 text-center text-nano text-fg-muted">{hint}</p>
           )}
           <button
+            type="button"
             onClick={handleGenerate}
             disabled={isGenerating || !canGenerate}
+            aria-busy={isGenerating}
             className="flex w-full items-center justify-center gap-1.5 rounded-md bg-fg px-3 py-2 text-xs font-medium text-bg transition-colors hover:bg-fg-on-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isGenerating ? (
               <>
-                <Loader2 size={12} className="animate-spin" />
-                {generationProgress
-                  ? generationProgress.completed === 0 && generationProgress.total > 1
-                    ? `Generating ${numberToWord(generationProgress.total)} variants…`
-                    : generationProgress.total > 1
-                      ? `${generationProgress.completed} of ${generationProgress.total} ready…`
-                      : agentMode === GENERATION_MODE.AGENTIC
-                        ? 'Running agent…'
-                        : 'Generating…'
+                <Loader2 size={12} className="animate-spin" aria-hidden />
+                {generationProgress && generationProgress.total > 1
+                  ? generationProgress.completed === 0
+                    ? `Generating ${smallNumberToWord(generationProgress.total)} variants…`
+                    : `${generationProgress.completed} of ${generationProgress.total} ready…`
                   : agentMode === GENERATION_MODE.AGENTIC
                     ? 'Running agent…'
                     : 'Generating…'}
               </>
+            ) : agentMode === GENERATION_MODE.AGENTIC ? (
+              <>
+                <Zap size={12} aria-hidden />
+                Run agent
+              </>
             ) : (
               <>
-                {agentMode === GENERATION_MODE.AGENTIC ? <Zap size={12} /> : <Sparkles size={12} />}
-                {agentMode === GENERATION_MODE.AGENTIC ? 'Run agent' : 'Generate'}
+                <Sparkles size={12} aria-hidden />
+                Generate
               </>
             )}
           </button>

@@ -32,6 +32,38 @@ import type {
 /** Same default as SDK grep (see `pi-coding-agent` grep tool). */
 const GREP_MAX_LINE_LENGTH = 500;
 const DEFAULT_GREP_MATCH_LIMIT = 100;
+/** Matches Pi read tool line cap (`truncate.js` in pi-coding-agent). */
+const SANDBOX_READ_MAX_LINES = 2000;
+
+/**
+ * Model-facing `description` for virtual tools on the just-bash workspace.
+ *
+ * **promptSnippet / promptGuidelines are NOT used here:** Pi's `buildSystemPrompt()` only injects those when
+ * no `customPrompt` is set. We pass `designer-agentic-system` as `customPrompt`, so that branch is skipped.
+ * Tool descriptions still reach the LLM via the API tool schema (JSON function definitions).
+ *
+ * Keep in sync with [agent-bash-sandbox.ts](../agent-bash-sandbox.ts) and `<sandbox_environment>` in shared-defaults.
+ */
+const SANDBOX_TOOL_OVERRIDES = {
+  read: {
+    description: `Read UTF-8 text from a file in the in-memory project at ${SANDBOX_PROJECT_ROOT}. This workspace is text-only for tool purposes (no image attachments). Output is truncated to ${SANDBOX_READ_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.`,
+  },
+  write: {
+    description: `Create or overwrite a UTF-8 text file under ${SANDBOX_PROJECT_ROOT}. Parent directories are created as needed. Use for **new files** or **complete file rewrites**; prefer **edit** for partial changes to existing files.`,
+  },
+  edit: {
+    description: `Apply exact search-and-replace edits to an existing file under ${SANDBOX_PROJECT_ROOT}. Each \`oldText\` must appear **exactly once** in the **original** file before edits are applied. Prefer **edit** over bash/sed for file changes.`,
+  },
+  ls: {
+    description: `List directory contents in the virtual project at ${SANDBOX_PROJECT_ROOT}. Returns entries sorted alphabetically, with '/' suffix for directories. Includes dotfiles. Output is truncated to 500 entries or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first).`,
+  },
+  find: {
+    description: `Search for files by glob pattern under the in-memory project at ${SANDBOX_PROJECT_ROOT}. Returns matching file paths relative to the search directory. There is no .gitignore in this sandbox — every seeded file is visible. Output is truncated to 1000 results or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first).`,
+  },
+  grep: {
+    description: `Search file contents in the virtual project workspace using ripgrep-style search (just-bash \`rg\`). Returns matching lines with file paths and line numbers. Only the in-memory design files under ${SANDBOX_PROJECT_ROOT} exist — there is no .gitignore or host filesystem. Output is truncated to ${DEFAULT_GREP_MATCH_LIMIT} matches or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Long lines are truncated to ${GREP_MAX_LINE_LENGTH} chars.`,
+  },
+} as const;
 
 function toProjectRelative(absPath: string): string | null {
   if (!absPath.startsWith(`${SANDBOX_PROJECT_ROOT}/`)) return null;
@@ -72,6 +104,7 @@ function createVirtualGrepTool(bash: Bash, sessionCwd: string) {
   type GrepParams = Static<(typeof base)['parameters']>;
   return {
     ...base,
+    ...SANDBOX_TOOL_OVERRIDES.grep,
     async execute(
       _toolCallId: string,
       params: GrepParams,
@@ -86,9 +119,8 @@ function createVirtualGrepTool(bash: Bash, sessionCwd: string) {
       }
 
       const searchPath = resolveVirtualPath(pathArg, sessionCwd);
-      let st;
       try {
-        st = await bash.fs.stat(searchPath);
+        await bash.fs.stat(searchPath);
       } catch {
         return {
           content: [{ type: 'text', text: `Path not found: ${searchPath}` }],
@@ -99,19 +131,16 @@ function createVirtualGrepTool(bash: Bash, sessionCwd: string) {
       const effectiveLimit = Math.max(1, limit ?? DEFAULT_GREP_MATCH_LIMIT);
       const contextLines = context && context > 0 ? context : 0;
 
-      const argv: string[] = ['grep', '-nH', '-I'];
-      if (ignoreCase) argv.push('-i');
-      if (literal) argv.push('-F');
-      else argv.push('-E');
+      const argv: string[] = ['rg', '-nH'];
+      if (ignoreCase) argv.push('--ignore-case');
+      if (literal) argv.push('--fixed-strings');
       if (contextLines > 0) argv.push('-C', String(contextLines));
-      if (st.isDirectory) {
-        argv.push('-r');
-      }
       const g = globPat?.trim();
       if (g) {
-        argv.push(`--include=${shellSingleQuote(g)}`);
+        argv.push('--glob', shellSingleQuote(g));
       }
-      argv.push('--', shellSingleQuote(pattern), shellSingleQuote(searchPath));
+      /** just-bash `rg` does not support GNU `--` end-of-options; pattern/path are shell-quoted. */
+      argv.push(shellSingleQuote(pattern), shellSingleQuote(searchPath));
 
       const cmd = argv.join(' ');
       const result = await bash.exec(cmd, { signal: signal ?? undefined });
@@ -126,7 +155,7 @@ function createVirtualGrepTool(bash: Bash, sessionCwd: string) {
           content: [
             {
               type: 'text',
-              text: errText || `grep failed with exit code ${result.exitCode}`,
+              text: errText || `rg failed with exit code ${result.exitCode}`,
             },
           ],
           details: undefined,
@@ -134,6 +163,14 @@ function createVirtualGrepTool(bash: Bash, sessionCwd: string) {
       }
 
       const rawOut = (result.stdout ?? '').replace(/\r\n/g, '\n').trimEnd();
+      const stderrTrim = (result.stderr ?? '').trim();
+      // Exit 1 usually means "no matches" for rg; non-empty stderr is a real error (e.g. bad flags).
+      if (result.exitCode === 1 && !rawOut && stderrTrim) {
+        return {
+          content: [{ type: 'text', text: stderrTrim }],
+          details: undefined,
+        };
+      }
       if (!rawOut) {
         return {
           content: [{ type: 'text', text: 'No matches found' }],
@@ -207,7 +244,7 @@ export function createVirtualPiCodingTools(
 ) {
   const sessionCwd = SANDBOX_PROJECT_ROOT;
 
-  const read = createReadToolDefinition(sessionCwd, {
+  const readInner = createReadToolDefinition(sessionCwd, {
     autoResizeImages: false,
     operations: {
       readFile: async (absolutePath) => {
@@ -220,8 +257,9 @@ export function createVirtualPiCodingTools(
       },
     },
   });
+  const read = { ...readInner, ...SANDBOX_TOOL_OVERRIDES.read };
 
-  const write = createWriteToolDefinition(sessionCwd, {
+  const writeInner = createWriteToolDefinition(sessionCwd, {
     operations: {
       mkdir: async (dir) => {
         await bash.fs.mkdir(dir, { recursive: true });
@@ -233,8 +271,9 @@ export function createVirtualPiCodingTools(
       },
     },
   });
+  const write = { ...writeInner, ...SANDBOX_TOOL_OVERRIDES.write };
 
-  const edit = createEditToolDefinition(sessionCwd, {
+  const editInner = createEditToolDefinition(sessionCwd, {
     operations: {
       readFile: async (absolutePath) => {
         const text = await bash.fs.readFile(absolutePath, 'utf8');
@@ -251,6 +290,7 @@ export function createVirtualPiCodingTools(
       },
     },
   });
+  const edit = { ...editInner, ...SANDBOX_TOOL_OVERRIDES.edit };
 
   const lsInner = createLsToolDefinition(sessionCwd, {
     operations: {
@@ -269,6 +309,7 @@ export function createVirtualPiCodingTools(
 
   const ls = {
     ...lsInner,
+    ...SANDBOX_TOOL_OVERRIDES.ls,
     execute: async (
       toolCallId: string,
       params: Parameters<LsExecute>[1],
@@ -327,7 +368,7 @@ export function createVirtualPiCodingTools(
     },
   } as (typeof lsInner);
 
-  const find = createFindToolDefinition(sessionCwd, {
+  const findInner = createFindToolDefinition(sessionCwd, {
     operations: {
       exists: (absolutePath) => bash.fs.exists(absolutePath),
       glob: async (pattern, searchPath, options) => {
@@ -362,6 +403,7 @@ export function createVirtualPiCodingTools(
       },
     },
   });
+  const find = { ...findInner, ...SANDBOX_TOOL_OVERRIDES.find };
 
   const grep = createVirtualGrepTool(bash, sessionCwd);
 

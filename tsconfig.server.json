@@ -40,6 +40,7 @@
     "src/lib/prompts/shared-defaults.ts",
     "src/lib/prompts/helpers.ts",
     "src/lib/prompts/compiler-user.ts",
+    "src/lib/prompts/section-generate.ts",
     "src/lib/prompts/variant-prompt.ts",
     "src/lib/extract-code.ts",
     "src/lib/debug-agent-ingest-shared.ts",

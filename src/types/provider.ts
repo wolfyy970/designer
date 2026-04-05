@@ -101,6 +101,10 @@ export interface RunTraceEvent {
   status?: 'info' | 'success' | 'warning' | 'error';
   /** Extra context (e.g. evaluator worker failure message) for observability UI */
   detail?: string;
+  /** JSON snapshot of Pi tool `args` at tool_execution_start (truncated on the server). */
+  toolArgs?: string;
+  /** Truncated text from tool result content (tool_execution_end). */
+  toolResult?: string;
 }
 
 /** One PI model turn's streamed reasoning (collapsible timeline). */

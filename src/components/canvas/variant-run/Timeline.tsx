@@ -15,6 +15,7 @@ import {
   TimelineEmptyStateSkeleton,
   TimelineJumpToLatest,
 } from './timeline-parts.tsx';
+import { ToolTraceObservabilityBlocks } from '../../shared/ToolTraceObservabilityBlocks';
 
 const NEAR_BOTTOM_PX = 48;
 
@@ -93,16 +94,25 @@ function buildTurnSegments(traces: RunTraceEvent[]): {
 
 function TraceLine({ t }: { t: RunTraceEvent }) {
   const time = traceTimeLabel(t.at);
+  const isToolLifecycle =
+    t.kind === 'tool_started' ||
+    t.kind === 'tool_finished' ||
+    t.kind === 'tool_failed';
+  const showToolBlocks =
+    isToolLifecycle && (t.toolArgs != null || t.detail != null || t.toolResult != null);
   return (
-    <div
-      className={`font-mono text-badge leading-snug ${STATUS_COLOR[t.status ?? ''] ?? 'text-fg-faint'}`}
-      title={`${t.at} — ${t.kind}: ${t.label}`}
-    >
-      <span className="tabular-nums text-fg-faint/80">{time}</span>{' '}
-      <span className="opacity-60">{t.kind}</span>{' '}
-      <span className={t.status === 'error' ? 'text-error' : 'text-fg-muted'}>
-        {t.label}
-      </span>
+    <div className="space-y-1">
+      <div
+        className={`font-mono text-badge leading-snug ${STATUS_COLOR[t.status ?? ''] ?? 'text-fg-faint'}`}
+        title={`${t.at} — ${t.kind}: ${t.label}`}
+      >
+        <span className="tabular-nums text-fg-faint/80">{time}</span>{' '}
+        <span className="opacity-60">{t.kind}</span>{' '}
+        <span className={t.status === 'error' ? 'text-error' : 'text-fg-muted'}>
+          {t.label}
+        </span>
+      </div>
+      {showToolBlocks ? <ToolTraceObservabilityBlocks trace={t} className="pl-1" /> : null}
     </div>
   );
 }

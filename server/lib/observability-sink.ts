@@ -8,6 +8,7 @@ import type { ObservabilityLine } from './observability-line.ts';
 
 const TRUNC_SUFFIX = '\n…[truncated]';
 const TRACE_LABEL_MAX = 4000;
+const TRACE_TOOL_FIELD_MAX = 4000;
 
 function truncBody(s: string, maxChars: number): string {
   if (maxChars <= 0 || s.length <= maxChars) return s;
@@ -21,6 +22,12 @@ export function observabilityLineForFile(line: ObservabilityLine): Observability
     const lab = ev.label;
     if (typeof lab === 'string' && lab.length > TRACE_LABEL_MAX) {
       ev.label = lab.slice(0, TRACE_LABEL_MAX) + TRUNC_SUFFIX;
+    }
+    for (const key of ['detail', 'toolArgs', 'toolResult'] as const) {
+      const v = ev[key];
+      if (typeof v === 'string' && v.length > TRACE_TOOL_FIELD_MAX) {
+        ev[key] = v.slice(0, TRACE_TOOL_FIELD_MAX) + TRUNC_SUFFIX;
+      }
     }
     return {
       ...line,

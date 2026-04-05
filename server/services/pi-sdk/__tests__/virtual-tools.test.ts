@@ -15,6 +15,15 @@ describe('createVirtualPiCodingTools', () => {
     expect(tools.map((t) => t.name)).toEqual(['read', 'write', 'edit', 'ls', 'find', 'grep']);
   });
 
+  it('write and edit tools use sandbox-accurate descriptions (API schema)', () => {
+    const bash = createAgentBashSandbox({});
+    const tools = createVirtualPiCodingTools(bash, () => {});
+    const write = tools.find((t) => t.name === 'write')!;
+    const edit = tools.find((t) => t.name === 'edit')!;
+    expect(write.description).toContain(SANDBOX_PROJECT_ROOT);
+    expect(edit.description).toContain(SANDBOX_PROJECT_ROOT);
+  });
+
   it('read tool reads a seeded file from the virtual tree', async () => {
     const bash = createAgentBashSandbox({ seedFiles: { 'hello.txt': 'world' } });
     const tools = createVirtualPiCodingTools(bash, () => {});
@@ -65,5 +74,147 @@ describe('createVirtualPiCodingTools', () => {
     expect(block?.type).toBe('text');
     expect(block && 'text' in block && block.text).toMatch(/a\.ts/);
     expect(block && 'text' in block && block.text).not.toMatch(/b\.js/);
+  });
+
+  it('grep tool exposes sandbox-accurate description and literal/ignoreCase parameters', () => {
+    const bash = createAgentBashSandbox({});
+    const tools = createVirtualPiCodingTools(bash, () => {});
+    const grep = tools.find((t) => t.name === 'grep')!;
+    expect(grep.description).toContain('in-memory');
+    expect(grep.description).toMatch(/line numbers/i);
+    const paramsJson = JSON.stringify(grep.parameters);
+    expect(paramsJson).toContain('literal');
+    expect(paramsJson).toContain('ignoreCase');
+  });
+
+  it('grep tool finds matches with file:line: output', async () => {
+    const bash = createAgentBashSandbox({ seedFiles: { 'lib/hi.txt': 'hello there' } });
+    const tools = createVirtualPiCodingTools(bash, () => {});
+    const grep = tools.find((t) => t.name === 'grep')!;
+    const result = await grep.execute(
+      'g1',
+      { pattern: 'hello', path: `${SANDBOX_PROJECT_ROOT}/lib/hi.txt` } as never,
+      undefined,
+      undefined,
+      noopCtx,
+    );
+    const text = result.content.find((c) => c.type === 'text' && 'text' in c) as
+      | { type: 'text'; text: string }
+      | undefined;
+    expect(text?.text).toContain('hello');
+    expect(text?.text).toMatch(/hi\.txt:\d+:/);
+  });
+
+  it('grep tool searches recursively across directories', async () => {
+    const bash = createAgentBashSandbox({
+      seedFiles: { 'src/a.ts': 'export const theme = "dark";', 'src/b.ts': 'export const x = 1;' },
+    });
+    const tools = createVirtualPiCodingTools(bash, () => {});
+    const grep = tools.find((t) => t.name === 'grep')!;
+    const result = await grep.execute(
+      'g2',
+      { pattern: 'theme', path: SANDBOX_PROJECT_ROOT } as never,
+      undefined,
+      undefined,
+      noopCtx,
+    );
+    const text = result.content.find((c) => c.type === 'text' && 'text' in c) as
+      | { type: 'text'; text: string }
+      | undefined;
+    expect(text?.text).toMatch(/a\.ts/);
+    expect(text?.text).toContain('theme');
+    expect(text?.text).not.toMatch(/b\.ts/);
+  });
+
+  it('grep tool returns No matches found when pattern absent', async () => {
+    const bash = createAgentBashSandbox({ seedFiles: { 'x.txt': 'alpha' } });
+    const tools = createVirtualPiCodingTools(bash, () => {});
+    const grep = tools.find((t) => t.name === 'grep')!;
+    const result = await grep.execute(
+      'g3',
+      { pattern: 'zzzz', path: `${SANDBOX_PROJECT_ROOT}/x.txt` } as never,
+      undefined,
+      undefined,
+      noopCtx,
+    );
+    const text = result.content.find((c) => c.type === 'text' && 'text' in c) as
+      | { type: 'text'; text: string }
+      | undefined;
+    expect(text?.text).toBe('No matches found');
+  });
+
+  it('grep tool respects --glob filter', async () => {
+    const bash = createAgentBashSandbox({
+      seedFiles: { 'one.ts': '// ts', 'two.js': '// ts match here' },
+    });
+    const tools = createVirtualPiCodingTools(bash, () => {});
+    const grep = tools.find((t) => t.name === 'grep')!;
+    const result = await grep.execute(
+      'g4',
+      { pattern: 'ts', path: SANDBOX_PROJECT_ROOT, glob: '*.ts' } as never,
+      undefined,
+      undefined,
+      noopCtx,
+    );
+    const text = result.content.find((c) => c.type === 'text' && 'text' in c) as
+      | { type: 'text'; text: string }
+      | undefined;
+    expect(text?.text).toMatch(/one\.ts/);
+    expect(text?.text).not.toMatch(/two\.js/);
+  });
+
+  it('grep tool supports ignoreCase', async () => {
+    const bash = createAgentBashSandbox({ seedFiles: { 'c.txt': 'Hello MIXED' } });
+    const tools = createVirtualPiCodingTools(bash, () => {});
+    const grep = tools.find((t) => t.name === 'grep')!;
+    const result = await grep.execute(
+      'g5',
+      { pattern: 'hello', path: `${SANDBOX_PROJECT_ROOT}/c.txt`, ignoreCase: true } as never,
+      undefined,
+      undefined,
+      noopCtx,
+    );
+    const text = result.content.find((c) => c.type === 'text' && 'text' in c) as
+      | { type: 'text'; text: string }
+      | undefined;
+    expect(text?.text).toMatch(/Hello/);
+  });
+
+  it('grep tool includes context lines when context > 0', async () => {
+    const bash = createAgentBashSandbox({
+      seedFiles: { 'block.txt': 'line1\nMATCH_HERE\nline3' },
+    });
+    const tools = createVirtualPiCodingTools(bash, () => {});
+    const grep = tools.find((t) => t.name === 'grep')!;
+    const result = await grep.execute(
+      'g6',
+      { pattern: 'MATCH_HERE', path: `${SANDBOX_PROJECT_ROOT}/block.txt`, context: 1 } as never,
+      undefined,
+      undefined,
+      noopCtx,
+    );
+    const text = result.content.find((c) => c.type === 'text' && 'text' in c) as
+      | { type: 'text'; text: string }
+      | undefined;
+    expect(text?.text).toContain('MATCH_HERE');
+    expect(text?.text).toContain('line1');
+    expect(text?.text).toContain('line3');
+  });
+
+  it('grep tool returns Path not found for missing path', async () => {
+    const bash = createAgentBashSandbox({});
+    const tools = createVirtualPiCodingTools(bash, () => {});
+    const grep = tools.find((t) => t.name === 'grep')!;
+    const result = await grep.execute(
+      'g7',
+      { pattern: 'x', path: `${SANDBOX_PROJECT_ROOT}/nope.txt` } as never,
+      undefined,
+      undefined,
+      noopCtx,
+    );
+    const text = result.content.find((c) => c.type === 'text' && 'text' in c) as
+      | { type: 'text'; text: string }
+      | undefined;
+    expect(text?.text).toMatch(/Path not found/);
   });
 });

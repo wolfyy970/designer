@@ -13,7 +13,10 @@ export type PromptKey =
   | 'agents-md-file'
   | 'evaluator-design-quality'
   | 'evaluator-strategy-fidelity'
-  | 'evaluator-implementation';
+  | 'evaluator-implementation'
+  | 'section-gen-research-context'
+  | 'section-gen-objectives-metrics'
+  | 'section-gen-design-constraints';
 
 export interface PromptMeta {
   key: PromptKey;
@@ -120,6 +123,45 @@ export const PROMPT_META: PromptMeta[] = [
     key: 'evaluator-implementation',
     label: 'Evaluator — Implementation',
     description: 'Rubric for static HTML/CSS/JS engineering review. JSON output per contract.',
+  },
+  {
+    key: 'section-gen-research-context',
+    label: 'Section — Generate research context (system)',
+    description:
+      'Auto-fill Research Context from the design brief: plausible user/context narrative without fabricating studies or data.',
+    variables: [
+      'DESIGN_BRIEF',
+      'EXISTING_DESIGN',
+      'RESEARCH_CONTEXT',
+      'OBJECTIVES_METRICS',
+      'DESIGN_CONSTRAINTS',
+    ],
+  },
+  {
+    key: 'section-gen-objectives-metrics',
+    label: 'Section — Generate objectives & metrics (system)',
+    description:
+      'Auto-fill Objectives & Metrics from the design brief: measurable outcomes and success signals, no invented KPI numbers.',
+    variables: [
+      'DESIGN_BRIEF',
+      'EXISTING_DESIGN',
+      'RESEARCH_CONTEXT',
+      'OBJECTIVES_METRICS',
+      'DESIGN_CONSTRAINTS',
+    ],
+  },
+  {
+    key: 'section-gen-design-constraints',
+    label: 'Section — Generate design constraints (system)',
+    description:
+      'Auto-fill Design Constraints from the design brief: non-negotiables and exploration ranges grounded in the brief.',
+    variables: [
+      'DESIGN_BRIEF',
+      'EXISTING_DESIGN',
+      'RESEARCH_CONTEXT',
+      'OBJECTIVES_METRICS',
+      'DESIGN_CONSTRAINTS',
+    ],
   },
 ];
 

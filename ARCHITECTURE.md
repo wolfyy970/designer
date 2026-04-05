@@ -100,6 +100,8 @@ flowchart TB
   apiClient -->|HTTP and SSE| routes
 ```
 
+**Pi sandbox stack:** Three layers must stay aligned: (1) **just-bash** VFS + `exec` (`agent-bash-sandbox.ts`), (2) **Pi `ToolDefinition`s** mapping to that runtime (`pi-sdk/virtual-tools.ts`, `pi-bash-tool.ts`)—model sees tool **`description`** via API schemas; **`promptSnippet`** is not injected when using a custom system prompt—(3) **LLM surface**: Langfuse **`designer-agentic-system`** (+ Pi-appended date/cwd), virtual **`AGENTS.md`** from **`agents-md-file`** only as a file in the sandbox. Full detail: [AGENTS.md — Pi design sandbox](AGENTS.md#pi-design-sandbox-three-layer-contract).
+
 - **`agentic-orchestrator`** calls **`runDesignAgentSession`** only — it does not import `@mariozechner/*` directly. To replace Pi, rework **`server/services/pi-sdk/`**, **`pi-agent-service.ts`**, and the event bridge; keep the orchestrator’s build/eval/revision contract stable.
 - **`createAgentSession`** uses **`tools: []`** so default Pi tools never touch the host filesystem; **`virtual-tools`** maps native Pi file tool schemas to **`just-bash`**, and **`pi-bash-tool`** runs shell commands in the same instance. **`cwd`** is the sandbox project root; **`createSandboxResourceLoader({ systemPrompt })`** avoids host-repo resource discovery and injects the Langfuse-resolved agentic system prompt via **`getSystemPrompt()`** — sandbox **`AGENTS.md`** (if any) still comes only from Langfuse **`agents-md-file`** via **`buildAgenticSystemContext`** → orchestrator seed merge.
 - **`pi-session-event-bridge`** turns Pi session callbacks into **`AgentRunEvent`**, which **`executeGenerateStream`** serializes to SSE for the client.
@@ -183,6 +185,7 @@ flowchart TB
 | `/api/logs` | GET | Fetch LLM call log entries (dev-only) | JSON: `LlmLogEntry[]` |
 | `/api/logs` | DELETE | Clear log entries (dev-only) | 204 |
 | `/api/design-system/extract` | POST | Extract design tokens from screenshots; optional **`promptOverrides`** | JSON: extracted tokens |
+| `/api/section/generate` | POST | Auto-fill Research / Objectives / Constraints from Design Brief; optional **`promptOverrides`** | JSON: `{ result: string }` |
 | `/api/prompts/*` | GET (list + per-key + history + versions) | Read-only for **Prompt Studio** baseline / diff; **`PUT`** and **`revert-baseline`** exist for CLI/admin (not used by the in-app editor) | JSON |
 | `/api/health` | GET | Health check | JSON: `{ ok: true }` |
 | `/api/preview/sessions` | POST | Register ephemeral virtual file tree for iframe preview; returns `{ id, entry }` | JSON |
@@ -195,7 +198,7 @@ flowchart TB
 
 **SSE events:** `progress` (status label), `activity` (streaming agent text), `code` (final HTML in single-shot), `file` (path + content in agentic), `plan` (declared file list in agentic), `skills_loaded` (pre-seeded non-manual skills for this Pi session; may repeat on revision rounds), `skill_activated` (successful **`use_skill`** call), `evaluation_worker_done` (one per rubric worker in an eval round; payload includes `round`, `rubric`, `report` snapshot for live UI), `error`, `done`.
 
-**Hypothesis flow:** The canvas still owns graph/domain state (Zustand + React Flow), but **prompt assembly and multi-model orchestration** for a hypothesis go through `/api/hypothesis/*`. Pure workspace helpers live in `src/workspace/hypothesis-generation-pure.ts` (importable by the server). `/api/hypothesis/generate` adds `laneIndex` to each event payload and emits `lane_done` per model lane before a final `done`; the client demuxes into one `GenerationResult` per lane. **Local prompt experimentation:** `src/stores/prompt-overrides-store.ts` (Zustand `persist` → `STORAGE_KEYS.PROMPTS`) supplies **`getActivePromptOverrides()`** for API payloads; `server/lib/prompt-overrides.ts` sanitizes keys and **`createResolvePromptBody`** layers overrides over **`getPromptBody`** for workspace bundle, compile, design-system extract, single-shot, and agentic paths.
+**Hypothesis flow:** The canvas still owns graph/domain state (Zustand + React Flow), but **prompt assembly and multi-model orchestration** for a hypothesis go through `/api/hypothesis/*`. Pure workspace helpers live in `src/workspace/hypothesis-generation-pure.ts` (importable by the server). `/api/hypothesis/generate` adds `laneIndex` to each event payload and emits `lane_done` per model lane before a final `done`; the client demuxes into one `GenerationResult` per lane. **Local prompt experimentation:** `src/stores/prompt-overrides-store.ts` (Zustand `persist` → `STORAGE_KEYS.PROMPTS`) supplies **`getActivePromptOverrides()`** for API payloads; `server/lib/prompt-overrides.ts` sanitizes keys and **`createResolvePromptBody`** layers overrides over **`getPromptBody`** for workspace bundle, compile, design-system extract, section auto-generate, single-shot, and agentic paths.
 
 POST endpoints validate bodies with Zod (typically via **`parse-request`** / `safeParse`). Validation and opaque failures use **`apiJsonError`** so JSON error responses stay shape-consistent (`{ error: string }` with selective `details`) across **400** / **404** / **422** / **500** / **503** before any LLM call where applicable.
 
@@ -230,6 +233,7 @@ POST endpoints validate bodies with Zod (typically via **`parse-request`** / `sa
 | `routes/models.ts` | GET /api/models/:provider |
 | `routes/logs.ts` | GET `/api/logs` → `{ llm, trace }`; POST `/api/logs/trace` (Zod); DELETE clears both rings (file append-only) |
 | `routes/design-system.ts` | POST /api/design-system/extract |
+| `routes/section-generate.ts` | POST /api/section/generate |
 | `routes/prompts.ts` | GET `/api/prompts*`; **PUT** / **revert-baseline** for Langfuse writes (CLI/admin) |
 | `routes/preview.ts` | POST/GET `/api/preview/sessions*` — ephemeral virtual FS for iframe + eval |
 | `lib/prompt-overrides.ts` | Sanitize **`promptOverrides`**; **`createResolvePromptBody`** for per-request layering over **`getPromptBody`** |

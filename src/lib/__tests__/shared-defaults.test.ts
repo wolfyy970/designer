@@ -54,10 +54,10 @@ describe('PROMPT_DEFAULTS', () => {
     expect(p).not.toContain('write_file');
     expect(p).not.toContain('read_file');
     expect(p).not.toContain('edit_file');
-    expect(p).toContain('write(');
-    expect(p).toContain('edit(');
-    expect(p).toContain('read(');
-    expect(p).toContain('bash(');
+    expect(p).toContain('**write**');
+    expect(p).toContain('**edit**');
+    expect(p).toContain('**read**');
+    expect(p).toMatch(/\bbash\b/);
     expect(p).toContain('milestone');
     expect(p).toContain('mandatory_skill_check');
     expect(p).toContain('use_skill');
@@ -66,11 +66,10 @@ describe('PROMPT_DEFAULTS', () => {
   it('designer-agentic-system documents virtual workspace tools including ls and find', () => {
     const p = PROMPT_DEFAULTS['designer-agentic-system'];
     [
-      'write(',
-      'edit(',
-      'read(',
-      'ls(',
-      'find(',
+      '**write**',
+      '**edit**',
+      '**read**',
+      'ls or find',
       'todo_write',
       'grep',
       'validate_js',
@@ -78,11 +77,12 @@ describe('PROMPT_DEFAULTS', () => {
     ].forEach((tool) => expect(p).toContain(tool));
   });
 
-  it('designer-agentic-system describes grep as line-oriented with schema-aligned params', () => {
+  it('designer-agentic-system documents just-bash sandbox environment', () => {
     const p = PROMPT_DEFAULTS['designer-agentic-system'];
-    expect(p).toContain('Line-oriented');
-    expect(p).toContain('literal?');
-    expect(p).toContain('ignoreCase?');
+    expect(p).toContain('<sandbox_environment>');
+    expect(p).toContain('just-bash');
+    expect(p).toContain('npm');
+    expect(p).toContain('rg');
   });
 
   it('designer-agentic-system allows flexible layout and multi-page artifacts', () => {
@@ -101,6 +101,7 @@ describe('PROMPT_DEFAULTS', () => {
     expect(p).toContain('npm');
     expect(p).toContain('index.html');
     expect(p).toContain('no fixed trio');
+    expect(p).not.toContain('## Shell (bash tool)');
   });
 
   it('designer-hypothesis-inputs prompt contains template variables', () => {
