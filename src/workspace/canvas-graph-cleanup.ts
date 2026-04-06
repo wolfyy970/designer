@@ -40,7 +40,7 @@ export function collectOrphanNodeIds(
   return orphanIds;
 }
 
-/** Drop dimension-map variant rows with no linked non-placeholder hypothesis card. */
+/** Drop incubator-plan strategy rows with no linked non-placeholder hypothesis card. */
 export function pruneIncubationPlansToLinkedRefIds(
   nodes: WorkspaceNode[],
   incubationPlans: Record<string, IncubationPlan>,

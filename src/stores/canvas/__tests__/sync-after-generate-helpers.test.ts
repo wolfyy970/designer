@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { firstResultIdByVariantStrategy } from '../sync-after-generate-helpers';
+import { firstResultIdByStrategy } from '../sync-after-generate-helpers';
 
-describe('firstResultIdByVariantStrategy', () => {
+describe('firstResultIdByStrategy', () => {
   it('keeps first id per strategy in iteration order', () => {
-    const m = firstResultIdByVariantStrategy([
+    const m = firstResultIdByStrategy([
       { id: 'a', strategyId: 'vs1' },
       { id: 'b', strategyId: 'vs1' },
       { id: 'c', strategyId: 'vs2' },
@@ -14,6 +14,6 @@ describe('firstResultIdByVariantStrategy', () => {
   });
 
   it('returns empty map for empty input', () => {
-    expect(firstResultIdByVariantStrategy([]).size).toBe(0);
+    expect(firstResultIdByStrategy([]).size).toBe(0);
   });
 });

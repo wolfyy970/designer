@@ -46,7 +46,7 @@
 
 ## Writing Rules
 
-**Product vs code names:** In prose, prefer **incubate**, **inputs** (auto-generate), and **preview** (canvas node). The codebase may still use historical identifiers (`compileVariantPrompts`, `CompiledPrompt`, `VariantNode.tsx`, `variantStatus`) — when docs mention them, label them as **code names** or **legacy** so readers are not pulled back to old product language.
+**Product vs code names:** In prose, prefer **incubate**, **inputs** (auto-generate), **hypothesis** (strategy card), and **preview** (output node). The codebase may still use historical identifiers (`compileVariantPrompts`, `CompiledPrompt`, `VariantNode.tsx`, CSS `--min-height-variant-node`, etc.) — when docs mention them, label them as **code names** or **legacy**. Client-side visual status for preview cards is `previewNodeStatus` in `node-status.ts`.
 
 1. **One source of truth** — Each fact lives in exactly one place
 2. **Link, don't duplicate** — Reference other docs instead of copying

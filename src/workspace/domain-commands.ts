@@ -91,7 +91,7 @@ export function syncDomainForRemovedNode(node: WorkspaceNode): void {
   }
 }
 
-/** Link each new hypothesis to the incubator in domain after compile. */
+/** Link each new hypothesis to the incubator in domain after incubate sync. */
 export function linkHypothesesAfterIncubate(
   compilerNodeId: string,
   pairs: readonly { hypothesisNodeId: string; strategyId: string }[],

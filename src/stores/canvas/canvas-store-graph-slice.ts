@@ -35,7 +35,7 @@ import {
   syncDomainForRemovedNode,
 } from '../../workspace/domain-commands';
 import {
-  ensureCompilerVariantAndDomainForHypothesis,
+  ensureHypothesisStrategyBinding,
   hydrateDomainAfterSpecMaterialize,
   removeCompilerPlanForNode,
   removeCompilerStrategyByRefId,
@@ -171,7 +171,7 @@ export const createGraphSlice: StateCreator<
     if (type === NODE_TYPES.HYPOTHESIS) {
       const pendingEdges = [...state.edges, ...structuralEdges, ...modelEdges];
       const nodesWithNew: WorkspaceNode[] = [...intermediateNodes, newNode];
-      const refId = ensureCompilerVariantAndDomainForHypothesis(id, nodesWithNew, pendingEdges);
+      const refId = ensureHypothesisStrategyBinding(id, nodesWithNew, pendingEdges);
       if (refId) {
         newNode.data = { ...newNode.data, refId };
       }

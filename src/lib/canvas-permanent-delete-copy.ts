@@ -49,32 +49,32 @@ function designSystemNodeDeleteCopy(): PermanentDeleteCopy {
   };
 }
 
-/** Tier G — variant node. */
-export function variantNodeDeleteCopy(variantLabel: string): PermanentDeleteCopy {
+/** Tier G — preview (output) node. */
+export function previewNodeDeleteCopy(previewLabel: string): PermanentDeleteCopy {
   return {
-    title: `Remove “${variantLabel}” from the canvas?`,
+    title: `Remove “${previewLabel}” from the canvas?`,
     description:
-      'Removes this variant from the canvas. You can run the hypothesis again to add a new variant. Stored generation data may be cleaned up per retention.',
+      'Removes this preview from the canvas. You can run the hypothesis again to add a new preview. Stored generation data may be cleaned up per retention.',
     confirmLabel: 'Remove from canvas',
   };
 }
 
-export function variantVersionDeleteCopy(): PermanentDeleteCopy {
+export function previewVersionDeleteCopy(): PermanentDeleteCopy {
   return {
     title: 'Delete this generation version?',
     description:
-      'This run is permanently removed from the version stack. Other versions on this variant stay. This cannot be undone.',
+      'This run is permanently removed from the version stack. Other versions on this preview stay. This cannot be undone.',
     confirmLabel: 'Delete version',
   };
 }
 
-/** Tier G — hypothesis (and its variants when present). */
-export function hypothesisDeleteCopy(variantCount: number): PermanentDeleteCopy {
-  if (variantCount > 0) {
-    const v = variantCount === 1 ? 'variant' : 'variants';
+/** Tier G — hypothesis (and connected preview nodes when present). */
+export function hypothesisDeleteCopy(previewCount: number): PermanentDeleteCopy {
+  if (previewCount > 0) {
+    const p = previewCount === 1 ? 'preview' : 'previews';
     return {
       title: 'Remove this hypothesis from the canvas?',
-      description: `Removes this hypothesis and ${variantCount} connected ${v} from the canvas. You can add a new hypothesis from the toolbar.`,
+      description: `Removes this hypothesis and ${previewCount} connected ${p} from the canvas. You can add a new hypothesis from the toolbar.`,
       confirmLabel: 'Remove from canvas',
     };
   }
@@ -110,7 +110,7 @@ export function keyboardMultiDeleteCopy(
       );
     }
     if (t === NODE_TYPES.PREVIEW) {
-      return variantNodeDeleteCopy('Variant');
+      return previewNodeDeleteCopy('Preview');
     }
     if (t === NODE_TYPES.MODEL) return modelNodeDeleteCopy();
     if (t === NODE_TYPES.DESIGN_SYSTEM) return designSystemNodeDeleteCopy();
@@ -120,7 +120,7 @@ export function keyboardMultiDeleteCopy(
   return {
     title: `Remove ${n} selected node${n === 1 ? '' : 's'} from the canvas?`,
     description:
-      'Removes the selected nodes from the canvas. Connected edges go with them; deleting a hypothesis also removes its variant nodes. You can re-add supported nodes from the toolbar. This cannot be undone from the canvas.',
+      'Removes the selected nodes from the canvas. Connected edges go with them; deleting a hypothesis also removes its preview nodes. You can re-add supported nodes from the toolbar. This cannot be undone from the canvas.',
     confirmLabel: 'Remove from canvas',
   };
 }

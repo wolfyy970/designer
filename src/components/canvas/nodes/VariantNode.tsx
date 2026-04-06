@@ -10,15 +10,15 @@ import type { PreviewNodeData } from '../../../types/canvas-data';
 import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
 import { useRequestPermanentDelete } from '../../../hooks/useRequestPermanentDelete';
 import {
-  variantNodeDeleteCopy,
-  variantVersionDeleteCopy,
+  previewNodeDeleteCopy,
+  previewVersionDeleteCopy,
 } from '../../../lib/canvas-permanent-delete-copy';
 import { useResultCode } from '../../../hooks/useResultCode';
 import { useResultFiles } from '../../../hooks/useResultFiles';
 import { useVersionStack } from '../../../hooks/useVersionStack';
 import { useVariantZoom } from '../../../hooks/useVariantZoom';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
-import { variantStatus } from '../../../lib/node-status';
+import { previewNodeStatus } from '../../../lib/node-status';
 import { GENERATION_STATUS } from '../../../constants/generation';
 import { abortGenerationForStrategy } from '../../../lib/generation-abort-registry';
 import { downloadFilesAsZip } from '../../../lib/zip-utils';
@@ -88,17 +88,17 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
   const removeFromCanvas = useNodeRemoval(id);
   const { requestPermanentDelete } = useRequestPermanentDelete();
 
-  const variantDeleteCopy = useMemo(() => variantNodeDeleteCopy(variantName), [variantName]);
+  const previewDeleteCopy = useMemo(() => previewNodeDeleteCopy(variantName), [variantName]);
 
   const onRemove = useCallback(() => {
     requestPermanentDelete({
-      title: variantDeleteCopy.title,
-      description: variantDeleteCopy.description,
-      confirmLabel: variantDeleteCopy.confirmLabel,
-      cancelLabel: variantDeleteCopy.cancelLabel,
+      title: previewDeleteCopy.title,
+      description: previewDeleteCopy.description,
+      confirmLabel: previewDeleteCopy.confirmLabel,
+      cancelLabel: previewDeleteCopy.cancelLabel,
       onConfirm: removeFromCanvas,
     });
-  }, [variantDeleteCopy, removeFromCanvas, requestPermanentDelete]);
+  }, [previewDeleteCopy, removeFromCanvas, requestPermanentDelete]);
 
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
   const [activeCodeFile, setActiveCodeFile] = useState<string | undefined>(undefined);
@@ -128,7 +128,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
   }, [result, versionKey, completedStack, stack, setSelectedVersion, deleteResult]);
 
   const confirmDeleteVersion = useCallback(() => {
-    const { title, description, confirmLabel, cancelLabel } = variantVersionDeleteCopy();
+    const { title, description, confirmLabel, cancelLabel } = previewVersionDeleteCopy();
     requestPermanentDelete({
       title,
       description,
@@ -190,7 +190,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
 
   const hasCode = result?.status === GENERATION_STATUS.COMPLETE && (!!code || isMultiFile);
 
-  const status = variantStatus({
+  const status = previewNodeStatus({
     isArchived,
     isError: result?.status === GENERATION_STATUS.ERROR,
     isGenerating: result?.status === GENERATION_STATUS.GENERATING,

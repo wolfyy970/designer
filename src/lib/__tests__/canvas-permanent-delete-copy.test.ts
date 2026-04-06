@@ -12,11 +12,11 @@ describe('canvas-permanent-delete-copy', () => {
     expect(title).toContain('Brief');
   });
 
-  it('hypothesisDeleteCopy pluralizes variants when count > 1', () => {
+  it('hypothesisDeleteCopy pluralizes previews when count > 1', () => {
     const one = hypothesisDeleteCopy(1);
-    expect(one.description).toContain('1 connected variant');
+    expect(one.description).toContain('1 connected preview');
     const many = hypothesisDeleteCopy(2);
-    expect(many.description).toContain('2 connected variants');
+    expect(many.description).toContain('2 connected previews');
     const none = hypothesisDeleteCopy(0);
     expect(none.description).not.toContain('connected');
   });

@@ -301,15 +301,15 @@ export function computeAutoLayout(
     }
   }
 
-  // 2d. Force disconnected variant nodes (archived/pinned) to the variant column rank
+  // 2d. Force disconnected preview nodes (archived/pinned) to the preview column rank
   //     Without edges, DFS assigns rank 0 which places them in the leftmost column.
-  const variantRank = Math.max(0, ...nodes
+  const previewRank = Math.max(0, ...nodes
     .filter((n) => n.type === 'preview' && (parents.get(n.id)?.length ?? 0) > 0)
     .map((n) => rank.get(n.id) ?? 0));
-  if (variantRank > 0) {
+  if (previewRank > 0) {
     for (const n of nodes) {
       if (n.type === 'preview' && (parents.get(n.id)?.length ?? 0) === 0) {
-        rank.set(n.id, variantRank);
+        rank.set(n.id, previewRank);
       }
     }
   }

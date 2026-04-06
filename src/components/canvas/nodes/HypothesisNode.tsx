@@ -130,9 +130,9 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
 
   const handleDelete = useCallback(() => {
     const snap = useCanvasStore.getState();
-    const variantCount = countOutgoingNodesOfType(nodeId, NODE_TYPES.PREVIEW, snap);
+    const previewCount = countOutgoingNodesOfType(nodeId, NODE_TYPES.PREVIEW, snap);
     const { title, description, confirmLabel, cancelLabel } =
-      hypothesisDeleteCopy(variantCount);
+      hypothesisDeleteCopy(previewCount);
     requestPermanentDelete({
       title,
       description,
@@ -291,7 +291,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               value={strategy.hypothesis}
               onChange={(e) => update('hypothesis', e.target.value)}
               rows={8}
-              placeholder="What you're exploring or validating with this variant..."
+              placeholder="What you're exploring or validating with this hypothesis…"
               className={`${RF_INTERACTIVE} min-h-[var(--min-height-hypothesis-textarea)] w-full resize-y rounded border border-border px-2.5 py-2 text-micro leading-relaxed text-fg-secondary placeholder:text-fg-faint input-focus`}
             />
           )}
@@ -370,7 +370,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
                 <Loader2 size={12} className="animate-spin" aria-hidden />
                 {generationProgress && generationProgress.total > 1
                   ? generationProgress.completed === 0
-                    ? `Generating ${smallNumberToWord(generationProgress.total)} variants…`
+                    ? `Generating ${smallNumberToWord(generationProgress.total)} previews…`
                     : `${generationProgress.completed} of ${generationProgress.total} ready…`
                   : agentMode === GENERATION_MODE.AGENTIC
                     ? 'Running agent…'

@@ -245,7 +245,7 @@ export default function VariantPreviewOverlay() {
       {/* Top bar */}
       <div className="flex shrink-0 items-center justify-between border-b border-preview-overlay-hairline px-5 py-2.5">
         <div className="flex items-center gap-4">
-          {/* Cross-variant navigation */}
+          {/* Cross-preview navigation (other preview nodes on this hypothesis) */}
           {previewNodeIds.length > 1 && (
             <div className="flex items-center gap-1 text-preview-overlay-text-muted">
               <button
@@ -298,7 +298,7 @@ export default function VariantPreviewOverlay() {
             </p>
           </div>
 
-          {/* Version navigation (within the same variant) */}
+          {/* Version navigation (within the same preview / strategy lane) */}
           {stackTotal > 1 && (
             <div className="flex items-center gap-1 rounded-md border border-preview-overlay-hairline px-1.5 py-0.5 text-preview-overlay-text-muted">
               <button

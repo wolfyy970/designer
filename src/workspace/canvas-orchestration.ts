@@ -20,16 +20,16 @@ import { findIncubatorForHypothesis } from './graph-queries';
 import { hydrateDomainFromCanvasGraph } from './hydrate-domain-from-canvas-graph';
 
 /**
- * Compiler map + domain link when adding a hypothesis node (after node id exists).
- * @returns variant refId for `newNode.data.refId` when created.
+ * When a hypothesis node is added, ensure the incubator plan has a matching strategy row
+ * and link domain state. Returns the new **strategy id** for `hypothesisNode.data.refId`.
  */
-export function ensureCompilerVariantAndDomainForHypothesis(
+export function ensureHypothesisStrategyBinding(
   hypothesisNodeId: string,
   canvasNodes: WorkspaceNode[],
   edges: Pick<WorkspaceEdge, 'source' | 'target'>[],
 ): string | undefined {
-  const compilerStore = useIncubatorStore.getState();
-  const compilerNodes = canvasNodes
+  const incubatorStore = useIncubatorStore.getState();
+  const incubatorNodes = canvasNodes
     .filter((n) => n.type === NODE_TYPES.INCUBATOR)
     .slice()
     .sort((a, b) => a.id.localeCompare(b.id));
@@ -42,13 +42,13 @@ export function ensureCompilerVariantAndDomainForHypothesis(
   );
   const domainIncubator = useWorkspaceDomainStore.getState().hypotheses[hypothesisNodeId]?.incubatorId;
   const domainIsValid =
-    domainIncubator != null && compilerNodes.some((c) => c.id === domainIncubator);
-  const targetCompilerId =
-    fromGraph ?? (domainIsValid ? domainIncubator : null) ?? compilerNodes[0]?.id ?? 'manual';
+    domainIncubator != null && incubatorNodes.some((c) => c.id === domainIncubator);
+  const targetIncubatorId =
+    fromGraph ?? (domainIsValid ? domainIncubator : null) ?? incubatorNodes[0]?.id ?? 'manual';
 
-  if (!compilerStore.incubationPlans[targetCompilerId]) {
+  if (!incubatorStore.incubationPlans[targetIncubatorId]) {
     const spec = useSpecStore.getState().spec;
-    compilerStore.setPlanForNode(targetCompilerId, {
+    incubatorStore.setPlanForNode(targetIncubatorId, {
       id: generateId(),
       specId: spec.id,
       dimensions: [],
@@ -57,14 +57,14 @@ export function ensureCompilerVariantAndDomainForHypothesis(
       incubatorModel: 'manual',
     });
   }
-  compilerStore.addStrategyToNode(targetCompilerId);
-  const map = compilerStore.incubationPlans[targetCompilerId];
-  const lastVariant = map?.hypotheses[map.hypotheses.length - 1];
-  if (lastVariant) {
+  incubatorStore.addStrategyToNode(targetIncubatorId);
+  const map = incubatorStore.incubationPlans[targetIncubatorId];
+  const lastStrategy = map?.hypotheses[map.hypotheses.length - 1];
+  if (lastStrategy) {
     useWorkspaceDomainStore
       .getState()
-      .linkHypothesisToIncubator(hypothesisNodeId, targetCompilerId, lastVariant.id);
-    return lastVariant.id;
+      .linkHypothesisToIncubator(hypothesisNodeId, targetIncubatorId, lastStrategy.id);
+    return lastStrategy.id;
   }
   return undefined;
 }

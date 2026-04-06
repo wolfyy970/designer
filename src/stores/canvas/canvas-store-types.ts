@@ -68,7 +68,7 @@ export interface CanvasStore {
   addPlaceholderHypotheses: (incubatorNodeId: string, count: number) => string[];
   removePlaceholders: (placeholderIds: string[]) => void;
   initializeCanvas: () => void;
-  syncAfterIncubate: (newVariants: HypothesisStrategy[], incubatorNodeId: string) => void;
+  syncAfterIncubate: (newStrategies: HypothesisStrategy[], incubatorNodeId: string) => void;
   syncAfterGenerate: (results: GenerationResult[], hypothesisNodeId: string) => void;
   forkHypothesisPreviews: (hypothesisNodeId: string) => void;
   clearPreviewNodeIdMap: () => void;

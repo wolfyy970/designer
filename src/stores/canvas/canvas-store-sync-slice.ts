@@ -23,7 +23,7 @@ import {
   HYPOTHESIS_STACK_SPACING,
 } from './hypothesis-layout-constants';
 import type { CanvasStore } from './canvas-store-types';
-import { firstResultIdByVariantStrategy } from './sync-after-generate-helpers';
+import { firstResultIdByStrategy } from './sync-after-generate-helpers';
 
 export const createSyncSlice: StateCreator<
   CanvasStore,
@@ -90,18 +90,18 @@ export const createSyncSlice: StateCreator<
     });
   },
 
-  syncAfterIncubate: (newVariants, incubatorNodeId) => {
-    if (newVariants.length === 0) return;
+  syncAfterIncubate: (newStrategies, incubatorNodeId) => {
+    if (newStrategies.length === 0) return;
     const state = get();
     const col = columnX(state.colGap);
-    const compilerNode = state.nodes.find((n) => n.id === incubatorNodeId);
-    const compilerY = compilerNode?.position.y ?? 300;
+    const incubatorCanvasNode = state.nodes.find((n) => n.id === incubatorNodeId);
+    const incubatorY = incubatorCanvasNode?.position.y ?? 300;
 
     const existingHypIds = new Set(
       state.nodes.filter((n) => n.type === 'hypothesis').map((n) => n.data.refId),
     );
 
-    let maxY = compilerY;
+    let maxY = incubatorY;
     for (const e of state.edges) {
       if (e.source !== incubatorNodeId) continue;
       const target = state.nodes.find((n) => n.id === e.target && n.type === 'hypothesis');
@@ -115,12 +115,12 @@ export const createSyncSlice: StateCreator<
     const addedEdges = [...state.edges];
     let placed = 0;
 
-    const compileLinkPairs: { hypothesisNodeId: string; strategyId: string }[] = [];
+    const strategyLinkPairs: { hypothesisNodeId: string; strategyId: string }[] = [];
 
-    newVariants.forEach((variant) => {
-      if (existingHypIds.has(variant.id)) return;
+    newStrategies.forEach((strategy) => {
+      if (existingHypIds.has(strategy.id)) return;
 
-      const nodeId = `hypothesis-${variant.id}`;
+      const nodeId = `hypothesis-${strategy.id}`;
       addedNodes.push({
         id: nodeId,
         type: 'hypothesis',
@@ -128,10 +128,10 @@ export const createSyncSlice: StateCreator<
           x: col.hypothesis,
           y: maxY + HYPOTHESIS_STACK_GAP + placed * (HYPOTHESIS_STACK_NODE_H + HYPOTHESIS_STACK_SPACING),
         }),
-        data: { refId: variant.id },
+        data: { refId: strategy.id },
       });
       placed++;
-      compileLinkPairs.push({ hypothesisNodeId: nodeId, strategyId: variant.id });
+      strategyLinkPairs.push({ hypothesisNodeId: nodeId, strategyId: strategy.id });
 
       addedEdges.push({
         id: buildEdgeId(incubatorNodeId, nodeId),
@@ -147,7 +147,7 @@ export const createSyncSlice: StateCreator<
 
     if (placed === 0) return;
 
-    const newHypothesisIds = compileLinkPairs.map((p) => p.hypothesisNodeId);
+    const newHypothesisIds = strategyLinkPairs.map((p) => p.hypothesisNodeId);
 
     const modelEdges = buildModelEdgesFromParent(
       incubatorNodeId,
@@ -158,7 +158,7 @@ export const createSyncSlice: StateCreator<
     addedEdges.push(...modelEdges);
 
     set({ nodes: addedNodes, edges: addedEdges });
-    linkHypothesesAfterIncubate(incubatorNodeId, compileLinkPairs);
+    linkHypothesesAfterIncubate(incubatorNodeId, strategyLinkPairs);
     const prevEdgeIds = new Set(state.edges.map((e) => e.id));
     const graphNodes = get().nodes;
     const graphEdges = get().edges;
@@ -176,17 +176,17 @@ export const createSyncSlice: StateCreator<
     const col = columnX(state.colGap);
     const hypothesisNode = state.nodes.find((n) => n.id === hypothesisNodeId);
 
-    const firstRefByStrategy = firstResultIdByVariantStrategy(results);
+    const firstRefByStrategy = firstResultIdByStrategy(results);
 
-    const existingVariantByStrategy = new Map<string, string>();
+    const existingPreviewByStrategy = new Map<string, string>();
     for (const e of state.edges) {
       if (e.source === hypothesisNodeId) {
         const target = state.nodes.find(
           (n) => n.id === e.target && n.type === 'preview',
         );
-        const variantData = target ? getPreviewNodeData(target) : undefined;
-        if (variantData?.strategyId) {
-          existingVariantByStrategy.set(variantData.strategyId, target!.id);
+        const previewData = target ? getPreviewNodeData(target) : undefined;
+        if (previewData?.strategyId) {
+          existingPreviewByStrategy.set(previewData.strategyId, target!.id);
         }
       }
     }
@@ -196,7 +196,7 @@ export const createSyncSlice: StateCreator<
     const nodeIdMap = new Map<string, string>();
 
     results.forEach((result) => {
-      const existingNodeId = existingVariantByStrategy.get(
+      const existingNodeId = existingPreviewByStrategy.get(
         result.strategyId,
       );
 
