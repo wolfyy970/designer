@@ -1,6 +1,5 @@
-/** Hypothesis generation mode (Direct vs Agentic) — wire payloads and UI */
+/** All hypothesis runs use the agentic design pipeline (Pi, virtual FS, optional revision loop). */
 export const GENERATION_MODE = {
-  SINGLE: 'single',
   AGENTIC: 'agentic',
 } as const;
 

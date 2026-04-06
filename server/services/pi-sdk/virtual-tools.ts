@@ -7,6 +7,14 @@ import type { Static } from '@sinclair/typebox';
 import { minimatch } from 'minimatch';
 import type { Bash } from 'just-bash';
 import { debugAgentIngest } from '../../lib/debug-agent-ingest.ts';
+import {
+  DEFAULT_MAX_BYTES,
+  GREP_MAX_LINE_LENGTH,
+  SANDBOX_FIND_MAX_RESULTS,
+  SANDBOX_GREP_DEFAULT_MATCH_LIMIT,
+  SANDBOX_LS_MAX_ENTRIES,
+  SANDBOX_READ_MAX_LINES,
+} from '../../lib/content-limits.ts';
 import { normalizeError } from '../../../src/lib/error-utils.ts';
 import { SANDBOX_PROJECT_ROOT } from '../agent-bash-sandbox.ts';
 import {
@@ -16,7 +24,6 @@ import {
   createLsToolDefinition,
   createFindToolDefinition,
   grepToolDefinition,
-  DEFAULT_MAX_BYTES,
   formatSize,
   truncateHead,
   truncateLine,
@@ -32,13 +39,8 @@ import {
   attemptMatchCascade,
   isEditNotFoundError,
   normalizeEditToolParams,
+  type CascadeDiagnostic,
 } from './edit-match-cascade.ts';
-
-/** Same default as SDK grep (see `pi-coding-agent` grep tool). */
-const GREP_MAX_LINE_LENGTH = 500;
-const DEFAULT_GREP_MATCH_LIMIT = 100;
-/** Matches Pi read tool line cap (`truncate.js` in pi-coding-agent). */
-const SANDBOX_READ_MAX_LINES = 2000;
 
 /**
  * Model-facing `description` for virtual tools on the just-bash workspace.
@@ -61,13 +63,13 @@ const SANDBOX_TOOL_OVERRIDES = {
     description: `Apply exact search-and-replace edits to an existing file under ${SANDBOX_PROJECT_ROOT}. Each \`oldText\` must appear **exactly once** in the **original** file before edits are applied. CRITICAL: Include **at least 3 lines of surrounding context** in each \`oldText\` so it uniquely identifies one occurrence — e.g. the full CSS rule block (selector + braces), not a single property line when that value repeats. Prefer **edit** over bash/sed for file changes.`,
   },
   ls: {
-    description: `List directory contents in the virtual project at ${SANDBOX_PROJECT_ROOT}. Returns entries sorted alphabetically, with '/' suffix for directories. Includes dotfiles. Output is truncated to 500 entries or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first).`,
+    description: `List directory contents in the virtual project at ${SANDBOX_PROJECT_ROOT}. Returns entries sorted alphabetically, with '/' suffix for directories. Includes dotfiles. Output is truncated to ${SANDBOX_LS_MAX_ENTRIES} entries or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first).`,
   },
   find: {
-    description: `Search for files by glob pattern under the in-memory project at ${SANDBOX_PROJECT_ROOT}. Returns matching file paths relative to the search directory. There is no .gitignore in this sandbox — every seeded file is visible. Output is truncated to 1000 results or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first).`,
+    description: `Search for files by glob pattern under the in-memory project at ${SANDBOX_PROJECT_ROOT}. Returns matching file paths relative to the search directory. There is no .gitignore in this sandbox — every seeded file is visible. Output is truncated to ${SANDBOX_FIND_MAX_RESULTS} results or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first).`,
   },
   grep: {
-    description: `Search file contents in the virtual project workspace using ripgrep-style search (just-bash \`rg\`). Returns matching lines with file paths and line numbers. Only the in-memory design files under ${SANDBOX_PROJECT_ROOT} exist — there is no .gitignore or host filesystem. Output is truncated to ${DEFAULT_GREP_MATCH_LIMIT} matches or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Long lines are truncated to ${GREP_MAX_LINE_LENGTH} chars.`,
+    description: `Search file contents in the virtual project workspace using ripgrep-style search (just-bash \`rg\`). Returns matching lines with file paths and line numbers. Only the in-memory design files under ${SANDBOX_PROJECT_ROOT} exist — there is no .gitignore or host filesystem. Output is truncated to ${SANDBOX_GREP_DEFAULT_MATCH_LIMIT} matches or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Long lines are truncated to ${GREP_MAX_LINE_LENGTH} chars.`,
   },
 } as const;
 
@@ -134,7 +136,7 @@ function createVirtualGrepTool(bash: Bash, sessionCwd: string) {
         };
       }
 
-      const effectiveLimit = Math.max(1, limit ?? DEFAULT_GREP_MATCH_LIMIT);
+      const effectiveLimit = Math.max(1, limit ?? SANDBOX_GREP_DEFAULT_MATCH_LIMIT);
       const contextLines = context && context > 0 ? context : 0;
 
       const argv: string[] = ['rg', '-nH'];
@@ -377,7 +379,6 @@ export function createVirtualPiCodingTools(
       }
       try {
         const result = await editInner.execute(toolCallId, params, signal, onUpdate, extCtx);
-        pathsSeenBeforeEdit.delete(abs);
         return result;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -394,10 +395,21 @@ export function createVirtualPiCodingTools(
         } catch {
           throw err;
         }
-        const corrected = attemptMatchCascade(fileContent, normalized.edits);
+        const diagnostics: CascadeDiagnostic[] = [];
+        const corrected = attemptMatchCascade(fileContent, normalized.edits, diagnostics);
         if (!corrected) {
+          console.debug(
+            '[edit-cascade] all strategies failed for',
+            rawPath,
+            JSON.stringify(diagnostics),
+          );
           throw err;
         }
+        console.debug(
+          '[edit-cascade] resolved via cascade for',
+          rawPath,
+          JSON.stringify(diagnostics),
+        );
         const retryParams = {
           path: normalized.path,
           edits: corrected,
@@ -410,7 +422,6 @@ export function createVirtualPiCodingTools(
             onUpdate,
             extCtx,
           );
-          pathsSeenBeforeEdit.delete(abs);
           return result;
         } catch {
           throw err;

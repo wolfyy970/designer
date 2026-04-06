@@ -12,6 +12,7 @@ import {
   isAllowedGoogleFontStylesheetUrl,
   isAllowedGoogleFontsExternalRef,
 } from '../../src/lib/google-fonts-allowlist.ts';
+import { classifyAssetRef, resolveVirtualAssetPath } from '../../src/lib/resolve-virtual-asset-path.ts';
 import { buildUseSkillToolDescription, SKILL_FILENAME } from '../lib/skill-discovery.ts';
 import type { SkillCatalogEntry } from '../lib/skill-schema.ts';
 
@@ -229,13 +230,6 @@ export function createValidateHtmlTool(bash: Bash): ToolDefinition {
         issues.push(`Unbalanced <style> tags: ${styleOpen} opening, ${styleClose} closing`);
       }
 
-      const normalizeAssetRef = (rawRef: string): string =>
-        rawRef.split('#')[0]!.split('?')[0]!.replace(/^\.\//, '');
-      const classifyRef = (rawRef: string): 'external' | 'absolute' | 'relative' => {
-        if (/^(https?:)?\/\//i.test(rawRef) || rawRef.startsWith('data:')) return 'external';
-        if (rawRef.startsWith('/')) return 'absolute';
-        return 'relative';
-      };
       const stylesheetRefs = [
         ...content.matchAll(/<link\s+[^>]*rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*\/?>/gi),
       ].map((match) => match[1] ?? '');
@@ -244,7 +238,7 @@ export function createValidateHtmlTool(bash: Bash): ToolDefinition {
       ].map((match) => match[1] ?? '');
 
       for (const ref of stylesheetRefs) {
-        const kind = classifyRef(ref);
+        const kind = classifyAssetRef(ref);
         if (kind === 'external') {
           if (isAllowedGoogleFontStylesheetUrl(ref)) continue;
           issues.push(`External asset reference found: ${ref}`);
@@ -252,28 +246,26 @@ export function createValidateHtmlTool(bash: Bash): ToolDefinition {
         }
         if (kind === 'absolute') {
           issues.push(`Use relative asset paths instead of root-absolute paths: ${ref}`);
-          continue;
         }
-        const normalized = normalizeAssetRef(ref);
-        if (!normalized) continue;
-        if (!(await hasProjectFile(bash, normalized))) {
+        const resolved = resolveVirtualAssetPath(ref, path);
+        if (!resolved) continue;
+        if (!(await hasProjectFile(bash, resolved))) {
           issues.push(`Referenced asset not found in workspace: ${ref}`);
         }
       }
 
       for (const ref of scriptRefs) {
-        const kind = classifyRef(ref);
+        const kind = classifyAssetRef(ref);
         if (kind === 'external') {
           issues.push(`External asset reference found: ${ref}`);
           continue;
         }
         if (kind === 'absolute') {
           issues.push(`Use relative asset paths instead of root-absolute paths: ${ref}`);
-          continue;
         }
-        const normalized = normalizeAssetRef(ref);
-        if (!normalized) continue;
-        if (!(await hasProjectFile(bash, normalized))) {
+        const resolved = resolveVirtualAssetPath(ref, path);
+        if (!resolved) continue;
+        if (!(await hasProjectFile(bash, resolved))) {
           issues.push(`Referenced asset not found in workspace: ${ref}`);
         }
       }
@@ -297,7 +289,7 @@ export function createValidateHtmlTool(bash: Bash): ToolDefinition {
       for (const styleMatch of content.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
         const css = styleMatch[1] ?? '';
         for (const importUrl of extractCssImportUrls(css)) {
-          if (classifyRef(importUrl) !== 'external') continue;
+          if (classifyAssetRef(importUrl) !== 'external') continue;
           if (isAllowedGoogleFontsExternalRef(importUrl)) continue;
           issues.push(`External @import in <style> not allowed: ${importUrl}`);
         }

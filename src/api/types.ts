@@ -1,7 +1,6 @@
 import type { DesignSpec, ReferenceImage } from '../types/spec';
 import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../types/incubator';
 import type {
-  AgentMode,
   DomainDesignSystemContent,
   DomainHypothesis,
   DomainModelProfile,
@@ -47,8 +46,6 @@ export interface HypothesisPromptBundleResponse {
   evaluationContext: EvaluationContextPayload | null;
   provenance: ProvenanceContext;
   generationContext: {
-    /** Hypothesis-level direct vs agentic (all lanes share this mode). */
-    agentMode: AgentMode;
     modelCredentials: {
       providerId: string;
       modelId: string;

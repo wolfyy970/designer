@@ -30,13 +30,12 @@ The API’s `**getPromptBody`** (when Langfuse is configured) tries the **new** 
 
 | Langfuse name                    | Plain-language goal                                                                                                                                                            |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `**designer-direct-system`**     | **Direct / single-shot** generation: system rules for outputting one self-contained **HTML** page from the hypothesis + context.                                               |
 | `**designer-agentic-system`**    | **Agentic** generation: system rules for the **tool-using agent** (virtual files, milestones, self-critique) before the static artifact is finalized.                          |
 | `**designer-agentic-revision-user`** | **Agentic revision rounds only**: user instructions merged after the **assembled** hypothesis context and before the evaluator **revision brief** (post-evaluation Pi passes).   |
 | `**designer-hypothesis-inputs`** | The **per-hypothesis user prompt**: strategy name, hypothesis, dimensions, design brief, optional design-system block — what tells the model *which* design to build this run. |
 
 
-**Runs when:** you **Generate** or **Run agent** on a hypothesis (`/api/hypothesis/generate`; agentic path includes tools + eval).
+**Runs when:** you **Design** on a hypothesis (`/api/hypothesis/generate`; Pi tools always; evaluation + revision only when **Auto-improve** is on — otherwise a single build, `evaluationContext: null` on the wire).
 
 ---
 
@@ -96,7 +95,7 @@ Three **separate rubrics** score the artifact for **design quality**, **strategy
 | `**evaluator-implementation`**    | **Frontend engineering** review: file-tree structure, `**preview_page_url`** + `source_files`, optional bundled fallback; whether the implementation expresses the design bet. |
 
 
-**Runs when:** evaluation runs after agentic (and related paths) on the server — not the same call as the “builder” model.
+**Runs when:** evaluation runs after each hypothesis build on the server — not the same call as the “builder” model.
 
 ---
 
@@ -106,7 +105,7 @@ Three **separate rubrics** score the artifact for **design quality**, **strategy
 | If this feels wrong…                                  | Start with these Langfuse names                                                                 |
 | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | Strategies are vague or JSON is malformed             | `hypotheses-generator-system`, `incubator-user-inputs`                                          |
-| Single-shot HTML off-brief or off-style               | `designer-direct-system`, `designer-hypothesis-inputs`                                          |
+| First-pass HTML off-brief or off-style               | `designer-agentic-system`, `designer-hypothesis-inputs`                                          |
 | Agent doesn’t plan, files are messy, or tools misused | `designer-agentic-system` (+ **Skills** in repo `skills/`, not Langfuse)                        |
 | Extract misses tokens or invents structure            | `design-system-extract-system`                                                                  |
 | Agent “forgets” after long runs                       | `agent-context-compaction`                                                                      |

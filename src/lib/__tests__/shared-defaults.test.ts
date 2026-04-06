@@ -28,10 +28,6 @@ describe('PROMPT_DEFAULTS', () => {
     expect(PROMPT_DEFAULTS['hypotheses-generator-system']).not.toContain('Progressive Disclosure');
   });
 
-  it('designer-direct-system contains HTML instruction', () => {
-    expect(PROMPT_DEFAULTS['designer-direct-system']).toContain('HTML');
-  });
-
   it('designer-agentic-system references hypothesis-driven reasoning', () => {
     const p = PROMPT_DEFAULTS['designer-agentic-system'];
     expect(p).toContain('hypothesis');

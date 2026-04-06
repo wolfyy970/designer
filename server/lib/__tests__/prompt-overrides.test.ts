@@ -17,7 +17,7 @@ describe('sanitizePromptOverrides', () => {
     expect(
       sanitizePromptOverrides({
         'not-a-prompt-key': 'x',
-        'designer-direct-system': '',
+        'designer-agentic-system': '',
       } as Record<string, string>),
     ).toBeUndefined();
   });
@@ -25,11 +25,11 @@ describe('sanitizePromptOverrides', () => {
   it('keeps only known PromptKey entries with non-empty strings', () => {
     expect(
       sanitizePromptOverrides({
-        'designer-direct-system': 'local-body',
+        'designer-agentic-system': 'local-body',
         'not-a-real-key': 'noise',
         'evaluator-design-quality': '',
       }),
-    ).toEqual({ 'designer-direct-system': 'local-body' });
+    ).toEqual({ 'designer-agentic-system': 'local-body' });
   });
 });
 
@@ -47,15 +47,15 @@ describe('createResolvePromptBody', () => {
 
   it('uses override text when key is present in partial map', async () => {
     const resolve = createResolvePromptBody({
-      'designer-direct-system': 'OVERRIDE',
+      'designer-agentic-system': 'OVERRIDE',
     });
-    await expect(resolve('designer-direct-system')).resolves.toBe('OVERRIDE');
+    await expect(resolve('designer-agentic-system')).resolves.toBe('OVERRIDE');
     expect(getPromptBody).not.toHaveBeenCalled();
   });
 
   it('falls back to getPromptBody for keys not overridden', async () => {
     const resolve = createResolvePromptBody({
-      'designer-direct-system': 'OVERRIDE',
+      'designer-agentic-system': 'OVERRIDE',
     });
     await expect(resolve('designer-hypothesis-inputs')).resolves.toBe('REMOTE:designer-hypothesis-inputs');
     expect(getPromptBody).toHaveBeenCalledWith('designer-hypothesis-inputs');

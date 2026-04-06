@@ -5,10 +5,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { env } from '../env.ts';
 import type { ObservabilityLine } from './observability-line.ts';
+import { TRACE_LABEL_MAX, TRACE_TOOL_FIELD_MAX } from './content-limits.ts';
 import { truncateUtf16WithSuffix } from './string-truncate.ts';
-
-const TRACE_LABEL_MAX = 4000;
-const TRACE_TOOL_FIELD_MAX = 4000;
 
 /** Deep clone line and truncate LLM bodies / trace label for file only. */
 function observabilityLineForFile(line: ObservabilityLine): ObservabilityLine {

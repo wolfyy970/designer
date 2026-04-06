@@ -125,7 +125,7 @@ export default function SettingsModal({
               : 'border-transparent text-fg-secondary hover:text-fg-secondary'
           }`}
         >
-          Evaluator
+          Evaluator defaults
         </button>
         <button
           type="button"
@@ -202,6 +202,12 @@ function EvaluatorSettingsTab() {
 
   return (
     <div className="space-y-4">
+      <p className="text-xs text-fg-secondary">
+        These apply when <span className="font-medium text-fg">Auto-improve</span> is on (evaluator + optional revision
+        loop). With Auto-improve off, the server does not run evaluators—only the design agent. Per-hypothesis overrides:
+        max rounds and target score on the node. Rubric weights stay here (shared across hypotheses that use
+        evaluation).
+      </p>
       <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">
         <span className="block text-sm font-medium text-fg">Maximum revision rounds</span>
         <p className="mt-1 text-xs text-fg-secondary">

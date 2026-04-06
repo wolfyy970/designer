@@ -2,7 +2,7 @@
 
 **Read the [North Star](PRODUCT.md#north-star) first.** Every decision in this repo serves that ambition.
 
-A design brief feeds the **Incubator**, which produces hypothesis strategies that systematically explore the solution space. Each hypothesis generates as a complete design — either a single-shot HTML document or an agentic multi-file project with reasoning, self-critique, and revision passes. Everything connects on a visual node-graph canvas.
+A design brief feeds the **Incubator**, which produces hypothesis strategies that systematically explore the solution space. Each hypothesis **Design** run uses the **agentic** pipeline (multi-file Pi sandbox). By default that is a **single** agent build with **no** evaluator. Turn **Auto-improve** on the node to run **evaluation** and optional **revision** loops (round cap and target score; rubric weights under Settings). Everything connects on a visual node-graph canvas.
 
 ## Quick Start
 
@@ -41,7 +41,7 @@ The primary interface is a visual node-graph canvas (`/canvas`, the default rout
 1. **Input nodes** (left) — Design Brief, Existing Design, Research Context, Objectives & Metrics, Design Constraints. On a fresh canvas, optional inputs may appear as **ghost placeholders**; opening **Canvas Manager** → **Load** materializes real **input nodes** when the saved spec already has text or images for those **facets** (stored under `spec.sections` in data). **Research Context**, **Objectives & Metrics**, and **Design Constraints** offer an optional **auto-generate** control (from the Design Brief and other filled facets) using the **first Model node** on the canvas and `POST /api/inputs/generate` — details in [USER_GUIDE.md](USER_GUIDE.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
 2. **Model node** — Connect to the Incubator or Hypotheses to configure which provider and model they use
 3. **Incubator** — Connect input nodes and a Model node, then click Generate to produce hypothesis strategies
-4. **Hypotheses** — Editable strategy cards. Connect a Model node, choose **Direct** (one-shot) or **Agentic**, then **Generate** or **Run agent**
+4. **Hypotheses** — Editable strategy cards. Connect a Model node and use **Design** to run the **agentic** Pi build (**Auto-improve** off = one build with no evaluator; **on** = evaluation + optional revision rounds)
 5. **Design System** (optional) — Connect to hypotheses to inject design tokens into generation
 6. **Previews** — Rendered design previews with zoom, version navigation, full-screen (hypothesis-scoped design stepping when domain preview slots exist), and optional **mark as best** vs evaluator ranking. Agentic results include a file explorer, zip download, run workspace with multi-round eval preview when applicable, and (when the run finishes) an evaluation scorecard plus optional headless-browser thumbnail.
 

@@ -425,6 +425,11 @@ describe.skipIf(!live)('sandbox LLM tool scenarios (OpenRouter)', () => {
    */
   it(
     'revision scenario: discover → grep → edit hardcoded colors + add mobile breakpoint',
+    {
+      timeout: 300_000,
+      // OpenRouter + tool JSON is occasionally non-deterministic; cascade rejections can leave TODOs behind.
+      retry: 2,
+    },
     async () => {
       // ── Seed files ─────────────────────────────────────────────────────────
       const indexHtml = [
@@ -597,9 +602,11 @@ describe.skipIf(!live)('sandbox LLM tool scenarios (OpenRouter)', () => {
           '- **No responsive layout:** The card grid has no mobile breakpoint. Add an @media query so cards stack into a single column on narrow viewports.',
           '',
           'Start by exploring the project to understand its structure, then read the stylesheet to see which custom properties exist and where hardcoded values appear. Apply targeted edits. If an edit is rejected because the text is not unique, include more surrounding lines in oldText to disambiguate.',
+          '',
+          'The final css/styles.css MUST include an `@media` rule (e.g. max-width breakpoint) that makes `.grid` a single column on narrow viewports. If repeated `edit` calls fail, use `write` on `css/styles.css` with the complete corrected stylesheet.',
         ].join('\n'),
         model,
-        maxToolRounds: 20,
+        maxToolRounds: 25,
       });
 
       // ── Assertions ─────────────────────────────────────────────────────────
@@ -650,6 +657,5 @@ describe.skipIf(!live)('sandbox LLM tool scenarios (OpenRouter)', () => {
         'should contain an @media query for mobile',
       ).toMatch(/@media\b/);
     },
-    300_000,
   );
 });

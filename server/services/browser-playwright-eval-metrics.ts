@@ -2,6 +2,13 @@
  * DOM metrics from Playwright page.evaluate — validated at the boundary.
  */
 import { z } from 'zod';
+import {
+  PLAYWRIGHT_BODY_MIN_HEIGHT_STRONG,
+  PLAYWRIGHT_BODY_MIN_WIDTH_STRONG,
+  PLAYWRIGHT_VISIBLE_TEXT_EXCELLENT,
+  PLAYWRIGHT_VISIBLE_TEXT_GOOD,
+  PLAYWRIGHT_VISIBLE_TEXT_MINIMAL,
+} from './browser-eval-scoring-config.ts';
 
 const playwrightDomMetricsSchema = z.object({
   textLen: z.number(),
@@ -33,14 +40,14 @@ export function parsePlaywrightDomMetrics(raw: unknown): PlaywrightDomMetrics {
 }
 
 export function scoreVisibleTextLength(textLen: number): number {
-  if (textLen >= 80) return 5;
-  if (textLen >= 30) return 3;
-  if (textLen >= 10) return 2;
+  if (textLen >= PLAYWRIGHT_VISIBLE_TEXT_EXCELLENT) return 5;
+  if (textLen >= PLAYWRIGHT_VISIBLE_TEXT_GOOD) return 3;
+  if (textLen >= PLAYWRIGHT_VISIBLE_TEXT_MINIMAL) return 2;
   return 1;
 }
 
 export function scoreBodyLayout(bodyW: number, bodyH: number): number {
-  if (bodyW > 100 && bodyH > 40) return 5;
+  if (bodyW > PLAYWRIGHT_BODY_MIN_WIDTH_STRONG && bodyH > PLAYWRIGHT_BODY_MIN_HEIGHT_STRONG) return 5;
   if (bodyW > 0 && bodyH > 0) return 3;
   return 1;
 }

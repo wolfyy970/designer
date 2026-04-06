@@ -17,6 +17,8 @@ export function GeneratingFooter({
   liveTodos,
   liveSkills,
   liveActivatedSkills,
+  /** When true, only the progress bar and primary status row (spinner + line + timer). Detail lines duplicate the run workspace Monitor tab. */
+  compact = false,
 }: {
   plan: string[] | undefined;
   written: number;
@@ -26,6 +28,7 @@ export function GeneratingFooter({
   liveSkills?: { key: string; name: string; description: string }[];
   /** Skills successfully loaded via use_skill this run. */
   liveActivatedSkills?: { key: string; name: string; description: string }[];
+  compact?: boolean;
 }) {
   const {
     progressMessage,
@@ -167,98 +170,102 @@ export function GeneratingFooter({
             <Loader2 size={10} className="shrink-0 animate-spin text-accent" />
             <span className="truncate">{primaryLine}</span>
           </span>
-          {(isEvaluating || isRevising) && hasPlan && (
-            <span className="pl-[18px] text-nano leading-snug text-fg-muted">
-              Build: {written} / {total} files
-            </span>
-          )}
-          {(isEvaluating || isRevising) && !hasPlan && written > 0 && (
-            <span className="pl-[18px] text-nano leading-snug text-fg-muted">
-              Saved {written} design file{written === 1 ? '' : 's'}
-            </span>
-          )}
-          {hasPlan && progressMessage && progressMessage !== primaryLine && !isEvaluating && !isRevising && (
-            <span
-              className="pl-[18px] text-nano leading-snug text-fg-muted"
-              title={progressMessage}
-            >
-              {progressMessage}
-            </span>
-          )}
-          {isStreamingToolArgs && (
-            <span className="flex items-center gap-1.5 pl-[18px] text-nano leading-snug text-fg-secondary">
-              <span
-                className="inline-block size-1.5 shrink-0 animate-pulse rounded-full bg-accent"
-                aria-hidden
-              />
-              <span className="min-w-0">
-                Streaming <code className="text-fg-secondary">{streamingToolName}</code>
-                {streamingToolPath != null && streamingToolPath.length > 0 ? (
-                  <>
-                    {' '}
-                    → <span className="text-fg-muted">{streamingToolPath}</span>
-                  </>
-                ) : null}
-                <span className="text-fg-muted">
-                  {' '}
-                  ({formatStreamArgSize(streamingToolChars ?? 0)})
+          {!compact ? (
+            <>
+              {(isEvaluating || isRevising) && hasPlan && (
+                <span className="pl-[18px] text-nano leading-snug text-fg-muted">
+                  Build: {written} / {total} files
                 </span>
-              </span>
-            </span>
-          )}
-          {todoHint && (
-            <span className="pl-[18px] text-nano leading-snug text-fg-muted">
-              {todoHint.label}: <span className="text-fg-secondary">{todoHint.task}</span>
-            </span>
-          )}
-          {liveSkills != null && liveSkills.length > 0 && (
-            <span className="pl-[18px] text-nano leading-snug text-fg-muted">
-              Skills (✓ = use_skill):{' '}
-              {liveSkills.map((s, i) => (
-                <span key={s.key}>
-                  {i > 0 ? ', ' : ''}
+              )}
+              {(isEvaluating || isRevising) && !hasPlan && written > 0 && (
+                <span className="pl-[18px] text-nano leading-snug text-fg-muted">
+                  Saved {written} design file{written === 1 ? '' : 's'}
+                </span>
+              )}
+              {hasPlan && progressMessage && progressMessage !== primaryLine && !isEvaluating && !isRevising && (
+                <span
+                  className="pl-[18px] text-nano leading-snug text-fg-muted"
+                  title={progressMessage}
+                >
+                  {progressMessage}
+                </span>
+              )}
+              {isStreamingToolArgs && (
+                <span className="flex items-center gap-1.5 pl-[18px] text-nano leading-snug text-fg-secondary">
                   <span
-                    className={activatedKeys.has(s.key) ? 'text-fg-secondary' : 'text-fg-faint'}
-                    title={s.description}
-                  >
-                    {activatedKeys.has(s.key) ? '✓ ' : ''}
-                    {s.name}
+                    className="inline-block size-1.5 shrink-0 animate-pulse rounded-full bg-accent"
+                    aria-hidden
+                  />
+                  <span className="min-w-0">
+                    Streaming <code className="text-fg-secondary">{streamingToolName}</code>
+                    {streamingToolPath != null && streamingToolPath.length > 0 ? (
+                      <>
+                        {' '}
+                        → <span className="text-fg-muted">{streamingToolPath}</span>
+                      </>
+                    ) : null}
+                    <span className="text-fg-muted">
+                      {' '}
+                      ({formatStreamArgSize(streamingToolChars ?? 0)})
+                    </span>
                   </span>
                 </span>
-              ))}
-            </span>
-          )}
-          {liveSkills != null && liveSkills.length === 0 && isBuilding && (
-            <span className="pl-[18px] text-nano leading-snug text-fg-faint">
-              Skills: no catalog entries (configure under <code>skills/</code> or all are{' '}
-              <code>manual</code>)
-            </span>
-          )}
-          {(activeToolName || activeToolPath) && !toolLineRedundant && !isStreamingToolArgs && (
-            <span className="pl-[18px] text-nano leading-snug text-fg-muted">
-              Tool:{' '}
-              <span className="text-fg-secondary">
-                {activeToolName ?? 'running'}
-                {activeToolPath ? ` · ${activeToolPath}` : ''}
-              </span>
-            </span>
-          )}
-          {modelActivityDetail != null && (
-            <span className="pl-[18px] text-nano leading-snug text-fg-muted">{modelActivityDetail}</span>
-          )}
-          {showStreamQuietWarning && (
-            <span className="pl-[18px] text-nano leading-snug text-warning">
-              No model or tool trace for {modelQuietSec}s — the run may still be working (slow
-              reasoning or provider queue). Use Stop if you believe it is stuck.
-            </span>
-          )}
-          {(showFileStall || firstFileWait) && (
-            <span className="pl-[18px] text-nano leading-snug text-warning">
-              {firstFileWait
-                ? `Also: No files saved yet after ${elapsed}s — planning or drafting first write may be slow on this model.`
-                : `Also: No new file saved for ${fileStallSec}s — the model may still be streaming a large write or edit argument (typical for big CSS/HTML). Check the activity log; use Stop if it is clearly stuck.`}
-            </span>
-          )}
+              )}
+              {todoHint && (
+                <span className="pl-[18px] text-nano leading-snug text-fg-muted">
+                  {todoHint.label}: <span className="text-fg-secondary">{todoHint.task}</span>
+                </span>
+              )}
+              {liveSkills != null && liveSkills.length > 0 && (
+                <span className="pl-[18px] text-nano leading-snug text-fg-muted">
+                  Skills (✓ = use_skill):{' '}
+                  {liveSkills.map((s, i) => (
+                    <span key={s.key}>
+                      {i > 0 ? ', ' : ''}
+                      <span
+                        className={activatedKeys.has(s.key) ? 'text-fg-secondary' : 'text-fg-faint'}
+                        title={s.description}
+                      >
+                        {activatedKeys.has(s.key) ? '✓ ' : ''}
+                        {s.name}
+                      </span>
+                    </span>
+                  ))}
+                </span>
+              )}
+              {liveSkills != null && liveSkills.length === 0 && isBuilding && (
+                <span className="pl-[18px] text-nano leading-snug text-fg-faint">
+                  Skills: no catalog entries (configure under <code>skills/</code> or all are{' '}
+                  <code>manual</code>)
+                </span>
+              )}
+              {(activeToolName || activeToolPath) && !toolLineRedundant && !isStreamingToolArgs && (
+                <span className="pl-[18px] text-nano leading-snug text-fg-muted">
+                  Tool:{' '}
+                  <span className="text-fg-secondary">
+                    {activeToolName ?? 'running'}
+                    {activeToolPath ? ` · ${activeToolPath}` : ''}
+                  </span>
+                </span>
+              )}
+              {modelActivityDetail != null && (
+                <span className="pl-[18px] text-nano leading-snug text-fg-muted">{modelActivityDetail}</span>
+              )}
+              {showStreamQuietWarning && (
+                <span className="pl-[18px] text-nano leading-snug text-warning">
+                  No model or tool trace for {modelQuietSec}s — the run may still be working (slow
+                  reasoning or provider queue). Use Stop if you believe it is stuck.
+                </span>
+              )}
+              {(showFileStall || firstFileWait) && (
+                <span className="pl-[18px] text-nano leading-snug text-warning">
+                  {firstFileWait
+                    ? `Also: No files saved yet after ${elapsed}s — planning or drafting first write may be slow on this model.`
+                    : `Also: No new file saved for ${fileStallSec}s — the model may still be streaming a large write or edit argument (typical for big CSS/HTML). Check the activity log; use Stop if it is clearly stuck.`}
+                </span>
+              )}
+            </>
+          ) : null}
         </div>
         <span className="shrink-0 tabular-nums text-nano leading-tight text-fg-muted">{elapsed}s</span>
       </div>

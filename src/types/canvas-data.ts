@@ -1,4 +1,3 @@
-import type { GenerationMode } from '../constants/generation';
 import type { ReferenceImage } from './spec';
 
 // ── Per-node data interfaces ────────────────────────────────────────
@@ -43,7 +42,6 @@ export type HypothesisNodeData = NodeData<{
   placeholder?: boolean;
   providerId?: string;  // vestigial post-v13, kept for migration safety
   modelId?: string;     // vestigial post-v13
-  agentMode?: GenerationMode;
 }>;
 
 export type PreviewNodeData = NodeData<{

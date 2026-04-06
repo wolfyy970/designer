@@ -68,6 +68,7 @@ describe('subscribePiSessionBridge streaming_tool', () => {
       onEvent: () => Promise.resolve(),
       trace: traceFactory(),
       toolPathByCallId: new Map(),
+      toolArgsByCallId: new Map(),
       waitingForFirstToken: { current: false },
       turnLogRef: {},
       streamActivityAt: { current: 0 },

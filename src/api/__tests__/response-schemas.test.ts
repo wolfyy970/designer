@@ -57,7 +57,6 @@ describe('HypothesisPromptBundleResponseSchema', () => {
       evaluationContext: null,
       provenance: { strategies: {} },
       generationContext: {
-        agentMode: 'single',
         modelCredentials: [{ providerId: 'p', modelId: 'm', thinkingLevel: 'minimal' as const }],
       },
     });

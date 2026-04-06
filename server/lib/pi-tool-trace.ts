@@ -2,13 +2,13 @@
  * Serialize Pi tool calls for RunTraceEvent (toolArgs / toolResult / detail).
  */
 import { normalizeError } from '../../src/lib/error-utils.ts';
+import {
+  PI_TOOL_ARGS_TRACE_MAX_CHARS,
+  PI_TOOL_RESULT_TRACE_MAX_CHARS,
+} from './content-limits.ts';
 import { truncateUtf16WithSuffix } from './string-truncate.ts';
 
-/** Max length for toolArgs JSON on traces and NDJSON. */
-export const PI_TOOL_ARGS_TRACE_MAX_CHARS = 2048;
-
-/** Max length for tool result text on traces (and mirrored to `detail` on finish events). */
-export const PI_TOOL_RESULT_TRACE_MAX_CHARS = 800;
+export { PI_TOOL_ARGS_TRACE_MAX_CHARS, PI_TOOL_RESULT_TRACE_MAX_CHARS };
 
 /** JSON-stringify tool_execution_start args for trace payloads. */
 export function serializePiToolArgsForTrace(raw: unknown, maxChars = PI_TOOL_ARGS_TRACE_MAX_CHARS): string | undefined {

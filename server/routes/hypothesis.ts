@@ -13,7 +13,6 @@ import {
   HypothesisGenerateRequestSchema,
   PromptBundleRequestSchema,
 } from '../lib/hypothesis-schemas.ts';
-import { GENERATION_MODE } from '../../src/constants/generation.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { apiJsonError } from '../lib/api-json-error.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
@@ -32,13 +31,13 @@ hypothesis.post('/prompt-bundle', async (c) => {
     return apiJsonError(c, 400, 'No model credentials for this hypothesis');
   }
   const { ctx, prompts, evaluationContext, provenance } = bundle;
+  const evalActive = body.domainHypothesis?.revisionEnabled === true;
 
   return c.json({
     prompts,
-    evaluationContext: evaluationContext ?? null,
+    evaluationContext: evalActive ? (evaluationContext ?? null) : null,
     provenance,
     generationContext: {
-      agentMode: ctx.agentMode,
       modelCredentials: ctx.modelCredentials.map((cred) => ({
         providerId: cred.providerId,
         modelId: cred.modelId,
@@ -67,6 +66,8 @@ hypothesis.post('/generate', async (c) => {
   const modelCredentials = [...ctx.modelCredentials];
   const parallel = modelCredentials.every((cred) => getProvider(cred.providerId)?.supportsParallel ?? false);
   const evaluatorClamp = clampEvaluatorOptional(body.evaluatorProviderId, body.evaluatorModelId);
+  const evalActive = body.domainHypothesis?.revisionEnabled === true;
+  const effectiveEvaluationContext = evalActive ? evaluationContext : null;
 
   return streamSSE(c, async (stream) => {
     const abortSignal = c.req.raw.signal;
@@ -94,8 +95,7 @@ hypothesis.post('/generate', async (c) => {
       const streamBody = GenerateStreamBodySchema.parse({
         ...base,
         thinkingLevel: cred.thinkingLevel,
-        mode: ctx.agentMode,
-        evaluationContext: ctx.agentMode === GENERATION_MODE.AGENTIC ? evaluationContext : undefined,
+        evaluationContext: effectiveEvaluationContext,
         providerId: cred.providerId,
         modelId: cred.modelId,
         correlationId: `${baseCorrelation}:lane-${laneIndex}`,

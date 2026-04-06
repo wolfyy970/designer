@@ -5,8 +5,7 @@ import type {
   EvaluationContextPayload,
   EvaluatorRubricId,
 } from '../../src/types/evaluation.ts';
-
-const REVISION_COMPILED_PROMPT_MAX = 4000;
+import { REVISION_COMPILED_PROMPT_MAX } from './content-limits.ts';
 
 /** One completed evaluation round for cross-round memory in revision prompts */
 export interface EvaluationRoundHistoryEntry {

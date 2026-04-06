@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { GENERATION_MODE } from '../constants/generation';
 import { ReferenceImageSchema } from '../types/spec';
 
 const DimensionSchema = z.object({
@@ -70,7 +69,6 @@ export const HypothesisPromptBundleResponseSchema = z.object({
   evaluationContext: EvaluationContextPayloadSchema.nullable(),
   provenance: ProvenanceContextSchema,
   generationContext: z.object({
-    agentMode: z.enum([GENERATION_MODE.SINGLE, GENERATION_MODE.AGENTIC]),
     modelCredentials: z.array(
       z.object({
         providerId: z.string(),

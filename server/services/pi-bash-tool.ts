@@ -7,9 +7,8 @@
 import { Type } from '@sinclair/typebox';
 import type { Bash } from 'just-bash';
 import type { ExtensionContext, ToolDefinition } from './pi-sdk/types.ts';
+import { BASH_TOOL_MAX_CHARS } from '../lib/content-limits.ts';
 import { SANDBOX_PROJECT_ROOT, snapshotDesignFiles } from './agent-bash-sandbox.ts';
-
-const MAX_TOOL_CHARS = 51_200;
 
 const bashParams = Type.Object({
   command: Type.String({
@@ -48,8 +47,8 @@ export function createSandboxBashTool(
       const body = merged || (result.exitCode !== 0 ? '(no stdout/stderr)' : '(no output)');
       const full = prefix + body;
       const text =
-        full.length > MAX_TOOL_CHARS
-          ? `${full.slice(0, MAX_TOOL_CHARS)}\n[Output truncated at ${MAX_TOOL_CHARS} characters]`
+        full.length > BASH_TOOL_MAX_CHARS
+          ? `${full.slice(0, BASH_TOOL_MAX_CHARS)}\n[Output truncated at ${BASH_TOOL_MAX_CHARS} characters]`
           : full;
 
       return {

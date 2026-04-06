@@ -43,7 +43,6 @@
     "src/lib/prompts/incubator-user.ts",
     "src/lib/prompts/inputs-generate.ts",
     "src/lib/prompts/variant-prompt.ts",
-    "src/lib/extract-code.ts",
     "src/lib/debug-agent-ingest-shared.ts",
     "src/lib/sse-reader.ts",
     "src/lib/rubric-weights.json",

@@ -1,8 +1,7 @@
 import { debugAgentIngest } from '../lib/debug-agent-ingest';
-import { GENERATION_MODE, GENERATION_STATUS } from '../constants/generation';
+import { GENERATION_STATUS } from '../constants/generation';
 import { storage } from '../storage';
 import type { CompiledPrompt } from '../types/incubator';
-import type { AgentMode } from '../types/workspace-domain';
 import type { GenerationResult, Provenance } from '../types/provider';
 import type { ProvenanceContext } from '../types/provenance-context';
 import { useGenerationStore } from '../stores/generation-store';
@@ -15,7 +14,6 @@ export function createPlaceholderFinalizeAfterStream(options: {
   prompt: CompiledPrompt;
   providerId: string;
   model: string;
-  mode?: AgentMode;
   provenanceCtx?: ProvenanceContext;
   updateResult: (id: string, patch: Partial<GenerationResult>) => void;
   flushAllPendingTraces: () => Promise<void>;
@@ -28,7 +26,6 @@ export function createPlaceholderFinalizeAfterStream(options: {
     prompt,
     providerId,
     model,
-    mode,
     provenanceCtx,
     updateResult,
     flushAllPendingTraces,
@@ -168,7 +165,7 @@ export function createPlaceholderFinalizeAfterStream(options: {
     updateResult(placeholderId, {
       id: placeholderId,
       status: GENERATION_STATUS.COMPLETE,
-      agenticPhase: mode === GENERATION_MODE.AGENTIC ? 'complete' : undefined,
+      agenticPhase: 'complete',
       evaluationStatus: undefined,
       ...(roundsMetaOnly ? { evaluationRounds: roundsMetaOnly } : {}),
       ...(lastEvalAggregate ? { evaluationSummary: lastEvalAggregate } : {}),

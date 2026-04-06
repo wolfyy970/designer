@@ -3,14 +3,12 @@
  * No Zustand, no Vite env, no IndexedDB.
  */
 import { NODE_TYPES } from '../constants/canvas';
-import { GENERATION_MODE } from '../constants/generation';
 import { getDesignSystemNodeData, getModelNodeData } from '../lib/canvas-node-data';
 import type { HypothesisStrategy } from '../types/incubator';
 import type { EvaluationContextPayload } from '../types/evaluation';
 import type { ProvenanceContext } from '../types/provenance-context';
 import type { DesignSpec, ReferenceImage } from '../types/spec';
 import type {
-  AgentMode,
   DomainDesignSystemContent,
   DomainHypothesis,
   DomainModelProfile,
@@ -89,7 +87,6 @@ export interface HypothesisGenerationContext {
   readonly hypothesisNodeId: string;
   readonly hypothesisStrategy: HypothesisStrategy;
   readonly spec: DesignSpec;
-  readonly agentMode: AgentMode;
   readonly modelCredentials: readonly ModelCredential[];
   readonly designSystemContent: string | undefined;
   readonly designSystemImages: readonly ReferenceImage[];
@@ -216,11 +213,6 @@ export function buildHypothesisGenerationContextFromInputs(input: {
   }
   if (modelCredentials.length === 0) return null;
 
-  const node = nodeById(snapshot, hypothesisNodeId);
-  const agentMode =
-    domainHypothesis?.agentMode ??
-    ((node?.data?.agentMode as AgentMode | undefined) ?? GENERATION_MODE.SINGLE);
-
   let designSystemContent: string | undefined;
   let designSystemImages: readonly ReferenceImage[] = [];
   if (domainHypothesis && domainHypothesis.designSystemNodeIds.length > 0) {
@@ -237,7 +229,6 @@ export function buildHypothesisGenerationContextFromInputs(input: {
     hypothesisNodeId,
     hypothesisStrategy,
     spec,
-    agentMode,
     modelCredentials,
     designSystemContent,
     designSystemImages,
@@ -263,8 +254,7 @@ export function provenanceFromHypothesisContext(
 
 export function evaluationPayloadFromHypothesisContext(
   ctx: HypothesisGenerationContext,
-): EvaluationContextPayload | undefined {
-  if (ctx.agentMode !== GENERATION_MODE.AGENTIC) return undefined;
+): EvaluationContextPayload {
   const s = ctx.hypothesisStrategy;
   const dv = s.dimensionValues;
   const outputFormat =

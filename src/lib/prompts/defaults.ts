@@ -3,7 +3,6 @@
 export type PromptKey =
   | 'hypotheses-generator-system'
   | 'incubator-user-inputs'
-  | 'designer-direct-system'
   | 'designer-agentic-system'
   | 'designer-agentic-revision-user'
   | 'designer-hypothesis-inputs'
@@ -48,12 +47,6 @@ export const PROMPT_META: PromptMeta[] = [
     ],
   },
   {
-    key: 'designer-direct-system',
-    label: 'Designer — Direct / single-shot (system)',
-    description:
-      'System prompt for Direct mode: return one self-contained HTML document with inline CSS and allowlisted Google Fonts only.',
-  },
-  {
     key: 'designer-agentic-system',
     label: 'Designer — Agentic (system)',
     description:
@@ -69,7 +62,7 @@ export const PROMPT_META: PromptMeta[] = [
     key: 'designer-hypothesis-inputs',
     label: 'Designer — Hypothesis (user)',
     description:
-      'User prompt for Direct and Agentic generation: hypothesis, dimension values, and full spec context for the specific design to build.',
+      'User prompt for agentic generation: hypothesis, dimension values, and full spec context for the specific design to build.',
     variables: [
       'STRATEGY_NAME',
       'HYPOTHESIS',
@@ -174,7 +167,7 @@ export const PROMPT_KEYS: PromptKey[] = PROMPT_META.map((m) => m.key);
 export const LEGACY_PROMPT_KEY_ALIASES = {
   compilerSystem: 'hypotheses-generator-system',
   compilerUser: 'incubator-user-inputs',
-  genSystemHtml: 'designer-direct-system',
+  genSystemHtml: 'designer-agentic-system',
   genSystemHtmlAgentic: 'designer-agentic-system',
   variant: 'designer-hypothesis-inputs',
   designSystemExtract: 'design-system-extract-system',

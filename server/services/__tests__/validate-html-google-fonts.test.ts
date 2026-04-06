@@ -80,4 +80,33 @@ body { font-family: 'Source Sans 3', sans-serif; }
     const text = await runValidate(html);
     expect(text).toContain('External @import in <style> not allowed');
   });
+
+  it('resolves parent-relative href from a sub-page', async () => {
+    const about = `${shell}<link rel="stylesheet" href="../css/style.css">${tail}`;
+    const tool = createValidateHtmlTool(
+      mockBash({
+        'pages/about.html': about,
+        'css/style.css': 'body{}',
+      }),
+    );
+    const result = await tool.execute('tc', { path: 'pages/about.html' }, undefined, undefined, {} as never);
+    const first = result.content[0];
+    const text = first?.type === 'text' ? first.text : '';
+    expect(text).toContain('structure OK');
+    expect(text).not.toContain('not found');
+  });
+
+  it('resolves same-directory href from a sub-page', async () => {
+    const sub = `${shell}<link rel="stylesheet" href="shared.css">${tail}`;
+    const tool = createValidateHtmlTool(
+      mockBash({
+        'pages/sub.html': sub,
+        'pages/shared.css': 'body{}',
+      }),
+    );
+    const result = await tool.execute('tc', { path: 'pages/sub.html' }, undefined, undefined, {} as never);
+    const first = result.content[0];
+    const text = first?.type === 'text' ? first.text : '';
+    expect(text).toContain('structure OK');
+  });
 });

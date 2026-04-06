@@ -5,7 +5,7 @@ import type {
 import type { CompiledPrompt } from '../types/incubator';
 import type { GenerationResult } from '../types/provider';
 import type { HypothesisGenerationContext } from '../workspace/hypothesis-generation-pure';
-import { GENERATION_MODE, GENERATION_STATUS } from '../constants/generation';
+import { GENERATION_STATUS } from '../constants/generation';
 import {
   createPlaceholderGenerationSession,
   runFinalizeWithCatch,
@@ -101,7 +101,6 @@ export async function executeHypothesisGenerationRun(
       prompt,
       providerId: cred.providerId,
       model: cred.modelId,
-      mode: bundle.generationContext.agentMode,
       provenanceCtx,
       updateResult: deps.updateResult,
       correlationId: deps.runId,
@@ -116,7 +115,7 @@ export async function executeHypothesisGenerationRun(
   }
 
   deps.syncAfterGenerate(placeholderResults, deps.nodeId);
-  if (bundle.generationContext.agentMode === GENERATION_MODE.AGENTIC) {
+  {
     const canvas = deps.getCanvasState();
     const previewNodeId = canvas.previewNodeIdMap.get(prompt.strategyId);
     if (previewNodeId) canvas.setRunInspectorPreview(previewNodeId);

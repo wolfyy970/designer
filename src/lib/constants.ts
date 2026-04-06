@@ -1,5 +1,4 @@
 import type { SpecSectionId, SpecSectionMeta } from '../types/spec';
-import { GENERATION_MODE } from '../constants/generation';
 import { LOCKDOWN_MODEL_ID } from './lockdown-model';
 
 export const SPEC_SECTIONS: SpecSectionMeta[] = [
@@ -64,7 +63,7 @@ export const DEFAULT_MODEL_ID = import.meta.env.VITE_DEFAULT_MODEL_ID || LOCKDOW
  */
 export const PREREQUISITE_DEFAULTS: Record<string, Record<string, unknown>> = {
   model: { providerId: DEFAULT_INCUBATOR_PROVIDER, modelId: DEFAULT_MODEL_ID, thinkingLevel: 'minimal' },
-  hypothesis: { agentMode: GENERATION_MODE.SINGLE },
+  hypothesis: {},
 };
 
 

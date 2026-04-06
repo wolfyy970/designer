@@ -2,7 +2,6 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { GENERATION_MODE } from '../../src/constants/generation.ts';
 import {
   hydrateIncubateRequest,
   hydrateIncubateRequestFromParsed,
@@ -23,7 +22,7 @@ describe('meta-harness test-case-hydrator', () => {
     ) as unknown;
     const body = hydrateMetaHarnessTestCase(raw, { defaultIncubatorProvider: 'openrouter' });
     expect(body.hypothesisNodeId).toBe(MH_HYPOTHESIS_NODE);
-    expect(body.domainHypothesis?.agentMode).toBe(GENERATION_MODE.AGENTIC);
+    expect(body.domainHypothesis?.revisionEnabled).toBe(true);
     expect(body.modelProfiles[MH_MODEL_NODE]?.modelId).toContain('minimax');
     expect(body.strategy.hypothesis.length).toBeGreaterThan(20);
     expect(body.spec.sections['design-brief']?.content).toContain('Northstar');

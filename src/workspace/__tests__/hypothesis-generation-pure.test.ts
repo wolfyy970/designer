@@ -141,7 +141,6 @@ describe('hypothesis-generation-pure', () => {
         strategyId: 'vs1',
         modelNodeIds: ['mod1'],
         designSystemNodeIds: ['ds1'],
-        agentMode: 'agentic',
         placeholder: false,
       },
       modelProfiles: {
@@ -153,7 +152,6 @@ describe('hypothesis-generation-pure', () => {
       defaultIncubatorProvider: 'openrouter',
     });
     expect(ctx).not.toBeNull();
-    expect(ctx!.agentMode).toBe('agentic');
     expect(ctx!.modelCredentials).toEqual([
       { providerId: 'openrouter', modelId: 'x', thinkingLevel: 'medium' },
     ]);
@@ -173,7 +171,7 @@ describe('hypothesis-generation-pure', () => {
           id: 'h1',
           type: NODE_TYPES.HYPOTHESIS,
           position: { x: 0, y: 0 },
-          data: { agentMode: 'single' },
+          data: {},
         },
       ],
       edges: [
@@ -204,7 +202,6 @@ describe('hypothesis-generation-pure', () => {
       defaultIncubatorProvider: 'openrouter',
     });
     expect(ctx).not.toBeNull();
-    expect(ctx!.agentMode).toBe('single');
     expect(ctx!.modelCredentials).toEqual([
       { providerId: 'lmstudio', modelId: 'lm', thinkingLevel: 'low' },
     ]);

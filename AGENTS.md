@@ -35,14 +35,14 @@ pnpm lint            # eslint
 # Tests
 pnpm test            # vitest run (one-shot)
 pnpm test:watch      # vitest (watch mode)
-pnpm vitest run src/lib/__tests__/extract-code.test.ts  # single test file
+pnpm vitest run src/hooks/__tests__/resolve-evaluator-settings.test.ts  # single test file
 ```
 
 Vitest excludes `server/services/__tests__/browser-playwright-evaluator.test.ts` via `vite.config.ts` so the default suite stays hermetic; run that file explicitly when changing Playwright merge logic. Pi virtual FS tools are covered in `server/services/pi-sdk/__tests__/virtual-tools.test.ts`.
 
 ## Architecture (quick reference)
 
-**Full technical reference:** [ARCHITECTURE.md](ARCHITECTURE.md) — routes, server modules, client stores, canvas, generation (single-shot vs agentic), preview URLs, Pi NPM boundary. **Pi design sandbox** (three-layer contract, **tool inventory** table, edit cascade / `edit-match-cascade.ts`): [ARCHITECTURE.md § Pi design sandbox](ARCHITECTURE.md#pi-design-sandbox-three-layer-contract).
+**Full technical reference:** [ARCHITECTURE.md](ARCHITECTURE.md) — routes, server modules, client stores, canvas, generation (agentic Pi sandbox + optional auto-improve loop), preview URLs, Pi NPM boundary. **Pi design sandbox** (three-layer contract, **tool inventory** table, edit cascade / `edit-match-cascade.ts`): [ARCHITECTURE.md § Pi design sandbox](ARCHITECTURE.md#pi-design-sandbox-three-layer-contract).
 
 ### Two-process dev setup
 

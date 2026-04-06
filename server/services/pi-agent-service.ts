@@ -167,6 +167,7 @@ export async function runDesignAgentSession(
     onEvent,
     trace,
     toolPathByCallId: new Map<string, string | undefined>(),
+    toolArgsByCallId: new Map<string, string | undefined>(),
     waitingForFirstToken: { current: false },
     turnLogRef: llmTurnLogRef,
     streamActivityAt,

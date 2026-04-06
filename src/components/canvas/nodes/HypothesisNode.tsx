@@ -1,19 +1,25 @@
 import { memo, useCallback, useState } from 'react';
 import { type NodeProps, type Node, Handle, Position } from '@xyflow/react';
-import { FileText, Loader2, Pencil, Sparkles, X, Zap } from 'lucide-react';
+import { FileText, Loader2, Pencil, X, Zap } from 'lucide-react';
 import { useIncubatorStore, findStrategy } from '../../../stores/incubator-store';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { useGenerationStore } from '../../../stores/generation-store';
 import { useSpecStore } from '../../../stores/spec-store';
 import { useWorkspaceDomainStore } from '../../../stores/workspace-domain-store';
+import { useEvaluatorDefaultsStore } from '../../../stores/evaluator-defaults-store';
 import type { HypothesisNodeData } from '../../../types/canvas-data';
 import { useHypothesisGeneration } from '../../../hooks/useHypothesisGeneration';
 import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
 import { useRequestPermanentDelete } from '../../../hooks/useRequestPermanentDelete';
 import { hypothesisDeleteCopy } from '../../../lib/canvas-permanent-delete-copy';
 import { processingOrFilled } from '../../../lib/node-status';
-import { GENERATION_MODE, GENERATION_STATUS } from '../../../constants/generation';
-import type { AgentMode } from '../../../types/workspace-domain';
+import { GENERATION_STATUS } from '../../../constants/generation';
+import {
+  EVALUATOR_MAX_REVISION_ROUNDS_MAX,
+  EVALUATOR_MAX_REVISION_ROUNDS_MIN,
+  EVALUATOR_MAX_SCORE,
+  EVALUATOR_MIN_SCORE,
+} from '../../../types/evaluator-settings';
 import { abortGenerationForStrategy } from '../../../lib/generation-abort-registry';
 import { NODE_STATUS, NODE_TYPES, RF_INTERACTIVE } from '../../../constants/canvas';
 import {
@@ -29,6 +35,7 @@ import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
 import GeneratingSkeleton from './GeneratingSkeleton';
 import { NodeErrorBlock } from './shared/NodeErrorBlock';
+import { DsHelpTooltip } from '../../shared/DsHelpTooltip';
 
 type HypothesisEditorTab = 'hypothesis' | 'why' | 'measurements';
 
@@ -53,16 +60,27 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
   );
   const updateStrategy = useIncubatorStore((s) => s.updateStrategy);
 
-  const agentModeDomain = useWorkspaceDomainStore((s) => s.hypotheses[nodeId]?.agentMode);
-  const agentModeCanvas = useCanvasStore((s) =>
-    (s.nodes.find((n) => n.id === nodeId)?.data.agentMode as AgentMode | undefined),
+  const domainHypothesis = useWorkspaceDomainStore((s) => s.hypotheses[nodeId]);
+  const setHypothesisGenerationSettings = useWorkspaceDomainStore(
+    (s) => s.setHypothesisGenerationSettings,
   );
-  const agentMode = agentModeDomain ?? agentModeCanvas ?? GENERATION_MODE.SINGLE;
+  const globalMaxRounds = useEvaluatorDefaultsStore((s) => s.maxRevisionRounds);
+  const globalMinScore = useEvaluatorDefaultsStore((s) => s.minOverallScore);
 
-  const setAgentMode = useCallback(
-    (mode: AgentMode) =>
-      useCanvasStore.getState().updateNodeData(nodeId, { agentMode: mode }),
-    [nodeId],
+  const revisionEnabled = domainHypothesis?.revisionEnabled ?? false;
+  const hypoMaxRounds = domainHypothesis?.maxRevisionRounds;
+  const hypoMinScore = domainHypothesis?.minOverallScore;
+
+  const displayMaxRounds = hypoMaxRounds ?? globalMaxRounds;
+  const effectiveMinScore =
+    hypoMinScore !== undefined ? hypoMinScore : globalMinScore;
+  const targetScoreChecked = effectiveMinScore != null;
+
+  const setRevisionEnabled = useCallback(
+    (enabled: boolean) => {
+      setHypothesisGenerationSettings(nodeId, { revisionEnabled: enabled });
+    },
+    [nodeId, setHypothesisGenerationSettings],
   );
 
   const handleRemove = useNodeRemoval(nodeId);
@@ -72,7 +90,6 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
     countIncomingModelsWithModelSelected(nodeId, { nodes: s.nodes, edges: s.edges }),
   );
 
-  // Check if THIS hypothesis is generating (not global)
   const isGenerating = useGenerationStore((s) =>
     s.results.some((r) => r.strategyId === strategyId && r.status === GENERATION_STATUS.GENERATING),
   );
@@ -101,7 +118,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
     const domain = useWorkspaceDomainStore.getState();
     const gen = useGenerationStore.getState();
     const incubationPlan = findPlanForStrategy(incubator.incubationPlans, strategyId);
-    const domainHypothesis = domain.hypotheses[nodeId];
+    const dh = domain.hypotheses[nodeId];
     const compiledPromptsForStrategy = incubator.compiledPrompts.filter(
       (p) => p.strategyId === strategyId,
     );
@@ -112,13 +129,12 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
       hypothesisNodeId: nodeId,
       strategy,
       incubationPlan,
-      domainHypothesis,
+      domainHypothesis: dh,
       modelProfiles: domain.modelProfiles,
       designSystems: domain.designSystems,
       spec,
       compiledPromptsForStrategy,
       resultsForStrategy,
-      agentModeOnNode: agentMode,
     });
     const slug = (strategy.name || 'hypothesis')
       .toLowerCase()
@@ -126,7 +142,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
       .replace(/(^-|-$)/g, '');
     const stamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
     downloadTextFile(`${slug}-hypothesis-debug-${stamp}.md`, md);
-  }, [strategy, strategyId, nodeId, agentMode]);
+  }, [strategy, strategyId, nodeId]);
 
   const handleDelete = useCallback(() => {
     const snap = useCanvasStore.getState();
@@ -183,7 +199,6 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
   const hasModel = connectedModelCount > 0;
   const canGenerate = !!strategy.name.trim() && !!strategy.hypothesis.trim() && hasModel;
 
-  // Layer 2: inline readiness hint
   const hint = !isGenerating
     ? !hasModel
       ? 'Connect a Model node'
@@ -261,7 +276,6 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
         )}
       </NodeHeader>
 
-      {/* Hypothesis / Why / Measurements — one tab at a time for readable editing */}
       <div className="flex min-h-[var(--min-height-hypothesis-shell)] flex-col px-3 pb-2 pt-1">
         <div
           className={`${RF_INTERACTIVE} mb-1.5 flex gap-0.5 rounded-md border border-border bg-surface-raised p-0.5`}
@@ -316,42 +330,94 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
         </div>
       </div>
 
-      {/* ── Generation Controls ──────────────────────────────── */}
       <div className="border-t border-border-subtle px-3 py-2.5">
         {generationError && <NodeErrorBlock message={generationError} />}
 
         <div className={`${RF_INTERACTIVE} mb-2 space-y-1.5`}>
-          <div className="space-y-1">
-            <span className="text-nano text-fg-muted">Run mode</span>
-            <div className="flex gap-0.5 rounded border border-border bg-surface p-0.5">
-              <button
-                type="button"
-                onPointerDown={() => setAgentMode(GENERATION_MODE.SINGLE)}
-                title="Direct: one shot"
-                className={`${RF_INTERACTIVE} flex min-w-0 flex-1 items-center justify-center gap-1 rounded px-1.5 py-0.5 text-nano transition-colors ${
-                  agentMode === GENERATION_MODE.SINGLE ? 'bg-fg text-bg' : 'text-fg-muted hover:text-fg-secondary'
-                }`}
-              >
-                <Sparkles size={9} className="shrink-0 opacity-90" />
-                Direct
-              </button>
-              <button
-                type="button"
-                onPointerDown={() => setAgentMode(GENERATION_MODE.AGENTIC)}
-                title="Agentic: tools, eval, revise"
-                className={`${RF_INTERACTIVE} flex min-w-0 flex-1 items-center justify-center gap-1 rounded px-1.5 py-0.5 text-nano transition-colors ${
-                  agentMode === GENERATION_MODE.AGENTIC ? 'bg-fg text-bg' : 'text-fg-muted hover:text-fg-secondary'
-                }`}
-              >
-                <Zap size={9} className="shrink-0 opacity-90" />
-                Agentic
-              </button>
+          <div className="rounded-md border border-border-subtle bg-surface/40 px-2 py-1.5">
+
+            <div className="flex items-center gap-1">
+              <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 select-none">
+                <input
+                  type="checkbox"
+                  checked={revisionEnabled}
+                  onChange={(e) => setRevisionEnabled(e.target.checked)}
+                  className="accent-accent shrink-0"
+                />
+                <span className="text-nano font-medium text-fg-secondary">Auto-improve</span>
+              </label>
+              <DsHelpTooltip
+                aria-label="What Auto-improve does"
+                content={
+                  <>
+                    <span className="font-medium text-fg-secondary">Off:</span> one design pass, no quality loop.{' '}
+                    <span className="font-medium text-fg-secondary">On:</span> score the work, then the agent can refine
+                    it—bounded by max rounds and an optional score target below.
+                  </>
+                }
+              />
             </div>
+            {revisionEnabled ? (
+              <div className="mt-2 space-y-2 pl-7">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-nano text-fg-muted" htmlFor={`${nodeId}-max-rounds`}>
+                    Max rounds
+                  </label>
+                  <input
+                    id={`${nodeId}-max-rounds`}
+                    type="number"
+                    min={EVALUATOR_MAX_REVISION_ROUNDS_MIN}
+                    max={EVALUATOR_MAX_REVISION_ROUNDS_MAX}
+                    value={displayMaxRounds}
+                    onChange={(e) =>
+                      setHypothesisGenerationSettings(nodeId, {
+                        maxRevisionRounds: Number(e.target.value),
+                      })
+                    }
+                    className="w-14 rounded border border-border bg-bg px-1.5 py-1 text-nano text-fg-secondary input-focus"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="flex cursor-pointer items-start gap-2 select-none">
+                    <input
+                      type="checkbox"
+                      checked={targetScoreChecked}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setHypothesisGenerationSettings(nodeId, {
+                            minOverallScore: globalMinScore ?? 4,
+                          });
+                        } else {
+                          setHypothesisGenerationSettings(nodeId, {
+                            minOverallScore: null,
+                          });
+                        }
+                      }}
+                      className="accent-accent mt-0.5 shrink-0"
+                    />
+                    <span className="text-nano text-fg-secondary">
+                      Target quality score (early stop when reached, no hard fails)
+                    </span>
+                  </label>
+                  {targetScoreChecked ? (
+                    <input
+                      type="number"
+                      min={EVALUATOR_MIN_SCORE}
+                      max={EVALUATOR_MAX_SCORE}
+                      step={0.1}
+                      value={effectiveMinScore ?? EVALUATOR_MIN_SCORE}
+                      onChange={(e) =>
+                        setHypothesisGenerationSettings(nodeId, {
+                          minOverallScore: Number(e.target.value),
+                        })
+                      }
+                      className="ml-6 w-20 rounded border border-border bg-bg px-1.5 py-1 text-nano text-fg-secondary input-focus"
+                    />
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
-          <p className="text-nano leading-snug text-fg-muted">
-            <span className="font-medium text-fg-secondary">Thinking</span> is set on each{' '}
-            <span className="text-fg-secondary">Model</span> node.
-          </p>
         </div>
 
         <div className={RF_INTERACTIVE}>
@@ -370,21 +436,14 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
                 <Loader2 size={12} className="animate-spin" aria-hidden />
                 {generationProgress && generationProgress.total > 1
                   ? generationProgress.completed === 0
-                    ? `Generating ${smallNumberToWord(generationProgress.total)} previews…`
+                    ? `Designing ${smallNumberToWord(generationProgress.total)} previews…`
                     : `${generationProgress.completed} of ${generationProgress.total} ready…`
-                  : agentMode === GENERATION_MODE.AGENTIC
-                    ? 'Running agent…'
-                    : 'Generating…'}
-              </>
-            ) : agentMode === GENERATION_MODE.AGENTIC ? (
-              <>
-                <Zap size={12} aria-hidden />
-                Run agent
+                  : 'Designing…'}
               </>
             ) : (
               <>
-                <Sparkles size={12} aria-hidden />
-                Generate
+                <Zap size={12} className="shrink-0 opacity-90" aria-hidden />
+                Design
               </>
             )}
           </button>

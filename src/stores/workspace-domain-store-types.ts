@@ -1,5 +1,4 @@
 import type {
-  AgentMode,
   DomainDesignSystemContent,
   DomainHypothesis,
   DomainIncubatorWiring,
@@ -42,7 +41,10 @@ export interface WorkspaceDomainStore {
   ) => void;
   setHypothesisGenerationSettings: (
     hypothesisId: string,
-    partial: { agentMode?: AgentMode | undefined },
+    partial: Pick<
+      DomainHypothesis,
+      'revisionEnabled' | 'maxRevisionRounds' | 'minOverallScore'
+    >,
   ) => void;
   setHypothesisPlaceholder: (hypothesisId: string, placeholder: boolean) => void;
   removeHypothesis: (hypothesisId: string) => void;

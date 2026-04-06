@@ -8,7 +8,7 @@ describe('spreadPromptOverrides', () => {
   });
 
   it('wraps non-empty map as promptOverrides', () => {
-    const o = { 'designer-direct-system': 'x' };
+    const o = { 'designer-agentic-system': 'x' };
     expect(spreadPromptOverrides(o)).toEqual({ promptOverrides: o });
   });
 });
@@ -18,12 +18,12 @@ describe('getActivePromptOverrides', () => {
     expect(getActivePromptOverrides({})).toBeUndefined();
     expect(
       getActivePromptOverrides({
-        'designer-direct-system': '',
+        'designer-agentic-system': '',
       } as Partial<Record<PromptKey, string>>),
     ).toBeUndefined();
     expect(
       getActivePromptOverrides({
-        'designer-direct-system': '   ',
+        'designer-agentic-system': '   ',
       } as Partial<Record<PromptKey, string>>),
     ).toBeUndefined();
   });
@@ -31,8 +31,8 @@ describe('getActivePromptOverrides', () => {
   it('includes keys whose trimmed body is non-empty, preserving original string', () => {
     expect(
       getActivePromptOverrides({
-        'designer-direct-system': '  x  ',
+        'designer-agentic-system': '  x  ',
       }),
-    ).toEqual({ 'designer-direct-system': '  x  ' });
+    ).toEqual({ 'designer-agentic-system': '  x  ' });
   });
 });

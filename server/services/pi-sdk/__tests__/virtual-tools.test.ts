@@ -266,7 +266,7 @@ describe('createVirtualPiCodingTools', () => {
       expect(body).toBe('v2');
     });
 
-    it('requires read again after a successful edit before a second edit', async () => {
+    it('allows consecutive edits to the same file without re-reading', async () => {
       const bash = createAgentBashSandbox({ seedFiles: { 'twice.txt': 'one two' } });
       const tools = createVirtualPiCodingTools(bash, () => {});
       const read = tools.find((t) => t.name === 'read')!;
@@ -276,13 +276,6 @@ describe('createVirtualPiCodingTools', () => {
         path: 'twice.txt',
         edits: [{ oldText: 'one', newText: 'ONE' }],
       });
-      await expect(
-        exec(edit, {
-          path: 'twice.txt',
-          edits: [{ oldText: 'two', newText: 'TWO' }],
-        }),
-      ).rejects.toThrow(/read .* before editing/i);
-      await exec(read, { path: 'twice.txt' });
       await exec(edit, {
         path: 'twice.txt',
         edits: [{ oldText: 'two', newText: 'TWO' }],

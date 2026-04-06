@@ -38,7 +38,7 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 | Model | Processing | Centralizes provider + model selection. Connect to **Incubator**, **Hypothesis**, or **Design System** nodes to configure which LLM they use. |
 | Design System | Processing | Self-contained design token definitions. Supports multiple instances (e.g., Material Design vs custom tokens). Content stored in node data, not spec store. Optional vision-based extraction from uploaded images. |
 | Incubator | Processing | **Incubates** connected inputs into hypothesis strategies via LLM |
-| Hypothesis | Processing | Editable strategy card with built-in generation controls. Mode **Direct** (one forward generation) vs **Agentic** (tool loop + evaluation). Connect a Model node, then **Generate** or **Run agent**. |
+| Hypothesis | Processing | Editable strategy card with **Design** (always **agentic** Pi). **Auto-improve** off: single build, no evaluator. **On:** rubric + browser evaluation and optional revision rounds. Connect a Model node. |
 | Preview | Output | Rendered design preview. Single-file results show an HTML iframe. Multi-file (agentic) results show a file explorer + preview/code tabs + zip download. Completed agentic runs show an **evaluation scorecard** (aggregate score, prioritized fixes, runtime QA) and, when available, a **headless browser thumbnail**. Version navigation across all results. |
 
 ### Canvas Features
@@ -71,26 +71,22 @@ Previews can connect to **Existing Design** (screenshot reference) or **Incubato
 3. Re-incubate with the new context
 4. Generate improved designs
 
-Structured critique during agentic runs comes from the **evaluator** (scorecard, fix list, revision rounds), not a separate canvas node.
+Structured critique on **Auto-improve** runs comes from the **evaluator** (scorecard, fix list, revision rounds), not a separate canvas node. Single-pass runs skip evaluation entirely.
 
 ## Generation Engine
 
-Each hypothesis-model pair produces a design via one of two modes. Server routes, SSE events, and store boundaries are summarized in [ARCHITECTURE.md](ARCHITECTURE.md); this section is the product-facing behavior.
-
-### Single-Shot Mode
-
-The server sends the **assembled** hypothesis user prompt (hypothesis + spec context) to the LLM with the `designer-direct-system` system prompt, in one call. The response is extracted as a complete, self-contained HTML document with inline CSS and JS. Code streams back via SSE and renders immediately.
+Each hypothesis-model pair produces a design through the **agentic** pipeline (Pi sandbox and tools). **Evaluation** and **revision** run only when **Auto-improve** is on. Server routes, SSE events, and store boundaries are summarized in [ARCHITECTURE.md](ARCHITECTURE.md); this section is the product-facing behavior.
 
 **Parallel generation.** Multiple hypotheses generate simultaneously. Progress and completion update independently per preview.
 
-### Agentic Mode
+### Agentic design (and optional evaluation + revision)
 
-Enabled by choosing **Agentic** in Mode on a Hypothesis node; use **Run agent** to start it. Powered by `@mariozechner/pi-coding-agent` with a **`just-bash`** in-memory project shell.
+Start a run with **Design** on the Hypothesis node. With **Auto-improve** **off** (default), the server runs **one** Pi **build** and returns—**no** evaluator workers. With **Auto-improve** **on**, it runs **build → evaluate → optional revise loop**. Powered by `@mariozechner/pi-coding-agent` with a **`just-bash`** in-memory project shell.
 
-**Server pipeline (not a single LLM call):**
-1. **Build** — PI multi-turn tool loop produces the file tree (streaming events: plan, files, activity, todos).
-2. **Evaluate** — Four workers run: **design**, **strategy**, and **implementation** rubrics (structured JSON from the LLM) plus **browser QA**. The eval harness registers the same **virtual file tree** the agent wrote and passes a **`preview_page_url`** into LLM evaluators; Playwright **`goto`** that URL for a real render when enabled. Browser **preflight** still uses a **bundled** HTML view for fast VM checks (structure, assets, inline scripts) and scans **all `.html` files** for broken relative references. When Playwright browsers are installed, **headless Chromium** adds console/page errors, layout/text heuristics, and may attach a **viewport screenshot** on the scorecard. If Chromium is unavailable, the merge keeps preflight only and records a note — setup gaps do not hard-fail the whole evaluation.
-3. **Revise** — If the merged scores trip the revision gate, the server can run additional PI sessions seeded with the current files and an evaluation brief, until satisfied or until **max revision rounds** (server default / env / API). Provenance stores **checkpoint** metadata (e.g. stop reason, revision attempt count).
+**Server pipeline (not a single LLM call when Auto-improve is on):**
+1. **Build** — PI multi-turn tool loop produces the file tree (streaming events: plan, files, activity, todos). Always runs.
+2. **Evaluate** — *(Auto-improve on only.)* Four workers run: **design**, **strategy**, and **implementation** rubrics (structured JSON from the LLM) plus **browser QA**. The eval harness registers the same **virtual file tree** the agent wrote and passes a **`preview_page_url`** into LLM evaluators; Playwright **`goto`** that URL for a real render when enabled. Browser **preflight** still uses a **bundled** HTML view for fast VM checks (structure, assets, inline scripts) and scans **all `.html` files** for broken relative references. When Playwright browsers are installed, **headless Chromium** adds console/page errors, layout/text heuristics, and may attach a **viewport screenshot** on the scorecard. If Chromium is unavailable, the merge keeps preflight only and records a note — setup gaps do not hard-fail the whole evaluation.
+3. **Revise** — *(Auto-improve on only.)* When the merged scores trip the revision gate, the server can run additional PI sessions seeded with the current files and an evaluation brief, until satisfied or until **max revision rounds** (Settings defaults, per-hypothesis override, env, or API). Provenance stores **checkpoint** metadata (e.g. stop reason, revision attempt count). Single-pass runs record **`build_only`** with no evaluation rounds.
 
 **Tools:** Pi-native **`read`**, **`write`**, **`edit`** (search/replace), **`ls`**, **`find`**, **`grep`** against the **virtual** project tree (not the host disk); plus **`bash`** for shell utilities; **`todo_write`**, **`validate_js`**, **`validate_html`**.
 
@@ -100,7 +96,7 @@ Enabled by choosing **Agentic** in Mode on a Hypothesis node; use **Run agent** 
 
 **Preview uses the real file tree.** The UI **POSTs** the current map to **`/api/preview/sessions`** (debounced while files stream) and loads the canonical HTML entry in an iframe via **`src`** (relative links and multi-page navigation work). If registration fails, **`bundleVirtualFS()`** falls back to a single **`srcDoc`**. Original paths stay available in the code tab and zip export.
 
-**Live evaluation status.** While the server runs rubric workers, SSE **`evaluation_worker_done`** updates the preview run workspace **Evaluation** tab (and tab affordance) with per-worker progress before the merged report.
+**Live evaluation status.** When evaluation runs, SSE **`evaluation_worker_done`** updates the preview run workspace **Evaluation** tab (and tab affordance) with per-worker progress before the merged report.
 
 **Headless eval URL** — Set **`PREVIEW_PUBLIC_URL`** if the API isn’t reachable at `http://127.0.0.1:$PORT` from the Playwright process (defaults assume same machine).
 
@@ -108,9 +104,9 @@ Enabled by choosing **Agentic** in Mode on a Hypothesis node; use **Run agent** 
 
 **Context compaction.** For long agent runs (turn count threshold), the context is compacted: the first message (full hypothesis/spec context), a fresh **LLM summary** of the middle turns, and the most recent turns are kept, with file paths and todos surfaced in the summary so work is not lost.
 
-**Thinking** (Hypothesis node). When the connected model advertises reasoning support: **None / Light / Deep** map to API levels *off* / *minimal* / *medium*. Other levels exist in the stack but are not exposed in this UI.
+**Thinking** (Model node). When the connected model advertises reasoning support: **None / Light / Deep** map to API levels *off* / *minimal* / *medium*. Other levels exist in the stack but are not exposed in this UI.
 
-**Prompts.** **Production** text for incubate, hypothesis, single-shot, agentic, evaluators, design-system extract, and agent compaction templates lives in **Langfuse** (or shared defaults when Langfuse is off). **Prompt Studio** (**Settings → Prompts**) edits against that baseline but **saves local browser drafts** only, applied per request via **`promptOverrides`** — see **[LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)** for keys and **[USER_GUIDE.md](USER_GUIDE.md)** for workflow. Loop limits (e.g. max revision rounds) are server-configured unless overridden via API/env — there is no dedicated canvas control yet.
+**Prompts.** **Production** text for incubate, hypothesis, agentic design/revision, evaluators, design-system extract, and agent compaction templates lives in **Langfuse** (or shared defaults when Langfuse is off). **Prompt Studio** (**Settings → Prompts**) edits against that baseline but **saves local browser drafts** only, applied per request via **`promptOverrides`** — see **[LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)** for keys and **[USER_GUIDE.md](USER_GUIDE.md)** for workflow. Revision loop limits default from **Settings → Evaluator defaults** and can be overridden per hypothesis (**Auto-improve**, max rounds, target score on the node) or via API/env.
 
 ## Prompt keys (catalog)
 

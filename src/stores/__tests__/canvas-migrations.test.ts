@@ -414,7 +414,7 @@ describe('v12 → v13: extract inline model config into Model nodes', () => {
 });
 
 describe('v13 → v15: hypothesis/model generation fields', () => {
-  it('applies v13→v14 then v14→v15: mode on hypothesis, thinking on model', () => {
+  it('applies v13→v14 then v14→v15: thinking on model; v22→v23 strips canvas agentMode', () => {
     const state = {
       nodes: [
         makeNode('m1', 'model', { modelId: 'x', providerId: 'openrouter' }),
@@ -426,14 +426,14 @@ describe('v13 → v15: hypothesis/model generation fields', () => {
     const nodes = result.nodes as Array<Record<string, unknown>>;
     const h = nodes.find((n) => n.id === 'h1');
     const m = nodes.find((n) => n.id === 'm1');
-    expect((h!.data as Record<string, unknown>).agentMode).toBe('agentic');
+    expect((h!.data as Record<string, unknown>)).not.toHaveProperty('agentMode');
     expect((m!.data as Record<string, unknown>).agentMode).toBeUndefined();
     expect((m!.data as Record<string, unknown>).thinkingLevel).toBe('minimal');
   });
 });
 
 describe('v14 → v15: hypothesis agentMode, model thinkingLevel', () => {
-  it('moves agent mode back to hypothesis and thinking onto models', () => {
+  it('moves agent mode back to hypothesis and thinking onto models (agentMode later stripped at v23)', () => {
     const state = {
       nodes: [
         makeNode('m1', 'model', {
@@ -449,7 +449,7 @@ describe('v14 → v15: hypothesis agentMode, model thinkingLevel', () => {
     const nodes = result.nodes as Array<Record<string, unknown>>;
     const h = nodes.find((n) => n.id === 'h1');
     const m = nodes.find((n) => n.id === 'm1');
-    expect((h!.data as Record<string, unknown>).agentMode).toBe('agentic');
+    expect((h!.data as Record<string, unknown>)).not.toHaveProperty('agentMode');
     expect((h!.data as Record<string, unknown>).thinkingLevel).toBeUndefined();
     expect((m!.data as Record<string, unknown>).agentMode).toBeUndefined();
     expect((m!.data as Record<string, unknown>).thinkingLevel).toBe('medium');
@@ -671,5 +671,21 @@ describe('v21 → v22: input ghost ids, node type, and dismissed-slot keys', () 
     expect(edges.some((e) => e.source === 'ghost-section-researchContext' || e.target === 'ghost-section-researchContext')).toBe(
       false,
     );
+  });
+});
+
+describe('v22 → v23: strip hypothesis agentMode from canvas', () => {
+  it('removes agentMode from hypothesis node data', () => {
+    const state = {
+      nodes: [
+        makeNode('h1', 'hypothesis', { refId: 'vs1', agentMode: 'single' }),
+        makeNode('m1', 'model', { modelId: 'x', providerId: 'p' }),
+      ],
+      edges: [],
+    };
+    const result = migrateCanvasState(state, 22);
+    const nodes = result.nodes as Array<Record<string, unknown>>;
+    const h = nodes.find((n) => n.id === 'h1');
+    expect((h!.data as Record<string, unknown>)).not.toHaveProperty('agentMode');
   });
 });

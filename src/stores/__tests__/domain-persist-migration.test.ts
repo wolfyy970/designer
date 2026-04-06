@@ -122,3 +122,41 @@ describe('workspace domain persist migration v6 → v7', () => {
     expect(w).not.toHaveProperty('sectionNodeIds');
   });
 });
+
+describe('workspace domain persist migration v7 → v8', () => {
+  it('maps legacy agentMode to revisionEnabled and strips agentMode', () => {
+    const v7State = {
+      incubatorWirings: {},
+      incubatorModelNodeIds: {},
+      hypotheses: {
+        h1: {
+          id: 'h1',
+          incubatorId: 'i',
+          strategyId: 's',
+          modelNodeIds: [],
+          designSystemNodeIds: [],
+          agentMode: 'single',
+          placeholder: false,
+        },
+        h2: {
+          id: 'h2',
+          incubatorId: 'i',
+          strategyId: 's2',
+          modelNodeIds: [],
+          designSystemNodeIds: [],
+          agentMode: 'agentic',
+          placeholder: false,
+        },
+      },
+      modelProfiles: {},
+      designSystems: {},
+      previewSlots: {},
+    };
+    const result = migrate(structuredClone(v7State), 7) as Record<string, unknown>;
+    const hyps = result.hypotheses as Record<string, Record<string, unknown>>;
+    expect(hyps.h1.revisionEnabled).toBe(false);
+    expect(hyps.h1).not.toHaveProperty('agentMode');
+    expect(hyps.h2.revisionEnabled).toBe(true);
+    expect(hyps.h2).not.toHaveProperty('agentMode');
+  });
+});

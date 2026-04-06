@@ -20,7 +20,13 @@ export const DEFAULT_RUBRIC_WEIGHTS: Record<EvaluatorRubricId, number> = {
 
 export const EVALUATOR_WORKER_COUNT = EVALUATOR_RUBRIC_IDS.length;
 
-export type AgenticStopReason = 'satisfied' | 'max_revisions' | 'aborted' | 'revision_failed';
+export type AgenticStopReason =
+  | 'satisfied'
+  | 'max_revisions'
+  | 'aborted'
+  | 'revision_failed'
+  /** Initial Pi build finished; evaluation was not requested (single pass). */
+  | 'build_only';
 
 export interface EvalCriterionScore {
   score: number;

@@ -17,9 +17,7 @@ import type {
   ThinkingTurnSlice,
   TodoItem,
 } from '../types/provider';
-import { GENERATION_MODE } from '../constants/generation';
 import type {
-  AgentMode,
   DomainDesignSystemContent,
   DomainHypothesis,
   DomainModelProfile,
@@ -235,7 +233,9 @@ function formatDomainHypothesisBlock(
   let body = `- **hypothesis id:** \`${hyp.id}\`\n`;
   body += `- **incubatorId:** \`${hyp.incubatorId}\`\n`;
   body += `- **strategyId:** \`${hyp.strategyId}\`\n`;
-  body += `- **agentMode:** ${hyp.agentMode ?? GENERATION_MODE.SINGLE}\n`;
+  body += `- **revisionEnabled (auto-improve):** ${hyp.revisionEnabled ?? false}\n`;
+  body += `- **maxRevisionRounds (override):** ${hyp.maxRevisionRounds ?? '_use Settings default_'}\n`;
+  body += `- **minOverallScore (override):** ${hyp.minOverallScore === undefined ? '_use Settings default_' : hyp.minOverallScore === null ? 'off' : hyp.minOverallScore}\n`;
   body += `- **placeholder:** ${hyp.placeholder}\n\n`;
   body += '### Model nodes\n\n';
   if (!hyp.modelNodeIds.length) body += '_None._\n';
@@ -300,7 +300,6 @@ export interface HypothesisDebugExportInput {
   spec: DesignSpec | undefined;
   compiledPromptsForStrategy: CompiledPrompt[];
   resultsForStrategy: GenerationResult[];
-  agentModeOnNode: AgentMode;
 }
 
 export function buildHypothesisDebugMarkdown(input: HypothesisDebugExportInput): string {
@@ -314,7 +313,6 @@ export function buildHypothesisDebugMarkdown(input: HypothesisDebugExportInput):
   if (input.canvasTitle) md += `\n**Canvas / library:** ${input.canvasTitle}\n`;
   md += `\n**Hypothesis node id:** \`${input.hypothesisNodeId}\`\n`;
   md += `**Strategy id:** \`${input.strategy.id}\`\n`;
-  md += `**Run mode (node):** ${input.agentModeOnNode}\n`;
   md += '\n' + section('Hypothesis strategy (compiler)', formatStrategyCore(input.strategy));
   md += HR + section('Incubation plan & axes', formatDimensionContext(input.incubationPlan, input.strategy));
   md += HR + section('Workspace domain bindings', formatDomainHypothesisBlock(

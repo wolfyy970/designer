@@ -2,10 +2,8 @@
  * Domain-first workspace model (client).
  * Canvas nodes/edges are a projection; semantic relations live here.
  */
-import type { GenerationMode } from '../constants/generation';
 import type { ReferenceImage } from './spec';
 
-export type AgentMode = GenerationMode;
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high';
 
 /** Wired inputs for incubate: input + preview node ids feeding an incubator. */
@@ -21,8 +19,14 @@ export interface DomainHypothesis {
   strategyId: string;
   modelNodeIds: string[];
   designSystemNodeIds: string[];
-  /** Direct vs agentic — one setting for all lanes on this hypothesis. */
-  agentMode?: AgentMode;
+  /** When true, run evaluator-driven revision after the initial build + eval. Default false = one pass (no Pi revision loop). */
+  revisionEnabled?: boolean;
+  /** Per-hypothesis max revision rounds; undefined = use Settings evaluator defaults. */
+  maxRevisionRounds?: number;
+  /**
+   * Per-hypothesis target overall score (0–5); undefined = use Settings default; null = no score target.
+   */
+  minOverallScore?: number | null;
   placeholder: boolean;
 }
 

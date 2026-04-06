@@ -31,4 +31,14 @@ describe('runBrowserQA VM DOM stubs', () => {
     const r = runBrowserQA({ files });
     expect(r.findings.filter((f) => f.summary === 'JS runtime error')).toHaveLength(0);
   });
+
+  it('resolves relative asset paths from sub-page HTML for asset_integrity', () => {
+    const files = {
+      'index.html': `<!DOCTYPE html><html><head><link rel="stylesheet" href="root.css"></head><body><a href="pages/other.html">x</a></body></html>`,
+      'root.css': 'body{margin:0}',
+      'pages/other.html': `<!DOCTYPE html><html><head><link rel="stylesheet" href="../root.css"></head><body>Other</body></html>`,
+    };
+    const r = runBrowserQA({ files });
+    expect(r.scores.asset_integrity?.score).toBe(5);
+  });
 });

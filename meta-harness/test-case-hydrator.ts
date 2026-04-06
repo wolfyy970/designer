@@ -2,7 +2,6 @@
  * Expand simplified meta-harness benchmark JSON into POST /api/hypothesis/generate bodies.
  */
 import { z } from 'zod';
-import { GENERATION_MODE } from '../src/constants/generation.ts';
 import { generateId, now } from '../src/lib/utils.ts';
 import type { DesignSpec, SpecSection } from '../src/types/spec.ts';
 import { HypothesisGenerateRequestSchema, ThinkingLevelSchema } from '../server/lib/hypothesis-schemas.ts';
@@ -185,7 +184,7 @@ export function hydrateMetaHarnessTestCaseFromParsed(
       strategyId: strategy.id,
       modelNodeIds: [MH_MODEL_NODE],
       designSystemNodeIds: [],
-      agentMode: GENERATION_MODE.AGENTIC,
+      revisionEnabled: true,
       placeholder: false,
     },
     modelProfiles: {

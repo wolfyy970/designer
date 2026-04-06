@@ -21,7 +21,7 @@ function promptKeyFromLlmLogEntry(entry: LlmLogEntry): PromptKey | null {
   }
 
   if (source === 'builder') {
-    if (phase === 'Single-shot generate') return 'designer-direct-system';
+    if (phase === 'Single-shot generate') return 'designer-agentic-system';
     if (phase === 'agentic_turn' || phase === 'revision') return 'designer-agentic-system';
     return null;
   }
@@ -91,7 +91,7 @@ describe('prompt-log-mapping', () => {
       promptKeyFromLlmLogEntry(
         baseEntry({ source: 'builder', phase: 'Single-shot generate' }),
       ),
-    ).toBe('designer-direct-system');
+    ).toBe('designer-agentic-system');
     expect(
       promptKeyFromLlmLogEntry(baseEntry({ source: 'builder', phase: 'agentic_turn' })),
     ).toBe('designer-agentic-system');

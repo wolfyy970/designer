@@ -36,14 +36,6 @@ export function validatePrompt(key: PromptKey, value: string): Diagnostic[] {
     });
   }
 
-  if (key === 'designer-direct-system' && !value.toLowerCase().includes('html')) {
-    diagnostics.push({
-      level: 'warning',
-      message:
-        'Should instruct the model to return HTML. Output is rendered in a sandboxed iframe.',
-    });
-  }
-
   return diagnostics;
 }
 
@@ -53,7 +45,6 @@ export const PROMPT_GROUPS: { label: string; keys: PromptKey[] }[] = [
     label: 'Designer',
     keys: [
       'designer-hypothesis-inputs',
-      'designer-direct-system',
       'designer-agentic-system',
       'designer-agentic-revision-user',
     ],

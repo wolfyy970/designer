@@ -7,6 +7,14 @@ import { bundleVirtualFS } from '../../src/lib/bundle-virtual-fs.ts';
 import type { EvaluatorWorkerReport } from '../../src/types/evaluation.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import {
+  PLAYWRIGHT_CONSOLE_ERROR_BULK_PENALTY,
+  PLAYWRIGHT_CONSOLE_ERRORS_SCORE_2,
+  PLAYWRIGHT_CONSOLE_ERRORS_SCORE_3,
+  PLAYWRIGHT_CONSOLE_ERRORS_SCORE_5,
+  PLAYWRIGHT_PAGE_ERROR_SCORE_MULTIPLIER,
+  PLAYWRIGHT_SCREENSHOT_JPEG_QUALITY,
+} from './browser-eval-scoring-config.ts';
+import {
   PLAYWRIGHT_EVAL_SCRIPT,
   parsePlaywrightDomMetrics,
   scoreBodyLayout,
@@ -19,14 +27,16 @@ export interface BrowserPlaywrightInput {
   previewPageUrl?: string;
 }
 
-function scoreFromCount(errors: number, maxPenalty = 4): number {
-  if (errors === 0) return 5;
-  if (errors === 1) return 3;
-  if (errors === 2) return 2;
-  return Math.max(1, 5 - maxPenalty);
+function scorePlaywrightConsoleErrors(errorCount: number): number {
+  if (errorCount === PLAYWRIGHT_CONSOLE_ERRORS_SCORE_5) return 5;
+  if (errorCount === PLAYWRIGHT_CONSOLE_ERRORS_SCORE_3) return 3;
+  if (errorCount === PLAYWRIGHT_CONSOLE_ERRORS_SCORE_2) return 2;
+  return Math.max(1, 5 - PLAYWRIGHT_CONSOLE_ERROR_BULK_PENALTY);
 }
 
 const SCREENSHOT_MAX_BASE64 = 600_000;
+const FONTS_READY_TIMEOUT_MS = 8_000;
+const NETWORK_IDLE_AFTER_SET_CONTENT_MS = 10_000;
 
 function skipReport(
   reason: 'browser_unavailable' | 'eval_error',
@@ -42,6 +52,18 @@ function skipReport(
 }
 
 async function settlePageForEval(page: Page): Promise<void> {
+  // String evaluate: runs in the page (has `document`); keeps Node `tsc` happy without DOM lib.
+  await page
+    .evaluate(
+      `(() => Promise.race([
+        document.fonts.ready,
+        new Promise((resolve) => setTimeout(resolve, ${FONTS_READY_TIMEOUT_MS})),
+      ]))()`,
+    )
+    .catch((err) => {
+      console.warn('[playwright-eval] document.fonts.ready', normalizeError(err));
+    });
+
   await page
     .waitForFunction(`() => (document.body?.innerText ?? '').trim().length >= 10`, {
       timeout: 4500,
@@ -54,6 +76,15 @@ async function settlePageForEval(page: Page): Promise<void> {
   }))()`);
 }
 
+async function loadPageForScreenshot(page: Page, bundled: string, previewPageUrl?: string): Promise<void> {
+  if (previewPageUrl) {
+    await page.goto(previewPageUrl, { waitUntil: 'networkidle', timeout: 25_000 });
+  } else {
+    await page.setContent(bundled, { waitUntil: 'load', timeout: 20_000 });
+    await page.waitForLoadState('networkidle', { timeout: NETWORK_IDLE_AFTER_SET_CONTENT_MS }).catch(() => {});
+  }
+}
+
 /**
  * Run Playwright against bundled HTML (inlined assets). Returns rubric `browser` slice
  * with `playwright_*` score keys merged upstream with preflight scores.
@@ -62,14 +93,19 @@ export async function runBrowserPlaywrightEval(
   input: BrowserPlaywrightInput,
 ): Promise<EvaluatorWorkerReport> {
   let bundled: string;
-  try {
-    bundled = bundleVirtualFS(input.files);
-  } catch (err) {
-    console.warn(
-      '[playwright-eval] bundleVirtualFS failed; using fallback HTML slice',
-      normalizeError(err),
-    );
-    bundled = Object.values(input.files).find((v) => /<html/i.test(v)) ?? '<html><body></body></html>';
+  if (input.previewPageUrl) {
+    bundled = '<html><body></body></html>';
+  } else {
+    try {
+      bundled = bundleVirtualFS(input.files);
+    } catch (err) {
+      console.warn(
+        '[playwright-eval] bundleVirtualFS failed; using fallback HTML slice',
+        normalizeError(err),
+      );
+      bundled =
+        Object.values(input.files).find((v) => /<html/i.test(v)) ?? '<html><body></body></html>';
+    }
   }
 
   const pageErrors: string[] = [];
@@ -89,18 +125,18 @@ export async function runBrowserPlaywrightEval(
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
 
-    if (input.previewPageUrl) {
-      await page.goto(input.previewPageUrl, { waitUntil: 'domcontentloaded', timeout: 25_000 });
-    } else {
-      await page.setContent(bundled, { waitUntil: 'domcontentloaded', timeout: 20_000 });
-    }
+    await loadPageForScreenshot(page, bundled, input.previewPageUrl);
     await settlePageForEval(page);
 
     const metrics = parsePlaywrightDomMetrics(await page.evaluate(PLAYWRIGHT_EVAL_SCRIPT));
 
     let artifacts: EvaluatorWorkerReport['artifacts'];
     try {
-      const buf = await page.screenshot({ type: 'jpeg', quality: 72, fullPage: false });
+      const buf = await page.screenshot({
+        type: 'jpeg',
+        quality: PLAYWRIGHT_SCREENSHOT_JPEG_QUALITY,
+        fullPage: false,
+      });
       const base64 = buf.toString('base64');
       if (base64.length <= SCREENSHOT_MAX_BASE64) {
         artifacts = {
@@ -113,14 +149,17 @@ export async function runBrowserPlaywrightEval(
 
     const scores: EvaluatorWorkerReport['scores'] = {
       playwright_render: {
-        score: pageErrors.length === 0 ? 5 : Math.max(1, 5 - pageErrors.length * 2),
+        score:
+          pageErrors.length === 0
+            ? 5
+            : Math.max(1, 5 - pageErrors.length * PLAYWRIGHT_PAGE_ERROR_SCORE_MULTIPLIER),
         notes:
           pageErrors.length === 0
             ? 'Page loaded without uncaught exceptions'
             : pageErrors.slice(0, 2).join('; '),
       },
       playwright_console: {
-        score: scoreFromCount(consoleErrors.length),
+        score: scorePlaywrightConsoleErrors(consoleErrors.length),
         notes:
           consoleErrors.length === 0
             ? 'No console errors'
@@ -135,7 +174,10 @@ export async function runBrowserPlaywrightEval(
         notes: `Body box ${Math.round(metrics.bodyW)}×${Math.round(metrics.bodyH)}`,
       },
       playwright_images: {
-        score: metrics.brokenImages === 0 ? 5 : Math.max(1, 5 - metrics.brokenImages * 2),
+        score:
+          metrics.brokenImages === 0
+            ? 5
+            : Math.max(1, 5 - metrics.brokenImages * PLAYWRIGHT_PAGE_ERROR_SCORE_MULTIPLIER),
         notes:
           metrics.brokenImages === 0
             ? 'No broken images detected'

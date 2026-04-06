@@ -47,7 +47,7 @@ describe('production API gates (NODE_ENV=production)', () => {
 
   it('PUT /api/prompts/:key returns 404', async () => {
     const app = await loadProductionApp();
-    const res = await app.request('http://localhost/api/prompts/designer-direct-system', {
+    const res = await app.request('http://localhost/api/prompts/designer-agentic-system', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ body: 'not allowed in production' }),
@@ -58,7 +58,7 @@ describe('production API gates (NODE_ENV=production)', () => {
   it('POST /api/prompts/:key/revert-baseline returns 404', async () => {
     const app = await loadProductionApp();
     const res = await app.request(
-      'http://localhost/api/prompts/designer-direct-system/revert-baseline',
+      'http://localhost/api/prompts/designer-agentic-system/revert-baseline',
       { method: 'POST' },
     );
     expect(res.status).toBe(404);

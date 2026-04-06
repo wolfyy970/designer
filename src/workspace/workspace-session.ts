@@ -48,6 +48,6 @@ export function provenanceFromHypothesisContext(
 
 export function evaluationPayloadFromHypothesisContext(
   ctx: HypothesisGenerationContext,
-): EvaluationContextPayload | undefined {
+): EvaluationContextPayload {
   return evaluationPayloadPure(ctx);
 }

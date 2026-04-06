@@ -61,6 +61,7 @@ export function VariantNodeGenerating({
         liveTodos={result.liveTodos}
         liveSkills={result.liveSkills}
         liveActivatedSkills={result.liveActivatedSkills}
+        compact={isWorkspaceOpen}
       />
     </div>
   );

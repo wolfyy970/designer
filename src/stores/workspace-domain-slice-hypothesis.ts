@@ -1,4 +1,3 @@
-import { GENERATION_MODE } from '../constants/generation';
 import {
   previewSlotKey,
   type DomainHypothesis,
@@ -65,7 +64,9 @@ export function createWorkspaceDomainHypothesisSlice(set: DomainSet): Pick<
           strategyId,
           modelNodeIds: prev?.modelNodeIds ?? [],
           designSystemNodeIds: prev?.designSystemNodeIds ?? [],
-          agentMode: prev?.agentMode ?? GENERATION_MODE.SINGLE,
+          revisionEnabled: prev?.revisionEnabled ?? false,
+          maxRevisionRounds: prev?.maxRevisionRounds,
+          minOverallScore: prev?.minOverallScore,
           placeholder: prev?.placeholder ?? false,
         };
         const k = previewSlotKey(hypothesisId, strategyId);
@@ -86,13 +87,25 @@ export function createWorkspaceDomainHypothesisSlice(set: DomainSet): Pick<
       set((s) => {
         const h = s.hypotheses[hypothesisId];
         if (!h) return s;
-        if (!('agentMode' in partial)) return s;
+        const hasAny =
+          'revisionEnabled' in partial ||
+          'maxRevisionRounds' in partial ||
+          'minOverallScore' in partial;
+        if (!hasAny) return s;
         return {
           hypotheses: {
             ...s.hypotheses,
             [hypothesisId]: {
               ...h,
-              agentMode: partial.agentMode,
+              ...(partial.revisionEnabled !== undefined
+                ? { revisionEnabled: partial.revisionEnabled }
+                : {}),
+              ...(partial.maxRevisionRounds !== undefined
+                ? { maxRevisionRounds: partial.maxRevisionRounds }
+                : {}),
+              ...(partial.minOverallScore !== undefined
+                ? { minOverallScore: partial.minOverallScore }
+                : {}),
             },
           },
         };

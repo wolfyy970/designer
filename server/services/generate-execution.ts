@@ -1,4 +1,3 @@
-import { getProvider } from './providers/registry.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import { env } from '../env.ts';
 import { isLangfuseTracingEnabled } from '../lib/langfuse-tracing-enabled.ts';
@@ -10,7 +9,6 @@ import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { agenticOrchestratorEventToSse } from '../lib/agentic-sse-map.ts';
 import { createResolvePromptBody, sanitizePromptOverrides } from '../lib/prompt-overrides.ts';
 import { createWriteGate, type WriteGate } from '../lib/sse-write-gate.ts';
-import { executeSingleShotGenerateStream } from './single-shot-generate-stream.ts';
 
 export { createWriteGate };
 
@@ -20,10 +18,10 @@ export interface SseStreamWriter {
 
 type LaneEndMode = 'done' | 'lane_done';
 
-const GENERATE_ROOT_SPAN_ID = '0000000000000002';
+const AGENTIC_GENERATE_SPAN_ID = '0000000000000001';
 
 /**
- * Runs single-shot or agentic generation and writes SSE events.
+ * Runs agentic generation and writes SSE events.
  * When `laneIndex` is set, every payload includes `laneIndex` for client demux.
  * `laneEndMode: 'lane_done'` emits `lane_done` instead of a final `done` (orchestrator sends global `done`).
  */
@@ -47,10 +45,9 @@ async function executeGenerateStream(
   const wrap = (data: Record<string, unknown>): Record<string, unknown> =>
     laneIndex !== undefined ? { ...data, laneIndex } : data;
 
-  const sseWriteAudit =
-    env.isDev && body.mode === GENERATION_MODE.AGENTIC
-      ? { byType: {} as Record<string, number>, skippedAbort: 0, t0: Date.now() }
-      : null;
+  const sseWriteAudit = env.isDev
+    ? { byType: {} as Record<string, number>, skippedAbort: 0, t0: Date.now() }
+    : null;
 
   const write = async (event: string, data: Record<string, unknown>) => {
     if (sseWriteAudit) sseWriteAudit.byType[event] = (sseWriteAudit.byType[event] ?? 0) + 1;
@@ -60,16 +57,16 @@ async function executeGenerateStream(
     });
   };
 
-  if (body.mode === GENERATION_MODE.AGENTIC) {
-    const writeAgentic = async (event: Parameters<typeof agenticOrchestratorEventToSse>[0]) => {
-      if (abortSignal.aborted) {
-        if (sseWriteAudit) sseWriteAudit.skippedAbort += 1;
-        return;
-      }
-      const { sseEvent, data } = agenticOrchestratorEventToSse(event);
-      await write(sseEvent, data);
-    };
+  const writeAgentic = async (event: Parameters<typeof agenticOrchestratorEventToSse>[0]) => {
+    if (abortSignal.aborted) {
+      if (sseWriteAudit) sseWriteAudit.skippedAbort += 1;
+      return;
+    }
+    const { sseEvent, data } = agenticOrchestratorEventToSse(event);
+    await write(sseEvent, data);
+  };
 
+  const runAgentic = async () => {
     const agenticResult = await runAgenticWithEvaluation({
       build: {
         userPrompt: body.prompt,
@@ -104,49 +101,26 @@ async function executeGenerateStream(
         durationMs: Date.now() - sseWriteAudit.t0,
       });
     }
-    return;
-  }
-
-  const provider = getProvider(body.providerId);
-  if (!provider) {
-    await write(SSE_EVENT_NAMES.error, { error: `Unknown provider: ${body.providerId}` });
-    return;
-  }
-
-  const runSingleShot = async () => {
-    await executeSingleShotGenerateStream({
-      write,
-      provider,
-      prompt: body.prompt,
-      providerId: body.providerId,
-      modelId: body.modelId,
-      supportsVision: body.supportsVision,
-      abortSignal,
-      correlationId,
-      laneIndex,
-      laneEndMode,
-      resolvePromptBody: resolvePrompt,
-    });
   };
 
   if (!isLangfuseTracingEnabled() || !correlationId) {
-    await runSingleShot();
+    await runAgentic();
     return;
   }
 
   const parentSpanContext = {
     traceId: await createTraceId(correlationId),
-    spanId: GENERATE_ROOT_SPAN_ID,
+    spanId: AGENTIC_GENERATE_SPAN_ID,
     traceFlags: 1,
   };
   await startActiveObservation(
-    'generate-single',
+    'generate-agentic',
     async (span) => {
       span.update({
         metadata: { correlationId, providerId: body.providerId, modelId: body.modelId },
-        input: { mode: GENERATION_MODE.SINGLE, promptPreview: body.prompt.slice(0, 400) },
+        input: { mode: GENERATION_MODE.AGENTIC, promptPreview: body.prompt.slice(0, 400) },
       });
-      await runSingleShot();
+      await runAgentic();
       span.update({ output: { done: true } });
     },
     { parentSpanContext },

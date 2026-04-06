@@ -2,7 +2,6 @@
  * Zod schemas for hypothesis workspace API payloads — single source for route + tests.
  */
 import { z } from 'zod';
-import { GENERATION_MODE } from '../../src/constants/generation.ts';
 import { DesignSpecSchema } from '../../src/types/spec.ts';
 import { DomainDesignSystemContentSchema } from '../../src/lib/domain-design-system-schema.ts';
 import { WorkspaceSnapshotSchema } from '../../src/lib/workspace-snapshot-schema.ts';
@@ -15,7 +14,9 @@ export const DomainHypothesisSchema = z.object({
   strategyId: z.string(),
   modelNodeIds: z.array(z.string()),
   designSystemNodeIds: z.array(z.string()),
-  agentMode: z.enum([GENERATION_MODE.SINGLE, GENERATION_MODE.AGENTIC]).optional(),
+  revisionEnabled: z.boolean().optional(),
+  maxRevisionRounds: z.number().int().min(0).max(20).optional(),
+  minOverallScore: z.union([z.number().min(0).max(5), z.null()]).optional(),
   placeholder: z.boolean(),
 });
 

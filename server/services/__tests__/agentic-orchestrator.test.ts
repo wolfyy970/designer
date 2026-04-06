@@ -158,6 +158,25 @@ describe('runAgenticWithEvaluation', () => {
     expect(result?.finalAggregate.shouldRevise).toBe(false);
   });
 
+  it('skips evaluation workers when evaluationContext is null (single Pi build)', async () => {
+    mocks.runDesignAgentSession.mockResolvedValueOnce({
+      files: { 'index.html': '<html></html>' },
+      todos: [],
+    });
+
+    const result = await runAgenticWithEvaluation({
+      ...baseOpts,
+      evaluationContext: null,
+    });
+
+    expect(result).not.toBeNull();
+    expect(mocks.runDesignAgentSession).toHaveBeenCalledTimes(1);
+    expect(mocks.runEvaluationWorkers).not.toHaveBeenCalled();
+    expect(result?.rounds).toHaveLength(0);
+    expect(result?.checkpoint.stopReason).toBe('build_only');
+    expect(result?.checkpoint.totalRounds).toBe(0);
+  });
+
   it('returns a checkpoint on the first result', async () => {
     mocks.runDesignAgentSession.mockResolvedValueOnce({
       files: { 'index.html': '<html></html>', 'styles.css': 'body{}' },

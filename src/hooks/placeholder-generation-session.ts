@@ -1,6 +1,5 @@
 import { normalizeError } from '../lib/error-utils';
 import { GENERATION_STATUS } from '../constants/generation';
-import type { AgentMode } from '../types/workspace-domain';
 import type { CompiledPrompt } from '../types/incubator';
 import type { GenerationResult } from '../types/provider';
 import type { ProvenanceContext } from '../types/provenance-context';
@@ -20,7 +19,6 @@ export interface PlaceholderSessionOptions {
   prompt: CompiledPrompt;
   providerId: string;
   model: string;
-  mode?: AgentMode;
   provenanceCtx?: ProvenanceContext;
   updateResult: (id: string, patch: Partial<GenerationResult>) => void;
   traceLimit?: number;
@@ -43,7 +41,6 @@ export function createPlaceholderGenerationSession(
     prompt,
     providerId,
     model,
-    mode,
     provenanceCtx,
     updateResult,
     traceLimit = DEFAULT_TRACE_LIMIT,
@@ -72,7 +69,6 @@ export function createPlaceholderGenerationSession(
     prompt,
     providerId,
     model,
-    mode,
     provenanceCtx,
     updateResult,
     flushAllPendingTraces: trace.flushAllPending,

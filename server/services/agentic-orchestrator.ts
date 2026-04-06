@@ -3,15 +3,16 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { PromptKey } from '../../src/lib/prompts/defaults.ts';
-import type {
-  AgenticCheckpoint,
-  AgenticPhase,
-  AgenticStopReason,
-  AggregatedEvaluationReport,
-  EvaluationContextPayload,
-  EvaluationRoundSnapshot,
-  EvaluatorRubricId,
-  EvaluatorWorkerReport,
+import {
+  EVALUATOR_RUBRIC_IDS,
+  type AgenticCheckpoint,
+  type AgenticPhase,
+  type AgenticStopReason,
+  type AggregatedEvaluationReport,
+  type EvaluationContextPayload,
+  type EvaluationRoundSnapshot,
+  type EvaluatorRubricId,
+  type EvaluatorWorkerReport,
 } from '../../src/types/evaluation.ts';
 import { getProvider } from './providers/registry.ts';
 import {
@@ -67,7 +68,8 @@ export type AgenticOrchestratorEvent =
 interface AgenticOrchestratorOptions {
   build: AgenticOrchestratorBuildInput;
   compiledPrompt: string;
-  evaluationContext?: EvaluationContextPayload;
+  /** `null` = skip evaluation and revision (single Pi build only). `undefined` = run eval (legacy /api/generate). */
+  evaluationContext?: EvaluationContextPayload | null;
   /** Override provider/model for LLM evaluators; defaults to build provider/model */
   evaluatorProviderId?: string;
   evaluatorModelId?: string;
@@ -165,7 +167,7 @@ async function runEvaluationRound(
   const workers = await runEvaluationWorkers({
     files,
     compiledPrompt: options.compiledPrompt,
-    context: options.evaluationContext,
+    context: options.evaluationContext ?? undefined,
     providerId: options.build.providerId,
     modelId: options.build.modelId,
     evaluatorProviderId: options.evaluatorProviderId,
@@ -260,6 +262,34 @@ function agenticResult(
     rounds,
     finalAggregate: snapshot.aggregate,
     checkpoint: buildCheckpoint(files, rounds, checkpointOpts),
+  };
+}
+
+function buildSkippedEvalAggregate(): AggregatedEvaluationReport {
+  const normalizedScores = Object.fromEntries(
+    EVALUATOR_RUBRIC_IDS.map((id) => [id, 0]),
+  ) as Record<string, number>;
+  return {
+    overallScore: 0,
+    normalizedScores,
+    hardFails: [],
+    prioritizedFixes: [],
+    shouldRevise: false,
+    revisionBrief: '',
+  };
+}
+
+/** Pi build finished without running evaluator workers (single pass). */
+function agenticBuildOnlyResult(files: Record<string, string>): AgenticOrchestratorResult {
+  const aggregate = buildSkippedEvalAggregate();
+  return {
+    files,
+    rounds: [],
+    finalAggregate: aggregate,
+    checkpoint: buildCheckpoint(files, [], {
+      stopReason: 'build_only',
+      revisionAttempts: 0,
+    }),
   };
 }
 
@@ -427,7 +457,7 @@ async function runAgenticWithEvaluationImpl(
         baseDir,
         runId: mergedOptions.build.correlationId ?? randomUUID(),
         compiledPrompt: mergedOptions.compiledPrompt,
-        evaluationContext: mergedOptions.evaluationContext,
+        evaluationContext: mergedOptions.evaluationContext ?? undefined,
         getPromptBody: mergedOptions.getPromptBody,
         rounds: result.rounds,
         revisionPromptByEvalRound,
@@ -439,6 +469,11 @@ async function runAgenticWithEvaluationImpl(
     }
     return result;
   };
+
+  if (mergedOptions.evaluationContext === null) {
+    await emit(streamCtx, { type: 'phase', phase: 'complete' });
+    return finishWithLog(agenticBuildOnlyResult(files));
+  }
 
   await emit(streamCtx, { type: 'phase', phase: 'evaluating' });
   let evalRound = 1;
@@ -475,7 +510,7 @@ async function runAgenticWithEvaluationImpl(
 
     const tracesSection = buildEvaluatorTracesSection(snapshot.aggregate.evaluatorTraces);
     const revisionParts = [
-      buildRevisionUserContext(options.compiledPrompt, options.evaluationContext),
+      buildRevisionUserContext(options.compiledPrompt, options.evaluationContext ?? undefined),
       revisionUserInstructions,
       '',
       buildRoundHistorySection(roundHistory),

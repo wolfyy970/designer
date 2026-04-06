@@ -28,7 +28,7 @@ flowchart TB
 
 **Client** — React SPA with Zustand stores, `@xyflow/react` canvas, IndexedDB for generated code. Makes REST and SSE calls to `/api/`*.
 
-**Server** — Hono app deployed as a Vercel serverless function. Handles all LLM orchestration: compilation, generation (single-shot and agentic), model listing, design system extraction. Holds API keys server-side.
+**Server** — Hono app deployed as a Vercel serverless function. Handles all LLM orchestration: compilation, generation (agentic Pi pipeline + evaluation), model listing, design system extraction. Holds API keys server-side.
 
 **Local dev** — Two processes: Vite (SPA + HMR on 5173) and Hono (API on 3001 via `tsx watch`). Vite proxy forwards `/api/`* to Hono.
 
@@ -147,7 +147,7 @@ If all edits get a corrected `oldText` that differs from the model’s version, 
 
 **How descriptions reach the model:** For `read` / `write` / `edit` / `ls` / `find` / `grep`, `SANDBOX_TOOL_OVERRIDES` replaces the Pi SDK default `description` with sandbox-accurate text. `promptSnippet` / `promptGuidelines` are **not** injected when a `customPrompt` is set (`designer-agentic-system`). Only the `description` field is reliably visible via the OpenAI-format tool JSON.
 
-**Scope:** Virtual file tools and just-bash apply **only** during **agentic Pi sessions** (initial build + each revision round in `agentic-orchestrator.ts`). **Direct** generation, **incubate**, **evaluator** LLM calls, and **meta-harness** API tests do **not** mount this sandbox. Keep **`designer-agentic-system`** (`<sandbox_environment>` in Langfuse) aligned with this doc and with tool **`description`**s.
+**Scope:** Virtual file tools and just-bash apply **only** during **agentic Pi sessions** (initial build + each revision round in `agentic-orchestrator.ts`). **Incubate**, **evaluator** LLM calls, other **non-Pi** API paths, and **meta-harness** API tests do **not** mount this sandbox. Keep **`designer-agentic-system`** (`<sandbox_environment>` in Langfuse) aligned with this doc and with tool **`description`**s.
 
 **Multi-file persistence:** Agentic file maps go to IndexedDB via client `saveFiles()`; provenance can include evaluation rounds + checkpoint.
 
@@ -226,9 +226,9 @@ flowchart TB
 
 | Endpoint                        | Method                                    | Purpose                                                                                                                                                                                | Response                   |
 | ------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| `/api/config`                   | GET                                       | App flags (`lockdown` + pinned models when locked) and **agentic evaluator defaults** (`agenticMaxRevisionRounds`, `agenticMinOverallScore` from env) for Settings → Evaluator seeding | JSON                       |
+| `/api/config`                   | GET                                       | App flags (`lockdown` + pinned models when locked) and **agentic evaluator defaults** (`agenticMaxRevisionRounds`, `agenticMinOverallScore` from env) for Settings → Evaluator defaults seeding | JSON                       |
 | `/api/incubate`                 | POST                                      | Incubate spec into incubation plan (SSE: `incubate_result`); optional body `**promptOverrides`** (known prompt keys only, sanitized server-side)                                       | SSE → `IncubationPlan`     |
-| `/api/generate`                 | POST                                      | Generate one design (single-shot or agentic)                                                                                                                                           | SSE stream                 |
+| `/api/generate`                 | POST                                      | Generate one design (agentic path; legacy `mode: "single"` accepted as alias)                                                                                                         | SSE stream                 |
 | `/api/hypothesis/prompt-bundle` | POST                                      | Build **per-hypothesis prompt bundles** (`CompiledPrompt[]`) + eval/provenance from workspace slice; optional `**promptOverrides`**                                                    | JSON                       |
 | `/api/hypothesis/generate`      | POST                                      | Run all models for one hypothesis; multiplexed SSE (`laneIndex` on events, `lane_done` per lane); optional `**promptOverrides**` threaded into stream + agentic eval                   | SSE stream                 |
 | `/api/models/:provider`         | GET                                       | List available models                                                                                                                                                                  | JSON: `ProviderModel[]`    |
@@ -246,11 +246,11 @@ flowchart TB
 | `/api/preview/sessions/:id`     | DELETE                                    | Drop session from memory                                                                                                                                                               | JSON                       |
 
 
-`**/api/generate` request fields:** `prompt`, `providerId`, `modelId`, `promptOverrides` (`designer-direct-system`, `designer-agentic-system`, `designer-hypothesis-inputs`), `supportsVision`, `mode` (`single` | `agentic`), `thinkingLevel` (`off` | `minimal` | `low` | `medium` | `high`).
+`**/api/generate` request fields:** `prompt`, `providerId`, `modelId`, `promptOverrides` (`designer-agentic-system`, `designer-hypothesis-inputs`, …), `supportsVision`, `mode` (optional; defaults to agentic; `single` is a deprecated alias), `thinkingLevel` (`off` | `minimal` | `low` | `medium` | `high`), `evaluationContext` (object, **`null`**, or omit — **`null`** skips all evaluation; omit runs eval workers as before).
 
-**SSE events:** `progress` (status label), `activity` (streaming agent text), `code` (final HTML in single-shot), `file` (path + content in agentic), `plan` (declared file list in agentic), `skills_loaded` (pre-seeded non-manual skills for this Pi session; may repeat on revision rounds), `skill_activated` (successful `**use_skill`** call), `evaluation_worker_done` (one per rubric worker in an eval round; payload includes `round`, `rubric`, `report` snapshot for live UI), `error`, `done`.
+**SSE events:** `progress` (status label), `activity` (streaming agent text), `file` (path + content), `plan` (declared file list), `skills_loaded` (pre-seeded non-manual skills for this Pi session; may repeat on revision rounds), `skill_activated` (successful `**use_skill`** call), `evaluation_worker_done` (one per rubric worker in an eval round; payload includes `round`, `rubric`, `report` snapshot for live UI), `error`, `done`.
 
-**Hypothesis flow:** The canvas still owns graph/domain state (Zustand + React Flow), but **prompt assembly and multi-model orchestration** for a hypothesis go through `/api/hypothesis/*`. Pure workspace helpers live in `src/workspace/hypothesis-generation-pure.ts` (importable by the server). `/api/hypothesis/generate` adds `laneIndex` to each event payload and emits `lane_done` per model lane before a final `done`; the client demuxes into one `GenerationResult` per lane. **Local prompt experimentation:** `src/stores/prompt-overrides-store.ts` (Zustand `persist` → `STORAGE_KEYS.PROMPTS`) supplies `**getActivePromptOverrides()`** for API payloads; `server/lib/prompt-overrides.ts` sanitizes keys and `**createResolvePromptBody**` layers overrides over `**getPromptBody**` for workspace bundle, incubate, design-system extract, inputs auto-generate, single-shot, and agentic paths.
+**Hypothesis flow:** The canvas still owns graph/domain state (Zustand + React Flow), but **prompt assembly and multi-model orchestration** for a hypothesis go through `/api/hypothesis/*`. Pure workspace helpers live in `src/workspace/hypothesis-generation-pure.ts` (importable by the server). `/api/hypothesis/generate` adds `laneIndex` to each event payload and emits `lane_done` per model lane before a final `done`; the client demuxes into one `GenerationResult` per lane. **Local prompt experimentation:** `src/stores/prompt-overrides-store.ts` (Zustand `persist` → `STORAGE_KEYS.PROMPTS`) supplies `**getActivePromptOverrides()`** for API payloads; `server/lib/prompt-overrides.ts` sanitizes keys and `**createResolvePromptBody**` layers overrides over `**getPromptBody**` for workspace bundle, incubate, design-system extract, inputs auto-generate, and agentic paths.
 
 POST endpoints validate bodies with Zod (typically via `**parse-request**` / `safeParse`). Validation and opaque failures use `**apiJsonError**` so JSON error responses stay shape-consistent (`{ error: string }` with selective `details`) across **400** / **404** / **413** / **422** / **500** / **503** before any LLM call where applicable.
 
@@ -265,7 +265,7 @@ POST endpoints validate bodies with Zod (typically via `**parse-request**` / `sa
 
 - **Direct `../../src/...` imports are OK** for pure types, Zod schemas, and shared **constants** with no Node/browser coupling (e.g. `src/types/*`, `src/lib/workspace-snapshot-schema.ts`, `src/constants/*`).
 - Prefer `**server/lib/`** modules for server-local shared logic (`api-json-error`, `parse-request`, `provider-helpers`, `lockdown-model`, hypothesis workspace helpers, etc.) so routes stay shallow.
-- **Pure shared helpers** that live only under `**src/lib/`** (`extract-code`, `error-utils`, `utils`, Zod schemas, constants) are imported from `**../../src/...**` directly — do not add one-line re-export barrels in `server/lib/`.
+- **Pure shared helpers** that live only under `**src/lib/`** (`error-utils`, `utils`, Zod schemas, constants) are imported from `**../../src/...**` directly — do not add one-line re-export barrels in `server/lib/`.
 - Do **not** import React, Vite-only code, or browser APIs from `server/`.
 
 
@@ -280,8 +280,7 @@ POST endpoints validate bodies with Zod (typically via `**parse-request**` / `sa
 | `routes/incubate.ts`                       | POST /api/incubate                                                                                                                                                                                                                                      |
 | `routes/generate.ts`                       | POST /api/generate — delegates to `services/generate-execution.ts`                                                                                                                                                                                      |
 | `routes/hypothesis.ts`                     | POST `/api/hypothesis/prompt-bundle`, `/api/hypothesis/generate`                                                                                                                                                                                        |
-| `services/generate-execution.ts`           | SSE multiplex: agentic path + `**executeSingleShotGenerateStream`**; optional `laneIndex` / `lane_done`                                                                                                                                                 |
-| `services/single-shot-generate-stream.ts`  | Single-shot `generateChat` + `extractCode` + SSE `progress` / `code` / `done`                                                                                                                                                                           |
+| `services/generate-execution.ts`           | SSE multiplex: agentic path; optional `laneIndex` / `lane_done`                                                                                                                                                                                        |
 | `lib/generate-stream-schema.ts`            | Zod schema shared by generate + hypothesis routes                                                                                                                                                                                                       |
 | `routes/models.ts`                         | GET /api/models/:provider                                                                                                                                                                                                                               |
 | `routes/logs.ts`                           | GET `/api/logs` → `{ llm, trace }`; POST `/api/logs/trace` (Zod); DELETE clears both rings (file append-only)                                                                                                                                           |
@@ -318,38 +317,28 @@ POST endpoints validate bodies with Zod (typically via `**parse-request**` / `sa
 
 ## Generation Engine
 
-### Single-Shot
+Hypothesis and `/api/generate` traffic use the **agentic** orchestrator. `mode` in the request body is optional and defaults to agentic; **`single`** is still accepted as a **deprecated alias** (normalized server-side) for backward compatibility.
 
-`server/routes/generate.ts` (when `mode === 'single'`) delegates to `**executeSingleShotGenerateStream**` in `services/single-shot-generate-stream.ts`:
-
-1. Request already Zod-validated by the route
-2. Resolves the `designer-direct-system` system prompt (default or client-provided override)
-3. Calls `provider.generateChat([system, user], options)`
-4. Extracts the HTML code block via `extractCode()` (`src/lib/extract-code.ts`)
-5. Streams three SSE events: `progress` (start), `code` (HTML), `done`
-
-### Agentic
-
-`server/routes/generate.ts` (when `mode === 'agentic'`) delegates to `server/services/agentic-orchestrator.ts` → `runAgenticWithEvaluation`. Agentic system text comes from Langfuse `**designer-agentic-system**` (and optional sandbox `**AGENTS.md**` from `**agents-md-file**` via `buildAgenticSystemContext`); the skill catalog XML is attached to the `**use_skill**` Pi tool, not appended to the system prompt. All non-`**manual**` skill bodies (+ small extras) are pre-seeded under `**skills/<key>/…**` in `**just-bash**` before the run.
+`server/routes/generate.ts` delegates to `server/services/agentic-orchestrator.ts` → `runAgenticWithEvaluation`. Agentic system text comes from Langfuse `**designer-agentic-system**` (and optional sandbox `**AGENTS.md**` from `**agents-md-file**` via `buildAgenticSystemContext`); the skill catalog XML is attached to the `**use_skill**` Pi tool, not appended to the system prompt. All non-`**manual**` skill bodies (+ small extras) are pre-seeded under `**skills/<key>/…**` in `**just-bash**` before the run.
 
 **Orchestrator (`runAgenticWithEvaluation`):**
 
 1. **Build:** `runDesignAgentSession` in `pi-agent-service.ts` — virtual FS is seeded with optional `**AGENTS.md`**, all catalog **skills** (`skills/<key>/…`), and any caller `seedFiles`, then the agent writes design artifacts. Each Pi session boundary re-runs `**discoverSkills`** (revision rounds use a fresh Pi session and re-seed skills).
-2. **Evaluate:** `runEvaluationWorkers` in `design-evaluation-service.ts` runs design / strategy / implementation LLM rubrics plus **browser** checks:
+2. **Evaluate + revise** *(skipped when `**evaluationContext**` is **`null`**, e.g. hypothesis **Auto-improve** off):* `runEvaluationWorkers` in `design-evaluation-service.ts` runs design / strategy / implementation LLM rubrics plus **browser** checks:
   - **Preflight:** `browser-qa-evaluator.ts` — HTML/VM heuristics (fast).
   - **Grounded:** `browser-playwright-evaluator.ts` — headless Chromium via Playwright (`setContent` on bundled HTML), console/page errors, visible text, layout box, broken images. Disabled when `VITEST=true` or `BROWSER_PLAYWRIGHT_EVAL=0`.
-3. **Revision loop:** Until `isEvalSatisfied` — with **no** target score, stop when `!shouldRevise` after `enforceRevisionGate`; with **Settings → Evaluator target score** (`agenticMinOverallScore`), stop only when **no hard fails** and **overall score ≥ target** (even if the rubric model sets `shouldRevise: false`). Otherwise continue until `**maxRevisionRounds`** or abort. Each revision re-seeds prior design files merged with fresh `**AGENTS.md**` (when configured) and the full non-`**manual**` skill packages again.
-4. **Checkpoint:** `AgenticCheckpoint` includes `stopReason` (`satisfied` | `max_revisions` | `aborted` | `revision_failed`) and `revisionAttempts`.
+   Then the **revision loop** runs until `isEvalSatisfied` — with **no** target score, stop when `!shouldRevise` after `enforceRevisionGate`; with **Settings / per-hypothesis target score** (`agenticMinOverallScore`), stop only when **no hard fails** and **overall score ≥ target** (even if the rubric model sets `shouldRevise: false`). Otherwise continue until `**maxRevisionRounds`** or abort. Each revision re-seeds prior design files merged with fresh `**AGENTS.md**` (when configured) and the full non-`**manual**` skill packages again.
+3. **Checkpoint:** `AgenticCheckpoint` includes `stopReason` (`satisfied` | `max_revisions` | `aborted` | `revision_failed` | `**build_only**`) and `revisionAttempts`. **`build_only`** means the Pi build finished and evaluation was not requested.
 
 **Env defaults** (`server/env.ts`): `AGENTIC_MAX_REVISION_ROUNDS` (default `5`, clamped 0–20), optional `AGENTIC_MIN_OVERALL_SCORE`. Request body may pass `agenticMaxRevisionRounds` / `agenticMinOverallScore`. For Playwright in production: install browsers once (`pnpm exec playwright install chromium`).
 
 `server/services/pi-sdk/` is the **NPM import boundary** for Pi packages (and the right place to replace Pi with another agent later). Other server code uses `./pi-sdk` or `../services/pi-sdk` for types/session helpers only — not deep Pi imports. Session orchestration stays in `pi-agent-service.ts`; app-specific Pi tools in `pi-*-tool(s).ts`; virtual FS mapping in `pi-sdk/virtual-tools.ts`; sandbox in `agent-bash-sandbox.ts`; `**sandbox-resource-loader.ts`** supplies the sealed-session resource loader (`getSystemPrompt()` carries the embedded agentic system prompt; no host-repo merge). Agentic system context (optional `**AGENTS.md**` seed + repo **skills**) is built in `server/lib/build-agentic-system-context.ts`.
 
-**Google Fonts (agentic / single-shot HTML):** Agent output may reference **only** `https://fonts.googleapis.com/...` (stylesheet API) and `**https://fonts.gstatic.com/...`** (font files referenced from that CSS). Allowlist logic lives in `[src/lib/google-fonts-allowlist.ts](src/lib/google-fonts-allowlist.ts)`; Pi `**validate_html**` permits those URLs in `<link rel="stylesheet">`, and allowed `@import` inside `<style>` blocks; other external stylesheets and any external `<script src>` remain invalid. The preview iframe can load allowlisted URLs when the **user’s browser** has network access; the `**browser-qa-evaluator`** VM does not fetch the network, so typography there is not ground-truth for CDN fonts.
+**Google Fonts (agentic HTML):** Agent output may reference **only** `https://fonts.googleapis.com/...` (stylesheet API) and `**https://fonts.gstatic.com/...`** (font files referenced from that CSS). Allowlist logic lives in `[src/lib/google-fonts-allowlist.ts](src/lib/google-fonts-allowlist.ts)`; Pi `**validate_html**` permits those URLs in `<link rel="stylesheet">`, and allowed `@import` inside `<style>` blocks; other external stylesheets and any external `<script src>` remain invalid. The preview iframe can load allowlisted URLs when the **user’s browser** has network access; the `**browser-qa-evaluator`** VM does not fetch the network, so typography there is not ground-truth for CDN fonts.
 
 ### Generation Cancellation
 
-SSE is unidirectional. The client holds an `AbortController` and calls `abort()` on unmount or user cancellation. Single-shot: the server checks `c.req.raw.signal.aborted`. Agentic: the abort signal is forwarded to `agent.abort()` via the `params.signal` event listener.
+SSE is unidirectional. The client holds an `AbortController` and calls `abort()` on unmount or user cancellation. The abort signal is forwarded into the agent run (`c.req.raw.signal` / `agent.abort()` via the orchestrator).
 
 ## Canvas Architecture
 
@@ -361,13 +350,13 @@ The primary interface is a node-graph canvas built on `@xyflow/react` v12.
 
 ### HypothesisNode — Generation Controls
 
-`HypothesisNode` stores `agentMode` (`single` | `agentic`) and `thinkingLevel` in canvas node data. The **Direct** / **Agentic** mode control and **Thinking** segmented control are inline on the node. At generation time, `[useHypothesisGeneration](src/hooks/useHypothesisGeneration.ts)` reads these from canvas state and drives the multiplexed hypothesis SSE stream (`/api/hypothesis/prompt-bundle` + `/api/hypothesis/generate` via `[src/api/client.ts](src/api/client.ts)`). Lane orchestration lives in `[hypothesis-generation-run.ts](src/hooks/hypothesis-generation-run.ts)`; per-lane SSE callbacks and post-stream persistence are in `[placeholder-generation-session.ts](src/hooks/placeholder-generation-session.ts)` and `[placeholder-*](src/hooks/placeholder-stream-handlers.ts)` helpers.
+**Auto-improve**, **max revision rounds**, and **target score** for a hypothesis live in **`workspace-domain-store`** (`DomainHypothesis`), with defaults from **Settings → Evaluator defaults**; `[resolveEvaluatorSettings](src/hooks/resolveEvaluatorSettings.ts)` merges them per run. **Thinking** is configured on **Model** nodes. At generation time, `[useHypothesisGeneration](src/hooks/useHypothesisGeneration.ts)` reads the workspace snapshot and drives the multiplexed hypothesis SSE stream (`/api/hypothesis/prompt-bundle` + `/api/hypothesis/generate` via `[src/api/client.ts](src/api/client.ts)`). Lane orchestration lives in `[hypothesis-generation-run.ts](src/hooks/hypothesis-generation-run.ts)`; per-lane SSE callbacks and post-stream persistence are in `[placeholder-generation-session.ts](src/hooks/placeholder-generation-session.ts)` and `[placeholder-*](src/hooks/placeholder-stream-handlers.ts)` helpers.
 
 ### Preview Node — Multi-File Display
 
 When a result has files (agentic output), the preview UI (`VariantNode` / canvas type `preview`) shows:
 
-- **Generating state:** file explorer sidebar (planned + written files with status dots) + activity log + progress bar
+- **Generating state:** file explorer sidebar (planned + written files with status dots) + activity log (**Streamdown** markdown in `variant-run/StreamdownTimeline.tsx`; table copy/download/fullscreen controls off by default) + progress bar
 - **Complete state:** Preview/Code tab bar. **Preview** registers the file map with `**/api/preview/sessions`** and loads the default entry in a sandboxed iframe via `**src**` (real relative URLs between HTML/CSS/JS). If the API is unreachable, `**bundleVirtualFS()**` inlines linked assets into `**srcDoc**` as a fallback. Code tab shows the file explorer + raw file content.
 - **Download:** produces a `.zip` via `fflate`.
 
@@ -447,7 +436,7 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 
 | File                         | Purpose                                                                                                                                                                                                                                                                                      |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `useHypothesisGeneration.ts` | Canvas **Generate** / **Run agent**: reads `agentMode`, `thinkingLevel`, and snapshot from stores; calls hypothesis prompt bundle + multiplexed SSE generate; uses `createPlaceholderGenerationSession` for callbacks, RAF-batched activity/thinking, trace forward, and IndexedDB finalize. |
+| `useHypothesisGeneration.ts` | Canvas **Design**: reads `thinkingLevel` from model wiring + evaluator resolution from domain; calls hypothesis prompt bundle + multiplexed SSE generate; uses `createPlaceholderGenerationSession` for callbacks, RAF-batched activity/thinking, trace forward, and IndexedDB finalize. |
 | `useResultCode.ts`           | Loads generated code from StoragePort (single-file results)                                                                                                                                                                                                                                  |
 | `useResultFiles.ts`          | Loads multi-file result from StoragePort (agentic results)                                                                                                                                                                                                                                   |
 | `useProviderModels.ts`       | React Query hook — calls `apiClient.listModels()`                                                                                                                                                                                                                                            |
@@ -479,7 +468,6 @@ Single source of truth for string literals shared across the codebase. Eliminate
 | `canvas-connections.ts` | Connection validation rules and auto-connect edge builders                                                                                                                                        |
 | `canvas-graph.ts`       | Lineage BFS (`computeLineage`); `buildIncubateInputs` for `/api/incubate` (optional domain wiring)                                                                                                |
 | `canvas-layout.ts`      | Sugiyama-style layout (`computeLayout`)                                                                                                                                                           |
-| `extract-code.ts`       | LLM response code-block extraction                                                                                                                                                                |
 | `error-utils.ts`        | `normalizeError` — consistent error normalization                                                                                                                                                 |
 | `sse-diagnostics.ts`    | Dev-only `SseStreamDiagnostics` — event counters, drop tracker, `window.__SSE_DIAG`                                                                                                               |
 | `sse-reader.ts`         | Shared SSE framing: `readSseEventStream` — pairs `event:`/`data:` lines across TCP chunks                                                                                                         |
@@ -488,7 +476,7 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 ## Key Design Decisions
 
-**Why a Hono server on Vercel.** All LLM orchestration runs server-side. API keys never reach the browser. LLM calls and SSE streaming run in a serverless function. Vercel supports 300s timeout (Hobby) or 800s (Pro) for streaming functions — sufficient for both single-shot and agentic generation.
+**Why a Hono server on Vercel.** All LLM orchestration runs server-side. API keys never reach the browser. LLM calls and SSE streaming run in a serverless function. Vercel supports 300s timeout (Hobby) or 800s (Pro) for streaming functions — sufficient for long agentic generation and evaluation.
 
 **Why prompts are sent per-request.** The prompt store lives in the browser (localStorage). The server is stateless — it carries defaults and applies client-provided overrides. No shared state between server and client beyond the request payload.
 
@@ -502,7 +490,7 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 **Why `src/constants/`.** String literals for node types, edge types, and generation statuses appear across stores, hooks, components, and edge/node definitions. A dedicated constants layer eliminates magic strings and ensures TypeScript narrows to exact union types at every call site.
 
-**Why SSE for generation.** Each hypothesis lane is a separate SSE stream. Single-shot events: `progress`, `code`, `done`. Agentic events additionally include `activity`, `plan`, and `file`. The client manages sequencing across lanes. **Dev diagnostics:** `SseStreamDiagnostics` (client, `src/lib/sse-diagnostics.ts`) tracks event counts, drops, and timing per stream — inspect via `window.__SSE_DIAG` in the browser console. Server-side `generate-execution` logs a write-count summary at stream close. `pi-session-event-bridge` uses `safeBridgeEmit` so async failures are logged instead of silently swallowed, and unknown Pi event types print in dev.
+**Why SSE for generation.** Each hypothesis lane is a separate SSE stream. Events include `progress`, `activity`, `plan`, `file`, evaluator progress, and `done`. The client manages sequencing across lanes. **Dev diagnostics:** `SseStreamDiagnostics` (client, `src/lib/sse-diagnostics.ts`) tracks event counts, drops, and timing per stream — inspect via `window.__SSE_DIAG` in the browser console. Server-side `generate-execution` logs a write-count summary at stream close. `pi-session-event-bridge` uses `safeBridgeEmit` so async failures are logged instead of silently swallowed, and unknown Pi event types print in dev.
 
 **Why URL-backed preview.** Agentic runs produce a **virtual file tree**. The API serves it at `**/api/preview/sessions/:id/...`** so iframe `**src**` uses real relative URLs (multi-page `a href` works). Sessions are ephemeral (TTL), not durable storage.
 

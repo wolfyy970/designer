@@ -53,6 +53,25 @@ describe('stripLeadingEmojiClusters', () => {
     expect(hadEmoji).toBe(true);
     expect(stripped).toBe('Payment options');
   });
+
+  it('removes leading check mark dingbat (✓) not covered by Extended_Pictographic', () => {
+    const { stripped, hadEmoji } = stripLeadingEmojiClusters('\u2713 Verified');
+    expect(hadEmoji).toBe(true);
+    expect(stripped).toBe('Verified');
+  });
+
+  it('removes leading cross dingbats (✗ ✘)', () => {
+    expect(stripLeadingEmojiClusters('\u2717 Failed').stripped).toBe('Failed');
+    expect(stripLeadingEmojiClusters('\u2718 Nope').stripped).toBe('Nope');
+  });
+
+  it('detects leading white heavy check mark (✅) and numbered list text after digit prefix', () => {
+    expect(stripLeadingEmojiClusters('\u2705 Automated flow').stripped).toBe('Automated flow');
+    const { stripped, hadEmoji } = stripLeadingEmojiClusters('1. \u2705 Hypothesis item');
+    expect(hadEmoji).toBe(false);
+    expect(stripped).toBe('1. \u2705 Hypothesis item');
+    expect(stripAllEmojiFrom('1. \u2705 Hypothesis item')).toBe('1. Hypothesis item');
+  });
 });
 
 // ── stripAllEmojiFrom ─────────────────────────────────────────────────────
@@ -88,6 +107,16 @@ describe('stripAllEmojiFrom', () => {
 
   it('handles malformed leading VS16 before emoji', () => {
     expect(stripAllEmojiFrom('\uFE0F\u26A1 Speed')).toBe('Speed');
+  });
+
+  it('removes supplemental check/cross dingbats inline', () => {
+    expect(stripAllEmojiFrom('Done \u2713')).toBe('Done');
+    expect(stripAllEmojiFrom('Bad \u2717 end')).toBe('Bad end');
+    expect(stripAllEmojiFrom('No \u2718 way')).toBe('No way');
+  });
+
+  it('removes white heavy check mark (✅)', () => {
+    expect(stripAllEmojiFrom('\u2705 Shipped')).toBe('Shipped');
   });
 });
 

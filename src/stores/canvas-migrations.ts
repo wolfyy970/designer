@@ -512,6 +512,20 @@ function migrateV21ToV22(s: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
+/** v22 → v23: hypothesis `agentMode` removed — designing is always agentic; settings live in workspace domain. */
+function migrateV22ToV23(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
+  return {
+    ...s,
+    nodes: nodes.map((n) => {
+      if (n.type !== 'hypothesis') return n;
+      const data = { ...((n.data as Record<string, unknown>) || {}) };
+      delete data.agentMode;
+      return { ...n, data };
+    }),
+  };
+}
+
 // ── Top-level migration runner ────────────────────────────────────────
 
 /**
@@ -548,6 +562,7 @@ export function migrateCanvasState(
   if (fromVersion < 20) s = migrateV19ToV20(s);
   if (fromVersion < 21) s = migrateV20ToV21(s);
   if (fromVersion < 22) s = migrateV21ToV22(s);
+  if (fromVersion < 23) s = migrateV22ToV23(s);
 
   return s;
 }

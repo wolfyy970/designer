@@ -15,7 +15,33 @@ import { Script, createContext } from 'node:vm';
 import type { EvaluatorWorkerReport } from '../../src/types/evaluation.ts';
 import { bundleVirtualFS } from '../../src/lib/bundle-virtual-fs.ts';
 import { resolvePreviewEntryPath } from '../../src/lib/preview-entry.ts';
+import { resolveVirtualAssetPath } from '../../src/lib/resolve-virtual-asset-path.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
+import {
+  QA_CONTENT_SCORE3_MIN_HEADINGS,
+  QA_CONTENT_SCORE3_MIN_PARAGRAPHS,
+  QA_CONTENT_SCORE4_MIN_HEADINGS,
+  QA_CONTENT_SCORE4_MIN_SECTIONS,
+  QA_CONTENT_SCORE5_MIN_HEADINGS,
+  QA_CONTENT_SCORE5_MIN_PARAGRAPHS,
+  QA_CONTENT_SCORE5_MIN_SECTIONS,
+  QA_CONTENT_WORDS_T2,
+  QA_CONTENT_WORDS_T3,
+  QA_CONTENT_WORDS_T4,
+  QA_CONTENT_WORDS_T5,
+  QA_INTERACTIVE_SCORE2_MIN_TOTAL,
+  QA_INTERACTIVE_SCORE3_MIN_ANCHORS,
+  QA_INTERACTIVE_SCORE3_MIN_BUTTONS,
+  QA_INTERACTIVE_SCORE3_MIN_TOTAL,
+  QA_INTERACTIVE_SCORE4_MIN_ANCHORS,
+  QA_INTERACTIVE_SCORE4_MIN_BUTTONS,
+  QA_INTERACTIVE_SCORE4_MIN_NAVS,
+  QA_INTERACTIVE_SCORE4_MIN_TOTAL,
+  QA_INTERACTIVE_SCORE5_MIN_BUTTONS,
+  QA_INTERACTIVE_SCORE5_MIN_FORMS,
+  QA_INTERACTIVE_SCORE5_MIN_TOTAL,
+} from './browser-eval-scoring-config.ts';
+import { countMatches, extractExternalRefs, extractScriptBodies, hasTag } from './html-analysis-helpers.ts';
 
 /** VM `runInContext` timeout per inline script (avoid infinite loops). */
 const INLINE_SCRIPT_VM_TIMEOUT_MS = 2000;
@@ -25,40 +51,6 @@ const MAX_INLINE_SCRIPTS_TO_RUN = 5;
 const RUNTIME_ERROR_MSG_MAX_LEN = 200;
 /** Console errors merged into the report (beyond inline script errors). */
 const MAX_CONSOLE_ERRORS_IN_REPORT = 3;
-
-// ── HTML parsing helpers ──────────────────────────────────────────────────────
-
-function hasTag(html: string, tag: string): boolean {
-  return new RegExp(`<${tag}[\\s>]`, 'i').test(html);
-}
-
-function countMatches(html: string, pattern: RegExp): number {
-  return (html.match(pattern) ?? []).length;
-}
-
-function extractScriptBodies(html: string): string[] {
-  const bodies: string[] = [];
-  const re = /<script(?![^>]*\bsrc\b)[^>]*>([\s\S]*?)<\/script>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) !== null) {
-    if (m[1] && m[1].trim()) bodies.push(m[1]);
-  }
-  return bodies;
-}
-
-function extractExternalRefs(html: string): { kind: 'script' | 'link'; src: string }[] {
-  const refs: { kind: 'script' | 'link'; src: string }[] = [];
-  const scriptRe = /<script[^>]+src=["']([^"']+)["'][^>]*>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = scriptRe.exec(html)) !== null) {
-    if (m[1]) refs.push({ kind: 'script', src: m[1] });
-  }
-  const linkRe = /<link[^>]+href=["']([^"']+)["'][^>]*>/gi;
-  while ((m = linkRe.exec(html)) !== null) {
-    if (m[1]) refs.push({ kind: 'link', src: m[1] });
-  }
-  return refs;
-}
 
 // ── Criterion checks ──────────────────────────────────────────────────────────
 
@@ -88,6 +80,7 @@ function checkPageStructure(html: string): { score: number; notes: string } {
 function checkAssetIntegrity(
   html: string,
   files: Record<string, string>,
+  htmlFilePath: string,
 ): { score: number; notes: string } {
   const refs = extractExternalRefs(html);
   if (refs.length === 0) {
@@ -98,10 +91,11 @@ function checkAssetIntegrity(
   const fileKeys = new Set(Object.keys(files));
 
   for (const ref of refs) {
-    const normalized = ref.src.replace(/^\.\//, '').replace(/^\//, '');
-    const found = fileKeys.has(ref.src) || fileKeys.has(normalized) ||
-      [...fileKeys].some((k) => k.endsWith(normalized) || k.endsWith(ref.src));
-    if (!found && !ref.src.startsWith('http') && !ref.src.startsWith('//')) {
+    const raw = ref.src.trim();
+    if (/^(https?:)/i.test(raw) || raw.startsWith('//')) continue;
+    const resolved = resolveVirtualAssetPath(ref.src, htmlFilePath);
+    if (resolved === undefined) continue;
+    if (!fileKeys.has(resolved)) {
       missing.push(ref.src);
     }
   }
@@ -309,10 +303,26 @@ function checkInteractiveElements(html: string): { score: number; notes: string 
   const navs = countMatches(html, /<nav[\s>]/gi);
 
   let score = 1;
-  if (total >= 1) score = 2;
-  if (total >= 3 || (anchors >= 2 && buttons >= 1)) score = 3;
-  if (total >= 6 || (buttons >= 2 && (anchors >= 3 || navs >= 1))) score = 4;
-  if (total >= 10 && (buttons >= 2 || forms >= 1)) score = 5;
+  if (total >= QA_INTERACTIVE_SCORE2_MIN_TOTAL) score = 2;
+  if (
+    total >= QA_INTERACTIVE_SCORE3_MIN_TOTAL ||
+    (anchors >= QA_INTERACTIVE_SCORE3_MIN_ANCHORS && buttons >= QA_INTERACTIVE_SCORE3_MIN_BUTTONS)
+  ) {
+    score = 3;
+  }
+  if (
+    total >= QA_INTERACTIVE_SCORE4_MIN_TOTAL ||
+    (buttons >= QA_INTERACTIVE_SCORE4_MIN_BUTTONS &&
+      (anchors >= QA_INTERACTIVE_SCORE4_MIN_ANCHORS || navs >= QA_INTERACTIVE_SCORE4_MIN_NAVS))
+  ) {
+    score = 4;
+  }
+  if (
+    total >= QA_INTERACTIVE_SCORE5_MIN_TOTAL &&
+    (buttons >= QA_INTERACTIVE_SCORE5_MIN_BUTTONS || forms >= QA_INTERACTIVE_SCORE5_MIN_FORMS)
+  ) {
+    score = 5;
+  }
 
   const parts: string[] = [];
   if (buttons > 0) parts.push(`${buttons} button(s)`);
@@ -343,16 +353,27 @@ function checkContentPresence(html: string): { score: number; notes: string } {
   const paragraphs = countMatches(html, /<p[\s>]/gi);
   const sections = countMatches(html, /<(section|article|main|header|footer)[\s>]/gi);
 
-  const CONTENT_WORDS_T2 = 20;
-  const CONTENT_WORDS_T3 = 60;
-  const CONTENT_WORDS_T4 = 120;
-  const CONTENT_WORDS_T5 = 200;
-
   let score = 1;
-  if (wordCount >= CONTENT_WORDS_T2) score = 2;
-  if (wordCount >= CONTENT_WORDS_T3 || (headings >= 1 && paragraphs >= 1)) score = 3;
-  if (wordCount >= CONTENT_WORDS_T4 && (headings >= 2 || sections >= 2)) score = 4;
-  if (wordCount >= CONTENT_WORDS_T5 && headings >= 2 && (paragraphs >= 3 || sections >= 3)) score = 5;
+  if (wordCount >= QA_CONTENT_WORDS_T2) score = 2;
+  if (
+    wordCount >= QA_CONTENT_WORDS_T3 ||
+    (headings >= QA_CONTENT_SCORE3_MIN_HEADINGS && paragraphs >= QA_CONTENT_SCORE3_MIN_PARAGRAPHS)
+  ) {
+    score = 3;
+  }
+  if (
+    wordCount >= QA_CONTENT_WORDS_T4 &&
+    (headings >= QA_CONTENT_SCORE4_MIN_HEADINGS || sections >= QA_CONTENT_SCORE4_MIN_SECTIONS)
+  ) {
+    score = 4;
+  }
+  if (
+    wordCount >= QA_CONTENT_WORDS_T5 &&
+    headings >= QA_CONTENT_SCORE5_MIN_HEADINGS &&
+    (paragraphs >= QA_CONTENT_SCORE5_MIN_PARAGRAPHS || sections >= QA_CONTENT_SCORE5_MIN_SECTIONS)
+  ) {
+    score = 5;
+  }
 
   return {
     score,
@@ -388,9 +409,9 @@ export function runBrowserQA(input: BrowserQAInput): EvaluatorWorkerReport {
     findings.push({ severity: 'high', summary: 'Malformed HTML structure', detail: structure.notes });
   }
 
-  let assets = checkAssetIntegrity(bundledHtml, input.files);
+  let assets = checkAssetIntegrity(bundledHtml, input.files, entryKey);
   for (const p of htmlPaths) {
-    const a = checkAssetIntegrity(input.files[p], input.files);
+    const a = checkAssetIntegrity(input.files[p]!, input.files, p);
     if (a.score < assets.score) assets = a;
   }
   scores.asset_integrity = assets;

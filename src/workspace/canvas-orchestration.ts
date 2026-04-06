@@ -7,11 +7,7 @@
 import type { CanvasNodeType, WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 import { NODE_TYPE_TO_SECTION } from '../types/workspace-graph';
 import { NODE_TYPES, INPUT_NODE_TYPES } from '../constants/canvas';
-import {
-  getDesignSystemNodeData,
-  getHypothesisNodeData,
-  getModelNodeData,
-} from '../lib/canvas-node-data';
+import { getDesignSystemNodeData, getModelNodeData } from '../lib/canvas-node-data';
 import { generateId, now } from '../lib/utils';
 import { useIncubatorStore } from '../stores/incubator-store';
 import { useSpecStore } from '../stores/spec-store';
@@ -105,14 +101,7 @@ export function syncNodeDataToWorkspaceDomain(
   patch: Record<string, unknown>,
 ): void {
   const dom = useWorkspaceDomainStore.getState();
-  if (node.type === 'hypothesis') {
-    if ('agentMode' in patch) {
-      const h = getHypothesisNodeData(mergedNode);
-      if (h?.agentMode != null) {
-        dom.setHypothesisGenerationSettings(node.id, { agentMode: h.agentMode });
-      }
-    }
-  }
+  void patch;
   if (node.type === 'model') {
     const m = getModelNodeData(mergedNode);
     if (m) {

@@ -15,7 +15,6 @@ const minimalGenCtx = {
   hypothesisNodeId: 'hyp-1',
   hypothesisStrategy,
   spec: { id: 's1' } as HypothesisGenerationContext['spec'],
-  agentMode: 'single' as const,
   modelCredentials: [
     { providerId: 'p', modelId: 'm', thinkingLevel: 'minimal' as const },
   ],
@@ -95,7 +94,7 @@ describe('executeHypothesisGenerationRun', () => {
           prompts: [],
           evaluationContext: null,
           provenance: { strategies: {}, designSystemSnapshot: null },
-          generationContext: { agentMode: 'single', modelCredentials: [] },
+          generationContext: { modelCredentials: [] },
         }),
         runStream: vi.fn(),
         onLaneIdsReady: vi.fn(),
@@ -141,7 +140,6 @@ describe('executeHypothesisGenerationRun', () => {
           evaluationContext: null,
           provenance: { strategies: {}, designSystemSnapshot: undefined },
           generationContext: {
-            agentMode: 'single',
             modelCredentials: [
               { providerId: 'a', modelId: '1', thinkingLevel: 'minimal' },
               { providerId: 'b', modelId: '2', thinkingLevel: 'minimal' },

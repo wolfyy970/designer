@@ -52,9 +52,9 @@ The **Langfuse** tab does not load traces into the app; it links to the **Langfu
 
 Prompt keys are **kebab-case** (e.g. `hypotheses-generator-system`, `designer-hypothesis-inputs`); plain-English map: [LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md). **`pnpm db:seed`** creates **missing** Langfuse prompts only. Agent **skills** are **not** Langfuse prompts — they live in the repo’s **`skills/`** tree (see [ARCHITECTURE.md](ARCHITECTURE.md) / [PRODUCT.md](PRODUCT.md)).
 
-## Agentic evaluator loop (Settings → Evaluator)
+## Evaluator defaults (Settings → Evaluator defaults)
 
-**Settings** (gear) → **Evaluator** sets **global defaults** for agentic runs: **maximum revision rounds** (cap on evaluator-driven revision passes) and an optional **target quality score**. When set, a run counts as successful only if the **weighted overall score** is **at or above** that target with **no hard fails**—the loop keeps revising (until the round cap) even when the rubrics would otherwise stop asking for changes. When the target is **off**, stopping follows the normal revision gate only. Values apply to the next **Generate** / **Run agent** on a hypothesis. Operator-level env defaults (`AGENTIC_MAX_REVISION_ROUNDS`, `AGENTIC_MIN_OVERALL_SCORE`) are served in **`GET /api/config`** and seed the UI once before you customize; see [ARCHITECTURE.md](ARCHITECTURE.md).
+**Settings** (gear) → **Evaluator defaults** sets **global defaults** for **maximum revision rounds**, optional **target quality score**, and **rubric weights**—used only when **Auto-improve** is **on** (that path runs evaluators and may loop). **Auto-improve** **off** = one **agentic** build with **no** evaluator (faster). Each Hypothesis node can override max rounds and target score when Auto-improve is on. When the target score is set, a revising run can stop early when the **weighted overall score** meets the threshold with **no hard fails**—otherwise stopping follows the revision gate and the round cap. Env defaults (`AGENTIC_MAX_REVISION_ROUNDS`, `AGENTIC_MIN_OVERALL_SCORE`) are served in **`GET /api/config`** and seed the UI once before you customize; see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Canvas Workflow
 
@@ -102,13 +102,11 @@ Add a **Design System** node from the toolbar (Processing group). It auto-connec
 
 ### 6. Generate Designs
 
-Each hypothesis has built-in generation controls at the bottom. Connect a Model node, then choose your mode:
+Each hypothesis has built-in generation controls at the bottom. Connect a Model node, set **thinking** on the Model (None / Light / Deep) when supported, then click **Design**. Every run uses the **agentic** engine: the agent plans files, writes/edits/validates them, and streams progress to the preview.
 
-**Direct (default):** Choose **Direct** in Mode, then **Generate**. The server makes one LLM call and returns a complete self-contained HTML document. Fast — typically 10–30 seconds.
+**Auto-improve** (on the hypothesis card): when **off** (default for fast runs), the run stops after that **single** agent build—**no** evaluator, no scorecard. When **on**, the server runs **evaluation** (LLM rubrics plus browser QA) and can apply **revision passes** from that feedback, up to the max rounds and optional target score (overridable per node; **Settings → Evaluator defaults** sets the baseline) — see **[PRODUCT.md](PRODUCT.md)** for the full pipeline.
 
-**Agentic:** Switch Mode to **Agentic**, choose a thinking level (None / Light / Deep), then **Run agent**. The agent plans files, writes/edits/validates them, and streams progress to the preview. The **server** then runs **evaluation** (LLM rubrics plus browser QA), and may run **additional revision passes** until scores settle or limits are hit — see **[PRODUCT.md](PRODUCT.md)** for the full pipeline.
-
-Agentic runs take longer (often several minutes) but produce more considered designs. When a run completes, the preview shows an **evaluation summary** and, if Playwright is installed, a small **browser capture** under Runtime QA. Generated HTML may use **Google Fonts** only via `fonts.googleapis.com` / `fonts.gstatic.com` (needs network in your browser for preview); other CDNs stay disallowed — see [ARCHITECTURE.md](ARCHITECTURE.md).
+Runs often take several minutes (shorter when Auto-improve is off). When Auto-improve was on, the preview includes an **evaluation summary** and, if Playwright is installed, a small **browser capture** under Runtime QA. Generated HTML may use **Google Fonts** only via `fonts.googleapis.com` / `fonts.gstatic.com` (needs network in your browser for preview); other CDNs stay disallowed — see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 **Output format hint:** If your **incubation plan** strategy dimensions include a value for **format** (or `output_format`), it is sent as evaluation context so the server can pick matching **skills** for the agent. Details live in PRODUCT / ARCHITECTURE — you do not need to set this unless you use those dimensions.
 
@@ -120,7 +118,7 @@ Running generation again adds new versions — use the version navigation arrows
 
 ### 7. Review Designs
 
-Preview nodes render the generated code in sandboxed iframes. Open the **run workspace** (panel icon on the toolbar) for the full timeline, tasks, **Design**/**Evaluation** tabs, and—when an agentic run had several evaluator rounds—a shared **Eval round** control on Design and Evaluation to preview that round’s files and scores.
+Preview nodes render the generated code in sandboxed iframes. Open the **run workspace** (panel icon on the toolbar) for the full timeline, tasks, **Design**/**Evaluation** tabs (when evaluation ran), and—when a run had several evaluator rounds—a shared **Eval round** control on Design and Evaluation to preview that round’s files and scores.
 
 **Best pick:** If you disagree with the evaluator’s ranking, use **Mark as best** (star on the preview toolbar or “Mark as best” in full-screen). **Clear best pick** restores score-based default for that strategy lane. Full-screen **prev/next design** moves between preview nodes **for the same hypothesis** when domain slots are present.
 

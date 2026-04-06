@@ -54,9 +54,19 @@ function stripLeadingFormatNoise(s: string): string {
 const EMOJI_CLUSTER_GLOBAL =
   /(?:[\uFEFF\u200B\u200D]|\uFE0F)*(?:[\u{1F1E6}-\u{1F1FF}]{2}|\p{Extended_Pictographic})(?:(?:\uFE0F|\u20E3)?(?:\u200D(?:[\u{1F1E6}-\u{1F1FF}]{2}|\p{Extended_Pictographic})(?:\uFE0F|\u20E3)?)*)(?:[\uFEFF\u200B\u200D]|\uFE0F)*/gu;
 
+/**
+ * Check / ballot-cross dingbats often used by LLMs; not Extended_Pictographic
+ * in V8/ICU (unlike U+2705 etc.), so they need an explicit pass.
+ */
+const SUPPLEMENTAL_DINGBAT_GLOBAL = /[\u2713\u2717\u2718]\uFE0F?/gu;
+
 /** Remove every emoji cluster (leading, inline, trailing) from a string. */
 export function stripAllEmojiFrom(s: string): string {
-  return s.replace(EMOJI_CLUSTER_GLOBAL, '').replace(/\s{2,}/g, ' ').trim();
+  return s
+    .replace(EMOJI_CLUSTER_GLOBAL, '')
+    .replace(SUPPLEMENTAL_DINGBAT_GLOBAL, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 /** Peel flag sequences, pictographic emoji, and ZWJ chains from the start of a string. */
@@ -83,6 +93,13 @@ export function stripLeadingEmojiClusters(input: string): { stripped: string; ha
         continue;
       }
       s = stripLeadingFormatNoise(s);
+      continue;
+    }
+
+    const ding = s.match(/^[\u2713\u2717\u2718](?:\uFE0F)?/u);
+    if (ding) {
+      s = stripLeadingFormatNoise(s.slice(ding[0].length));
+      hadEmoji = true;
       continue;
     }
 
@@ -179,7 +196,7 @@ function makeTimelineHeading(Level: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6') {
 }
 
 function emojiAwarePlainBlock(
-  Tag: 'p' | 'li',
+  Tag: 'p' | 'li' | 'td' | 'th',
   { children, ...rest }: HTMLAttributes<HTMLElement> & { node?: unknown },
 ) {
   // Always sanitize — works for plain strings, mixed content (bold/code/links),
@@ -217,4 +234,6 @@ export const streamdownTimelineComponents: Partial<Components> = {
   h6: makeTimelineHeading('h6'),
   p: (props) => emojiAwarePlainBlock('p', props),
   li: (props) => emojiAwarePlainBlock('li', props),
+  td: (props) => emojiAwarePlainBlock('td', props),
+  th: (props) => emojiAwarePlainBlock('th', props),
 };

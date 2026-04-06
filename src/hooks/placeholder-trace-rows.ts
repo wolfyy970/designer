@@ -140,6 +140,7 @@ export function traceRowCheckpoint(checkpoint: AgenticCheckpoint): RunTraceEvent
     kind: 'checkpoint',
     label: `Checkpoint: ${checkpoint.stopReason ?? 'complete'}`,
     phase: 'complete',
-    status: checkpoint.stopReason === 'satisfied' ? 'success' : 'info',
+    status:
+      checkpoint.stopReason === 'satisfied' || checkpoint.stopReason === 'build_only' ? 'success' : 'info',
   };
 }

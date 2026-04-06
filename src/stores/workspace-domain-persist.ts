@@ -1,6 +1,4 @@
-import { GENERATION_MODE } from '../constants/generation';
 import type {
-  AgentMode,
   DomainHypothesis,
   DomainIncubatorWiring,
   DomainModelProfile,
@@ -9,7 +7,10 @@ import type {
 import type { WorkspaceDomainStore } from './workspace-domain-store-types';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 
-type DomainHypothesisV2 = DomainHypothesis & { agentMode?: AgentMode };
+/** Legacy persisted values before `GenerationMode` was collapsed to agentic-only. */
+type LegacyAgentMode = 'single' | 'agentic';
+
+type DomainHypothesisV2 = DomainHypothesis & { agentMode?: LegacyAgentMode };
 
 export const workspaceDomainPersistOptions = {
   name: STORAGE_KEYS.WORKSPACE_DOMAIN,
@@ -21,7 +22,7 @@ export const workspaceDomainPersistOptions = {
     designSystems: state.designSystems,
     previewSlots: state.previewSlots,
   }),
-  version: 7,
+  version: 8,
   migrate: (persisted: unknown, fromVersion: number) => {
     let p = persisted as Record<string, unknown>;
     if (fromVersion < 2) {
@@ -31,12 +32,12 @@ export const workspaceDomainPersistOptions = {
       };
     }
     if (fromVersion < 3) {
-      type ProfV3 = DomainModelProfile & { agentMode?: AgentMode };
+      type ProfV3 = DomainModelProfile & { agentMode?: LegacyAgentMode };
       const rawHyp = (p.hypotheses as Record<string, DomainHypothesisV2>) ?? {};
       const modelProfiles = { ...(p.modelProfiles as Record<string, ProfV3>) };
       const hypotheses: Record<string, DomainHypothesis> = {};
       for (const [hid, h] of Object.entries(rawHyp)) {
-        const am = h.agentMode ?? GENERATION_MODE.SINGLE;
+        const am = h.agentMode ?? 'single';
         for (const mid of h.modelNodeIds) {
           const cur = modelProfiles[mid];
           if (cur) {
@@ -52,19 +53,19 @@ export const workspaceDomainPersistOptions = {
     if (fromVersion < 4) {
       type LegacyHyp = DomainHypothesis & {
         thinkingLevel?: string;
-        agentMode?: AgentMode;
+        agentMode?: LegacyAgentMode;
         variantStrategyId?: string;
       };
-      type LegacyProf = DomainModelProfile & { agentMode?: AgentMode };
+      type LegacyProf = DomainModelProfile & { agentMode?: LegacyAgentMode };
       const rawHyp = (p.hypotheses as Record<string, LegacyHyp>) ?? {};
       const modelProfiles = { ...(p.modelProfiles as Record<string, LegacyProf>) };
       const hypotheses: Record<string, DomainHypothesis> = {};
 
       for (const [hid, h] of Object.entries(rawHyp)) {
-        let aggregated: AgentMode = GENERATION_MODE.SINGLE;
+        let aggregated: LegacyAgentMode = 'single';
         for (const mid of h.modelNodeIds) {
           const prof = modelProfiles[mid];
-          if (prof?.agentMode === GENERATION_MODE.AGENTIC) aggregated = GENERATION_MODE.AGENTIC;
+          if (prof?.agentMode === 'agentic') aggregated = 'agentic';
         }
         const laneThinking =
           (h as { thinkingLevel?: string }).thinkingLevel ?? 'minimal';
@@ -88,7 +89,7 @@ export const workspaceDomainPersistOptions = {
           designSystemNodeIds: h.designSystemNodeIds,
           placeholder: h.placeholder,
           agentMode: aggregated,
-        };
+        } as DomainHypothesis & { agentMode: LegacyAgentMode };
       }
 
       for (const [mid, prof] of Object.entries(modelProfiles)) {
@@ -162,6 +163,25 @@ export const workspaceDomainPersistOptions = {
         };
       }
       p = { ...p, incubatorWirings };
+    }
+    if (fromVersion < 8) {
+      const rawHyp = (p.hypotheses as Record<string, Record<string, unknown>>) ?? {};
+      const hypotheses: Record<string, DomainHypothesis> = {};
+      for (const [hid, row] of Object.entries(rawHyp)) {
+        const copy = { ...row };
+        const legacyMode = copy.agentMode as LegacyAgentMode | undefined;
+        delete copy.agentMode;
+        const revisionEnabled =
+          typeof copy.revisionEnabled === 'boolean'
+            ? copy.revisionEnabled
+            : legacyMode === 'agentic';
+        hypotheses[hid] = {
+          ...copy,
+          revisionEnabled,
+          placeholder: Boolean(copy.placeholder),
+        } as DomainHypothesis;
+      }
+      p = { ...p, hypotheses };
     }
     return p;
   },

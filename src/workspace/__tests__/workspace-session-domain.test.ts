@@ -27,7 +27,7 @@ describe('buildHypothesisGenerationContext (domain)', () => {
           strategyId: 'vs1',
           modelNodeIds: ['mod1'],
           designSystemNodeIds: ['ds1'],
-          agentMode: 'agentic',
+          revisionEnabled: true,
           placeholder: false,
         },
       },
@@ -61,7 +61,6 @@ describe('buildHypothesisGenerationContext (domain)', () => {
     });
 
     expect(ctx).not.toBeNull();
-    expect(ctx!.agentMode).toBe('agentic');
     expect(ctx!.modelCredentials).toEqual([
       { providerId: 'openrouter', modelId: 'gpt-4', thinkingLevel: 'low' },
     ]);

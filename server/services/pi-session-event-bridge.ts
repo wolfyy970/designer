@@ -1,6 +1,12 @@
 /**
  * Bridge Pi `AgentSession` events → app `AgentRunEvent` SSE payloads.
  */
+import {
+  LOG_COMMAND_PREVIEW_HEAD_CHARS,
+  LOG_COMMAND_PREVIEW_MAX,
+  LOG_PREVIEW_SNIPPET_HEAD_CHARS,
+  LOG_PREVIEW_SNIPPET_MAX,
+} from '../lib/content-limits.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import type { AgentSessionEvent, AgentSession, AssistantMessage } from './pi-sdk/types.ts';
 import { appendLlmCallResponse } from '../log-store.ts';
@@ -22,6 +28,7 @@ export interface PiSessionBridgeContext {
     extra?: Partial<RunTraceEvent>,
   ) => AgentRunEvent;
   toolPathByCallId: Map<string, string | undefined>;
+  toolArgsByCallId: Map<string, string | undefined>;
   waitingForFirstToken: { current: boolean };
   turnLogRef: { current?: string };
   streamActivityAt: { current: number };
@@ -64,7 +71,10 @@ function toolStartProgressPayload(
 ): string {
   if (toolName === 'bash') {
     const c = command ?? '';
-    const short = c.length > 120 ? `${c.slice(0, 117)}…` : c;
+    const short =
+      c.length > LOG_PREVIEW_SNIPPET_MAX
+        ? `${c.slice(0, LOG_PREVIEW_SNIPPET_HEAD_CHARS)}…`
+        : c;
     return short ? `Running: ${short}` : 'Running shell command…';
   }
   switch (toolName) {
@@ -289,13 +299,17 @@ function handleToolExecutionStart(ctx: PiSessionBridgeContext, maps: BridgeMaps,
       path,
       pattern,
       reusedToolCallId,
-      commandPreview: command != null && command.length > 160 ? `${command.slice(0, 157)}…` : command,
+      commandPreview:
+        command != null && command.length > LOG_COMMAND_PREVIEW_MAX
+          ? `${command.slice(0, LOG_COMMAND_PREVIEW_HEAD_CHARS)}…`
+          : command,
       pendingAfter: toolStartMs.size,
     },
   });
   syncPendingToolProbe(ctx, toolStartMs);
   ctx.toolPathByCallId.set(event.toolCallId, path);
   const toolArgs = serializePiToolArgsForTrace(rawArgs);
+  ctx.toolArgsByCallId.set(event.toolCallId, toolArgs);
   safeBridgeEmit(
     ctx,
     ctx.trace('tool_started', path ? `${tn} → ${path}` : `Started ${tn}`, {
@@ -338,6 +352,7 @@ function handleToolExecutionEnd(ctx: PiSessionBridgeContext, maps: BridgeMaps, e
     resultText != null ? { detail: resultText, toolResult: resultText } : {};
   if (event.isError) {
     const path = ctx.toolPathByCallId.get(event.toolCallId);
+    const failedArgs = ctx.toolArgsByCallId.get(event.toolCallId);
     safeBridgeEmit(
       ctx,
       ctx.trace('tool_failed', `Tool failed: ${event.toolName}`, {
@@ -346,6 +361,7 @@ function handleToolExecutionEnd(ctx: PiSessionBridgeContext, maps: BridgeMaps, e
         path,
         status: 'error',
         ...traceResultFields,
+        ...(failedArgs != null ? { toolArgs: failedArgs } : {}),
       }),
     );
     safeBridgeEmit(ctx, {
@@ -366,6 +382,7 @@ function handleToolExecutionEnd(ctx: PiSessionBridgeContext, maps: BridgeMaps, e
     );
   }
   ctx.toolPathByCallId.delete(event.toolCallId);
+  ctx.toolArgsByCallId.delete(event.toolCallId);
 }
 
 function handleCompactionStart(ctx: PiSessionBridgeContext): void {

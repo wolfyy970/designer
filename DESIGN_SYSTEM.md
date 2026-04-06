@@ -46,6 +46,8 @@ Do not list font file names elsewhere — change imports and `--font-*` in `src/
 
 **Focus rings on inputs:** `.input-focus:focus` uses **solid** `--color-accent` on the field border and a matching **1px** outer ring—no washed translucent glow.
 
+**Tooltips (help affordances):** Use [`DsHelpTooltip`](src/components/shared/DsHelpTooltip.tsx)—`CircleHelp` trigger, `bg-surface-raised` + `border-border` panel, `text-nano` / `text-fg-secondary` copy, `shadow-md`, high `z-index` for canvas stacking. Wrap with **`nodrag nowheel`** when inside React Flow nodes; do not rely on the browser’s default `title=""` tooltip for product copy (untokenized).
+
 ---
 
 ## Palette architecture (hue budget)

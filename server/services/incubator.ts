@@ -76,7 +76,7 @@ export interface IncubateOptions {
   promptOptions?: IncubatorPromptOptions;
 }
 
-/** Throttle compile stream previews (mirrors single-shot generate). */
+/** Throttle compile stream previews (mirrors generate SSE pacing). */
 const INCUBATE_STREAM_PREVIEW_MIN_NEW_CHARS = 160;
 const INCUBATE_STREAM_PREVIEW_MIN_INTERVAL_MS = 100;
 const INCUBATE_STREAM_STALL_HEARTBEAT_MS = 12_000;
