@@ -289,7 +289,6 @@ describe.skipIf(!live)('sandbox LLM tool scenarios (OpenRouter)', () => {
    */
   it(
     'stress: replace duplicated token only inside .hero-title',
-    { timeout: 300_000, retry: 2 },
     async () => {
       const ambigueCss = [
         '.nav-item { padding: CONTENT__DUPE__Z9; }',
@@ -335,6 +334,7 @@ describe.skipIf(!live)('sandbox LLM tool scenarios (OpenRouter)', () => {
       expect(heroRule![0], 'hero block gets 2rem padding only').toMatch(/padding:\s*2rem/);
       expect(heroRule![0]).not.toContain('CONTENT__DUPE__Z9');
     },
+    300_000,
   );
 
   /*
@@ -345,7 +345,6 @@ describe.skipIf(!live)('sandbox LLM tool scenarios (OpenRouter)', () => {
    */
   it(
     'stress: fix tail rule in oversized css after truncated first read',
-    { timeout: 360_000, retry: 2 },
     async () => {
       const hugeCss = cssWithOversizedHeadPadding();
       expect(Buffer.byteLength(hugeCss, 'utf8')).toBeGreaterThan(50 * 1024);
@@ -362,7 +361,7 @@ describe.skipIf(!live)('sandbox LLM tool scenarios (OpenRouter)', () => {
           'Use read with offset/limit as needed, then edit. Do not delete unrelated padding comments.',
         ].join('\n'),
         model,
-        maxToolRounds: 36,
+        maxToolRounds: 24,
       });
 
       const finalCss = files['css/huge.css'] ?? '';
@@ -397,6 +396,7 @@ describe.skipIf(!live)('sandbox LLM tool scenarios (OpenRouter)', () => {
         'should paginate read (offset) or read again after truncation hint',
       ).toBe(true);
     },
+    360_000,
   );
 
   /*

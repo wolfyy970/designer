@@ -29,7 +29,7 @@ export type SandboxToolCallRecord = {
   name: string;
   /** Parsed tool arguments */
   args: Record<string, unknown>;
-  /** First text chunk returned by the tool */
+  /** Text sent back to the model (all `text` parts joined; not capped — mirrors production tool results). */
   resultPreview: string;
 };
 
@@ -48,9 +48,17 @@ function getToolMap(tools: ToolDefinition[]): Map<string, ToolDefinition> {
   return new Map(tools.map((x) => [x.name, x]));
 }
 
+/**
+ * Full text for the model's `tool` message. Do **not** truncate here: Pi's `read` tool already
+ * caps output (~50KB / line limit) and appends `Use offset=… to continue` at the end — a short
+ * slice would hide that hint and break pagination stress tests (and misrepresent production).
+ */
 function firstTextFromToolResult(res: { content: { type: string; text?: string }[] }): string {
-  const c = res.content[0];
-  return c?.type === 'text' && 'text' in c ? String(c.text).slice(0, 2000) : '';
+  const parts: string[] = [];
+  for (const c of res.content ?? []) {
+    if (c?.type === 'text' && 'text' in c) parts.push(String(c.text ?? ''));
+  }
+  return parts.length > 0 ? parts.join('\n') : '';
 }
 
 type OpenAiChatMessage = Record<string, unknown>;
