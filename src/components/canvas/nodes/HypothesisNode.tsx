@@ -1,7 +1,7 @@
 import { memo, useCallback, useState } from 'react';
 import { type NodeProps, type Node, Handle, Position } from '@xyflow/react';
-import { ClipboardCopy, FileText, Loader2, Pencil, Sparkles, X, Zap } from 'lucide-react';
-import { useCompilerStore, findStrategy } from '../../../stores/compiler-store';
+import { FileText, Loader2, Pencil, Sparkles, X, Zap } from 'lucide-react';
+import { useIncubatorStore, findStrategy } from '../../../stores/incubator-store';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { useGenerationStore } from '../../../stores/generation-store';
 import { useSpecStore } from '../../../stores/spec-store';
@@ -28,6 +28,7 @@ import {
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
 import GeneratingSkeleton from './GeneratingSkeleton';
+import { NodeErrorBlock } from './shared/NodeErrorBlock';
 
 type HypothesisEditorTab = 'hypothesis' | 'why' | 'measurements';
 
@@ -47,10 +48,10 @@ function smallNumberToWord(n: number): string {
 function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNodeType>) {
   const strategyId = data.refId ?? '';
 
-  const strategy = useCompilerStore(
+  const strategy = useIncubatorStore(
     (s) => findStrategy(s.incubationPlans, strategyId),
   );
-  const updateStrategy = useCompilerStore((s) => s.updateStrategy);
+  const updateStrategy = useIncubatorStore((s) => s.updateStrategy);
 
   const agentModeDomain = useWorkspaceDomainStore((s) => s.hypotheses[nodeId]?.agentMode);
   const agentModeCanvas = useCanvasStore((s) =>
@@ -96,12 +97,12 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
   const handleExportDebugMarkdown = useCallback(() => {
     if (!strategy) return;
     const spec = useSpecStore.getState().spec;
-    const compiler = useCompilerStore.getState();
+    const incubator = useIncubatorStore.getState();
     const domain = useWorkspaceDomainStore.getState();
     const gen = useGenerationStore.getState();
-    const incubationPlan = findPlanForStrategy(compiler.incubationPlans, strategyId);
+    const incubationPlan = findPlanForStrategy(incubator.incubationPlans, strategyId);
     const domainHypothesis = domain.hypotheses[nodeId];
-    const compiledPromptsForStrategy = compiler.compiledPrompts.filter(
+    const compiledPromptsForStrategy = incubator.compiledPrompts.filter(
       (p) => p.strategyId === strategyId,
     );
     const resultsForStrategy = gen.results.filter((r) => r.strategyId === strategyId);
@@ -317,22 +318,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
 
       {/* ── Generation Controls ──────────────────────────────── */}
       <div className="border-t border-border-subtle px-3 py-2.5">
-        {generationError && (
-          <div className="mb-2 rounded bg-error-subtle px-2 py-1.5 text-nano text-error select-text">
-            <pre className="max-h-36 overflow-y-auto whitespace-pre-wrap break-words font-sans leading-snug text-inherit [font-size:inherit]">
-              {generationError}
-            </pre>
-            <button
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={() => void navigator.clipboard?.writeText(generationError)}
-              className={`${RF_INTERACTIVE} mt-1 flex items-center gap-1 rounded px-0.5 py-0.5 text-nano font-medium text-error hover:bg-error-surface hover:text-error`}
-            >
-              <ClipboardCopy size={10} className="shrink-0 opacity-90" aria-hidden />
-              Copy message
-            </button>
-          </div>
-        )}
+        {generationError && <NodeErrorBlock message={generationError} />}
 
         <div className={`${RF_INTERACTIVE} mb-2 space-y-1.5`}>
           <div className="space-y-1">

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { GenerationResult } from '../../../types/provider';
-import type { HypothesisStrategy } from '../../../types/compiler';
+import type { HypothesisStrategy } from '../../../types/incubator';
 import {
   type DesignDebugExportOptions,
   buildDesignRunDebugMarkdown,

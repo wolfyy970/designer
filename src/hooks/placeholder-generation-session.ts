@@ -1,7 +1,7 @@
 import { normalizeError } from '../lib/error-utils';
 import { GENERATION_STATUS } from '../constants/generation';
 import type { AgentMode } from '../types/workspace-domain';
-import type { CompiledPrompt } from '../types/compiler';
+import type { CompiledPrompt } from '../types/incubator';
 import type { GenerationResult } from '../types/provider';
 import type { ProvenanceContext } from '../types/provenance-context';
 import { createPlaceholderTraceForwarder } from './placeholder-trace-forward';

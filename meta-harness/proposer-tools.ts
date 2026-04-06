@@ -26,11 +26,17 @@ export type ProposerContext = {
   rubricWeightPatch: Partial<Record<EvaluatorRubricId, number>>;
   submitted: { reasoning: string } | null;
   mode: MetaHarnessMode;
-  /** True after write_skill or delete_skill succeeded (compile mode omits those tools). */
+  /** True after write_skill or delete_skill succeeded (incubate mode omits those tools). */
   skillsMutated: boolean;
 };
 
-const COMPILE_PROMPT_KEYS = new Set<PromptKey>(['hypotheses-generator-system', 'incubator-user-inputs']);
+const INCUBATE_PROMPT_KEYS = new Set<PromptKey>(['hypotheses-generator-system', 'incubator-user-inputs']);
+
+const INPUTS_PROMPT_KEYS = new Set<PromptKey>([
+  'inputs-gen-research-context',
+  'inputs-gen-objectives-metrics',
+  'inputs-gen-design-constraints',
+]);
 
 const ToolReadFileArgsSchema = z.object({ path: z.string() });
 const ToolListDirArgsSchema = z.object({ path: z.string() });
@@ -161,8 +167,11 @@ function toolSetPromptOverride(ctx: ProposerContext, args: { key: string; body: 
   if (!PROMPT_KEYS.includes(k)) {
     return `Error: unknown prompt key. Allowed: ${PROMPT_KEYS.join(', ')}`;
   }
-  if (ctx.mode === 'compile' && !COMPILE_PROMPT_KEYS.has(k)) {
-    return `Error: compile mode only allows prompt keys: ${[...COMPILE_PROMPT_KEYS].join(', ')}`;
+  if (ctx.mode === 'incubate' && !INCUBATE_PROMPT_KEYS.has(k)) {
+    return `Error: incubate mode only allows prompt keys: ${[...INCUBATE_PROMPT_KEYS].join(', ')}`;
+  }
+  if (ctx.mode === 'inputs' && !INPUTS_PROMPT_KEYS.has(k)) {
+    return `Error: inputs mode only allows prompt keys: ${[...INPUTS_PROMPT_KEYS].join(', ')}`;
   }
   if (!args.body.trim()) return 'Error: empty body';
   ctx.promptOverrides[k] = args.body;
@@ -356,8 +365,11 @@ export async function dispatchTool(
   name: string,
   rawArgs: string,
 ): Promise<string> {
-  if (ctx.mode === 'compile' && (name === 'write_skill' || name === 'delete_skill')) {
-    return 'Error: compile mode does not use skills — tune hypotheses-generator-system and incubator-user-inputs only.';
+  if (ctx.mode === 'incubate' && (name === 'write_skill' || name === 'delete_skill')) {
+    return 'Error: incubate mode does not use skills — tune hypotheses-generator-system and incubator-user-inputs only.';
+  }
+  if (ctx.mode === 'inputs' && (name === 'write_skill' || name === 'delete_skill' || name === 'set_rubric_weights')) {
+    return 'Error: inputs mode does not use skills or rubric weights — tune inputs-gen-* prompts only.';
   }
   let args: Record<string, unknown>;
   try {

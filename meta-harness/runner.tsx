@@ -26,7 +26,7 @@ import type { MetaHarnessCliArgs, MetaHarnessConfig } from './config.ts';
 import { normalizeError } from '../src/lib/error-utils.ts';
 import { repoRoot } from './paths.ts';
 import {
-  DEFAULT_COMPILE_MODEL,
+  DEFAULT_INCUBATE_MODEL,
   DEFAULT_HYPOTHESIS_COUNT,
   INK_TTY_PREP_SEQUENCE,
   META_HARNESS_HEALTH_TIMEOUT_MS,
@@ -35,7 +35,7 @@ import { filterTestFilesBySubstrings, loadConfig, parseMetaHarnessArgv } from '.
 import { runMetaHarnessEngine } from './runner-core.ts';
 import { listTestCaseFiles } from './session.ts';
 import {
-  hydrateCompileRequest,
+  hydrateIncubateRequest,
   hydrateMetaHarnessTestCase,
 } from './test-case-hydrator.ts';
 import { printPlainPreflightSummary } from './preflight-promotion-plain.ts';
@@ -210,19 +210,19 @@ export async function main(): Promise<void> {
 
   if (args.dryRun) {
     const raw = JSON.parse(await readFile(filteredTests[0]!, 'utf8')) as unknown;
-    const compileProvider = cfg.compileProvider ?? cfg.defaultCompilerProvider;
-    const compileModel = cfg.compileModel ?? DEFAULT_COMPILE_MODEL;
-    if (args.mode === 'compile' || args.mode === 'e2e') {
-      const compileBody = hydrateCompileRequest(raw, {
-        compileProvider,
-        compileModel,
+    const incubateProvider = cfg.incubateProvider ?? cfg.defaultIncubatorProvider;
+    const incubateModel = cfg.incubateModel ?? DEFAULT_INCUBATE_MODEL;
+    if (args.mode === 'incubate' || args.mode === 'e2e') {
+      const incubateBody = hydrateIncubateRequest(raw, {
+        incubateProvider,
+        incubateModel,
         supportsVision: cfg.supportsVision,
-        defaultHypothesisCount: cfg.compileHypothesisCount ?? DEFAULT_HYPOTHESIS_COUNT,
+        defaultHypothesisCount: cfg.incubateHypothesisCount ?? DEFAULT_HYPOTHESIS_COUNT,
       });
-      console.log(JSON.stringify(compileBody, null, 2));
+      console.log(JSON.stringify(incubateBody, null, 2));
     } else {
       const body = hydrateMetaHarnessTestCase(raw, {
-        defaultCompilerProvider: cfg.defaultCompilerProvider,
+        defaultIncubatorProvider: cfg.defaultIncubatorProvider,
         correlationId: `mh-dry-run`,
       });
       console.log(JSON.stringify(body, null, 2));
@@ -236,9 +236,9 @@ export async function main(): Promise<void> {
     console.error('[meta-harness] Set OPENROUTER_API_KEY for the proposer (or use --eval-only)');
     process.exit(1);
   }
-  if (args.evalOnly && args.mode === 'compile' && !apiKey) {
+  if (args.evalOnly && args.mode === 'incubate' && !apiKey) {
     console.error(
-      '[meta-harness] compile mode needs OPENROUTER_API_KEY for the hypothesis rubric (even with --eval-only)',
+      '[meta-harness] incubate mode needs OPENROUTER_API_KEY for the hypothesis rubric (even with --eval-only)',
     );
     process.exit(1);
   }

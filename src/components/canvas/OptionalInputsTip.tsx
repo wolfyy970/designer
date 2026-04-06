@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { X } from 'lucide-react';
 import { RF_INTERACTIVE } from '../../constants/canvas';
-import { STORAGE_KEYS, CANVAS_OPTIONAL_SECTIONS_TIP_DISMISSED_VALUE } from '../../lib/storage-keys';
+import { STORAGE_KEYS, CANVAS_OPTIONAL_INPUTS_TIP_DISMISSED_VALUE } from '../../lib/storage-keys';
 import { useCanvasStore } from '../../stores/canvas-store';
 
 const TIP_BAR_CLASS_NAME =
@@ -20,15 +20,15 @@ function TipDismissButton(props: { onClick: () => void; 'aria-label': string }) 
   );
 }
 
-export default function OptionalSectionsTip() {
-  const sectionGhostToolbarNudge = useCanvasStore((s) => s.sectionGhostToolbarNudge);
-  const clearSectionGhostToolbarNudge = useCanvasStore((s) => s.clearSectionGhostToolbarNudge);
+export default function OptionalInputsTip() {
+  const inputGhostToolbarNudge = useCanvasStore((s) => s.inputGhostToolbarNudge);
+  const clearInputGhostToolbarNudge = useCanvasStore((s) => s.clearInputGhostToolbarNudge);
 
   const [mainDismissed, setMainDismissed] = useState(() => {
     try {
       return (
-        localStorage.getItem(STORAGE_KEYS.CANVAS_OPTIONAL_SECTIONS_TIP_DISMISSED) ===
-        CANVAS_OPTIONAL_SECTIONS_TIP_DISMISSED_VALUE
+        localStorage.getItem(STORAGE_KEYS.CANVAS_OPTIONAL_INPUTS_TIP_DISMISSED) ===
+        CANVAS_OPTIONAL_INPUTS_TIP_DISMISSED_VALUE
       );
     } catch {
       return false;
@@ -38,8 +38,8 @@ export default function OptionalSectionsTip() {
   const dismissMain = useCallback(() => {
     try {
       localStorage.setItem(
-        STORAGE_KEYS.CANVAS_OPTIONAL_SECTIONS_TIP_DISMISSED,
-        CANVAS_OPTIONAL_SECTIONS_TIP_DISMISSED_VALUE,
+        STORAGE_KEYS.CANVAS_OPTIONAL_INPUTS_TIP_DISMISSED,
+        CANVAS_OPTIONAL_INPUTS_TIP_DISMISSED_VALUE,
       );
     } catch {
       /* ignore quota / private mode */
@@ -48,10 +48,10 @@ export default function OptionalSectionsTip() {
   }, []);
 
   const dismissNudge = useCallback(() => {
-    clearSectionGhostToolbarNudge();
-  }, [clearSectionGhostToolbarNudge]);
+    clearInputGhostToolbarNudge();
+  }, [clearInputGhostToolbarNudge]);
 
-  if (sectionGhostToolbarNudge) {
+  if (inputGhostToolbarNudge) {
     return (
       <div className={TIP_BAR_CLASS_NAME} role="status">
         <p className="min-w-0 flex-1 text-xs leading-snug text-fg-secondary">

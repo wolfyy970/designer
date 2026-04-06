@@ -22,7 +22,8 @@ export interface IncubationPlan {
   hypotheses: HypothesisStrategy[];
   generatedAt: string;
   approvedAt?: string;
-  compilerModel: string;
+  /** Model id used when this plan was produced. */
+  incubatorModel: string;
 }
 
 export interface CompiledPrompt {

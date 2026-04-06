@@ -2,23 +2,23 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { LOCKDOWN_MODEL_ID, LOCKDOWN_PROVIDER_ID } from '../../../src/lib/lockdown-model.ts';
 
 const mocks = vi.hoisted(() => ({
-  compileSpecStream: vi.fn(async () => ({
+  incubateSpecStream: vi.fn(async () => ({
     id: 'd1',
     specId: 's1',
     dimensions: [],
     hypotheses: [],
     generatedAt: '2020-01-01T00:00:00.000Z',
-    compilerModel: 'test-model',
+    incubatorModel: 'test-model',
   })),
 }));
 
-vi.mock('../../services/compiler.ts', () => ({
-  compileSpecStream: mocks.compileSpecStream,
+vi.mock('../../services/incubator.ts', () => ({
+  incubateSpecStream: mocks.incubateSpecStream,
 }));
 
 import app from '../../app.ts';
 
-const minimalCompileBody = {
+const minimalIncubateBody = {
   spec: {
     id: 's1',
     title: 't',
@@ -47,15 +47,15 @@ const validSection = {
 
 function bodyWithSpec(overrides: Record<string, unknown> = {}) {
   return {
-    ...minimalCompileBody,
+    ...minimalIncubateBody,
     ...overrides,
-    spec: { ...minimalCompileBody.spec, ...(overrides.spec as object) },
+    spec: { ...minimalIncubateBody.spec, ...(overrides.spec as object) },
   };
 }
 
-describe('POST /api/compile validation', () => {
+describe('POST /api/incubate validation', () => {
   it('returns 400 when spec omits required DesignSpec fields', async () => {
-    const res = await app.request('http://localhost/api/compile', {
+    const res = await app.request('http://localhost/api/incubate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -65,17 +65,17 @@ describe('POST /api/compile validation', () => {
       }),
     });
     expect(res.status).toBe(400);
-    expect(mocks.compileSpecStream).not.toHaveBeenCalled();
+    expect(mocks.incubateSpecStream).not.toHaveBeenCalled();
   });
 
   it('returns 400 when promptOptions.existingStrategies has invalid strategy shape', async () => {
-    const res = await app.request('http://localhost/api/compile', {
+    const res = await app.request('http://localhost/api/incubate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(
         bodyWithSpec({
           spec: {
-            ...minimalCompileBody.spec,
+            ...minimalIncubateBody.spec,
             sections: { 'design-brief': validSection },
           },
           promptOptions: {
@@ -85,28 +85,28 @@ describe('POST /api/compile validation', () => {
       ),
     });
     expect(res.status).toBe(400);
-    expect(mocks.compileSpecStream).not.toHaveBeenCalled();
+    expect(mocks.incubateSpecStream).not.toHaveBeenCalled();
   });
 });
 
-describe('POST /api/compile SSE wire', () => {
+describe('POST /api/incubate SSE wire', () => {
   afterEach(() => {
-    mocks.compileSpecStream.mockReset();
-    mocks.compileSpecStream.mockImplementation(async () => ({
+    mocks.incubateSpecStream.mockReset();
+    mocks.incubateSpecStream.mockImplementation(async () => ({
       id: 'd1',
       specId: 's1',
       dimensions: [],
       hypotheses: [],
       generatedAt: '2020-01-01T00:00:00.000Z',
-      compilerModel: 'test-model',
+      incubatorModel: 'test-model',
     }));
   });
 
-  it('emits compile_result and done after successful compileSpecStream', async () => {
+  it('emits incubate_result and done after successful incubateSpecStream', async () => {
     const prev = process.env.LOCKDOWN;
     process.env.LOCKDOWN = 'false';
     try {
-      const res = await app.request('http://localhost/api/compile', {
+      const res = await app.request('http://localhost/api/incubate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyWithSpec()),
@@ -115,7 +115,7 @@ describe('POST /api/compile SSE wire', () => {
       expect(res.headers.get('content-type')).toMatch(/text\/event-stream/);
       const text = await res.text();
       expect(text).toContain('event: progress');
-      expect(text).toContain('event: compile_result');
+      expect(text).toContain('event: incubate_result');
       expect(text).toContain('"id":"d1"');
       expect(text).toContain('event: done');
       expect(text).not.toContain('event: error');
@@ -125,12 +125,12 @@ describe('POST /api/compile SSE wire', () => {
     }
   });
 
-  it('emits error then done when compileSpecStream throws', async () => {
-    mocks.compileSpecStream.mockRejectedValueOnce(new Error('LLM boom'));
+  it('emits error then done when incubateSpecStream throws', async () => {
+    mocks.incubateSpecStream.mockRejectedValueOnce(new Error('LLM boom'));
     const prev = process.env.LOCKDOWN;
     process.env.LOCKDOWN = 'false';
     try {
-      const res = await app.request('http://localhost/api/compile', {
+      const res = await app.request('http://localhost/api/incubate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyWithSpec()),
@@ -147,24 +147,24 @@ describe('POST /api/compile SSE wire', () => {
   });
 });
 
-describe('POST /api/compile lockdown', () => {
+describe('POST /api/incubate lockdown', () => {
   afterEach(() => {
-    mocks.compileSpecStream.mockClear();
+    mocks.incubateSpecStream.mockClear();
   });
 
   it('clamps provider and model when LOCKDOWN is unset', async () => {
     const prev = process.env.LOCKDOWN;
     delete process.env.LOCKDOWN;
     try {
-      const res = await app.request('http://localhost/api/compile', {
+      const res = await app.request('http://localhost/api/incubate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(minimalCompileBody),
+        body: JSON.stringify(minimalIncubateBody),
       });
       expect(res.status).toBe(200);
-      await res.text(); // drain SSE so the stream handler runs compileSpecStream
-      expect(mocks.compileSpecStream).toHaveBeenCalledTimes(1);
-      const first = mocks.compileSpecStream.mock.calls[0] as unknown as [unknown, string, string];
+      await res.text(); // drain SSE so the stream handler runs incubateSpecStream
+      expect(mocks.incubateSpecStream).toHaveBeenCalledTimes(1);
+      const first = mocks.incubateSpecStream.mock.calls[0] as unknown as [unknown, string, string];
       expect(first[1]).toBe(LOCKDOWN_MODEL_ID);
       expect(first[2]).toBe(LOCKDOWN_PROVIDER_ID);
     } finally {
@@ -177,14 +177,14 @@ describe('POST /api/compile lockdown', () => {
     const prev = process.env.LOCKDOWN;
     process.env.LOCKDOWN = 'false';
     try {
-      const res = await app.request('http://localhost/api/compile', {
+      const res = await app.request('http://localhost/api/incubate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(minimalCompileBody),
+        body: JSON.stringify(minimalIncubateBody),
       });
       expect(res.status).toBe(200);
       await res.text();
-      const first = mocks.compileSpecStream.mock.calls[0] as unknown as [unknown, string, string];
+      const first = mocks.incubateSpecStream.mock.calls[0] as unknown as [unknown, string, string];
       expect(first[1]).toBe('local-llm');
       expect(first[2]).toBe('lmstudio');
     } finally {

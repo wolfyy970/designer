@@ -9,6 +9,12 @@ import { debugMetaHarness } from './debug-log.ts';
 import type { MetaHarnessMode } from './modes.ts';
 import { parsePromptOverridesJsonString } from './schemas.ts';
 import { diffSkillTrees } from './skill-diff.ts';
+import {
+  parseRubricWeightsJson,
+  rubricWeightsDiffer,
+  type RubricWeightsRecord,
+} from './rubric-weights-compare.ts';
+import { EVALUATOR_RUBRIC_IDS } from '../src/types/evaluation.ts';
 
 export type PromotionSummary = {
   candidateId: number;
@@ -18,6 +24,7 @@ export type PromotionSummary = {
   skillsModified: string[];
   skillsDeleted: string[];
   testCasesAdded: string[];
+  rubricWeightsChanged: boolean;
   hasChanges: boolean;
 };
 
@@ -49,6 +56,7 @@ type PromotionSummaryContext = {
   summary: PromotionSummary;
   tree: SkillTreeDiffResult;
   promptOverrides: Record<string, string>;
+  rubricTable: { live: RubricWeightsRecord; winner: RubricWeightsRecord } | null;
 };
 
 async function buildPromotionSummaryWithContext(
@@ -83,12 +91,31 @@ async function buildPromotionSummaryWithContext(
   }
   const testCasesAdded = [...currentNames].filter((n) => !initialTestCaseNames.has(n)).sort();
 
+  let rubricTable: { live: RubricWeightsRecord; winner: RubricWeightsRecord } | null = null;
+  try {
+    const winnerRwRaw = await readFile(
+      path.join(winningCandidateDir, ARTIFACT.rubricWeightsJson),
+      'utf8',
+    );
+    const liveRwRaw = await readFile(path.join(repoRoot, 'src/lib/rubric-weights.json'), 'utf8');
+    const w = parseRubricWeightsJson(winnerRwRaw);
+    const l = parseRubricWeightsJson(liveRwRaw);
+    if (w && l && rubricWeightsDiffer(l, w)) {
+      rubricTable = { live: l, winner: w };
+    }
+  } catch (e) {
+    debugMetaHarness('promotion rubric-weights read skipped:', normalizeError(e));
+  }
+
+  const rubricWeightsChanged = rubricTable != null;
+
   const hasChanges =
     promptOverrideKeys.length > 0 ||
     tree.added.length > 0 ||
     tree.deleted.length > 0 ||
     tree.modified.length > 0 ||
-    testCasesAdded.length > 0;
+    testCasesAdded.length > 0 ||
+    rubricWeightsChanged;
 
   return {
     summary: {
@@ -99,10 +126,12 @@ async function buildPromotionSummaryWithContext(
       skillsModified: tree.modified.map((m) => m.relPath),
       skillsDeleted: tree.deleted,
       testCasesAdded,
+      rubricWeightsChanged,
       hasChanges,
     },
     tree,
     promptOverrides,
+    rubricTable,
   };
 }
 
@@ -111,7 +140,7 @@ export async function generatePromotionReportMarkdown(
 ): Promise<{ markdown: string; summary: PromotionSummary }> {
   const { repoRoot, winningCandidateDir, winningCandidateId, winningMeanScore, mode, candidateRows } = options;
 
-  const { summary, tree, promptOverrides } = await buildPromotionSummaryWithContext(options);
+  const { summary, tree, promptOverrides, rubricTable } = await buildPromotionSummaryWithContext(options);
 
   let proposalBody = '';
   try {
@@ -217,7 +246,29 @@ export async function generatePromotionReportMarkdown(
     }
   }
 
-  lines.push('## 4. New test cases since run start');
+  lines.push('## 4. Rubric weight changes');
+  lines.push('');
+  if (!rubricTable) {
+    lines.push(
+      '_Winner `rubric-weights.json` matches repo `src/lib/rubric-weights.json`, or file missing / unreadable._',
+    );
+    lines.push('');
+  } else {
+    lines.push(
+      'Replace values in **`src/lib/rubric-weights.json`** (or use preflight **P**). Restart the API server so `GET /api/config` serves the new defaults.',
+    );
+    lines.push('');
+    lines.push('| Dimension | Current | Winner |');
+    lines.push('|-----------|---------|--------|');
+    for (const id of EVALUATOR_RUBRIC_IDS) {
+      lines.push(
+        `| ${id} | ${rubricTable.live[id].toFixed(4)} | ${rubricTable.winner[id].toFixed(4)} |`,
+      );
+    }
+    lines.push('');
+  }
+
+  lines.push('## 5. New test cases since run start');
   lines.push('');
   if (summary.testCasesAdded.length === 0) {
     lines.push('_No new `*.json` files under `meta-harness/test-cases/` since this run began._');
@@ -229,7 +280,7 @@ export async function generatePromotionReportMarkdown(
     lines.push('');
   }
 
-  lines.push('## 5. How to apply (checklist)');
+  lines.push('## 6. How to apply (checklist)');
   lines.push('');
   let step = 1;
   if (Object.keys(promptOverrides).length > 0) {
@@ -249,10 +300,16 @@ export async function generatePromotionReportMarkdown(
     );
     step += 1;
   }
+  if (rubricTable) {
+    lines.push(
+      `${step}. Update \`src/lib/rubric-weights.json\` with the winner’s weights (section 4), then **restart the API server**.`,
+    );
+    step += 1;
+  }
   lines.push(`${step}. Run \`pnpm test\` and \`pnpm lint\`.`);
   lines.push('');
 
-  lines.push(`## 6. Proposer reasoning (from \`${ARTIFACT.proposalMd}\`)`);
+  lines.push(`## 7. Proposer reasoning (from \`${ARTIFACT.proposalMd}\`)`);
   lines.push('');
   lines.push(proposalBody.trimEnd());
   lines.push('');

@@ -4,17 +4,17 @@
 import { z } from 'zod';
 
 export const MetaHarnessConfigSchema = z.object({
-  mode: z.enum(['compile', 'e2e', 'design']).optional(),
+  mode: z.enum(['incubate', 'e2e', 'design', 'inputs']).optional(),
   apiBaseUrl: z.string().min(1),
   evalRunsBaseDir: z.string().optional(),
   iterations: z.number().finite(),
   proposerModel: z.string(),
   proposerMaxToolRounds: z.number().finite(),
-  defaultCompilerProvider: z.string(),
-  compileProvider: z.string().optional(),
-  compileModel: z.string().optional(),
+  defaultIncubatorProvider: z.string(),
+  incubateProvider: z.string().optional(),
+  incubateModel: z.string().optional(),
   hypothesisEvalModel: z.string().optional(),
-  compileHypothesisCount: z.number().finite().optional(),
+  incubateHypothesisCount: z.number().finite().optional(),
   hypothesisRubricTimeoutMs: z.number().finite().optional(),
   /** POST /api/hypothesis/generate (full SSE read) — default see constants.DEFAULT_HYPOTHESIS_GENERATE_TIMEOUT_MS */
   hypothesisGenerateTimeoutMs: z.number().finite().optional(),
@@ -22,6 +22,8 @@ export const MetaHarnessConfigSchema = z.object({
   openRouterChatTimeoutMs: z.number().finite().optional(),
   supportsVision: z.boolean().optional(),
   agenticMaxRevisionRounds: z.number().finite().optional(),
+  /** Per-call timeout for POST /api/inputs/generate (default see constants.DEFAULT_INPUTS_GENERATE_TIMEOUT_MS) */
+  inputsGenerateTimeoutMs: z.number().finite().optional(),
 });
 
 export type MetaHarnessConfig = z.infer<typeof MetaHarnessConfigSchema>;

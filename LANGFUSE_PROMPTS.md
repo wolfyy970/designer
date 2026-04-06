@@ -6,22 +6,22 @@ In **Langfuse** and **Prompt Studio**, templates are keyed by **kebab-case** ide
 
 The API’s `**getPromptBody`** (when Langfuse is configured) tries the **new** Langfuse name first, then the **legacy** name, so runs keep working until `pnpm db:seed` / `pnpm langfuse:sync-prompts` has created the kebab-case prompts.
 
-**Production source of truth for template text:** labeled versions in [Langfuse Cloud](https://langfuse.com/docs/deployment/cloud) (or self-hosted) — the server resolves prompts via **`getPromptBody`** at runtime. The repo’s `src/lib/prompts/shared-defaults.ts` is used when **creating** a missing prompt and as the **import source** for `**pnpm langfuse:sync-prompts**`. **Prompt Studio** in the app **reads** that baseline from **`GET /api/prompts`** but **does not write Langfuse** from Save; local drafts live in the browser and are sent as optional **`promptOverrides`** on compile / hypothesis / design-system / section-generate requests (see [ARCHITECTURE.md](ARCHITECTURE.md)). `**pnpm db:seed**` bootstraps missing keys only; `**pnpm langfuse:sync-prompts**` aligns every labeled prompt with repo/SQLite by calling **`prompt.create`** per changed key — Langfuse stores a **new version** and moves **`LANGFUSE_PROMPT_LABEL`** (e.g. `production`) to it; **older versions stay** in the UI for history. `**pnpm db:seed**` also runs a **migration step** for legacy Langfuse names.
+**Production source of truth for template text:** labeled versions in [Langfuse Cloud](https://langfuse.com/docs/deployment/cloud) (or self-hosted) — the server resolves prompts via **`getPromptBody`** at runtime. The repo’s `src/lib/prompts/shared-defaults.ts` is used when **creating** a missing prompt and as the **import source** for `**pnpm langfuse:sync-prompts**`. **Prompt Studio** in the app **reads** that baseline from **`GET /api/prompts`** but **does not write Langfuse** from Save; local drafts live in the browser and are sent as optional **`promptOverrides`** on incubate / hypothesis / design-system / inputs-generate requests (see [ARCHITECTURE.md](ARCHITECTURE.md)). `**pnpm db:seed**` bootstraps missing keys only; `**pnpm langfuse:sync-prompts**` aligns every labeled prompt with repo/SQLite by calling **`prompt.create`** per changed key — Langfuse stores a **new version** and moves **`LANGFUSE_PROMPT_LABEL`** (e.g. `production`) to it; **older versions stay** in the UI for history. `**pnpm db:seed**` also runs a **migration step** for legacy Langfuse names.
 
 **In-app labels** (Prompt Studio sidebar) match `[PROMPT_META](src/lib/prompts/defaults.ts)` — use that file for **template variables** (e.g. `{{DESIGN_BRIEF}}`) per key.
 
 ---
 
-## Incubator (incubation plan compile)
+## Incubator (incubation plan)
 
 
 | Langfuse name                     | Plain-language goal                                                                                                                                                   |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `**hypotheses-generator-system`** | Tells the LLM how to think as the **Incubator**: read your spec, infer **dimensions** and **hypothesis strategies**, and return structured **JSON** (the incubation plan). |
-| `**incubator-user-inputs`**       | The **filled-in spec package** sent with `hypotheses-generator-system`: brief, constraints, research, metrics, images — the concrete inputs for that compile call.    |
+| `**incubator-user-inputs`**       | The **filled-in spec package** sent with `hypotheses-generator-system`: brief, constraints, research, metrics, images — the concrete inputs for that incubate call.    |
 
 
-**Runs when:** you compile from the **Incubator** node (`/api/compile`).
+**Runs when:** you incubate from the **Incubator** node (`POST /api/incubate`, SSE `incubate_result`).
 
 ---
 
@@ -53,19 +53,21 @@ The API’s `**getPromptBody`** (when Langfuse is configured) tries the **new** 
 
 ---
 
-## Section nodes (magic wand auto-fill)
+## Input nodes (magic wand auto-fill)
 
 System prompts for **Generate** on **Research Context**, **Objectives & Metrics**, and **Design Constraints** when the user fills **Design Brief** first. The server builds a structured user message from the brief and any other spec sections; these keys control tone, grounding, and hallucination rules.
+
+**Canonical keys** (new): `inputs-gen-research-context`, `inputs-gen-objectives-metrics`, `inputs-gen-design-constraints`. **Legacy aliases** `section-gen-*` still resolve via `LEGACY_PROMPT_KEY_ALIASES` in `defaults.ts`.
 
 
 | Langfuse name                        | Plain-language goal                                                                                                                           |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `**section-gen-research-context`**   | Draft **Research & Context** from the brief: users, behaviors, and themes — **(Inferred)** where extrapolated; no fake studies or data.      |
-| `**section-gen-objectives-metrics`** | Draft **Objectives & Metrics**: outcomes and observable success signals; no invented KPI numbers unless the brief states them.              |
-| `**section-gen-design-constraints`** | Draft **Design Constraints**: non-negotiables vs exploration ranges, grounded in the brief.                                                   |
+| `**inputs-gen-research-context`**   | Draft **Research & Context** from the brief: users, behaviors, and themes — **(Inferred)** where extrapolated; no fake studies or data.      |
+| `**inputs-gen-objectives-metrics`** | Draft **Objectives & Metrics**: outcomes and observable success signals; no invented KPI numbers unless the brief states them.              |
+| `**inputs-gen-design-constraints`** | Draft **Design Constraints**: non-negotiables vs exploration ranges, grounded in the brief.                                                   |
 
 
-**Runs when:** you click **Generate** on one of those three section nodes (`POST /api/section/generate`). **Prompt Studio** includes these keys for local overrides.
+**Runs when:** you click **Generate** on one of those three input nodes (`POST /api/inputs/generate`). **Prompt Studio** includes these keys for local overrides.
 
 ---
 

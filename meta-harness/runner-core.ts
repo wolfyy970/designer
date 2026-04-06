@@ -1,7 +1,7 @@
 /**
  * Meta-harness outer loop engine — callbacks only, no UI.
  */
-import { cp, mkdir, writeFile } from 'node:fs/promises';
+import { cp, mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { normalizeError } from '../src/lib/error-utils.ts';
 import { repoRoot, resolveEvalRunsBaseDir } from './paths.ts';
@@ -20,12 +20,33 @@ import { writeCandidateChangelogAndAggregate } from './candidate-artifacts.ts';
 import type { RunnerCallbacks } from './runner-types.ts';
 import {
   ARTIFACT,
-  DEFAULT_COMPILE_MODEL,
+  DEFAULT_INCUBATE_MODEL,
   DEFAULT_HYPOTHESIS_COUNT,
   DEFAULT_OPENROUTER_CHAT_TIMEOUT_MS,
   META_HARNESS_BASELINE_PROMPT_OVERRIDES,
   NO_BEST_SENTINEL,
 } from './constants.ts';
+
+/** Snapshot repo `skills/` into the session folder before any proposer mutates disk. */
+export async function saveSkillsBaseline(skillsDir: string, baselineDir: string): Promise<void> {
+  await rm(baselineDir, { recursive: true, force: true });
+  try {
+    const st = await stat(skillsDir);
+    if (st.isDirectory()) {
+      await cp(skillsDir, baselineDir, { recursive: true });
+      return;
+    }
+  } catch {
+    /* skills missing or not a directory */
+  }
+  await mkdir(baselineDir, { recursive: true });
+}
+
+/** Replace repo `skills/` with the session baseline copy (per-candidate reset + `finally` cleanup). */
+export async function restoreSkillsFromBaseline(skillsDir: string, baselineDir: string): Promise<void> {
+  await rm(skillsDir, { recursive: true, force: true });
+  await cp(baselineDir, skillsDir, { recursive: true });
+}
 
 /** Optional engine tuning; pass `config` to avoid loading disk config twice. */
 type RunMetaHarnessEngineOptions = {
@@ -67,13 +88,14 @@ export async function runMetaHarnessEngine(
     cfg,
     iterations,
   });
-  const compileProvider = cfg.compileProvider ?? cfg.defaultCompilerProvider;
-  const compileModel = cfg.compileModel ?? DEFAULT_COMPILE_MODEL;
+  const incubateProvider = cfg.incubateProvider ?? cfg.defaultIncubatorProvider;
+  const incubateModel = cfg.incubateModel ?? DEFAULT_INCUBATE_MODEL;
   const hypothesisEvalModel =
     cfg.hypothesisEvalModel && cfg.hypothesisEvalModel.trim().length > 0
       ? cfg.hypothesisEvalModel.trim()
       : cfg.proposerModel;
-  const compileHypothesisCountDefault = cfg.compileHypothesisCount ?? DEFAULT_HYPOTHESIS_COUNT;
+  const inputsRubricModel = hypothesisEvalModel;
+  const incubateHypothesisCountDefault = cfg.incubateHypothesisCount ?? DEFAULT_HYPOTHESIS_COUNT;
   const openRouterChatTimeoutMs =
     cfg.openRouterChatTimeoutMs ?? DEFAULT_OPENROUTER_CHAT_TIMEOUT_MS;
 
@@ -81,9 +103,14 @@ export async function runMetaHarnessEngine(
   if (!args.evalOnly && !apiKey) {
     throw new Error('Set OPENROUTER_API_KEY for the proposer (or use --eval-only)');
   }
-  if (args.evalOnly && args.mode === 'compile' && !apiKey) {
+  if (args.evalOnly && args.mode === 'incubate' && !apiKey) {
     throw new Error(
-      'compile mode needs OPENROUTER_API_KEY for the hypothesis rubric (even with --eval-only)',
+      'incubate mode needs OPENROUTER_API_KEY for the hypothesis rubric (even with --eval-only)',
+    );
+  }
+  if (args.evalOnly && args.mode === 'inputs' && !apiKey) {
+    throw new Error(
+      'inputs mode needs OPENROUTER_API_KEY for the inputs rubric (even with --eval-only)',
     );
   }
 
@@ -104,42 +131,50 @@ export async function runMetaHarnessEngine(
     baselineWillRun: needsBaseline,
   });
 
+  const skillsDir = path.join(root, 'skills');
+  const skillsBaselineDir = path.join(historyDir, ARTIFACT.skillsBaseline);
+  await saveSkillsBaseline(skillsDir, skillsBaselineDir);
+
   const bestRef = { mean: NO_BEST_SENTINEL, id: NO_BEST_SENTINEL };
-  if (needsBaseline) {
-    await runBaselineCandidate({
-      root,
-      historyDir,
-      args,
-      cfg,
-      callbacks,
-      testFiles,
-      evalRunsBase,
-      compileProvider,
-      compileModel,
-      hypothesisEvalModel,
-      compileHypothesisCountDefault,
-      apiKey,
-      iterations,
-      candidateRows,
-      bestRef,
-    });
-  }
+  try {
+    if (needsBaseline) {
+      await runBaselineCandidate({
+        root,
+        historyDir,
+        args,
+        cfg,
+        callbacks,
+        testFiles,
+        evalRunsBase,
+        incubateProvider,
+        incubateModel,
+        hypothesisEvalModel,
+        inputsRubricModel,
+        incubateHypothesisCountDefault,
+        apiKey,
+        iterations,
+        candidateRows,
+        bestRef,
+      });
+    }
 
-  for (let iter = 0; iter < iterations; iter++) {
-    if (callbacks.shouldStop?.()) break;
+    for (let iter = 0; iter < iterations; iter++) {
+      if (callbacks.shouldStop?.()) break;
 
-    const candidateId = await nextCandidateId(historyDir);
-    const candidateDir = path.join(historyDir, `candidate-${candidateId}`);
-    await mkdir(candidateDir, { recursive: true });
-    const label = `candidate-${candidateId} (loop ${iter + 1}/${iterations})`;
+      const candidateId = await nextCandidateId(historyDir);
+      const candidateDir = path.join(historyDir, `candidate-${candidateId}`);
+      await mkdir(candidateDir, { recursive: true });
+      const label = `candidate-${candidateId} (loop ${iter + 1}/${iterations})`;
 
-    callbacks.onIterationStart(candidateId, iter + 1, iterations);
+      callbacks.onIterationStart(candidateId, iter + 1, iterations);
 
-    let proposalMd = '';
-    let promptOverrides: Record<string, string> = {};
-    let rubricWeights: Record<string, number> | undefined;
+      await restoreSkillsFromBaseline(skillsDir, skillsBaselineDir);
 
-    if (!args.evalOnly) {
+      let proposalMd = '';
+      let promptOverrides: Record<string, string> = {};
+      let rubricWeights: Record<string, number> | undefined;
+
+      if (!args.evalOnly) {
       if (callbacks.shouldStop?.()) break;
       callbacks.onProposerStart(cfg.proposerModel, cfg.proposerMaxToolRounds);
       const proposerStart = Date.now();
@@ -203,10 +238,11 @@ export async function runMetaHarnessEngine(
       callbacks,
       testFiles,
       evalRunsBase,
-      compileProvider,
-      compileModel,
+      incubateProvider,
+      incubateModel,
       hypothesisEvalModel,
-      compileHypothesisCountDefault,
+      inputsRubricModel,
+      incubateHypothesisCountDefault,
       apiKey,
       iterations,
       candidateRows,
@@ -221,37 +257,47 @@ export async function runMetaHarnessEngine(
       iterationLine: `${iter + 1} / ${iterations}`,
       includeProposerSection: true,
     });
-  }
+    }
 
-  const { mean: bestMean, id: bestCand } = bestRef;
-  let promotionReportRelPath: string | undefined;
-  if (
-    bestCand >= 0 &&
-    bestMean >= 0 &&
-    (await pathIsDir(path.join(historyDir, `candidate-${bestCand}`)))
-  ) {
-    const winningDir = path.join(historyDir, `candidate-${bestCand}`);
+    const { mean: bestMean, id: bestCand } = bestRef;
+    let promotionReportRelPath: string | undefined;
+    if (
+      bestCand >= 0 &&
+      bestMean >= 0 &&
+      (await pathIsDir(path.join(historyDir, `candidate-${bestCand}`)))
+    ) {
+      const winningDir = path.join(historyDir, `candidate-${bestCand}`);
+      try {
+        const { markdown, summary } = await generatePromotionReportMarkdown({
+          repoRoot: root,
+          winningCandidateDir: winningDir,
+          winningCandidateId: bestCand,
+          winningMeanScore: bestMean,
+          mode: args.mode,
+          candidateRows,
+          initialTestCaseNames,
+          currentTestCasesDir: testCasesDir,
+        });
+        const reportAbs = path.join(historyDir, ARTIFACT.promotionReportMd);
+        await writeFile(reportAbs, markdown, 'utf8');
+        promotionReportRelPath = path.relative(root, reportAbs);
+        callbacks.onPromotionReport?.(promotionReportRelPath, summary);
+      } catch (e) {
+        console.warn('[meta-harness] Failed to write PROMOTION_REPORT.md:', normalizeError(e));
+      }
+    }
+
+    callbacks.onComplete(bestCand, bestMean, path.relative(root, historyDir), promotionReportRelPath);
+  } finally {
     try {
-      const { markdown, summary } = await generatePromotionReportMarkdown({
-        repoRoot: root,
-        winningCandidateDir: winningDir,
-        winningCandidateId: bestCand,
-        winningMeanScore: bestMean,
-        mode: args.mode,
-        candidateRows,
-        initialTestCaseNames,
-        currentTestCasesDir: testCasesDir,
-      });
-      const reportAbs = path.join(historyDir, ARTIFACT.promotionReportMd);
-      await writeFile(reportAbs, markdown, 'utf8');
-      promotionReportRelPath = path.relative(root, reportAbs);
-      callbacks.onPromotionReport?.(promotionReportRelPath, summary);
+      await restoreSkillsFromBaseline(skillsDir, skillsBaselineDir);
     } catch (e) {
-      console.warn('[meta-harness] Failed to write PROMOTION_REPORT.md:', normalizeError(e));
+      console.warn(
+        '[meta-harness] Failed to restore skills/ from session baseline:',
+        normalizeError(e),
+      );
     }
   }
-
-  callbacks.onComplete(bestCand, bestMean, path.relative(root, historyDir), promotionReportRelPath);
 }
 
 /** Params for {@link runEvaluatedCandidatePhase} — exported for unit tests. */
@@ -263,10 +309,11 @@ export type EvaluatedCandidatePhaseParams = {
   callbacks: RunnerCallbacks;
   testFiles: string[];
   evalRunsBase: string;
-  compileProvider: string;
-  compileModel: string;
+  incubateProvider: string;
+  incubateModel: string;
   hypothesisEvalModel: string;
-  compileHypothesisCountDefault: number;
+  inputsRubricModel: string;
+  incubateHypothesisCountDefault: number;
   apiKey: string;
   iterations: number;
   candidateRows: CandidateScoreRow[];
@@ -296,10 +343,11 @@ export async function runEvaluatedCandidatePhase(p: EvaluatedCandidatePhaseParam
     rubricWeights: p.rubricWeights,
     testFiles: p.testFiles,
     evalRunsBase: p.evalRunsBase,
-    compileProvider: p.compileProvider,
-    compileModel: p.compileModel,
+    incubateProvider: p.incubateProvider,
+    incubateModel: p.incubateModel,
     hypothesisEvalModel: p.hypothesisEvalModel,
-    compileHypothesisCountDefault: p.compileHypothesisCountDefault,
+    inputsRubricModel: p.inputsRubricModel,
+    incubateHypothesisCountDefault: p.incubateHypothesisCountDefault,
     apiKey: p.apiKey,
     candidateDir: p.candidateDir,
     callbacks: p.callbacks,
@@ -350,10 +398,11 @@ async function runBaselineCandidate(params: {
   callbacks: RunnerCallbacks;
   testFiles: string[];
   evalRunsBase: string;
-  compileProvider: string;
-  compileModel: string;
+  incubateProvider: string;
+  incubateModel: string;
   hypothesisEvalModel: string;
-  compileHypothesisCountDefault: number;
+  inputsRubricModel: string;
+  incubateHypothesisCountDefault: number;
   apiKey: string;
   iterations: number;
   candidateRows: CandidateScoreRow[];
@@ -383,10 +432,11 @@ async function runBaselineCandidate(params: {
     callbacks,
     testFiles,
     evalRunsBase: params.evalRunsBase,
-    compileProvider: params.compileProvider,
-    compileModel: params.compileModel,
+    incubateProvider: params.incubateProvider,
+    incubateModel: params.incubateModel,
     hypothesisEvalModel: params.hypothesisEvalModel,
-    compileHypothesisCountDefault: params.compileHypothesisCountDefault,
+    inputsRubricModel: params.inputsRubricModel,
+    incubateHypothesisCountDefault: params.incubateHypothesisCountDefault,
     apiKey,
     iterations,
     candidateRows,

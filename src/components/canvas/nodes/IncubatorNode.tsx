@@ -4,51 +4,52 @@ import { ArrowRight, RefreshCw } from 'lucide-react';
 import { normalizeError } from '../../../lib/error-utils';
 import { useSpecStore } from '../../../stores/spec-store';
 import {
-  useCompilerStore,
+  useIncubatorStore,
   findStrategy,
-} from '../../../stores/compiler-store';
+} from '../../../stores/incubator-store';
 import { useGenerationStore } from '../../../stores/generation-store';
 import {
   useCanvasStore,
-  SECTION_NODE_TYPES,
+  INPUT_NODE_TYPES,
   type CanvasNodeType,
 } from '../../../stores/canvas-store';
-import type { CompilerNodeData } from '../../../types/canvas-data';
-import type { HypothesisStrategy } from '../../../types/compiler';
-import { compileStream } from '../../../api/client';
-import { buildCompileInputs } from '../../../lib/canvas-graph';
+import type { IncubatorNodeData } from '../../../types/canvas-data';
+import type { HypothesisStrategy } from '../../../types/incubator';
+import { incubateStream } from '../../../api/client';
+import { buildIncubateInputs } from '../../../lib/canvas-graph';
 import { useWorkspaceDomainStore } from '../../../stores/workspace-domain-store';
 import { scheduleCanvasFitView } from '../../../lib/canvas-fit-view';
 import { processingOrFilled } from '../../../lib/node-status';
 import { isPlaceholderHypothesis } from '../../../lib/hypothesis-node-utils';
 import { EDGE_STATUS, RF_INTERACTIVE } from '../../../constants/canvas';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
-import { getActivePromptOverrides, usePromptOverridesStore } from '../../../stores/prompt-overrides-store';
+import { getActivePromptOverrides, spreadPromptOverrides, usePromptOverridesStore } from '../../../stores/prompt-overrides-store';
 import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
 import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
 import GeneratingSkeleton from './GeneratingSkeleton';
+import { NodeErrorBlock } from './shared/NodeErrorBlock';
 
 const COUNT_OPTIONS = [1, 2, 3, 5];
 const DEFAULT_COUNT = 3;
 
-type CompilerNodeType = Node<CompilerNodeData, 'compiler'>;
+type IncubatorNodeFlowType = Node<IncubatorNodeData, 'incubator'>;
 
-function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
+function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>) {
   const { fitView } = useReactFlow();
   const spec = useSpecStore((s) => s.spec);
 
-  const isCompiling = useCompilerStore((s) => s.isCompiling);
-  const error = useCompilerStore((s) => s.error);
-  const appendStrategiesToNode = useCompilerStore((s) => s.appendStrategiesToNode);
-  const setCompiling = useCompilerStore((s) => s.setCompiling);
-  const setError = useCompilerStore((s) => s.setError);
+  const isCompiling = useIncubatorStore((s) => s.isCompiling);
+  const error = useIncubatorStore((s) => s.error);
+  const appendStrategiesToNode = useIncubatorStore((s) => s.appendStrategiesToNode);
+  const setCompiling = useIncubatorStore((s) => s.setCompiling);
+  const setError = useIncubatorStore((s) => s.setError);
 
   const onRemove = useCanvasNodePermanentRemove(id, STATIC_NODE_DELETE_COPY.incubator);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
-  const syncAfterCompile = useCanvasStore((s) => s.syncAfterCompile);
+  const syncAfterIncubate = useCanvasStore((s) => s.syncAfterIncubate);
   const addPlaceholderHypotheses = useCanvasStore((s) => s.addPlaceholderHypotheses);
   const removePlaceholders = useCanvasStore((s) => s.removePlaceholders);
   const setEdgeStatusBySource = useCanvasStore((s) => s.setEdgeStatusBySource);
@@ -59,16 +60,16 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
   const { providerId, modelId, supportsVision } = useConnectedModel(id);
 
   const hypothesisCount = (data.hypothesisCount as number | undefined) ?? DEFAULT_COUNT;
-  const [compileLiveLine, setCompileLiveLine] = useState('');
+  const [incubateLiveLine, setIncubateLiveLine] = useState('');
 
-  // Count connected input nodes (sections + variants)
+  // Count connected input nodes (spec inputs + reference previews)
   const connectedInputCount = useMemo(() => {
     if (
       domainWiring &&
-      (domainWiring.sectionNodeIds.length > 0 || domainWiring.previewNodeIds.length > 0)
+      (domainWiring.inputNodeIds.length > 0 || domainWiring.previewNodeIds.length > 0)
     ) {
       return (
-        domainWiring.sectionNodeIds.length +
+        domainWiring.inputNodeIds.length +
         domainWiring.previewNodeIds.length
       );
     }
@@ -76,7 +77,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
     return incomingEdges.filter((e) => {
       const sourceNode = nodes.find((n) => n.id === e.source);
       return sourceNode && (
-        SECTION_NODE_TYPES.has(sourceNode.type as CanvasNodeType) ||
+        INPUT_NODE_TYPES.has(sourceNode.type as CanvasNodeType) ||
         sourceNode.type === 'preview'
       );
     }).length;
@@ -101,13 +102,13 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
     [id, updateNodeData],
   );
 
-  const handleCompile = useCallback(async () => {
+  const handleIncubate = useCallback(async () => {
     const results = useGenerationStore.getState().results;
     const wiring = useWorkspaceDomainStore.getState().incubatorWirings[id];
     const { partialSpec, referenceDesigns } =
-      await buildCompileInputs(nodes, edges, spec, id, results, wiring);
+      await buildIncubateInputs(nodes, edges, spec, id, results, wiring);
 
-    const incubationPlans = useCompilerStore.getState().incubationPlans;
+    const incubationPlans = useIncubatorStore.getState().incubationPlans;
     const existingStrategies: HypothesisStrategy[] = [];
     const hypotheses = useWorkspaceDomainStore.getState().hypotheses;
     for (const h of Object.values(hypotheses)) {
@@ -117,15 +118,14 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
     }
 
     setCompiling(true);
-    setCompileLiveLine('');
+    setIncubateLiveLine('');
     setError(null);
     setEdgeStatusBySource(id, EDGE_STATUS.PROCESSING);
 
     const placeholderIds = addPlaceholderHypotheses(id, hypothesisCount);
 
     try {
-      const promptOverrides = getActivePromptOverrides(usePromptOverridesStore.getState().overrides);
-      const map = await compileStream(
+      const map = await incubateStream(
         {
           spec: partialSpec,
           providerId: providerId!,
@@ -133,14 +133,16 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
           referenceDesigns,
           supportsVision,
           promptOptions: { count: hypothesisCount, existingStrategies },
-          ...(promptOverrides ? { promptOverrides } : {}),
+          ...spreadPromptOverrides(
+            getActivePromptOverrides(usePromptOverridesStore.getState().overrides),
+          ),
         },
         {
-          onProgress: (status) => setCompileLiveLine(status),
+          onProgress: (status) => setIncubateLiveLine(status),
           onCode: (preview) => {
             const n = preview.length;
             const tail = preview.slice(-96);
-            setCompileLiveLine(
+            setIncubateLiveLine(
               n > 96 ? `Streaming… ${n} chars · …${tail}` : `Streaming… ${n} chars`,
             );
           },
@@ -148,15 +150,15 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
       );
       removePlaceholders(placeholderIds);
       appendStrategiesToNode(id, map);
-      syncAfterCompile(map.hypotheses, id);
+      syncAfterIncubate(map.hypotheses, id);
       setEdgeStatusBySource(id, EDGE_STATUS.COMPLETE);
       scheduleCanvasFitView(fitView);
     } catch (err) {
       removePlaceholders(placeholderIds);
-      setError(normalizeError(err, 'Compilation failed'));
+      setError(normalizeError(err, 'Incubation failed'));
       setEdgeStatusBySource(id, EDGE_STATUS.ERROR);
     } finally {
-      setCompileLiveLine('');
+      setIncubateLiveLine('');
       setCompiling(false);
     }
   }, [
@@ -171,7 +173,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
     setCompiling,
     setError,
     appendStrategiesToNode,
-    syncAfterCompile,
+    syncAfterIncubate,
     addPlaceholderHypotheses,
     removePlaceholders,
     setEdgeStatusBySource,
@@ -187,7 +189,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
   // Layer 2: inline readiness hint
   const hint = !isCompiling
     ? connectedInputCount === 0
-      ? 'Connect section nodes to begin'
+      ? 'Connect input nodes to begin'
       : !modelId
         ? 'Connect a Model node'
         : null
@@ -196,7 +198,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
   return (
     <NodeShell
       nodeId={id}
-      nodeType="compiler"
+      nodeType="incubator"
       selected={!!selected}
       width="w-node"
       status={status}
@@ -211,22 +213,18 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
         <h3 className="text-xs font-semibold text-fg">Incubator</h3>
       </NodeHeader>
 
-      {/* Skeleton overlay while compiling */}
+      {/* Skeleton overlay while incubating */}
       {isCompiling && (
         <GeneratingSkeleton
           variant="contentOnly"
-          detail={compileLiveLine || undefined}
+          detail={incubateLiveLine || undefined}
           elapsed={elapsed}
         />
       )}
 
       {/* Controls */}
       <div className="space-y-2 px-3 py-2.5">
-        {error && !isCompiling && (
-          <div className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded bg-error-subtle px-2 py-1.5 text-nano text-error select-text">
-            {error}
-          </div>
-        )}
+        {error && !isCompiling && <NodeErrorBlock variant="plain" message={error} />}
 
         <div className={`${RF_INTERACTIVE} space-y-2`}>
           <div className="flex items-center justify-between">
@@ -255,7 +253,7 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
 
           <button
             type="button"
-            onClick={handleCompile}
+            onClick={handleIncubate}
             disabled={isCompiling || !isReady}
             aria-busy={isCompiling}
             aria-label={isCompiling ? 'Incubating…' : 'Generate hypotheses'}
@@ -286,4 +284,4 @@ function CompilerNode({ id, data, selected }: NodeProps<CompilerNodeType>) {
   );
 }
 
-export default memo(CompilerNode);
+export default memo(IncubatorNode);

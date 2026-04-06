@@ -11,7 +11,7 @@ describe('isValidConnection', () => {
       'designConstraints',
     ];
     for (const section of sectionTypes) {
-      expect(isValidConnection(section, 'compiler')).toBe(true);
+      expect(isValidConnection(section, 'incubator')).toBe(true);
     }
   });
 
@@ -20,7 +20,7 @@ describe('isValidConnection', () => {
   });
 
   it('allows compiler to connect to hypothesis', () => {
-    expect(isValidConnection('compiler', 'hypothesis')).toBe(true);
+    expect(isValidConnection('incubator', 'hypothesis')).toBe(true);
   });
 
   it('allows hypothesis to connect to preview', () => {
@@ -28,32 +28,32 @@ describe('isValidConnection', () => {
   });
 
   it('allows preview to connect to compiler and existingDesign', () => {
-    expect(isValidConnection('preview', 'compiler')).toBe(true);
+    expect(isValidConnection('preview', 'incubator')).toBe(true);
     expect(isValidConnection('preview', 'existingDesign')).toBe(true);
   });
 
   it('rejects designSystem connecting to compiler', () => {
-    expect(isValidConnection('designSystem', 'compiler')).toBe(false);
+    expect(isValidConnection('designSystem', 'incubator')).toBe(false);
   });
 
   it('rejects reverse connections', () => {
-    expect(isValidConnection('compiler', 'designBrief')).toBe(false);
-    expect(isValidConnection('hypothesis', 'compiler')).toBe(false);
+    expect(isValidConnection('incubator', 'designBrief')).toBe(false);
+    expect(isValidConnection('hypothesis', 'incubator')).toBe(false);
     expect(isValidConnection('preview', 'hypothesis')).toBe(false);
   });
 
   it('rejects self-connections', () => {
-    expect(isValidConnection('compiler', 'compiler')).toBe(false);
+    expect(isValidConnection('incubator', 'incubator')).toBe(false);
     expect(isValidConnection('preview', 'preview')).toBe(false);
   });
 
   it('rejects unknown node types', () => {
-    expect(isValidConnection('unknown', 'compiler')).toBe(false);
+    expect(isValidConnection('unknown', 'incubator')).toBe(false);
     expect(isValidConnection('designBrief', 'unknown')).toBe(false);
   });
 
   it('allows model to connect to compiler, hypothesis, and designSystem', () => {
-    expect(isValidConnection('model', 'compiler')).toBe(true);
+    expect(isValidConnection('model', 'incubator')).toBe(true);
     expect(isValidConnection('model', 'hypothesis')).toBe(true);
     expect(isValidConnection('model', 'designSystem')).toBe(true);
   });
@@ -64,7 +64,7 @@ describe('isValidConnection', () => {
   });
 
   it('rejects connections TO model nodes', () => {
-    expect(isValidConnection('compiler', 'model')).toBe(false);
+    expect(isValidConnection('incubator', 'model')).toBe(false);
     expect(isValidConnection('hypothesis', 'model')).toBe(false);
     expect(isValidConnection('designBrief', 'model')).toBe(false);
   });

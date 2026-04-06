@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { EDGE_STATUS, EDGE_TYPES, NODE_TYPES } from '../../constants/canvas';
 import { useCanvasStore } from '../canvas-store';
-import { useCompilerStore } from '../compiler-store';
+import { useIncubatorStore } from '../incubator-store';
 import { useWorkspaceDomainStore } from '../workspace-domain-store';
-import type { IncubationPlan } from '../../types/compiler';
+import type { IncubationPlan } from '../../types/incubator';
 import type { WorkspaceEdge, WorkspaceNode } from '../../types/workspace-graph';
 import { previewSlotKey } from '../../types/workspace-domain';
 function minimalPlan(strategyId: string): IncubationPlan {
@@ -22,14 +22,14 @@ function minimalPlan(strategyId: string): IncubationPlan {
       },
     ],
     generatedAt: '2020-01-01',
-    compilerModel: 'x',
+    incubatorModel: 'x',
   };
 }
 
 describe('canvas-store removeNode (preview)', () => {
   beforeEach(() => {
     useWorkspaceDomainStore.getState().reset();
-    useCompilerStore.getState().reset();
+    useIncubatorStore.getState().reset();
     useCanvasStore.getState().reset();
     useCanvasStore.setState({ autoLayout: false });
   });
@@ -37,7 +37,7 @@ describe('canvas-store removeNode (preview)', () => {
   it('clears domain preview slot and UI pointers so the node does not stay wired', () => {
     const compiler: WorkspaceNode = {
       id: 'c1',
-      type: NODE_TYPES.COMPILER,
+      type: NODE_TYPES.INCUBATOR,
       position: { x: 0, y: 0 },
       data: {},
     };
@@ -70,7 +70,7 @@ describe('canvas-store removeNode (preview)', () => {
       },
     ];
 
-    useCompilerStore.getState().setPlanForNode('c1', minimalPlan('vs1'));
+    useIncubatorStore.getState().setPlanForNode('c1', minimalPlan('vs1'));
     const dom = useWorkspaceDomainStore.getState();
     dom.linkHypothesisToIncubator('h1', 'c1', 'vs1');
     dom.setPreviewSlot('h1', 'vs1', {

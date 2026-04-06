@@ -47,7 +47,7 @@ const HypothesisWorkspaceCoreObjectSchema = z.object({
   domainHypothesis: DomainHypothesisSchema.nullish(),
   modelProfiles: z.record(z.string(), DomainModelProfileSchema),
   designSystems: z.record(z.string(), DomainDesignSystemContentSchema),
-  defaultCompilerProvider: z.string().min(1),
+  defaultIncubatorProvider: z.string().min(1),
   promptOverrides: z.record(z.string(), z.string()).optional(),
 });
 

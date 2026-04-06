@@ -1,1 +1,1 @@
-export type MetaHarnessMode = 'compile' | 'e2e' | 'design';
+export type MetaHarnessMode = 'incubate' | 'e2e' | 'design' | 'inputs';

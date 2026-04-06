@@ -9,15 +9,15 @@ import type { MetaHarnessCliArgs } from '../config.ts';
 import type { MetaHarnessConfig } from '../schemas.ts';
 import type { RunnerCallbacks } from '../runner-types.ts';
 import type { SimplifiedMetaHarnessTestCase } from '../test-case-hydrator.ts';
-import type { IncubationPlan } from '../../src/types/compiler.ts';
+import type { IncubationPlan } from '../../src/types/incubator.ts';
 
-const { runCompilePipelineMock, scoreHypothesisWithRubricMock } = vi.hoisted(() => ({
-  runCompilePipelineMock: vi.fn(),
+const { runIncubatePipelineMock, scoreHypothesisWithRubricMock } = vi.hoisted(() => ({
+  runIncubatePipelineMock: vi.fn(),
   scoreHypothesisWithRubricMock: vi.fn(),
 }));
 
-vi.mock('../compile-pipeline.ts', () => ({
-  runCompilePipeline: runCompilePipelineMock,
+vi.mock('../incubate-pipeline.ts', () => ({
+  runIncubatePipeline: runIncubatePipelineMock,
 }));
 
 vi.mock('../hypothesis-evaluator.ts', async (importOriginal) => {
@@ -61,7 +61,7 @@ const plan: IncubationPlan = {
     },
   ],
   generatedAt: new Date().toISOString(),
-  compilerModel: 'cm',
+  incubatorModel: 'cm',
 };
 
 const cfg: MetaHarnessConfig = {
@@ -69,12 +69,12 @@ const cfg: MetaHarnessConfig = {
   iterations: 1,
   proposerModel: 'm',
   proposerMaxToolRounds: 3,
-  defaultCompilerProvider: 'openrouter',
+  defaultIncubatorProvider: 'openrouter',
   hypothesisRubricTimeoutMs: 30_000,
 };
 
 const args: MetaHarnessCliArgs = {
-  mode: 'compile',
+  mode: 'incubate',
   once: false,
   evalOnly: true,
   dryRun: false,
@@ -100,18 +100,18 @@ function stubCallbacks(): RunnerCallbacks {
   } as RunnerCallbacks;
 }
 
-describe('runOneMetaHarnessTest compile mode (rubric errors)', () => {
+describe('runOneMetaHarnessTest incubate mode (rubric errors)', () => {
   let root: string;
 
   afterEach(async () => {
-    runCompilePipelineMock.mockReset();
+    runIncubatePipelineMock.mockReset();
     scoreHypothesisWithRubricMock.mockReset();
     if (root) await rm(root, { recursive: true, force: true });
   });
 
   it('maps AbortError from rubric to timeout-style message in summary and callback', async () => {
     root = await mkdtemp(path.join(tmpdir(), 'mh-roc-abort-'));
-    runCompilePipelineMock.mockResolvedValue({ plan, requestedCount: 1 });
+    runIncubatePipelineMock.mockResolvedValue({ plan, requestedCount: 1 });
     const abort = new Error('aborted');
     abort.name = 'AbortError';
     scoreHypothesisWithRubricMock.mockRejectedValue(abort);
@@ -124,10 +124,11 @@ describe('runOneMetaHarnessTest compile mode (rubric errors)', () => {
       evalStart: Date.now(),
       testResultsDir,
       evalRunsBase: path.join(root, 'eval'),
-      compileProvider: 'openrouter',
-      compileModel: 'a/b',
+      incubateProvider: 'openrouter',
+      incubateModel: 'a/b',
       hypothesisEvalModel: 'rub/m',
-      compileHypothesisCountDefault: 5,
+      inputsRubricModel: 'rub/m',
+      incubateHypothesisCountDefault: 5,
       apiKey: 'k',
       callbacks: { ...stubCallbacks(), onTestCaseDone },
     });
@@ -145,7 +146,7 @@ describe('runOneMetaHarnessTest compile mode (rubric errors)', () => {
 
   it('records non-timeout rubric errors on summary and error outcome', async () => {
     root = await mkdtemp(path.join(tmpdir(), 'mh-roc-bad-'));
-    runCompilePipelineMock.mockResolvedValue({ plan, requestedCount: 1 });
+    runIncubatePipelineMock.mockResolvedValue({ plan, requestedCount: 1 });
     scoreHypothesisWithRubricMock.mockRejectedValue(new Error('OpenRouter: invalid response shape'));
 
     const testResultsDir = path.join(root, 'tr2');
@@ -156,10 +157,11 @@ describe('runOneMetaHarnessTest compile mode (rubric errors)', () => {
       evalStart: Date.now(),
       testResultsDir,
       evalRunsBase: path.join(root, 'eval'),
-      compileProvider: 'openrouter',
-      compileModel: 'a/b',
+      incubateProvider: 'openrouter',
+      incubateModel: 'a/b',
       hypothesisEvalModel: 'rub/m',
-      compileHypothesisCountDefault: 5,
+      inputsRubricModel: 'rub/m',
+      incubateHypothesisCountDefault: 5,
       apiKey: 'k',
       callbacks: { ...stubCallbacks(), onTestCaseDone },
     });
@@ -170,7 +172,7 @@ describe('runOneMetaHarnessTest compile mode (rubric errors)', () => {
 
   it('writes summary with error outcome when rubric fails inside outer catch', async () => {
     root = await mkdtemp(path.join(tmpdir(), 'mh-roc-summary-'));
-    runCompilePipelineMock.mockResolvedValue({ plan, requestedCount: 1 });
+    runIncubatePipelineMock.mockResolvedValue({ plan, requestedCount: 1 });
     scoreHypothesisWithRubricMock.mockRejectedValue(new Error('rubric parse failed'));
 
     const testResultsDir = path.join(root, 'tr3');
@@ -180,10 +182,11 @@ describe('runOneMetaHarnessTest compile mode (rubric errors)', () => {
       evalStart: Date.now(),
       testResultsDir,
       evalRunsBase: path.join(root, 'eval'),
-      compileProvider: 'openrouter',
-      compileModel: 'a/b',
+      incubateProvider: 'openrouter',
+      incubateModel: 'a/b',
       hypothesisEvalModel: 'rub/m',
-      compileHypothesisCountDefault: 5,
+      inputsRubricModel: 'rub/m',
+      incubateHypothesisCountDefault: 5,
       apiKey: 'k',
       callbacks: stubCallbacks(),
     });

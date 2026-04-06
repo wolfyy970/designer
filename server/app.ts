@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import compile from './routes/compile.ts';
+import incubate from './routes/incubate.ts';
 import generate from './routes/generate.ts';
 import models from './routes/models.ts';
 import logs from './routes/logs.ts';
@@ -9,7 +9,7 @@ import prompts from './routes/prompts.ts';
 import hypothesis from './routes/hypothesis.ts';
 import preview from './routes/preview.ts';
 import configRoute from './routes/config.ts';
-import sectionGenerate from './routes/section-generate.ts';
+import inputsGenerate from './routes/inputs-generate.ts';
 
 const app = new Hono().basePath('/api');
 
@@ -27,7 +27,7 @@ app.use(
 
 app.get('/health', (c) => c.json({ ok: true }));
 app.route('/config', configRoute);
-app.route('/compile', compile);
+app.route('/incubate', incubate);
 app.route('/generate', generate);
 app.route('/models', models);
 app.route('/logs', logs);
@@ -35,6 +35,6 @@ app.route('/design-system', designSystem);
 app.route('/prompts', prompts);
 app.route('/hypothesis', hypothesis);
 app.route('/preview', preview);
-app.route('/section', sectionGenerate);
+app.route('/inputs', inputsGenerate);
 
 export default app;

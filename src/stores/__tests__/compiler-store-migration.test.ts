@@ -74,7 +74,7 @@ describe('compiler store migration v2 → v3 (dimensionMaps → incubationPlans)
             { id: 'vs1', name: 'H1', hypothesis: 'Test it', rationale: 'R', measurements: 'M', dimensionValues: {} },
           ],
           generatedAt: '2024-01-01',
-          compilerModel: 'test-model',
+          incubatorModel: 'test-model',
         },
       },
       selectedProvider: 'openrouter',

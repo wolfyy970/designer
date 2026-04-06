@@ -1,31 +1,16 @@
 import { describe, it, expect } from 'vitest';
+import { PROMPT_KEYS } from '../prompts/defaults';
 import { PROMPT_DEFAULTS } from '../prompts/shared-defaults';
 
-const EXPECTED_KEYS = [
-  'hypotheses-generator-system',
-  'incubator-user-inputs',
-  'designer-direct-system',
-  'designer-agentic-system',
-  'designer-agentic-revision-user',
-  'designer-hypothesis-inputs',
-  'design-system-extract-system',
-  'design-system-extract-user-input',
-  'agent-context-compaction',
-  'agents-md-file',
-  'evaluator-design-quality',
-  'evaluator-strategy-fidelity',
-  'evaluator-implementation',
-] as const;
-
 describe('PROMPT_DEFAULTS', () => {
-  it('defines every prompt key', () => {
-    for (const key of EXPECTED_KEYS) {
-      expect(PROMPT_DEFAULTS).toHaveProperty(key);
+  it('defines every prompt key from PROMPT_KEYS', () => {
+    for (const key of PROMPT_KEYS) {
+      expect(PROMPT_DEFAULTS[key]).toBeDefined();
     }
   });
 
   it('has non-empty string for every key', () => {
-    for (const key of EXPECTED_KEYS) {
+    for (const key of PROMPT_KEYS) {
       const val = PROMPT_DEFAULTS[key];
       expect(typeof val).toBe('string');
       expect(val.trim().length).toBeGreaterThan(0);

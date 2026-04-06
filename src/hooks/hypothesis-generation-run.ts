@@ -2,7 +2,7 @@ import type {
   HypothesisGenerateApiPayload,
   HypothesisPromptBundleResponse,
 } from '../api/types';
-import type { CompiledPrompt } from '../types/compiler';
+import type { CompiledPrompt } from '../types/incubator';
 import type { GenerationResult } from '../types/provider';
 import type { HypothesisGenerationContext } from '../workspace/hypothesis-generation-pure';
 import { GENERATION_MODE, GENERATION_STATUS } from '../constants/generation';

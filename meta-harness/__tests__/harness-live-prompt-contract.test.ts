@@ -20,7 +20,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
-  hydrateCompileRequestFromParsed,
+  hydrateIncubateRequestFromParsed,
   hydrateMetaHarnessTestCaseFromParsed,
   SimplifiedMetaHarnessTestCaseSchema,
 } from '../test-case-hydrator.ts';
@@ -61,9 +61,9 @@ describe('harness live prompt contract', () => {
 
   it('compile POST body omits promptOverrides for baseline-shaped hydration', () => {
     const parsed = SimplifiedMetaHarnessTestCaseSchema.parse(minimalCase);
-    const body = hydrateCompileRequestFromParsed(parsed, {
-      compileProvider: 'openrouter',
-      compileModel: 'a/b',
+    const body = hydrateIncubateRequestFromParsed(parsed, {
+      incubateProvider: 'openrouter',
+      incubateModel: 'a/b',
       promptOverrides: { ...META_HARNESS_BASELINE_PROMPT_OVERRIDES },
     });
     expect('promptOverrides' in body).toBe(false);
@@ -72,7 +72,7 @@ describe('harness live prompt contract', () => {
   it('hypothesis POST body omits promptOverrides for baseline-shaped hydration', () => {
     const parsed = SimplifiedMetaHarnessTestCaseSchema.parse(minimalCase);
     const body = hydrateMetaHarnessTestCaseFromParsed(parsed, {
-      defaultCompilerProvider: 'openrouter',
+      defaultIncubatorProvider: 'openrouter',
       promptOverrides: { ...META_HARNESS_BASELINE_PROMPT_OVERRIDES },
     });
     expect('promptOverrides' in body).toBe(false);

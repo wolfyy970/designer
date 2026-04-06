@@ -4,15 +4,15 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { GENERATION_MODE } from '../../src/constants/generation.ts';
 import {
-  hydrateCompileRequest,
-  hydrateCompileRequestFromParsed,
+  hydrateIncubateRequest,
+  hydrateIncubateRequestFromParsed,
   hydrateMetaHarnessTestCase,
   hydrateMetaHarnessTestCaseFromParsed,
   MH_HYPOTHESIS_NODE,
   MH_MODEL_NODE,
   SimplifiedMetaHarnessTestCaseSchema,
 } from '../test-case-hydrator.ts';
-import type { HypothesisStrategy } from '../../src/types/compiler.ts';
+import type { HypothesisStrategy } from '../../src/types/incubator.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -21,7 +21,7 @@ describe('meta-harness test-case-hydrator', () => {
     const raw = JSON.parse(
       await readFile(path.join(__dirname, '../test-cases/landing-page-saas.json'), 'utf8'),
     ) as unknown;
-    const body = hydrateMetaHarnessTestCase(raw, { defaultCompilerProvider: 'openrouter' });
+    const body = hydrateMetaHarnessTestCase(raw, { defaultIncubatorProvider: 'openrouter' });
     expect(body.hypothesisNodeId).toBe(MH_HYPOTHESIS_NODE);
     expect(body.domainHypothesis?.agentMode).toBe(GENERATION_MODE.AGENTIC);
     expect(body.modelProfiles[MH_MODEL_NODE]?.modelId).toContain('minimax');
@@ -49,12 +49,12 @@ describe('meta-harness test-case-hydrator', () => {
       },
       model: { providerId: 'openrouter', modelId: 'x/y' },
     };
-    const body = hydrateMetaHarnessTestCase(raw, { defaultCompilerProvider: 'openrouter' });
+    const body = hydrateMetaHarnessTestCase(raw, { defaultIncubatorProvider: 'openrouter' });
     expect(body.spec.sections['design-brief']?.content).toContain('custom-notes');
     expect(body.spec.sections['design-brief']?.content).toContain('extra block');
   });
 
-  it('hydrateCompileRequest builds compile body with promptOptions.count', () => {
+  it('hydrateIncubateRequest builds incubate body with promptOptions.count', () => {
     const raw = {
       name: 'c1',
       spec: {
@@ -62,11 +62,11 @@ describe('meta-harness test-case-hydrator', () => {
         sections: { 'design-brief': 'brief', 'existing-design': '', 'research-context': '', 'objectives-metrics': '', 'design-constraints': '' },
       },
       model: { providerId: 'openrouter', modelId: 'x/y' },
-      compile: { hypothesisCount: 3 },
+      incubate: { hypothesisCount: 3 },
     };
-    const body = hydrateCompileRequest(raw, {
-      compileProvider: 'openrouter',
-      compileModel: 'a/b',
+    const body = hydrateIncubateRequest(raw, {
+      incubateProvider: 'openrouter',
+      incubateModel: 'a/b',
       defaultHypothesisCount: 99,
     });
     expect(body.providerId).toBe('openrouter');
@@ -100,7 +100,7 @@ describe('meta-harness test-case-hydrator', () => {
       model: { providerId: 'openrouter', modelId: 'x/y' },
     };
     const body = hydrateMetaHarnessTestCase(raw, {
-      defaultCompilerProvider: 'openrouter',
+      defaultIncubatorProvider: 'openrouter',
       strategyOverride: override,
     });
     expect(body.strategy.id).toBe('picked-1');
@@ -129,18 +129,18 @@ describe('meta-harness test-case-hydrator', () => {
         dimensionValues: { format: 'html' },
       },
       model: { providerId: 'openrouter', modelId: 'x/y' },
-      compile: { hypothesisCount: 2 },
+      incubate: { hypothesisCount: 2 },
     };
     const parsed = SimplifiedMetaHarnessTestCaseSchema.parse(raw);
-    const compileA = hydrateCompileRequestFromParsed(parsed, { compileProvider: 'p', compileModel: 'm' });
-    const compileB = hydrateCompileRequest(raw, { compileProvider: 'p', compileModel: 'm' });
-    expect(compileA.promptOptions).toEqual(compileB.promptOptions);
-    expect(compileA.providerId).toBe(compileB.providerId);
-    expect(compileA.modelId).toBe(compileB.modelId);
-    expect((compileA.spec as { title: string }).title).toBe((compileB.spec as { title: string }).title);
+    const incubateA = hydrateIncubateRequestFromParsed(parsed, { incubateProvider: 'p', incubateModel: 'm' });
+    const incubateB = hydrateIncubateRequest(raw, { incubateProvider: 'p', incubateModel: 'm' });
+    expect(incubateA.promptOptions).toEqual(incubateB.promptOptions);
+    expect(incubateA.providerId).toBe(incubateB.providerId);
+    expect(incubateA.modelId).toBe(incubateB.modelId);
+    expect((incubateA.spec as { title: string }).title).toBe((incubateB.spec as { title: string }).title);
 
-    const hypA = hydrateMetaHarnessTestCaseFromParsed(parsed, { defaultCompilerProvider: 'openrouter' });
-    const hypB = hydrateMetaHarnessTestCase(raw, { defaultCompilerProvider: 'openrouter' });
+    const hypA = hydrateMetaHarnessTestCaseFromParsed(parsed, { defaultIncubatorProvider: 'openrouter' });
+    const hypB = hydrateMetaHarnessTestCase(raw, { defaultIncubatorProvider: 'openrouter' });
     expect(hypA.strategy).toEqual(hypB.strategy);
     expect(hypA.modelProfiles).toEqual(hypB.modelProfiles);
     expect(hypA.spec.title).toBe(hypB.spec.title);
@@ -162,7 +162,7 @@ describe('meta-harness test-case-hydrator', () => {
       },
       model: { providerId: 'openrouter', modelId: 'x/y' },
     };
-    expect(() => hydrateMetaHarnessTestCase(raw, { defaultCompilerProvider: 'openrouter' })).toThrow(
+    expect(() => hydrateMetaHarnessTestCase(raw, { defaultIncubatorProvider: 'openrouter' })).toThrow(
       /strategy/,
     );
   });

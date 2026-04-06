@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
 import { useGenerationStore } from '../../../stores/generation-store';
 import { normalizeError } from '../../../lib/error-utils';
-import { useCompilerStore, findStrategy } from '../../../stores/compiler-store';
+import { useIncubatorStore, findStrategy } from '../../../stores/incubator-store';
 import { prepareIframeContent, renderErrorHtml } from '../../../lib/iframe-utils';
 import { preferredArtifactFileOrder } from '../../../lib/preview-entry';
 import { useCanvasStore } from '../../../stores/canvas-store';
@@ -72,7 +72,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
   const { code, isLoading: codeLoading } = useResultCode(result?.id, result?.status);
   const { files } = useResultFiles(result?.id, result?.status);
 
-  const strategy = useCompilerStore((s) => {
+  const strategy = useIncubatorStore((s) => {
     const vsId = strategyId ?? result?.strategyId;
     if (!vsId) return undefined;
     return findStrategy(s.incubationPlans, vsId);

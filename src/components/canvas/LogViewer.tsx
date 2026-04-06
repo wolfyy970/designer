@@ -4,7 +4,7 @@ import { getLogs as apiGetLogs, clearLogs as apiClearLogs } from '../../api/clie
 import { useObservabilityLogStore } from '../../stores/observability-log-store';
 import Modal from '../shared/Modal';
 import { useGenerationStore } from '../../stores/generation-store';
-import { useCompilerStore, findStrategy } from '../../stores/compiler-store';
+import { useIncubatorStore, findStrategy } from '../../stores/incubator-store';
 import type { RunTraceEvent } from '../../types/provider';
 import { runTraceEventSchema } from '../../lib/run-trace-event-schema';
 import type { PromptKey } from '../../stores/prompt-store';
@@ -22,7 +22,7 @@ function parseRunTracePayload(ev: unknown): RunTraceEvent | null {
     }
     return null;
   }
-  return r.data as RunTraceEvent;
+  return r.data;
 }
 
 interface LogViewerProps {
@@ -92,7 +92,7 @@ export default function LogViewer({ open, onClose, onOpenPromptStudio: _onOpenPr
   const setObservabilitySnapshot = useObservabilityLogStore((s) => s.setSnapshot);
   const [tab, setTab] = useState<'langfuse' | 'trace'>('trace');
   const results = useGenerationStore((s) => s.results);
-  const incubationPlans = useCompilerStore((s) => s.incubationPlans);
+  const incubationPlans = useIncubatorStore((s) => s.incubationPlans);
 
   useEffect(() => {
     if (!open) return;

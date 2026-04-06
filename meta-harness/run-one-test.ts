@@ -1,5 +1,5 @@
 /**
- * Evaluate a single meta-harness test case (compile / e2e / design paths).
+ * Evaluate a single meta-harness test case (incubate / e2e / design paths).
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -15,7 +15,8 @@ import type { AggregatedEvaluationReport } from '../src/types/evaluation.ts';
 import { rubricMeansFromNormalizedScores } from '../server/lib/evaluation-revision-gate.ts';
 import type { MetaHarnessCliArgs, MetaHarnessConfig } from './config.ts';
 import type { RunnerCallbacks } from './runner-types.ts';
-import { runCompilePipeline } from './compile-pipeline.ts';
+import { runIncubatePipeline } from './incubate-pipeline.ts';
+import { runInputsGeneratePipeline, type InputsFacetTarget } from './inputs-pipeline.ts';
 import { hypothesisRubricAbortSignal, withTestCaseHeartbeat } from './eval-heartbeat.ts';
 import {
   ARTIFACT,
@@ -33,10 +34,12 @@ type RunOneMetaHarnessTestRunContext = {
   evalStart: number;
   testResultsDir: string;
   evalRunsBase: string;
-  compileProvider: string;
-  compileModel: string;
+  incubateProvider: string;
+  incubateModel: string;
   hypothesisEvalModel: string;
-  compileHypothesisCountDefault: number;
+  /** Model used for the inputs-quality rubric LLM call (inputs + e2e modes). */
+  inputsRubricModel: string;
+  incubateHypothesisCountDefault: number;
   apiKey: string;
   promptOverrides?: Record<string, string>;
   rubricWeights?: Record<string, number>;
@@ -58,10 +61,11 @@ export async function runOneMetaHarnessTest(
     evalStart,
     testResultsDir,
     evalRunsBase,
-    compileProvider,
-    compileModel,
+    incubateProvider,
+    incubateModel,
     hypothesisEvalModel,
-    compileHypothesisCountDefault,
+    inputsRubricModel,
+    incubateHypothesisCountDefault,
     apiKey,
     promptOverrides: po,
     rubricWeights: rw,
@@ -79,18 +83,51 @@ export async function runOneMetaHarnessTest(
   let laneCorrelationId: string | null = null;
   let evalRunDir: string | null = null;
   let sseErrors: string[] = [];
-  let compileSummary: Record<string, unknown> | undefined;
+  let incubateSummary: Record<string, unknown> | undefined;
   let evalAggregate: AggregatedEvaluationReport | null = null;
 
   try {
-    if (args.mode === 'compile') {
-      const { plan, requestedCount } = await runCompilePipeline({
+    if (args.mode === 'inputs') {
+      const inputsResult = await runInputsGeneratePipeline({
+        testCase,
+        apiBaseUrl: cfg.apiBaseUrl,
+        promptOverrides: po,
+        inputsGenerateProviderId: testCase.model.providerId,
+        inputsGenerateModelId: testCase.model.modelId,
+        inputsRubricApiKey: apiKey,
+        inputsRubricModel,
+        timeoutMs: cfg.inputsGenerateTimeoutMs,
+        openRouterChatTimeoutMs,
+        onInputsGenerateStart(target: InputsFacetTarget) {
+          callbacks.onInputsGenerateStart?.(name, target);
+        },
+        onInputsGenerateDone(target: InputsFacetTarget, charCount: number) {
+          callbacks.onInputsGenerateDone?.(name, target, charCount);
+        },
+        onInputsRubricDone(target: InputsFacetTarget, mean: number) {
+          callbacks.onInputsRubricDone?.(name, target, mean);
+        },
+      });
+      overallScore = inputsResult.overallMean;
+      stopReason = 'inputs_rubric';
+      incubateSummary = {
+        mode: 'inputs',
+        perFacet: inputsResult.perFacet.map((s) => ({
+          target: s.target,
+          charCount: s.generated.length,
+          mean: s.rubric?.mean ?? null,
+          scores: s.rubric?.scores ?? null,
+          error: s.error,
+        })),
+      };
+    } else if (args.mode === 'incubate') {
+      const { plan, requestedCount } = await runIncubatePipeline({
         testCase,
         name,
         cfg,
-        compileProvider,
-        compileModel,
-        compileHypothesisCountDefault,
+        incubateProvider,
+        incubateModel,
+        incubateHypothesisCountDefault,
         promptOverrides: po,
         apiBaseUrl: cfg.apiBaseUrl,
         callbacks,
@@ -139,8 +176,8 @@ export async function runOneMetaHarnessTest(
       overallScore =
         hypMeans.length > 0 ? hypMeans.reduce((a, b) => a + b, 0) / hypMeans.length : null;
       stopReason = 'hypothesis_rubric';
-      compileSummary = {
-        mode: 'compile',
+      incubateSummary = {
+        mode: 'incubate',
         incubationPlanId: plan.id,
         perHypothesis,
         requestedHypothesisCount: requestedCount,
@@ -149,13 +186,46 @@ export async function runOneMetaHarnessTest(
       let generateBody: MetaHarnessHypothesisGenerateBody;
 
       if (args.mode === 'e2e') {
-        const { plan } = await runCompilePipeline({
-          testCase,
+        let e2eTestCase = testCase;
+        try {
+          const inputsResult = await runInputsGeneratePipeline({
+            testCase,
+            apiBaseUrl: cfg.apiBaseUrl,
+            promptOverrides: po,
+            inputsGenerateProviderId: testCase.model.providerId,
+            inputsGenerateModelId: testCase.model.modelId,
+            inputsRubricApiKey: apiKey,
+            inputsRubricModel,
+            timeoutMs: cfg.inputsGenerateTimeoutMs,
+            openRouterChatTimeoutMs,
+            onInputsGenerateStart(target: InputsFacetTarget) {
+              callbacks.onInputsGenerateStart?.(name, target);
+            },
+            onInputsGenerateDone(target: InputsFacetTarget, charCount: number) {
+              callbacks.onInputsGenerateDone?.(name, target, charCount);
+            },
+            onInputsRubricDone(target: InputsFacetTarget, mean: number) {
+              callbacks.onInputsRubricDone?.(name, target, mean);
+            },
+          });
+          const mergedSections = { ...testCase.spec.sections };
+          for (const [key, val] of Object.entries(inputsResult.generatedByFacet)) {
+            if (val) mergedSections[key] = val;
+          }
+          e2eTestCase = { ...testCase, spec: { ...testCase.spec, sections: mergedSections } };
+        } catch (e) {
+          callbacks.onWireEvent(name, 'inputs_generate_fallback', {
+            error: normalizeError(e),
+          });
+        }
+
+        const { plan } = await runIncubatePipeline({
+          testCase: e2eTestCase,
           name,
           cfg,
-          compileProvider,
-          compileModel,
-          compileHypothesisCountDefault,
+          incubateProvider,
+          incubateModel,
+          incubateHypothesisCountDefault,
           promptOverrides: po,
           apiBaseUrl: cfg.apiBaseUrl,
           callbacks,
@@ -163,8 +233,8 @@ export async function runOneMetaHarnessTest(
         const picked = plan.hypotheses[Math.floor(Math.random() * plan.hypotheses.length)]!;
         callbacks.onHypothesisPicked?.(name, picked.name);
 
-        generateBody = hydrateMetaHarnessTestCaseFromParsed(testCase, {
-          defaultCompilerProvider: cfg.defaultCompilerProvider,
+        generateBody = hydrateMetaHarnessTestCaseFromParsed(e2eTestCase, {
+          defaultIncubatorProvider: cfg.defaultIncubatorProvider,
           correlationId,
           promptOverrides: po,
           supportsVision: cfg.supportsVision,
@@ -174,7 +244,7 @@ export async function runOneMetaHarnessTest(
         });
       } else {
         generateBody = hydrateMetaHarnessTestCaseFromParsed(testCase, {
-          defaultCompilerProvider: cfg.defaultCompilerProvider,
+          defaultIncubatorProvider: cfg.defaultIncubatorProvider,
           correlationId,
           promptOverrides: po,
           supportsVision: cfg.supportsVision,
@@ -232,7 +302,7 @@ export async function runOneMetaHarnessTest(
     evalRunDir,
     errorMessage,
     sseErrors,
-    ...(compileSummary ? compileSummary : {}),
+    ...(incubateSummary ? incubateSummary : {}),
     ...(rubricMeans && Object.keys(rubricMeans).length > 0 ? { rubricMeans } : {}),
     ...(evalAggregate?.revisionBrief
       ? { revisionBrief: evalAggregate.revisionBrief.slice(0, REVISION_BRIEF_MAX_CHARS) }

@@ -4,8 +4,8 @@
  *
  * Pure logic lives in `hypothesis-generation-pure.ts` (server-importable).
  */
-import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
-import type { HypothesisStrategy } from '../types/compiler';
+import { DEFAULT_INCUBATOR_PROVIDER } from '../lib/constants';
+import type { HypothesisStrategy } from '../types/incubator';
 import type { EvaluationContextPayload } from '../types/evaluation';
 import type { ProvenanceContext } from '../types/provenance-context';
 import type { DesignSpec } from '../types/spec';
@@ -36,7 +36,7 @@ export function buildHypothesisGenerationContext(input: {
     domainHypothesis: domainHyp ?? null,
     modelProfiles: s.modelProfiles,
     designSystems: s.designSystems,
-    defaultCompilerProvider: DEFAULT_COMPILER_PROVIDER,
+    defaultIncubatorProvider: DEFAULT_INCUBATOR_PROVIDER,
   });
 }
 

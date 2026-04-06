@@ -28,6 +28,7 @@ describe('scanUnpromotedSessions', () => {
     candidateId: number;
     meanScore: number;
     overrides?: Record<string, string>;
+    winnerRubricWeights?: Record<string, number>;
   }) {
     const sessionDir = path.join(historyRoot, opts.folder);
     const cand = path.join(sessionDir, `candidate-${opts.candidateId}`);
@@ -44,6 +45,13 @@ describe('scanUnpromotedSessions', () => {
       'utf8',
     );
     await mkdir(path.join(cand, 'skills-snapshot'), { recursive: true });
+    if (opts.winnerRubricWeights) {
+      await writeFile(
+        path.join(cand, ARTIFACT.rubricWeightsJson),
+        `${JSON.stringify(opts.winnerRubricWeights, null, 2)}\n`,
+        'utf8',
+      );
+    }
   }
 
   it('returns stale prompts when live API body differs', async () => {
@@ -77,6 +85,43 @@ describe('scanUnpromotedSessions', () => {
     expect(stale!.stalePrompts[0]!.winnerBody).toBe('winner body');
     expect(stale!.stalePrompts[0]!.liveBody).toBe('different live');
     expect(stale!.staleSkills).toHaveLength(0);
+  });
+
+  it('returns stale rubric weights when repo file differs from winner', async () => {
+    const lib = path.join(root, 'src', 'lib');
+    await mkdir(lib, { recursive: true });
+    await writeFile(
+      path.join(lib, 'rubric-weights.json'),
+      `${JSON.stringify(
+        { design: 0.4, strategy: 0.3, implementation: 0.2, browser: 0.1 },
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    );
+
+    await writeSession({
+      folder: 'session-rw',
+      candidateId: 1,
+      meanScore: 3.2,
+      overrides: {},
+      winnerRubricWeights: { design: 0.35, strategy: 0.3, implementation: 0.25, browser: 0.1 },
+    });
+
+    vi.stubGlobal('fetch', vi.fn());
+
+    const stale = await scanUnpromotedSessions({
+      historyRoot,
+      repoRoot: root,
+      apiBaseUrl: 'http://127.0.0.1:3001/api',
+      skillsDir,
+    });
+    expect(stale).not.toBeNull();
+    expect(stale!.stalePrompts).toHaveLength(0);
+    expect(stale!.staleSkills).toHaveLength(0);
+    expect(stale!.staleRubricWeights).not.toBeNull();
+    expect(stale!.staleRubricWeights!.winnerWeights.design).toBe(0.35);
+    expect(stale!.staleRubricWeights!.liveWeights.design).toBe(0.4);
   });
 
   it('returns null when live matches winner (already promoted)', async () => {

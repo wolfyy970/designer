@@ -1,5 +1,5 @@
 import type { DesignSpec } from '../../types/spec';
-import type { HypothesisStrategy } from '../../types/compiler';
+import type { HypothesisStrategy } from '../../types/incubator';
 import { interpolate } from '../utils';
 import { getSectionContent, collectImageLines } from './helpers';
 

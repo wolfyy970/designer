@@ -1,5 +1,5 @@
 import type { DesignSpec } from '../../types/spec';
-import type { HypothesisStrategy } from '../../types/compiler';
+import type { HypothesisStrategy } from '../../types/incubator';
 import { interpolate } from '../utils';
 import { getSectionContent, collectImageLines } from './helpers';
 
@@ -9,18 +9,18 @@ function imageBlock(spec: DesignSpec): string {
   return '## Reference Images\n' + lines.join('\n');
 }
 
-export interface CompilerPromptOptions {
+export interface IncubatorPromptOptions {
   count?: number;
   existingStrategies?: HypothesisStrategy[];
 }
 
-export function buildCompilerUserPrompt(
+export function buildIncubatorUserPrompt(
   spec: DesignSpec,
-  compilerUserTemplate: string,
+  incubatorUserTemplate: string,
   referenceDesigns?: { name: string; code: string }[],
-  options?: CompilerPromptOptions,
+  options?: IncubatorPromptOptions,
 ): string {
-  let prompt = interpolate(compilerUserTemplate, {
+  let prompt = interpolate(incubatorUserTemplate, {
     SPEC_TITLE: spec.title,
     DESIGN_BRIEF: getSectionContent(spec, 'design-brief'),
     EXISTING_DESIGN: getSectionContent(spec, 'existing-design'),

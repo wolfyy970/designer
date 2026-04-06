@@ -91,5 +91,14 @@ export function validateTestCaseShapeForMode(
   if (mode === 'design' && !data.strategy) {
     return `${filePath}: design mode requires a "strategy" object in the test case JSON`;
   }
+  if (mode === 'inputs') {
+    const brief =
+      typeof data.spec.sections['design-brief'] === 'string'
+        ? data.spec.sections['design-brief']
+        : (data.spec.sections['design-brief'] as { content?: string } | undefined)?.content ?? '';
+    if (!brief.trim()) {
+      return `${filePath}: inputs mode requires a non-empty "design-brief" in spec.sections`;
+    }
+  }
   return null;
 }

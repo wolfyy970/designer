@@ -36,10 +36,10 @@ describe('validateTestCaseShapeForMode', () => {
     expect(msg).toContain('strategy');
   });
 
-  it('allows compile mode without strategy', () => {
+  it('allows incubate mode without strategy', () => {
     expect(
       validateTestCaseShapeForMode(
-        'compile',
+        'incubate',
         {
           name: 't',
           spec: { title: 'x', sections: {} },
@@ -50,7 +50,7 @@ describe('validateTestCaseShapeForMode', () => {
     ).toBeNull();
   });
 
-  it('allows e2e mode without strategy (compile picks hypothesis before generate)', () => {
+  it('allows e2e mode without strategy (incubate picks hypothesis before generate)', () => {
     expect(
       validateTestCaseShapeForMode(
         'e2e',
@@ -62,6 +62,46 @@ describe('validateTestCaseShapeForMode', () => {
         '/x/t.json',
       ),
     ).toBeNull();
+  });
+
+  it('allows inputs mode without strategy when brief exists', () => {
+    expect(
+      validateTestCaseShapeForMode(
+        'inputs',
+        {
+          name: 't',
+          spec: { title: 'x', sections: { 'design-brief': 'Build something' } },
+          model: { providerId: 'p', modelId: 'm' },
+        },
+        '/x/t.json',
+      ),
+    ).toBeNull();
+  });
+
+  it('rejects inputs mode when design-brief is empty', () => {
+    const msg = validateTestCaseShapeForMode(
+      'inputs',
+      {
+        name: 't',
+        spec: { title: 'x', sections: { 'design-brief': '  ' } },
+        model: { providerId: 'p', modelId: 'm' },
+      },
+      '/x/t.json',
+    );
+    expect(msg).toContain('design-brief');
+  });
+
+  it('rejects inputs mode when design-brief is missing', () => {
+    const msg = validateTestCaseShapeForMode(
+      'inputs',
+      {
+        name: 't',
+        spec: { title: 'x', sections: {} },
+        model: { providerId: 'p', modelId: 'm' },
+      },
+      '/x/t.json',
+    );
+    expect(msg).toContain('design-brief');
   });
 });
 

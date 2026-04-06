@@ -4,7 +4,7 @@ import {
   scoreHypothesisWithRubric,
 } from '../hypothesis-evaluator.ts';
 import type { DesignSpec } from '../../src/types/spec.ts';
-import type { HypothesisStrategy } from '../../src/types/compiler.ts';
+import type { HypothesisStrategy } from '../../src/types/incubator.ts';
 
 vi.mock('../openrouter-client.ts', () => ({
   fetchOpenRouterChat: vi.fn(),

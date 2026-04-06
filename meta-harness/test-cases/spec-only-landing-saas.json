@@ -1,6 +1,6 @@
 {
   "name": "spec-only-landing-saas",
-  "description": "Spec + model only — for --mode=compile or --mode=e2e (no fixed strategy). Skipped in default design mode.",
+  "description": "Spec + model only — for --mode=incubate or --mode=e2e (no fixed strategy). Skipped in default design mode.",
   "spec": {
     "title": "Northstar Analytics — product landing",
     "sections": {
@@ -13,7 +13,7 @@
       "design-constraints": { "content": "Static HTML/CSS/JS only. No npm, no frameworks. Google Fonts allowlist only. One primary CTA color. Mobile-first layout." }
     }
   },
-  "compile": {
+  "incubate": {
     "hypothesisCount": 5
   },
   "model": {

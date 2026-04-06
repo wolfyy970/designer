@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { evaluationPayloadFromHypothesisContext } from '../workspace-session';
 import type { HypothesisGenerationContext } from '../workspace-session';
-import type { HypothesisStrategy } from '../../types/compiler';
+import type { HypothesisStrategy } from '../../types/incubator';
 import type { DesignSpec } from '../../types/spec';
 
 const baseStrategy = (dimensionValues: Record<string, string>): HypothesisStrategy => ({

@@ -21,7 +21,7 @@ export const workspaceDomainPersistOptions = {
     designSystems: state.designSystems,
     previewSlots: state.previewSlots,
   }),
-  version: 6,
+  version: 7,
   migrate: (persisted: unknown, fromVersion: number) => {
     let p = persisted as Record<string, unknown>;
     if (fromVersion < 2) {
@@ -106,7 +106,7 @@ export const workspaceDomainPersistOptions = {
       const incubatorWirings: Record<string, DomainIncubatorWiring> = {};
       for (const [k, w] of Object.entries(rawW)) {
         incubatorWirings[k] = {
-          sectionNodeIds: (w.sectionNodeIds as string[]) ?? [],
+          inputNodeIds: (w.sectionNodeIds as string[] | undefined) ?? (w.inputNodeIds as string[] | undefined) ?? [],
           previewNodeIds: (w.previewNodeIds as string[] | undefined) ?? (w.variantNodeIds as string[] | undefined) ?? [],
         };
       }
@@ -144,8 +144,21 @@ export const workspaceDomainPersistOptions = {
       const incubatorWirings: Record<string, DomainIncubatorWiring> = {};
       for (const [k, w] of Object.entries(rawW)) {
         incubatorWirings[k] = {
-          sectionNodeIds: (w.sectionNodeIds as string[]) ?? [],
+          inputNodeIds: (w.sectionNodeIds as string[] | undefined) ?? (w.inputNodeIds as string[] | undefined) ?? [],
           previewNodeIds: (w.previewNodeIds as string[] | undefined) ?? (w.variantNodeIds as string[] | undefined) ?? [],
+        };
+      }
+      p = { ...p, incubatorWirings };
+    }
+    if (fromVersion < 7) {
+      const rawW = (p.incubatorWirings as Record<string, Record<string, unknown>>) ?? {};
+      const incubatorWirings: Record<string, DomainIncubatorWiring> = {};
+      for (const [k, w] of Object.entries(rawW)) {
+        const inputNodeIds =
+          (w.inputNodeIds as string[] | undefined) ?? (w.sectionNodeIds as string[] | undefined) ?? [];
+        incubatorWirings[k] = {
+          inputNodeIds,
+          previewNodeIds: (w.previewNodeIds as string[] | undefined) ?? [],
         };
       }
       p = { ...p, incubatorWirings };

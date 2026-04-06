@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import type { SectionGhostTargetType } from '../../types/canvas-data';
+import type { InputGhostTargetType } from '../../types/canvas-data';
 import type { DesignSpec } from '../../types/spec';
 import {
   type CanvasNodeType,
@@ -15,12 +15,12 @@ import {
   columnX,
   computeAdjacentPosition,
   computeDefaultPosition,
-  reconcileSectionGhostNodes,
-  OPTIONAL_SECTION_SLOTS,
-  SECTION_GHOST_ID_PREFIX,
+  reconcileInputGhostNodes,
+  OPTIONAL_INPUT_SLOTS,
+  isEphemeralInputGhostId,
   snap,
 } from '../../lib/canvas-layout';
-import { NODE_TYPES, SECTION_NODE_TYPES, buildEdgeId, EDGE_TYPES, EDGE_STATUS } from '../../constants/canvas';
+import { NODE_TYPES, INPUT_NODE_TYPES, buildEdgeId, EDGE_TYPES, EDGE_STATUS } from '../../constants/canvas';
 import {
   isValidConnection as checkValidConnection,
   buildAutoConnectEdges,
@@ -46,7 +46,7 @@ import {
   scheduleDebouncedAutoLayout,
   shouldScheduleAutoLayoutOnDimensionChange,
 } from '../canvas/dimension-layout-debounce';
-import { optionalSectionSlotsWithSpecMaterial } from '../../lib/spec-materialize-sections';
+import { optionalInputSlotsWithSpecMaterial } from '../../lib/spec-materialize-sections';
 import type { CanvasStore } from './canvas-store-types';
 
 export const createGraphSlice: StateCreator<
@@ -60,19 +60,19 @@ export const createGraphSlice: StateCreator<
     | 'isValidConnection'
     | 'onConnect'
     | 'addNode'
-    | 'materializeOptionalSectionNodesFromSpec'
+    | 'materializeOptionalInputNodesFromSpec'
     | 'removeNode'
     | 'removeEdge'
     | 'updateNodeData'
     | 'disconnectOutputs'
-    | 'dismissSectionGhostSlot'
+    | 'dismissInputGhostSlot'
   >
 > = (set, get) => ({
   onNodesChange: (changes) => {
     const filtered = changes.filter((ch) => {
       if (ch.type !== 'remove') return true;
       const id = 'id' in ch ? (ch.id as string) : '';
-      return !id.startsWith(SECTION_GHOST_ID_PREFIX);
+      return !isEphemeralInputGhostId(id);
     });
     set({ nodes: applyWorkspaceNodeChanges(filtered, get().nodes) });
     if (shouldScheduleAutoLayoutOnDimensionChange(get().autoLayout, filtered)) {
@@ -97,20 +97,20 @@ export const createGraphSlice: StateCreator<
     const sourceNode = nodes.find((n) => n.id === connection.source);
     const targetNode = nodes.find((n) => n.id === connection.target);
     if (!sourceNode || !targetNode) return false;
-    if (sourceNode.type === 'sectionGhost' || targetNode.type === 'sectionGhost') {
+    if (sourceNode.type === 'inputGhost' || targetNode.type === 'inputGhost') {
       return false;
     }
     return checkValidConnection(sourceNode.type ?? '', targetNode.type ?? '');
   },
 
-  dismissSectionGhostSlot: (targetType: SectionGhostTargetType) => {
-    const current = get().dismissedSectionGhostSlots;
+  dismissInputGhostSlot: (targetType: InputGhostTargetType) => {
+    const current = get().dismissedInputGhostSlots;
     if (current.includes(targetType)) return;
-    const dismissedSectionGhostSlots = [...current, targetType];
+    const dismissedInputGhostSlots = [...current, targetType];
     set({
-      dismissedSectionGhostSlots,
-      sectionGhostToolbarNudge: true,
-      nodes: reconcileSectionGhostNodes(get().nodes, dismissedSectionGhostSlots),
+      dismissedInputGhostSlots,
+      inputGhostToolbarNudge: true,
+      nodes: reconcileInputGhostNodes(get().nodes, dismissedInputGhostSlots),
     });
     if (get().autoLayout) get().applyAutoLayout();
   },
@@ -134,12 +134,12 @@ export const createGraphSlice: StateCreator<
   addNode: (type, position) => {
     const state = get();
 
-    if (SECTION_NODE_TYPES.has(type) && state.nodes.some((n) => n.type === type)) return;
-    if (type === NODE_TYPES.HYPOTHESIS && !state.nodes.some((n) => n.type === NODE_TYPES.COMPILER)) return;
+    if (INPUT_NODE_TYPES.has(type) && state.nodes.some((n) => n.type === type)) return;
+    if (type === NODE_TYPES.HYPOTHESIS && !state.nodes.some((n) => n.type === NODE_TYPES.INCUBATOR)) return;
 
-    const dismissedSectionGhostSlots = (OPTIONAL_SECTION_SLOTS as readonly string[]).includes(type)
-      ? state.dismissedSectionGhostSlots.filter((s) => s !== type)
-      : state.dismissedSectionGhostSlots;
+    const dismissedInputGhostSlots = (OPTIONAL_INPUT_SLOTS as readonly string[]).includes(type)
+      ? state.dismissedInputGhostSlots.filter((s) => s !== type)
+      : state.dismissedInputGhostSlots;
 
     const id = `${type}-${generateId()}`;
     const col = columnX(state.colGap);
@@ -178,18 +178,18 @@ export const createGraphSlice: StateCreator<
     }
 
     set({
-      dismissedSectionGhostSlots,
-      nodes: reconcileSectionGhostNodes(
+      dismissedInputGhostSlots,
+      nodes: reconcileInputGhostNodes(
         [...intermediateNodes, newNode],
-        dismissedSectionGhostSlots,
+        dismissedInputGhostSlots,
       ),
       edges: [...state.edges, ...structuralEdges, ...modelEdges],
     });
     if (get().autoLayout) get().applyAutoLayout();
   },
 
-  materializeOptionalSectionNodesFromSpec: (spec: DesignSpec) => {
-    for (const slot of optionalSectionSlotsWithSpecMaterial(spec)) {
+  materializeOptionalInputNodesFromSpec: (spec: DesignSpec) => {
+    for (const slot of optionalInputSlotsWithSpecMaterial(spec)) {
       if (get().nodes.some((n) => n.type === slot)) continue;
       get().addNode(slot);
     }
@@ -203,13 +203,13 @@ export const createGraphSlice: StateCreator<
     const state = get();
     const node = state.nodes.find((n) => n.id === nodeId);
     if (!node) return;
-    if (node.type === 'sectionGhost') return;
+    if (node.type === 'inputGhost') return;
 
     resetSpecSectionForRemovedNode(node);
 
     syncDomainForRemovedNode(node);
 
-    if (node.type === NODE_TYPES.COMPILER) {
+    if (node.type === NODE_TYPES.INCUBATOR) {
       removeCompilerPlanForNode(nodeId);
     }
 
@@ -235,9 +235,9 @@ export const createGraphSlice: StateCreator<
       if (removeIds.has(v)) nextPreviewMap.delete(k);
     }
     set({
-      nodes: reconcileSectionGhostNodes(
+      nodes: reconcileInputGhostNodes(
         state.nodes.filter((n) => !removeIds.has(n.id)),
-        state.dismissedSectionGhostSlots,
+        state.dismissedInputGhostSlots,
       ),
       edges: state.edges.filter(
         (e) => !removeIds.has(e.source) && !removeIds.has(e.target),

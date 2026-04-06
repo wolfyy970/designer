@@ -159,7 +159,7 @@
   /* Layout heights — dense UI; change once, not per-node magic numbers */
   --min-height-variant-node: 420px;
   --min-height-hypothesis-shell: 200px;
-  --min-height-section-textarea: 240px;
+  --min-height-input-textarea: 240px;
   --min-height-prompt-textarea: 200px;
   /** Unified diff gutter column (leading +/− / space) */
   --width-prompt-diff-gutter: 2rem;

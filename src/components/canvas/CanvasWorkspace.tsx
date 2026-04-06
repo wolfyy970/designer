@@ -11,7 +11,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 
-import { useCanvasStore, SECTION_NODE_TYPES, GRID_SIZE, type CanvasNodeType } from '../../stores/canvas-store';
+import { useCanvasStore, INPUT_NODE_TYPES, GRID_SIZE, type CanvasNodeType } from '../../stores/canvas-store';
 import { useGenerationStore } from '../../stores/generation-store';
 import { GENERATION_STATUS } from '../../constants/generation';
 import { PREVIEW_NODE_GENERATING_Z_INDEX } from '../../constants/canvas';
@@ -26,7 +26,7 @@ import CanvasToolbar from './CanvasToolbar';
 import CanvasContextMenu from './CanvasContextMenu';
 import VariantPreviewOverlay from './VariantPreviewOverlay';
 import VariantRunInspector from './VariantRunInspector';
-import OptionalSectionsTip from './OptionalSectionsTip';
+import OptionalInputsTip from './OptionalInputsTip';
 import { useCanvasOrchestrator } from './hooks/useCanvasOrchestrator';
 import { useNodeDeletion } from './hooks/useNodeDeletion';
 import { useFeedbackLoopConnection } from './hooks/useFeedbackLoopConnection';
@@ -190,10 +190,10 @@ function CanvasInner() {
 
   const miniMapNodeColor = useCallback((node: { type?: string }) => {
     const t = node.type as CanvasNodeType | undefined;
-    if (t && SECTION_NODE_TYPES.has(t)) return 'var(--color-fg-muted)'; // inputs
-    if (t === 'sectionGhost') return 'var(--color-fg-faint)';
+    if (t && INPUT_NODE_TYPES.has(t)) return 'var(--color-fg-muted)'; // inputs
+    if (t === 'inputGhost') return 'var(--color-fg-faint)';
     switch (t) {
-      case 'compiler':
+      case 'incubator':
       case 'designSystem':
       case 'model':
         return 'var(--color-accent)'; // processing
@@ -255,7 +255,7 @@ function CanvasInner() {
               />
             )}
             <CanvasToolbar />
-            <OptionalSectionsTip />
+            <OptionalInputsTip />
           </ReactFlow>
           {contextMenu && (
             <CanvasContextMenu

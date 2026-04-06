@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useCanvasStore } from '../stores/canvas-store';
 import { NODE_TYPES } from '../constants/canvas';
 import { getModelNodeData } from '../lib/canvas-node-data';
-import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
+import { DEFAULT_INCUBATOR_PROVIDER } from '../lib/constants';
 import {
   LOCKDOWN_MODEL_ID,
   LOCKDOWN_PROVIDER_ID,
@@ -23,7 +23,7 @@ export function useFirstCanvasModel() {
     const m = s.nodes.find((n) => n.type === NODE_TYPES.MODEL);
     if (!m) return '';
     const d = getModelNodeData(m);
-    const pid = (d?.providerId?.trim() || DEFAULT_COMPILER_PROVIDER).trim();
+    const pid = (d?.providerId?.trim() || DEFAULT_INCUBATOR_PROVIDER).trim();
     const mid = (d?.modelId ?? '').trim();
     if (!mid) return '';
     return `${pid}${PACK}${mid}`;

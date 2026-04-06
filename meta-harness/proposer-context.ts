@@ -6,6 +6,7 @@ import path from 'node:path';
 import type { PromptKey } from '../src/lib/prompts/defaults.ts';
 import { PROMPT_DEFAULTS } from '../src/lib/prompts/shared-defaults.ts';
 import { resolveRubricWeights } from '../server/lib/evaluation-revision-gate.ts';
+import { DefaultRubricWeightsSchema } from '../src/api/response-schemas.ts';
 import { normalizeError } from '../src/lib/error-utils.ts';
 import { ARTIFACT } from './constants.ts';
 import type { MetaHarnessMode } from './modes.ts';
@@ -21,7 +22,12 @@ import {
 
 /** Prompt keys the proposer should pre-inject per mode (the edit surfaces). */
 export const MODE_PROMPT_KEYS: Record<MetaHarnessMode, PromptKey[]> = {
-  compile: ['hypotheses-generator-system', 'incubator-user-inputs'],
+  incubate: ['hypotheses-generator-system', 'incubator-user-inputs'],
+  inputs: [
+    'inputs-gen-research-context',
+    'inputs-gen-objectives-metrics',
+    'inputs-gen-design-constraints',
+  ],
   design: [
     'designer-agentic-system',
     'designer-hypothesis-inputs',
@@ -32,6 +38,9 @@ export const MODE_PROMPT_KEYS: Record<MetaHarnessMode, PromptKey[]> = {
     'evaluator-implementation',
   ],
   e2e: [
+    'inputs-gen-research-context',
+    'inputs-gen-objectives-metrics',
+    'inputs-gen-design-constraints',
     'hypotheses-generator-system',
     'incubator-user-inputs',
     'designer-agentic-system',
@@ -301,12 +310,37 @@ export async function loadCurrentSkills(skillsDir: string, includeBodies = true)
   return lines.join('\n');
 }
 
-export function formatRubricWeightsContext(): string {
-  const r = resolveRubricWeights(undefined);
+const RUBRIC_CONFIG_FETCH_MS = 5_000;
+
+/** Live blend from GET /api/config when reachable; else gate merge of defaults. */
+export async function formatRubricWeightsContext(apiBaseUrl: string): Promise<string> {
+  const base = apiBaseUrl.replace(/\/$/, '');
+  const url = `${base}/config`;
+  let resolved = resolveRubricWeights(undefined);
+  try {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), RUBRIC_CONFIG_FETCH_MS);
+    const res = await fetch(url, { signal: ac.signal });
+    clearTimeout(t);
+    if (res.ok) {
+      const json: unknown = await res.json();
+      const body = json && typeof json === 'object' && 'defaultRubricWeights' in json
+        ? (json as { defaultRubricWeights: unknown }).defaultRubricWeights
+        : undefined;
+      const parsed = DefaultRubricWeightsSchema.safeParse(body);
+      if (parsed.success) {
+        resolved = { ...parsed.data };
+      }
+    }
+  } catch {
+    // fall through to resolveRubricWeights(undefined)
+  }
+
   return [
     '## Current rubric weights (overall score blend for agentic eval)',
+    '_Source: GET /api/config `defaultRubricWeights` when API is up; otherwise merged defaults._',
     '```json',
-    JSON.stringify(r, null, 2),
+    JSON.stringify(resolved, null, 2),
     '```',
     'Use **set_rubric_weights** with one or more of design, strategy, implementation, browser (non-negative; server renormalizes).',
   ].join('\n');

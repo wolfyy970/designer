@@ -29,13 +29,13 @@ export function parseMetaHarnessModeFromArgv(argv: string[]): MetaHarnessMode | 
     const a = argv[i]!;
     if (a.startsWith('--mode=')) {
       const v = a.slice('--mode='.length).trim().toLowerCase();
-      if (v === 'compile' || v === 'e2e' || v === 'design') return v;
-      throw new Error(`Invalid --mode value "${v}". Use compile, e2e, or design.`);
+      if (v === 'incubate' || v === 'e2e' || v === 'design' || v === 'inputs') return v;
+      throw new Error(`Invalid --mode value "${v}". Use incubate, e2e, design, or inputs.`);
     }
     if (a === '--mode' && argv[i + 1]) {
       const v = argv[i + 1]!.trim().toLowerCase();
-      if (v === 'compile' || v === 'e2e' || v === 'design') return v;
-      throw new Error(`Invalid --mode value "${v}". Use compile, e2e, or design.`);
+      if (v === 'incubate' || v === 'e2e' || v === 'design' || v === 'inputs') return v;
+      throw new Error(`Invalid --mode value "${v}". Use incubate, e2e, design, or inputs.`);
     }
   }
   return undefined;

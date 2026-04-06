@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useCanvasStore } from '../../../stores/canvas-store';
-import { SECTION_NODE_TYPES } from '../../../constants/canvas';
+import { INPUT_NODE_TYPES } from '../../../constants/canvas';
 import type { WorkspaceNode } from '../../../types/workspace-graph';
 import { useRequestPermanentDelete } from '../../../hooks/useRequestPermanentDelete';
 import { keyboardMultiDeleteCopy } from '../../../lib/canvas-permanent-delete-copy';
@@ -29,9 +29,9 @@ export function useNodeDeletion() {
         e.preventDefault();
 
         const PROTECTED = new Set<string>([
-          'compiler',
-          'sectionGhost',
-          ...SECTION_NODE_TYPES,
+          'incubator',
+          'inputGhost',
+          ...INPUT_NODE_TYPES,
         ]);
 
         const removable = selected.filter((n) => !PROTECTED.has(n.type));

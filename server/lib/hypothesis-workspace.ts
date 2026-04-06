@@ -1,5 +1,5 @@
-import { HYPOTHESIS_COMPILER_MODEL } from '../../src/constants/canvas.ts';
-import type { CompiledPrompt } from '../../src/types/compiler.ts';
+import { HYPOTHESIS_INCUBATOR_MODEL } from '../../src/constants/canvas.ts';
+import type { CompiledPrompt } from '../../src/types/incubator.ts';
 import type { EvaluationContextPayload } from '../../src/types/evaluation.ts';
 import type { ProvenanceContext } from '../../src/types/provenance-context.ts';
 import {
@@ -9,7 +9,7 @@ import {
   workspaceSnapshotWireToGraph,
   type HypothesisGenerationContext,
 } from '../../src/workspace/hypothesis-generation-pure.ts';
-import { compileHypothesisPrompts } from '../services/compiler.ts';
+import { incubateHypothesisPrompts } from '../services/incubator.ts';
 import { createResolvePromptBody, sanitizePromptOverrides } from './prompt-overrides.ts';
 import { generateId, now } from '../../src/lib/utils.ts';
 
@@ -37,7 +37,7 @@ export async function buildHypothesisWorkspaceBundle(
     domainHypothesis: body.domainHypothesis ?? undefined,
     modelProfiles: body.modelProfiles,
     designSystems: body.designSystems,
-    defaultCompilerProvider: body.defaultCompilerProvider,
+    defaultIncubatorProvider: body.defaultIncubatorProvider,
   });
   if (!ctxRaw) return null;
   const ctx = applyLockdownToHypothesisContext(ctxRaw);
@@ -50,10 +50,10 @@ export async function buildHypothesisWorkspaceBundle(
     dimensions: [],
     hypotheses: [ctx.hypothesisStrategy],
     generatedAt: now(),
-    compilerModel: HYPOTHESIS_COMPILER_MODEL,
+    incubatorModel: HYPOTHESIS_INCUBATOR_MODEL,
   };
 
-  const prompts = compileHypothesisPrompts(
+  const prompts = incubateHypothesisPrompts(
     ctx.spec,
     filteredPlan,
     hypothesisTemplate,

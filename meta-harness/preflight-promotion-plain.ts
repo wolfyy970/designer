@@ -18,6 +18,17 @@ function colorizeLine(text: string): string {
   return `${ANSI_DIM}${text}${ANSI_RESET}`;
 }
 
+function printDiffIndented(liveBody: string, winnerBody: string): void {
+  const lines = buildUnifiedDiffLines(liveBody, winnerBody);
+  if (lines.length === 0) {
+    console.log('  (no line differences)');
+  } else {
+    for (const line of lines) {
+      console.log(`  ${colorizeLine(line.text)}`);
+    }
+  }
+}
+
 export function printPlainPreflightSummary(session: UnpromotedSession): void {
   const meanStr = session.meanScore >= 0 ? session.meanScore.toFixed(2) : 'n/a';
   bannerLine(
@@ -29,33 +40,34 @@ export function printPlainPreflightSummary(session: UnpromotedSession): void {
   }
 
   const prompts = [...session.stalePrompts].sort((a, b) => a.key.localeCompare(b.key));
-  for (const p of prompts) {
-    bannerLine(`Prompt: ${p.key}`);
-    if (p.fetchError) {
-      console.warn(`  (live fetch: ${p.fetchError})`);
-    }
-    const lines = buildUnifiedDiffLines(p.liveBody, p.winnerBody);
-    if (lines.length === 0) {
-      console.log('  (no line differences)');
-    } else {
-      for (const line of lines) {
-        console.log(`  ${colorizeLine(line.text)}`);
+  if (prompts.length > 0) {
+    bannerLine(`Prompts (${prompts.length} change(s))`);
+    for (const p of prompts) {
+      bannerLine(`Prompt: ${p.key}`);
+      if (p.fetchError) {
+        console.warn(`  (live fetch: ${p.fetchError})`);
       }
+      printDiffIndented(p.liveBody, p.winnerBody);
+      console.log();
     }
-    console.log();
   }
 
   const skills = [...session.staleSkills].sort((a, b) => a.relPath.localeCompare(b.relPath));
-  for (const s of skills) {
-    bannerLine(`Skill [${s.kind}]: ${s.relPath}`);
-    const lines = buildUnifiedDiffLines(s.liveBody, s.winnerBody);
-    if (lines.length === 0) {
-      console.log('  (no line differences)');
-    } else {
-      for (const line of lines) {
-        console.log(`  ${colorizeLine(line.text)}`);
-      }
+  if (skills.length > 0) {
+    bannerLine(`Skills (${skills.length} change(s))`);
+    for (const s of skills) {
+      bannerLine(`Skill [${s.kind}]: ${s.relPath}`);
+      printDiffIndented(s.liveBody, s.winnerBody);
+      console.log();
     }
+  }
+
+  if (session.staleRubricWeights) {
+    bannerLine('Rubric Weights');
+    printDiffIndented(
+      JSON.stringify(session.staleRubricWeights.liveWeights, null, 2),
+      JSON.stringify(session.staleRubricWeights.winnerWeights, null, 2),
+    );
     console.log();
   }
 

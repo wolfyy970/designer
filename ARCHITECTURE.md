@@ -113,7 +113,7 @@ flowchart TB
 flowchart TB
   ui["UI Layer — React components, Canvas"]
   spec["1. Spec Model — DesignSpec, 5 SpecSections, images, types/spec.ts"]
-  api["2. API Client + Prompt Compiler — compileVariantPrompts locally, compileSpec and generate on server"]
+  api["2. API Client + prompt stitching — compileVariantPrompts locally; incubate + hypothesis generate on server"]
   storage["3. Storage Abstraction — StoragePort interface, BrowserStorage, IndexedDB"]
   output["4. Output Rendering — iframe preview (URL-backed VFS or bundled fallback), VariantNode"]
 
@@ -122,13 +122,13 @@ flowchart TB
 
 ## Domain model, canvas projection, and session DTOs
 
-**Canonical client model** — `src/stores/workspace-domain-store.ts` (persisted) holds workflow semantics without requiring a graph: incubator input wiring (section / preview node ids), model assignments per incubator and per hypothesis, design-system attachments, hypothesis ↔ incubator ↔ hypothesis-strategy links, preview slots (active result / pins), and mirrors for model/design-system payloads synced from the canvas. `src/types/workspace-domain.ts` defines the shapes.
+**Canonical client model** — `src/stores/workspace-domain-store.ts` (persisted) holds workflow semantics without requiring a graph: incubator input wiring (input / preview node ids), model assignments per incubator and per hypothesis, design-system attachments, hypothesis ↔ incubator ↔ hypothesis-strategy links, preview slots (active result / pins), and mirrors for model/design-system payloads synced from the canvas. `src/types/workspace-domain.ts` defines the shapes.
 
-**Canvas as projection** — `src/stores/canvas-store.ts` still persists React Flow–backed **nodes and edges** for layout and interaction. Graph edits call `src/workspace/domain-commands.ts` so domain relations stay the source of truth for compile/generate. Pure graph helpers live in `src/workspace/graph-queries.ts`.
+**Canvas as projection** — `src/stores/canvas-store.ts` still persists React Flow–backed **nodes and edges** for layout and interaction. Graph edits call `src/workspace/domain-commands.ts` so domain relations stay the source of truth for incubate/generate. Pure graph helpers live in `src/workspace/graph-queries.ts`.
 
-**Node removal** — Prefer `canvas-store.removeNode` for deletes so domain cleanup (`syncDomainForRemovedNode`), compiler strategy pruning, and cascade removal of attached preview nodes stay consistent. Orchestrator paths that filter nodes out of Zustand directly must still call `syncDomainForRemovedNode` for each removed id (see `useCanvasOrchestrator`).
+**Node removal** — Prefer `canvas-store.removeNode` for deletes so domain cleanup (`syncDomainForRemovedNode`), incubator strategy pruning, and cascade removal of attached preview nodes stay consistent. Orchestrator paths that filter nodes out of Zustand directly must still call `syncDomainForRemovedNode` for each removed id (see `useCanvasOrchestrator`).
 
-**Compile inputs** — `buildCompileInputs()` in `src/lib/canvas-graph.ts` accepts optional `DomainIncubatorWiring`; when present, structural inputs come from the domain list instead of only incoming edges to the compiler node.
+**Incubate inputs** — `buildIncubateInputs()` in `src/lib/canvas-graph.ts` accepts optional `DomainIncubatorWiring`; when present, structural inputs come from the domain list instead of only incoming edges to the incubator node.
 
 **Graph queries** (`src/workspace/graph-queries.ts`) remain pure helpers over `WorkspaceNode[]` + `WorkspaceEdge[]` for legacy paths and visualization (e.g. lineage).
 
@@ -147,7 +147,7 @@ flowchart TB
   compiledPrompt["CompiledPrompt[] one per hypothesis"]
   generate[POST /api/generate SSE stream]
 
-  designSpec -->|POST /api/compile| incubationPlan
+  designSpec -->|POST /api/incubate| incubationPlan
   incubationPlan -->|user edits on canvas| compiledPrompt
   compiledPrompt -->|compileVariantPrompts client-side| generate
 
@@ -176,7 +176,7 @@ flowchart TB
 | Endpoint | Method | Purpose | Response |
 |---|---|---|---|
 | `/api/config` | GET | App flags (`lockdown` + pinned models when locked) and **agentic evaluator defaults** (`agenticMaxRevisionRounds`, `agenticMinOverallScore` from env) for Settings → Evaluator seeding | JSON |
-| `/api/compile` | POST | Compile spec into incubation plan; optional body **`promptOverrides`** (known prompt keys only, sanitized server-side) | JSON: `IncubationPlan` |
+| `/api/incubate` | POST | Incubate spec into incubation plan (SSE: `incubate_result`); optional body **`promptOverrides`** (known prompt keys only, sanitized server-side) | SSE → `IncubationPlan` |
 | `/api/generate` | POST | Generate one design (single-shot or agentic) | SSE stream |
 | `/api/hypothesis/prompt-bundle` | POST | Build compiled prompts + eval/provenance from workspace slice; optional **`promptOverrides`** | JSON |
 | `/api/hypothesis/generate` | POST | Run all models for one hypothesis; multiplexed SSE (`laneIndex` on events, `lane_done` per lane); optional **`promptOverrides`** threaded into stream + agentic eval | SSE stream |
@@ -185,7 +185,7 @@ flowchart TB
 | `/api/logs` | GET | Fetch LLM call log entries (dev-only) | JSON: `LlmLogEntry[]` |
 | `/api/logs` | DELETE | Clear log entries (dev-only) | 204 |
 | `/api/design-system/extract` | POST | Extract design tokens from screenshots; optional **`promptOverrides`** | JSON: extracted tokens |
-| `/api/section/generate` | POST | Auto-fill Research / Objectives / Constraints from Design Brief; optional **`promptOverrides`** | JSON: `{ result: string }` |
+| `/api/inputs/generate` | POST | Auto-fill Research / Objectives / Constraints from Design Brief; optional **`promptOverrides`** | JSON: `{ result: string }` |
 | `/api/prompts/*` | GET (list + per-key + history + versions) | Read-only for **Prompt Studio** baseline / diff; **`PUT`** and **`revert-baseline`** exist for CLI/admin (not used by the in-app editor) | JSON |
 | `/api/health` | GET | Health check | JSON: `{ ok: true }` |
 | `/api/preview/sessions` | POST | Register ephemeral virtual file tree for iframe preview; returns `{ id, entry }` | JSON |
@@ -198,7 +198,7 @@ flowchart TB
 
 **SSE events:** `progress` (status label), `activity` (streaming agent text), `code` (final HTML in single-shot), `file` (path + content in agentic), `plan` (declared file list in agentic), `skills_loaded` (pre-seeded non-manual skills for this Pi session; may repeat on revision rounds), `skill_activated` (successful **`use_skill`** call), `evaluation_worker_done` (one per rubric worker in an eval round; payload includes `round`, `rubric`, `report` snapshot for live UI), `error`, `done`.
 
-**Hypothesis flow:** The canvas still owns graph/domain state (Zustand + React Flow), but **prompt assembly and multi-model orchestration** for a hypothesis go through `/api/hypothesis/*`. Pure workspace helpers live in `src/workspace/hypothesis-generation-pure.ts` (importable by the server). `/api/hypothesis/generate` adds `laneIndex` to each event payload and emits `lane_done` per model lane before a final `done`; the client demuxes into one `GenerationResult` per lane. **Local prompt experimentation:** `src/stores/prompt-overrides-store.ts` (Zustand `persist` → `STORAGE_KEYS.PROMPTS`) supplies **`getActivePromptOverrides()`** for API payloads; `server/lib/prompt-overrides.ts` sanitizes keys and **`createResolvePromptBody`** layers overrides over **`getPromptBody`** for workspace bundle, compile, design-system extract, section auto-generate, single-shot, and agentic paths.
+**Hypothesis flow:** The canvas still owns graph/domain state (Zustand + React Flow), but **prompt assembly and multi-model orchestration** for a hypothesis go through `/api/hypothesis/*`. Pure workspace helpers live in `src/workspace/hypothesis-generation-pure.ts` (importable by the server). `/api/hypothesis/generate` adds `laneIndex` to each event payload and emits `lane_done` per model lane before a final `done`; the client demuxes into one `GenerationResult` per lane. **Local prompt experimentation:** `src/stores/prompt-overrides-store.ts` (Zustand `persist` → `STORAGE_KEYS.PROMPTS`) supplies **`getActivePromptOverrides()`** for API payloads; `server/lib/prompt-overrides.ts` sanitizes keys and **`createResolvePromptBody`** layers overrides over **`getPromptBody`** for workspace bundle, incubate, design-system extract, inputs auto-generate, single-shot, and agentic paths.
 
 POST endpoints validate bodies with Zod (typically via **`parse-request`** / `safeParse`). Validation and opaque failures use **`apiJsonError`** so JSON error responses stay shape-consistent (`{ error: string }` with selective `details`) across **400** / **404** / **422** / **500** / **503** before any LLM call where applicable.
 
@@ -224,7 +224,7 @@ POST endpoints validate bodies with Zod (typically via **`parse-request`** / `sa
 | `log-store.ts` | In-memory LLM call ring (dev); finalized rows + one-shots → single `writeObservabilityLine` NDJSON via `server/lib/observability-sink.ts` |
 | `trace-log-store.ts` | Run-trace ring (dedupe by `event.id`); client POST `/api/logs/trace`; same NDJSON sink |
 | `routes/config.ts` | GET /api/config — `env.LOCKDOWN`, lockdown model ids, `AGENTIC_MAX_REVISION_ROUNDS` / `AGENTIC_MIN_OVERALL_SCORE` |
-| `routes/compile.ts` | POST /api/compile |
+| `routes/incubate.ts` | POST /api/incubate |
 | `routes/generate.ts` | POST /api/generate — delegates to `services/generate-execution.ts` |
 | `routes/hypothesis.ts` | POST `/api/hypothesis/prompt-bundle`, `/api/hypothesis/generate` |
 | `services/generate-execution.ts` | SSE multiplex: agentic path + **`executeSingleShotGenerateStream`**; optional `laneIndex` / `lane_done` |
@@ -233,7 +233,7 @@ POST endpoints validate bodies with Zod (typically via **`parse-request`** / `sa
 | `routes/models.ts` | GET /api/models/:provider |
 | `routes/logs.ts` | GET `/api/logs` → `{ llm, trace }`; POST `/api/logs/trace` (Zod); DELETE clears both rings (file append-only) |
 | `routes/design-system.ts` | POST /api/design-system/extract |
-| `routes/section-generate.ts` | POST /api/section/generate |
+| `routes/inputs-generate.ts` | POST /api/inputs/generate |
 | `routes/prompts.ts` | GET `/api/prompts*`; **PUT** / **revert-baseline** for Langfuse writes (CLI/admin) |
 | `routes/preview.ts` | POST/GET `/api/preview/sessions*` — ephemeral virtual FS for iframe + eval |
 | `lib/prompt-overrides.ts` | Sanitize **`promptOverrides`**; **`createResolvePromptBody`** for per-request layering over **`getPromptBody`** |
@@ -248,7 +248,7 @@ POST endpoints validate bodies with Zod (typically via **`parse-request`** / `sa
 | `services/design-evaluation-service.ts` | Design evaluation payload handling |
 | `services/browser-qa-evaluator.ts` | Deterministic browser QA preflight (HTML + VM) |
 | `services/browser-playwright-evaluator.ts` | Playwright headless render + DOM/console checks |
-| `services/compiler.ts` | LLM compilation — Zod-validates request/response boundaries |
+| `services/incubator.ts` | LLM incubation — Zod-validates request/response boundaries |
 | `services/providers/openrouter.ts` | OpenRouter provider (direct API, auth header) |
 | `services/providers/lmstudio.ts` | LM Studio provider (direct URL) |
 | `services/providers/registry.ts` | Provider registration and lookup |
@@ -301,7 +301,7 @@ The primary interface is a node-graph canvas built on `@xyflow/react` v12.
 
 ### Node Types
 
-10 node types in 3 categories: 5 input nodes rendered by shared `SectionNode.tsx`, plus `ModelNode`, `DesignSystemNode`, `CompilerNode`, `HypothesisNode`, and `PreviewNode` (`VariantNode.tsx`). `ModelNode` centralizes provider/model selection. Design System is self-contained (data in `node.data`, not spec store). Each node uses a typed data interface from `types/canvas-data.ts`.
+10 node types in 3 categories: 5 input nodes rendered by shared `InputNode.tsx`, plus `ModelNode`, `DesignSystemNode`, `IncubatorNode`, `HypothesisNode`, and `PreviewNode` (`VariantNode.tsx`). `ModelNode` centralizes provider/model selection. Design System is self-contained (data in `node.data`, not spec store). Each node uses a typed data interface from `types/canvas-data.ts`.
 
 ### HypothesisNode — Generation Controls
 
@@ -318,17 +318,17 @@ When a result has files (agentic output), `VariantNode` (renders the `preview` c
 
 Centralized rules for what connects to what when nodes are added or generated:
 
-- **`buildAutoConnectEdges`** — Structural connections only: section→compiler, design system→hypothesis.
+- **`buildAutoConnectEdges`** — Structural connections only: input nodes→incubator, design system→hypothesis.
 - **`buildModelEdgeForNode`** — When a node is added from the palette, connects it to the first available Model node on the canvas.
 - **`buildModelEdgesFromParent`** — When hypotheses are generated from an Incubator, they inherit that Incubator's connected Model — not every Model on the canvas.
 
 Model connections are column-scoped: a Model node connects only to adjacent-column nodes.
 
-### Lineage & compile topology (`canvas-graph.ts`)
+### Lineage & incubate topology (`canvas-graph.ts`)
 
 `computeLineage` performs a full connected-component walk (bidirectional BFS). Selecting a node highlights every node reachable through any chain of edges — including sibling inputs to shared targets. Unconnected nodes dim to 40%.
 
-`buildCompileInputs` builds the partial spec and reference designs for `/api/compile`; it can use **domain incubator wiring** when provided so compile does not depend solely on edge topology.
+`buildIncubateInputs` builds the partial spec and reference designs for `/api/incubate`; it can use **domain incubator wiring** when provided so incubation does not depend solely on edge topology.
 
 ### Version Stacking
 
@@ -347,7 +347,7 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 | File | Key types |
 |------|-----------|
 | `spec.ts` | `DesignSpec`, `SpecSection`, `ReferenceImage` (Zod schemas) |
-| `compiler.ts` | `IncubationPlan`, `HypothesisStrategy`, `CompiledPrompt` |
+| `incubator.ts` | `IncubationPlan`, `HypothesisStrategy`, `CompiledPrompt` |
 | `provider.ts` | `GenerationProvider`, `GenerationResult`, `ChatMessage`, `ProviderOptions`, `ChatResponse`, `ContentPart`, `ProviderModel` |
 | `canvas-data.ts` | Per-node typed data interfaces |
 
@@ -356,7 +356,7 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 | File | Purpose |
 |------|---------|
 | `client.ts` | REST + SSE fetch wrappers. `GenerateStreamCallbacks` includes `onFile(path, content)` and `onPlan(files)` for agentic events. |
-| `types.ts` | Request/response interfaces for compile, hypothesis, and observability. `GenerateSSEEvent` includes `file` and `plan` variants. Legacy `/api/generate` wire types live on the server. |
+| `types.ts` | Request/response interfaces for incubate, hypothesis, and observability. `GenerateSSEEvent` includes `file` and `plan` variants. Legacy `/api/generate` wire types live on the server. |
 
 ### Storage (`src/storage/`)
 
@@ -371,10 +371,10 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 | Store | Persistence | What it owns |
 |-------|-------------|--------------|
 | `spec-store` | localStorage | Active `DesignSpec`, section/image CRUD |
-| `compiler-store` | localStorage | `IncubationPlan` per **incubator id** (same id as the Incubator canvas node today), `CompiledPrompt[]`, hypothesis editing |
+| `incubator-store` | localStorage | `IncubationPlan` per **incubator id** (same id as the Incubator canvas node today), `CompiledPrompt[]`, hypothesis editing |
 | `generation-store` | localStorage + StoragePort | `GenerationResult[]` metadata in localStorage (persist v5; v4 adds `userBestOverrides`, v5 renames `variantStrategyId` → `strategyId`; `evaluationRounds[].files` stripped in `partialize`), code in IndexedDB (`code` store), multi-file in IndexedDB (`files` store), optional per-eval-round file snapshots (`{resultId}:round:{n}` in the same files DB). `liveCode`, `liveFiles`, `liveFilesPlan` are in-memory only, stripped by `partialize`. |
 | `workspace-domain-store` | localStorage | Domain-first relations and payloads (hypotheses, incubator wiring, model assignments, preview slots, mirrored node content). Prefer this for workflow semantics. |
-| `canvas-store` | localStorage | React Flow nodes/edges, viewport, auto-layout, transient UI (lineage, edge status, `previewNodeIdMap`). Kept in sync with domain on connect/disconnect and compile/generate lifecycle. |
+| `canvas-store` | localStorage | React Flow nodes/edges, viewport, auto-layout, transient UI (lineage, edge status, `previewNodeIdMap`). Kept in sync with domain on connect/disconnect and incubate/generate lifecycle. |
 | `prompt-store` | localStorage | Prompt template overrides (sent as per-request overrides to server). Includes `designer-agentic-system`. |
 
 ### Hooks (`src/hooks/`)
@@ -407,7 +407,7 @@ Single source of truth for string literals shared across the codebase. Eliminate
 | `node-status.ts` | `filledOrEmpty`, `processingOrFilled`, `variantStatus` — pure helpers for node visual state |
 | `provider-fetch.ts` | Environment-agnostic fetch utilities shared by client and server (`fetchChatCompletion`, `fetchModelList`, `parseChatResponse`, `extractMessageText`) |
 | `canvas-connections.ts` | Connection validation rules and auto-connect edge builders |
-| `canvas-graph.ts` | Lineage BFS (`computeLineage`); `buildCompileInputs` for compile (optional domain wiring) |
+| `canvas-graph.ts` | Lineage BFS (`computeLineage`); `buildIncubateInputs` for `/api/incubate` (optional domain wiring) |
 | `canvas-layout.ts` | Sugiyama-style layout (`computeLayout`) |
 | `extract-code.ts` | LLM response code-block extraction |
 | `error-utils.ts` | `normalizeError` — consistent error normalization |
@@ -447,14 +447,24 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 ## Meta-harness (optional CLI)
 
-The **`meta-harness/`** package is a repo-local **Node CLI** (`pnpm meta-harness`, see root `package.json`) that exercises the same **`/api/*`** flows as the canvas (compile, hypothesis generate + eval) using JSON fixtures, an OpenRouter-based **proposer**, and gitignored **`meta-harness/history/session-<mode>-*/`** artifacts (folder name includes **`compile` | `e2e` | `design`** before the timestamp; per-session **`PROMOTION_REPORT.md`** at the session root). Before the run loop it can **preflight** the most recent completed session: compare winning **`prompt-overrides.json`** to **`GET /api/prompts/:key`** and **`skills-snapshot/`** to **`skills/`**, showing unified diffs in Ink (or stdout in **`--plain`**) unless **`--skip-promotion-check`** or **`--improve`**. In a TTY, **`P`** applies drift to **`src/lib/prompts/shared-defaults.ts`** and **`skills/`**, then runs **`pnpm langfuse:sync-prompts`** when Langfuse is configured. **`--promote`** is preflight-only (plus health); **`--plain --promote`** prints diffs without auto-apply. It is not bundled in the SPA build. Operator runbook: [meta-harness/README.md](meta-harness/README.md) and [meta-harness/META_HARNESS_OUTER_LOOP.md](meta-harness/META_HARNESS_OUTER_LOOP.md).
+The **`meta-harness/`** package is a repo-local **Node CLI** (`pnpm meta-harness`, see root `package.json`) that exercises the same **`/api/*`** flows as the canvas (incubate, hypothesis generate + eval, **inputs-generate**) using JSON fixtures, an OpenRouter-based **proposer**, and gitignored **`meta-harness/history/session-<mode>-*/`** artifacts (folder name includes **`incubate` | `e2e` | `design` | `inputs`** before the timestamp; per-session **`PROMOTION_REPORT.md`** at the session root). **Four modes:** `--mode=incubate` (hypothesis rubric), `--mode=inputs` (inputs auto-fill quality rubric), `--mode=design` (agentic build + eval), `--mode=e2e` (inputs-gen → incubate → build → eval). Before the run loop it can **preflight** the most recent completed session: compare winning **`prompt-overrides.json`** to **`GET /api/prompts/:key`**, **`skills-snapshot/`** to **`skills/`**, and **`candidate-*/rubric-weights.json`** to **`src/lib/rubric-weights.json`**, showing unified diffs in Ink (or stdout in **`--plain`**) unless **`--skip-promotion-check`** or **`--improve`**. In a TTY, **`P`** applies drift to **`src/lib/prompts/shared-defaults.ts`**, **`skills/`**, and **`src/lib/rubric-weights.json`**, then runs **`pnpm langfuse:sync-prompts`** when Langfuse is configured and prompts changed. **`--promote`** is preflight-only (plus health); **`--plain --promote`** prints diffs without auto-apply. It is not bundled in the SPA build. Operator runbook: [meta-harness/README.md](meta-harness/README.md) and [meta-harness/META_HARNESS_OUTER_LOOP.md](meta-harness/META_HARNESS_OUTER_LOOP.md).
+
+**Three tunable surfaces** (repo source → what preflight compares → **`P`** promotion target):
+
+| Surface | Repo source of truth | Compared in preflight | After **`P`** |
+|--------|------------------------|------------------------|---------------|
+| **Prompts** | `src/lib/prompts/shared-defaults.ts` | Winner vs **`GET /api/prompts/:key`** (live) | Patch **`shared-defaults.ts`** → **`pnpm langfuse:sync-prompts`** when Langfuse is set |
+| **Skills** | `skills/` (per-package folders) | **`skills-snapshot/`** vs **`skills/`** | Copy / delete files under **`skills/`** |
+| **Rubric weights** | `src/lib/rubric-weights.json` | Winner **`rubric-weights.json`** vs repo file | Overwrite **`rubric-weights.json`**; **restart API** so **`GET /api/config`** exposes new defaults |
+
+During a meta-harness **run**, repo **`skills/`** is **restored** from per-session **`skills-baseline/`** between candidates and in **`finally`**, so only promotion (**`P`**) or manual steps persist skill edits to the app tree.
 
 ## Adding a New Provider
 
 1. Create `server/services/providers/yourprovider.ts`
 2. Implement the `GenerationProvider` interface from `src/types/provider.ts`
 3. Register it in `server/services/providers/registry.ts`
-4. Add the provider config to `getProviderConfig()` in `server/services/compiler.ts`
+4. Add any server env defaults or lockdown mappings needed for the new provider id (see `server/lib/lockdown-model.ts` and provider `listModels` registration)
 
 ## Deployment
 

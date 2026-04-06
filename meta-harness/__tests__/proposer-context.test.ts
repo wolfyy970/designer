@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -47,11 +47,41 @@ describe('loadRichCandidateHistory', () => {
 });
 
 describe('formatRubricWeightsContext', () => {
-  it('includes JSON rubric weights block', () => {
-    const ctx = formatRubricWeightsContext();
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('includes weights from GET /api/config when fetch succeeds', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            lockdown: false,
+            agenticMaxRevisionRounds: 3,
+            agenticMinOverallScore: null,
+            defaultRubricWeights: {
+              design: 0.5,
+              strategy: 0.2,
+              implementation: 0.2,
+              browser: 0.1,
+            },
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+    const ctx = await formatRubricWeightsContext('http://127.0.0.1:3001/api');
     expect(ctx).toContain('## Current rubric weights');
-    expect(ctx).toContain('design');
+    expect(ctx).toContain('"design": 0.5');
     expect(ctx).toContain('set_rubric_weights');
+  });
+
+  it('falls back to merged defaults when config fetch fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')));
+    const ctx = await formatRubricWeightsContext('http://127.0.0.1:3001/api');
+    expect(ctx).toContain('## Current rubric weights');
+    expect(ctx).toContain('"design": 0.4');
   });
 });
 

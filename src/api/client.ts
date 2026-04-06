@@ -1,6 +1,6 @@
 import type {
-  CompileRequest,
-  CompileResponse,
+  IncubateRequest,
+  IncubateResponse,
   GenerateSSEEvent,
   HypothesisGenerateApiPayload,
   HypothesisPromptBundleResponse,
@@ -9,8 +9,8 @@ import type {
   ObservabilityLogsResponse,
   DesignSystemExtractRequest,
   DesignSystemExtractResponse,
-  SectionGenerateRequest,
-  SectionGenerateResponse,
+  InputsGenerateRequest,
+  InputsGenerateResponse,
   HypothesisWorkspaceApiPayload,
 } from './types';
 import type { RunTraceEvent, TodoItem } from '../types/provider';
@@ -36,11 +36,12 @@ import {
   LOCKDOWN_PROVIDER_ID,
 } from '../lib/lockdown-model';
 import { DEFAULT_EVALUATOR_SETTINGS } from '../types/evaluator-settings';
+import { DEFAULT_RUBRIC_WEIGHTS } from '../types/evaluation';
 import type { ZodError, ZodType } from 'zod';
 import {
-  CompileResponseSchema,
+  IncubateResponseSchema,
   DesignSystemExtractResponseSchema,
-  SectionGenerateResponseSchema,
+  InputsGenerateResponseSchema,
   HypothesisPromptBundleResponseSchema,
   ObservabilityLogsResponseSchema,
   ModelsResponseSchema,
@@ -114,6 +115,7 @@ export function getPlaceholderAppConfig(): AppConfigResponse {
     lockdownModelLabel: LOCKDOWN_MODEL_LABEL,
     agenticMaxRevisionRounds: DEFAULT_EVALUATOR_SETTINGS.maxRevisionRounds,
     agenticMinOverallScore: DEFAULT_EVALUATOR_SETTINGS.minOverallScore,
+    defaultRubricWeights: { ...DEFAULT_RUBRIC_WEIGHTS },
   };
 }
 
@@ -138,27 +140,27 @@ export async function fetchAppConfig(signal?: AbortSignal): Promise<AppConfigRes
   return r.data;
 }
 
-// ── Compile (SSE stream) ────────────────────────────────────────────
+// ── Incubate (SSE stream) ───────────────────────────────────────────
 
-export interface CompileStreamCallbacks {
+export interface IncubateStreamCallbacks {
   onProgress?: (status: string) => void;
-  /** Throttled tail of raw model output (compiler JSON). */
+  /** Throttled tail of raw model output (incubation JSON). */
   onCode?: (preview: string) => void;
-  onCompileResult?: (plan: CompileResponse) => void;
+  onIncubateResult?: (plan: IncubateResponse) => void;
   onError?: (error: string) => void;
   onDone?: () => void;
 }
 
 /**
- * POST /api/compile — consumes SSE (`progress`, `code`, `compile_result`, `done`, `error`).
- * Resolves with the incubation plan from the final `compile_result` event.
+ * POST /api/incubate — consumes SSE (`progress`, `code`, `incubate_result`, `done`, `error`).
+ * Resolves with the incubation plan from the final `incubate_result` event.
  */
-export async function compileStream(
-  req: CompileRequest,
-  callbacks?: CompileStreamCallbacks,
+export async function incubateStream(
+  req: IncubateRequest,
+  callbacks?: IncubateStreamCallbacks,
   signal?: AbortSignal,
-): Promise<CompileResponse> {
-  const response = await fetch(`${API_BASE}/compile`, {
+): Promise<IncubateResponse> {
+  const response = await fetch(`${API_BASE}/incubate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
@@ -173,7 +175,7 @@ export async function compileStream(
   const reader = response.body?.getReader();
   if (!reader) throw new Error('No response body');
 
-  let result: CompileResponse | undefined;
+  let result: IncubateResponse | undefined;
   let streamError: string | undefined;
 
   await readSseEventStream(reader, async (currentEvent, raw) => {
@@ -204,23 +206,23 @@ export async function compileStream(
       return;
     }
 
-    if (ev === SSE_EVENT_NAMES.compile_result) {
+    if (ev === SSE_EVENT_NAMES.incubate_result) {
       if (!parsed) {
         streamError = INVALID_SERVER_RESPONSE;
         callbacks?.onError?.(streamError);
         return;
       }
-      const r = CompileResponseSchema.safeParse(parsed);
+      const r = IncubateResponseSchema.safeParse(parsed);
       if (!r.success) {
         streamError = INVALID_SERVER_RESPONSE;
         callbacks?.onError?.(streamError);
         if (import.meta.env.DEV) {
-          console.warn('[api] compile SSE compile_result unexpected shape', r.error.flatten());
+          console.warn('[api] incubate SSE incubate_result unexpected shape', r.error.flatten());
         }
         return;
       }
       result = r.data;
-      callbacks?.onCompileResult?.(r.data);
+      callbacks?.onIncubateResult?.(r.data);
       return;
     }
 
@@ -239,9 +241,9 @@ export async function compileStream(
   return result;
 }
 
-/** Same body as {@link compileStream} but without per-event callbacks. */
-export async function compile(req: CompileRequest, signal?: AbortSignal): Promise<CompileResponse> {
-  return compileStream(req, undefined, signal);
+/** Same body as {@link incubateStream} but without per-event callbacks. */
+export async function incubate(req: IncubateRequest, signal?: AbortSignal): Promise<IncubateResponse> {
+  return incubateStream(req, undefined, signal);
 }
 
 // ── Generate (SSE) ──────────────────────────────────────────────────
@@ -597,10 +599,10 @@ export async function extractDesignSystem(
   return postParsed('/design-system/extract', req, DesignSystemExtractResponseSchema);
 }
 
-// ── Section auto-generate ─────────────────────────────────────────────
+// ── Inputs auto-generate (spec facets) ────────────────────────────────
 
-export async function generateSectionContent(
-  req: SectionGenerateRequest,
-): Promise<SectionGenerateResponse> {
-  return postParsed('/section/generate', req, SectionGenerateResponseSchema);
+export async function generateInputContent(
+  req: InputsGenerateRequest,
+): Promise<InputsGenerateResponse> {
+  return postParsed('/inputs/generate', req, InputsGenerateResponseSchema);
 }

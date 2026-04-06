@@ -26,6 +26,13 @@ export function getActivePromptOverrides(
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+/** Spread into API request bodies: `{ promptOverrides }` when set, else `{}`. */
+export function spreadPromptOverrides(
+  promptOverrides: Record<string, string> | undefined,
+): { promptOverrides: Record<string, string> } | Record<string, never> {
+  return promptOverrides ? { promptOverrides } : {};
+}
+
 export const usePromptOverridesStore = create<PromptOverridesState>()(
   persist(
     (set) => ({

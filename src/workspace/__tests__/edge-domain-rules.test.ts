@@ -11,10 +11,10 @@ import {
 /** Representative (sourceType, targetType) per rule id — must satisfy `isValidConnection`. */
 const DOMAIN_EDGE_EXAMPLES: Record<string, [CanvasNodeType, CanvasNodeType]> = {
   'model-hypothesis': [NODE_TYPES.MODEL, NODE_TYPES.HYPOTHESIS],
-  'model-compiler': [NODE_TYPES.MODEL, NODE_TYPES.COMPILER],
-  'compiler-hypothesis': [NODE_TYPES.COMPILER, NODE_TYPES.HYPOTHESIS],
-  'section-compiler': [NODE_TYPES.DESIGN_BRIEF, NODE_TYPES.COMPILER],
-  'variant-compiler': [NODE_TYPES.PREVIEW, NODE_TYPES.COMPILER],
+  'model-compiler': [NODE_TYPES.MODEL, NODE_TYPES.INCUBATOR],
+  'compiler-hypothesis': [NODE_TYPES.INCUBATOR, NODE_TYPES.HYPOTHESIS],
+  'section-compiler': [NODE_TYPES.DESIGN_BRIEF, NODE_TYPES.INCUBATOR],
+  'variant-compiler': [NODE_TYPES.PREVIEW, NODE_TYPES.INCUBATOR],
   'designSystem-hypothesis': [NODE_TYPES.DESIGN_SYSTEM, NODE_TYPES.HYPOTHESIS],
 };
 

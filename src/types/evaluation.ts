@@ -3,17 +3,19 @@
  * Shared between client metadata and server orchestration.
  */
 
+import rubricWeightsJson from '../lib/rubric-weights.json';
+
 /** Canonical rubric order for parallel workers, aggregation, and UI. */
 export const EVALUATOR_RUBRIC_IDS = ['design', 'strategy', 'implementation', 'browser'] as const;
 
 export type EvaluatorRubricId = (typeof EVALUATOR_RUBRIC_IDS)[number];
 
-/** Default blend for overall score (must sum to 1). Shared by client Settings and server aggregation. */
+/** Repo source of truth: `src/lib/rubric-weights.json` */
 export const DEFAULT_RUBRIC_WEIGHTS: Record<EvaluatorRubricId, number> = {
-  design: 0.4,
-  strategy: 0.3,
-  implementation: 0.2,
-  browser: 0.1,
+  design: rubricWeightsJson.design,
+  strategy: rubricWeightsJson.strategy,
+  implementation: rubricWeightsJson.implementation,
+  browser: rubricWeightsJson.browser,
 };
 
 export const EVALUATOR_WORKER_COUNT = EVALUATOR_RUBRIC_IDS.length;

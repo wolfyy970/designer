@@ -16,6 +16,8 @@ type PromotionStepOk = { key?: string; relPath?: string; ok: boolean; error?: st
 export type PromotionResult = {
   promptsPatched: PromotionStepOk[];
   skillsCopied: PromotionStepOk[];
+  /** Present when preflight had rubric drift; single write to rubric-weights.json */
+  rubricWeightsPatched: PromotionStepOk | null;
   langfuseSyncExitCode: number | null;
   langfuseSyncOutput: string;
 };
@@ -177,6 +179,20 @@ export async function copySkillFiles(
   return results;
 }
 
+export async function patchRubricWeightsFile(
+  repoRoot: string,
+  winnerWeights: Record<string, number>,
+): Promise<PromotionStepOk> {
+  const jsonPath = path.join(repoRoot, 'src/lib/rubric-weights.json');
+  try {
+    await mkdir(path.dirname(jsonPath), { recursive: true });
+    await writeFile(jsonPath, `${JSON.stringify(winnerWeights, null, 2)}\n`, 'utf8');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: normalizeError(e) };
+  }
+}
+
 function runLangfuseSync(repoRoot: string): { exitCode: number | null; output: string } {
   if (!isLangfuseAppConfigured()) {
     return {
@@ -202,8 +218,9 @@ function runLangfuseSync(repoRoot: string): { exitCode: number | null; output: s
 export function promotionSucceeded(result: PromotionResult): boolean {
   const promptsOk = result.promptsPatched.every((p) => p.ok);
   const skillsOk = result.skillsCopied.every((p) => p.ok);
+  const rubricOk = result.rubricWeightsPatched == null || result.rubricWeightsPatched.ok;
   const syncOk = result.langfuseSyncExitCode === null || result.langfuseSyncExitCode === 0;
-  return promptsOk && skillsOk && syncOk;
+  return promptsOk && skillsOk && rubricOk && syncOk;
 }
 
 /** Count newly-versioned keys from Langfuse sync stdout. */
@@ -234,26 +251,32 @@ export async function applyPromotion(
 
   const promptsPatched = await patchSharedDefaults(sharedDefaultsPath, session.stalePrompts);
   const skillsCopied = await copySkillFiles(skillsDir, session.staleSkills);
+  const rubricWeightsPatched = session.staleRubricWeights
+    ? await patchRubricWeightsFile(repoRoot, session.staleRubricWeights.winnerWeights)
+    : null;
 
   let langfuseSyncExitCode: number | null = null;
   let langfuseSyncOutput = '';
 
   const promptsOk = promptsPatched.every((p) => p.ok);
   const skillsOk = skillsCopied.every((p) => p.ok);
+  const rubricOk = rubricWeightsPatched == null || rubricWeightsPatched.ok;
 
-  if (promptsOk && skillsOk && session.stalePrompts.length > 0) {
+  if (promptsOk && skillsOk && rubricOk && session.stalePrompts.length > 0) {
     const sync = runLangfuseSync(repoRoot);
     langfuseSyncExitCode = sync.exitCode;
     langfuseSyncOutput = sync.output;
-  } else if (promptsOk && skillsOk && session.stalePrompts.length === 0) {
+  } else if (promptsOk && skillsOk && rubricOk && session.stalePrompts.length === 0) {
     langfuseSyncOutput = 'No prompt drift — skipped Langfuse sync.';
   } else {
-    langfuseSyncOutput = 'Skipped Langfuse sync due to prompt or skill errors.';
+    langfuseSyncOutput =
+      'Skipped Langfuse sync due to prompt, skill, or rubric-weight errors.';
   }
 
   return {
     promptsPatched,
     skillsCopied,
+    rubricWeightsPatched,
     langfuseSyncExitCode,
     langfuseSyncOutput,
   };

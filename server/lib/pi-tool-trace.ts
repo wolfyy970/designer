@@ -2,8 +2,7 @@
  * Serialize Pi tool calls for RunTraceEvent (toolArgs / toolResult / detail).
  */
 import { normalizeError } from '../../src/lib/error-utils.ts';
-
-const TRUNC = '\n…[truncated]';
+import { truncateUtf16WithSuffix } from './string-truncate.ts';
 
 /** Max length for toolArgs JSON on traces and NDJSON. */
 export const PI_TOOL_ARGS_TRACE_MAX_CHARS = 2048;
@@ -11,17 +10,12 @@ export const PI_TOOL_ARGS_TRACE_MAX_CHARS = 2048;
 /** Max length for tool result text on traces (and mirrored to `detail` on finish events). */
 export const PI_TOOL_RESULT_TRACE_MAX_CHARS = 800;
 
-function clip(s: string, maxChars: number): string {
-  if (maxChars <= 0 || s.length <= maxChars) return s;
-  return s.slice(0, maxChars) + TRUNC;
-}
-
 /** JSON-stringify tool_execution_start args for trace payloads. */
 export function serializePiToolArgsForTrace(raw: unknown, maxChars = PI_TOOL_ARGS_TRACE_MAX_CHARS): string | undefined {
   if (raw == null) return undefined;
   if (typeof raw !== 'object') return undefined;
   try {
-    return clip(JSON.stringify(raw), maxChars);
+    return truncateUtf16WithSuffix(JSON.stringify(raw), maxChars);
   } catch {
     return undefined;
   }
@@ -77,5 +71,5 @@ export function serializePiToolResultForTrace(
   }
   const trimmed = text.trim();
   if (!trimmed) return isError ? '(empty result)' : undefined;
-  return clip(trimmed, maxChars);
+  return truncateUtf16WithSuffix(trimmed, maxChars);
 }

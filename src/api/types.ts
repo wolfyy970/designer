@@ -1,5 +1,5 @@
 import type { DesignSpec, ReferenceImage } from '../types/spec';
-import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../types/compiler';
+import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../types/incubator';
 import type {
   AgentMode,
   DomainDesignSystemContent,
@@ -11,9 +11,9 @@ import type { ProviderModel } from '../types/provider';
 import type { EvaluationContextPayload } from '../types/evaluation';
 import type { WorkspaceSnapshotWire } from '../lib/workspace-snapshot-schema';
 
-// ── Compile ─────────────────────────────────────────────────────────
+// ── Incubate (spec → incubation plan) ────────────────────────────────
 
-export interface CompileRequest {
+export interface IncubateRequest {
   spec: DesignSpec;
   providerId: string;
   modelId: string;
@@ -27,7 +27,7 @@ export interface CompileRequest {
   promptOverrides?: Record<string, string>;
 }
 
-export type CompileResponse = IncubationPlan;
+export type IncubateResponse = IncubationPlan;
 
 /** Workspace slice sent to `/api/hypothesis/*` (mirrors client domain + graph). */
 export interface HypothesisWorkspaceApiPayload {
@@ -38,7 +38,7 @@ export interface HypothesisWorkspaceApiPayload {
   domainHypothesis: DomainHypothesis | null;
   modelProfiles: Record<string, DomainModelProfile>;
   designSystems: Record<string, DomainDesignSystemContent>;
-  defaultCompilerProvider: string;
+  defaultIncubatorProvider: string;
   promptOverrides?: Record<string, string>;
 }
 
@@ -93,7 +93,7 @@ export interface LlmLogEntry {
   status?: LlmLogStatus;
   correlationId?: string;
   source:
-    | 'compiler'
+    | 'incubator'
     | 'planner'
     | 'builder'
     | 'designSystem'
@@ -150,15 +150,15 @@ export interface DesignSystemExtractResponse {
   result: string;
 }
 
-// ── Section auto-generate (magic wand) ───────────────────────────────
+// ── Spec inputs auto-generate (magic wand) ──────────────────────────
 
-export type SectionGenerateTargetApiId =
+export type InputsGenerateTargetApiId =
   | 'research-context'
   | 'objectives-metrics'
   | 'design-constraints';
 
-export interface SectionGenerateRequest {
-  sectionId: SectionGenerateTargetApiId;
+export interface InputsGenerateRequest {
+  inputId: InputsGenerateTargetApiId;
   designBrief: string;
   existingDesign?: string;
   researchContext?: string;
@@ -169,6 +169,6 @@ export interface SectionGenerateRequest {
   promptOverrides?: Record<string, string>;
 }
 
-export interface SectionGenerateResponse {
+export interface InputsGenerateResponse {
   result: string;
 }

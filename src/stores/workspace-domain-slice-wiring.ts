@@ -1,4 +1,4 @@
-import { NODE_TYPES, SECTION_NODE_TYPES } from '../constants/canvas';
+import { NODE_TYPES, INPUT_NODE_TYPES } from '../constants/canvas';
 import type { CanvasNodeType } from '../types/workspace-graph';
 import { defaultIncubatorWiring } from '../types/workspace-domain';
 import { ensureWiring, uniqPush, removeId } from './workspace-domain-helpers';
@@ -45,7 +45,7 @@ export function createWorkspaceDomainWiringSlice(set: DomainSet): Pick<
             },
           };
         }
-        if (targetType === NODE_TYPES.COMPILER) {
+        if (targetType === NODE_TYPES.INCUBATOR) {
           const cur = s.incubatorModelNodeIds[targetId] ?? [];
           return {
             incubatorModelNodeIds: {
@@ -72,7 +72,7 @@ export function createWorkspaceDomainWiringSlice(set: DomainSet): Pick<
             },
           };
         }
-        if (targetType === NODE_TYPES.COMPILER) {
+        if (targetType === NODE_TYPES.INCUBATOR) {
           const cur = s.incubatorModelNodeIds[targetId];
           if (!cur) return s;
           return {
@@ -88,8 +88,8 @@ export function createWorkspaceDomainWiringSlice(set: DomainSet): Pick<
     attachIncubatorInput: (incubatorId, sourceId, sourceType) =>
       set((s) => {
         const w = { ...ensureWiring(s.incubatorWirings, incubatorId) };
-        if (SECTION_NODE_TYPES.has(sourceType)) {
-          w.sectionNodeIds = uniqPush(w.sectionNodeIds, sourceId);
+        if (INPUT_NODE_TYPES.has(sourceType)) {
+          w.inputNodeIds = uniqPush(w.inputNodeIds, sourceId);
         } else if (sourceType === NODE_TYPES.PREVIEW) {
           w.previewNodeIds = uniqPush(w.previewNodeIds, sourceId);
         } else return s;
@@ -103,8 +103,8 @@ export function createWorkspaceDomainWiringSlice(set: DomainSet): Pick<
         const cur = s.incubatorWirings[incubatorId];
         if (!cur) return s;
         const w = { ...cur };
-        if (SECTION_NODE_TYPES.has(sourceType)) {
-          w.sectionNodeIds = removeId(w.sectionNodeIds, sourceId);
+        if (INPUT_NODE_TYPES.has(sourceType)) {
+          w.inputNodeIds = removeId(w.inputNodeIds, sourceId);
         } else if (sourceType === NODE_TYPES.PREVIEW) {
           w.previewNodeIds = removeId(w.previewNodeIds, sourceId);
         } else return s;

@@ -2,7 +2,7 @@
  * Keep `useWorkspaceDomainStore` in sync with canvas graph edits so compile/generate
  * can read domain relations instead of relying on edge walks alone.
  */
-import { NODE_TYPES, SECTION_NODE_TYPES } from '../constants/canvas';
+import { NODE_TYPES, INPUT_NODE_TYPES } from '../constants/canvas';
 import type { CanvasNodeType } from '../types/workspace-graph';
 import type { WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
@@ -38,7 +38,7 @@ export function syncDomainForRemovedEdge(edge: Pick<WorkspaceEdge, 'source' | 't
 export function syncDomainForRemovedNode(node: WorkspaceNode): void {
   const d = useWorkspaceDomainStore.getState();
 
-  if (node.type === NODE_TYPES.COMPILER) {
+  if (node.type === NODE_TYPES.INCUBATOR) {
     d.removeIncubator(node.id);
     return;
   }
@@ -84,7 +84,7 @@ export function syncDomainForRemovedNode(node: WorkspaceNode): void {
     return;
   }
 
-  if (SECTION_NODE_TYPES.has(node.type as CanvasNodeType)) {
+  if (INPUT_NODE_TYPES.has(node.type as CanvasNodeType)) {
     for (const incId of Object.keys(d.incubatorWirings)) {
       d.detachIncubatorInput(incId, node.id, node.type as CanvasNodeType);
     }
@@ -92,7 +92,7 @@ export function syncDomainForRemovedNode(node: WorkspaceNode): void {
 }
 
 /** Link each new hypothesis to the incubator in domain after compile. */
-export function linkHypothesesAfterCompile(
+export function linkHypothesesAfterIncubate(
   compilerNodeId: string,
   pairs: readonly { hypothesisNodeId: string; strategyId: string }[],
 ): void {

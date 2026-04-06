@@ -12,7 +12,7 @@ const baseCfg: MetaHarnessConfig = {
   iterations: 2,
   proposerModel: 'm',
   proposerMaxToolRounds: 5,
-  defaultCompilerProvider: 'p',
+  defaultIncubatorProvider: 'p',
   mode: 'design',
 };
 
@@ -20,17 +20,26 @@ describe('parseMetaHarnessModeFromArgv', () => {
   it('parses --mode=e2e', () => {
     expect(parseMetaHarnessModeFromArgv(['--mode=e2e'])).toBe('e2e');
   });
-  it('parses --mode compile', () => {
-    expect(parseMetaHarnessModeFromArgv(['--mode', 'compile'])).toBe('compile');
+  it('parses --mode incubate', () => {
+    expect(parseMetaHarnessModeFromArgv(['--mode', 'incubate'])).toBe('incubate');
+  });
+  it('parses --mode=inputs', () => {
+    expect(parseMetaHarnessModeFromArgv(['--mode=inputs'])).toBe('inputs');
+  });
+  it('parses --mode inputs (space-separated)', () => {
+    expect(parseMetaHarnessModeFromArgv(['--mode', 'inputs'])).toBe('inputs');
   });
   it('returns undefined when absent', () => {
     expect(parseMetaHarnessModeFromArgv(['--plain'])).toBeUndefined();
+  });
+  it('throws on unknown mode', () => {
+    expect(() => parseMetaHarnessModeFromArgv(['--mode=bogus'])).toThrow(/Invalid --mode/);
   });
 });
 
 describe('resolveMode', () => {
   it('CLI wins over config', () => {
-    expect(resolveMode(['--mode=compile'], { ...baseCfg, mode: 'e2e' })).toBe('compile');
+    expect(resolveMode(['--mode=incubate'], { ...baseCfg, mode: 'e2e' })).toBe('incubate');
   });
   it('falls back to config.mode', () => {
     expect(resolveMode([], { ...baseCfg, mode: 'e2e' })).toBe('e2e');

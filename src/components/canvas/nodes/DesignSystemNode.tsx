@@ -2,11 +2,11 @@ import { memo, useState, useCallback, useMemo } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
 import { useDropzone } from 'react-dropzone';
 import { ImagePlus, Sparkles, Loader2, X } from 'lucide-react';
-import { normalizeError } from '../../../lib/error-utils';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import type { DesignSystemNodeData } from '../../../types/canvas-data';
 import { extractDesignSystem } from '../../../api/client';
-import { getActivePromptOverrides, usePromptOverridesStore } from '../../../stores/prompt-overrides-store';
+import { spreadPromptOverrides } from '../../../stores/prompt-overrides-store';
+import { usePromptOverrideAsyncAction } from '../../../hooks/usePromptOverrideAsyncAction';
 import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { readFileAsReferenceImage } from '../../../lib/image-utils';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
@@ -15,6 +15,7 @@ import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-co
 import { filledOrEmpty } from '../../../lib/node-status';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
+import { NodeErrorBlock } from './shared/NodeErrorBlock';
 import type { ReferenceImage } from '../../../types/spec';
 
 type DesignSystemNodeType = Node<DesignSystemNodeData, 'designSystem'>;
@@ -31,6 +32,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
 
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
+  const runPromptAction = usePromptOverrideAsyncAction();
 
   const update = useCallback(
     (field: string, value: unknown) => updateNodeData(id, { [field]: value }),
@@ -73,29 +75,28 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
 
   const handleExtract = useCallback(async () => {
     if (images.length === 0 || !modelId) return;
-    setExtracting(true);
-    setExtractError(null);
-    try {
-      const promptOverrides = getActivePromptOverrides(usePromptOverridesStore.getState().overrides);
-      const response = await extractDesignSystem({
-        images,
-        providerId: providerId!,
-        modelId: modelId!,
-        ...(promptOverrides ? { promptOverrides } : {}),
-      });
-      const result = response.result;
-
-      if (content.trim()) {
-        update('content', content + '\n\n---\n\n' + result);
-      } else {
-        update('content', result);
-      }
-    } catch (err) {
-      setExtractError(normalizeError(err, 'Extraction failed'));
-    } finally {
-      setExtracting(false);
+    const response = await runPromptAction(
+      (promptOverrides) =>
+        extractDesignSystem({
+          images,
+          providerId: providerId!,
+          modelId: modelId!,
+          ...spreadPromptOverrides(promptOverrides),
+        }),
+      {
+        setLoading: setExtracting,
+        setError: setExtractError,
+        errorMessage: 'Extraction failed',
+      },
+    );
+    if (!response) return;
+    const result = response.result;
+    if (content.trim()) {
+      update('content', content + '\n\n---\n\n' + result);
+    } else {
+      update('content', result);
     }
-  }, [images, modelId, providerId, content, update]);
+  }, [images, modelId, providerId, content, update, runPromptAction]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -214,11 +215,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
               </p>
             )}
 
-            {extractError && (
-              <p className="rounded bg-error-subtle px-2 py-1 text-micro text-error">
-                {extractError}
-              </p>
-            )}
+            {extractError && <NodeErrorBlock message={extractError} />}
           </div>
         )}
       </div>

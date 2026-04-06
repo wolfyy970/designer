@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import type { CompileRequest } from '../types';
-import { compile, compileStream } from '../client';
+import type { IncubateRequest } from '../types';
+import { incubate, incubateStream } from '../client';
 import { SSE_EVENT_NAMES } from '../../constants/sse-events';
 
 function sseResponse(events: { name: string; data: Record<string, unknown> }[]): Response {
@@ -32,7 +32,7 @@ const plan = {
     },
   ],
   generatedAt: '2020-01-01T00:00:00.000Z',
-  compilerModel: 'm1',
+  incubatorModel: 'm1',
 };
 
 const minimalReq = {
@@ -77,45 +77,45 @@ const minimalReq = {
   },
   providerId: 'openrouter',
   modelId: 'x/y',
-} satisfies CompileRequest;
+} satisfies IncubateRequest;
 
-describe('compileStream', () => {
+describe('incubateStream', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('resolves incubation plan from compile_result and invokes callbacks', async () => {
+  it('resolves incubation plan from incubate_result and invokes callbacks', async () => {
     const onProgress = vi.fn();
     const onCode = vi.fn();
-    const onCompileResult = vi.fn();
+    const onIncubateResult = vi.fn();
     const onDone = vi.fn();
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
         sseResponse([
-          { name: SSE_EVENT_NAMES.progress, data: { status: 'Compiling…' } },
+          { name: SSE_EVENT_NAMES.progress, data: { status: 'Incubating…' } },
           { name: SSE_EVENT_NAMES.code, data: { code: '{"partial":' } },
-          { name: SSE_EVENT_NAMES.compile_result, data: plan },
+          { name: SSE_EVENT_NAMES.incubate_result, data: plan },
           { name: SSE_EVENT_NAMES.done, data: {} },
         ]),
       ),
     );
 
-    const out = await compileStream(minimalReq, {
+    const out = await incubateStream(minimalReq, {
       onProgress,
       onCode,
-      onCompileResult,
+      onIncubateResult,
       onDone,
     });
 
     expect(out.id).toBe('plan-1');
     expect(out.hypotheses).toHaveLength(1);
-    expect(onProgress).toHaveBeenCalledWith('Compiling…');
+    expect(onProgress).toHaveBeenCalledWith('Incubating…');
     expect(onCode).toHaveBeenCalled();
-    expect(onCompileResult).toHaveBeenCalledWith(expect.objectContaining({ id: 'plan-1' }));
+    expect(onIncubateResult).toHaveBeenCalledWith(expect.objectContaining({ id: 'plan-1' }));
     expect(onDone).toHaveBeenCalledTimes(1);
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      '/api/compile',
+      '/api/incubate',
       expect.objectContaining({ method: 'POST' }),
     );
   });
@@ -125,7 +125,7 @@ describe('compileStream', () => {
       'fetch',
       vi.fn().mockResolvedValue(new Response('server error body', { status: 502 })),
     );
-    await expect(compileStream(minimalReq)).rejects.toThrow();
+    await expect(incubateStream(minimalReq)).rejects.toThrow();
   });
 
   it('throws when SSE emits error', async () => {
@@ -134,37 +134,37 @@ describe('compileStream', () => {
       'fetch',
       vi.fn().mockResolvedValue(
         sseResponse([
-          { name: SSE_EVENT_NAMES.error, data: { error: 'Compile failed' } },
+          { name: SSE_EVENT_NAMES.error, data: { error: 'Incubation failed' } },
           { name: SSE_EVENT_NAMES.done, data: {} },
         ]),
       ),
     );
 
-    await expect(compileStream(minimalReq, { onError })).rejects.toThrow(
-      /Compile failed|Compilation failed/,
+    await expect(incubateStream(minimalReq, { onError })).rejects.toThrow(
+      /Incubation failed|Compilation failed/,
     );
-    expect(onError).toHaveBeenCalledWith('Compile failed');
+    expect(onError).toHaveBeenCalledWith('Incubation failed');
   });
 
-  it('throws when stream ends without compile_result', async () => {
+  it('throws when stream ends without incubate_result', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(sseResponse([{ name: SSE_EVENT_NAMES.done, data: {} }])),
     );
-    await expect(compileStream(minimalReq)).rejects.toThrow(/Invalid server response/);
+    await expect(incubateStream(minimalReq)).rejects.toThrow(/Invalid server response/);
   });
 
-  it('compile() delegates to compileStream', async () => {
+  it('incubate() delegates to incubateStream', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
         sseResponse([
-          { name: SSE_EVENT_NAMES.compile_result, data: plan },
+          { name: SSE_EVENT_NAMES.incubate_result, data: plan },
           { name: SSE_EVENT_NAMES.done, data: {} },
         ]),
       ),
     );
-    const out = await compile(minimalReq);
+    const out = await incubate(minimalReq);
     expect(out.specId).toBe('s1');
   });
 });

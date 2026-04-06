@@ -3,7 +3,7 @@ import { systemPromptForMode } from '../proposer-prompts.ts';
 
 /** Regression: all modes share explicit refine-on-leader vs explore framing. */
 describe('systemPromptForMode', () => {
-  it.each(['compile', 'design', 'e2e'] as const)('mode %s includes refine/explore strategy', (mode) => {
+  it.each(['incubate', 'design', 'e2e', 'inputs'] as const)('mode %s includes refine/explore strategy', (mode) => {
     const s = systemPromptForMode(mode);
     expect(s).toContain('refine-on-leader');
     expect(s).toContain('explore');

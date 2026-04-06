@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import {
   useCanvasStore,
-  SECTION_NODE_TYPES,
+  INPUT_NODE_TYPES,
   type CanvasNodeType,
 } from '../../stores/canvas-store';
 
@@ -29,7 +29,7 @@ const NODE_ENTRIES: NodeEntry[] = [
   { type: 'objectivesMetrics', label: 'Objectives & Metrics', icon: <Target size={14} />, group: 'input' },
   { type: 'designConstraints', label: 'Design Constraints', icon: <ShieldCheck size={14} />, group: 'input' },
   { type: 'model', label: 'Model', icon: <Bot size={14} />, group: 'processing' },
-  { type: 'compiler', label: 'Incubator', icon: <Cpu size={14} />, group: 'processing' },
+  { type: 'incubator', label: 'Incubator', icon: <Cpu size={14} />, group: 'processing' },
   { type: 'designSystem', label: 'Design System', icon: <SwatchBook size={14} />, group: 'processing' },
   { type: 'hypothesis', label: 'Hypothesis', icon: <Lightbulb size={14} />, group: 'strategies' },
 ];
@@ -51,7 +51,7 @@ export default function NodePalette({ onAdd, position }: NodePaletteProps) {
 
   function isSingleton(type: CanvasNodeType): boolean {
     // Sections are still singletons; compilers and designers can be multiple
-    if (SECTION_NODE_TYPES.has(type)) return true;
+    if (INPUT_NODE_TYPES.has(type)) return true;
     return false;
   }
 
@@ -59,7 +59,7 @@ export default function NodePalette({ onAdd, position }: NodePaletteProps) {
     return nodes.some((n) => n.type === type);
   }
 
-  const hasIncubator = nodes.some((n) => n.type === 'compiler');
+  const hasIncubator = nodes.some((n) => n.type === 'incubator');
 
   function handleClick(type: CanvasNodeType) {
     if (onAdd) {

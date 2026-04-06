@@ -1,13 +1,13 @@
 # Meta-Harness outer loop
 
-Standalone CLI inspired by [Meta-Harness](https://arxiv.org/abs/2603.28052): a **proposer** agent edits skills, prompt overrides, and benchmark JSON; a **runner** scores each candidate. **`--mode=design`** (default) runs fixed strategies through **`POST /api/hypothesis/generate`**. **`--mode=compile`** runs **`POST /api/compile`** plus an OpenRouter **hypothesis rubric** (no design build). **`--mode=e2e`** compiles, picks a **random** hypothesis, then generates and evaluates like design mode.
+Standalone CLI inspired by [Meta-Harness](https://arxiv.org/abs/2603.28052): a **proposer** agent edits skills, prompt overrides, and benchmark JSON; a **runner** scores each candidate. **`--mode=design`** (default) runs fixed strategies through **`POST /api/hypothesis/generate`**. **`--mode=incubate`** runs **`POST /api/incubate`** plus an OpenRouter **hypothesis rubric** (no design build). **`--mode=inputs`** optimizes the three **inputs-generate prompts** (`inputs-gen-research-context`, `inputs-gen-objectives-metrics`, `inputs-gen-design-constraints`) by calling **`POST /api/inputs/generate`** per test case and scoring output with a 5-dimension rubric. **`--mode=e2e`** runs the full pipeline: inputs-gen → incubate → random hypothesis → agentic build → multi-rubric eval.
 
 **Operator runbook:** [META_HARNESS_OUTER_LOOP.md](./META_HARNESS_OUTER_LOOP.md) — how to run `pnpm meta-harness`, config, flags, folders, benchmarks, troubleshooting.
 
 ## Prerequisites
 
 1. **API server running** (`pnpm dev:server` or `pnpm dev:all`).
-2. **`OPENROUTER_API_KEY`** in `.env.local` (or env) for the **proposer**, for **`--mode=compile`** rubric calls, and for generation when using OpenRouter-backed models on the server.
+2. **`OPENROUTER_API_KEY`** in `.env.local` (or env) for the **proposer**, for **`--mode=incubate`** and **`--mode=inputs`** rubric calls, and for generation when using OpenRouter-backed models on the server.
 3. Optional: set **`OBSERVABILITY_LOG_DIR`** or rely on dev default `logs/observability` so `eval-runs/<id>/` exists after agentic runs.
 
 ## Usage
@@ -25,14 +25,17 @@ pnpm meta-harness --eval-only
 # Only run benchmarks whose JSON basename contains a substring (multiple --test= OR’d)
 pnpm meta-harness --test=dashboard-analytics --once
 
-# Dry run: show hydrated payload + paths, no HTTP (compile body if --mode=compile|e2e)
+# Dry run: show hydrated payload + paths, no HTTP (incubate body if --mode=incubate|e2e)
 pnpm meta-harness --dry-run
-pnpm meta-harness --mode=compile --dry-run
+pnpm meta-harness --mode=incubate --dry-run
 
-# Hypothesis-quality loop (compile + rubric only)
-pnpm meta-harness --mode=compile
+# Hypothesis-quality loop (incubate + rubric only)
+pnpm meta-harness --mode=incubate
 
-# Full pipeline: compile → random hypothesis → build + eval
+# Inputs auto-fill quality loop (inputs-generate + rubric only)
+pnpm meta-harness --mode=inputs
+
+# Full pipeline: inputs-gen → incubate → random hypothesis → build + eval
 pnpm meta-harness --mode=e2e
 
 # Classic log lines (no Ink dashboard) — useful for CI or piping to a file
@@ -59,14 +62,14 @@ In a normal terminal, the runner uses an **Ink** (React-in-terminal) UI; `--plai
 | **`--promote`** | yes | yes — **same full** experience as default | **no** (exits after review) |
 | **`--dry-run`** | no* | no | no (*exits after printing one hydrated payload) |
 
-**`--promote` is not a lite preflight.** It uses the same code path as the default preflight: same session scan, same unified diffs per prompt/skill, same `PreflightReview` / `printPlainPreflightSummary`. The only difference is you never load benchmarks or run the outer loop — useful when you only want the “should I promote?” review.
+**`--promote` is not a lite preflight.** It uses the same code path as the default preflight: same session scan, same unified diffs grouped by **Prompts / Skills / Rubric weights**, same `PreflightReview` / `printPlainPreflightSummary`. The only difference is you never load benchmarks or run the outer loop — useful when you only want the “should I promote?” review.
 
 ### Preflight promotion check
 
-**When preflight runs (default or `--promote`):** the CLI scans recent **`history/session-*`** folders (newest first) for a completed session (`PROMOTION_REPORT.md` + `best-candidate.json`) whose winning **`prompt-overrides.json`** or **`skills-snapshot/`** still **differs** from what the API serves today and what’s on disk under **`skills/`**. If something is stale:
+**When preflight runs (default or `--promote`):** the CLI scans recent **`history/session-*`** folders (newest first) for a completed session (`PROMOTION_REPORT.md` + `best-candidate.json`) whose winning artifacts still **differ** from the live app: **`prompt-overrides.json`** vs **`GET /api/prompts/:key`**, **`skills-snapshot/`** vs **`skills/`**, and (if the winner has **`rubric-weights.json`**) that file vs **`src/lib/rubric-weights.json`**. If something is stale:
 
-- **TTY:** Ink **unified diffs** per item. **`P`** Promote: writes winner prompts into **`src/lib/prompts/shared-defaults.ts`**, applies skill drift into **`skills/`**, runs **`pnpm langfuse:sync-prompts`** when Langfuse env is set (each changed key gets a **new Langfuse prompt version**; the configured label moves forward; older versions remain in the Prompts UI), then continues (default run) or exits (**`--promote`**). **`S`** / **`Q`** exit without changing files. Scroll `j`/`k` or ↑/↓; items `[`/`]`. On failure, the CLI exits **1** with a per-step log.
-- **`--plain` / non-TTY:** full diffs printed to stdout — **no automatic apply** (use TTY + **P** or promote manually). Default run **continues** into the harness; **`--promote`** **exits** after diffs.
+- **TTY:** Ink **unified diffs** per item with a **section navigation** row (counts per surface). **`P`** Promote: writes winner prompts into **`src/lib/prompts/shared-defaults.ts`**, applies skill drift into **`skills/`**, overwrites **`src/lib/rubric-weights.json`** when rubrics drifted, runs **`pnpm langfuse:sync-prompts`** when Langfuse env is set **and** prompts changed (each changed key gets a **new Langfuse prompt version**; the configured label moves forward; older versions remain in the Prompts UI), then continues (default run) or exits (**`--promote`**). **Restart the API** after promoting rubric weights so **`GET /api/config`** picks up the file. **`S`** / **`Q`** exit without changing files. Scroll `j`/`k` or ↑/↓; items `[`/`]`. On failure, the CLI exits **1** with a per-step log.
+- **`--plain` / non-TTY:** full diffs printed to stdout under **Prompts** / **Skills** / **Rubric weights** section headers — **no automatic apply** (use TTY + **P** or promote manually). Default run **continues** into the harness; **`--promote`** **exits** after diffs.
 
 **`--improve`** (or **`--skip-promotion-check`**) skips preflight and goes straight to the harness.
 
@@ -76,17 +79,17 @@ If nothing is stale, one line is logged (default **continues**; **`--promote`** 
 
 ## Layout
 
-- `config.json` — mode (`compile` / `e2e` / `design`), API URL, proposer model, iteration budget. The `--mode` CLI flag overrides the config value.
-- `test-cases/*.json` — benchmarks: **`spec` + `model`** always; **`strategy`** required for **`--mode=design`**; optional for **`compile`** / **`e2e`**. Optional **`compile.hypothesisCount`** sets compile output size (defaults in `config.json`). Example without strategy: `test-cases/spec-only-landing-saas.json`.
-- `history/` — per-session and per-candidate artifacts (gitignored). Each run creates **`history/session-<mode>-…/`** (compile / e2e / design prefix before the timestamp) with `session.json`, `best-candidate.json`, and **`PROMOTION_REPORT.md`** at the session root after a full run (it names the winning `candidate-*` inside that session). Under the session folder, each **`candidate-*`** holds `proposal.md`, `prompt-overrides.json`, `skills-snapshot/`, `test-results/`, `aggregate.json`, etc. When **`history/candidate-0/aggregate.json`** is missing (not `--eval-only`), the runner evaluates **`candidate-0`** as a **baseline** first—even if other `candidate-*` folders exist from an old run—then runs the configured **`iterations`** of propose+eval. If the proposer exhausts its tool budget without **`submit_candidate`** but did change prompts or skills, those edits are still evaluated for that candidate.
+- `config.json` — mode (`incubate` / `inputs` / `e2e` / `design`), API URL, proposer model, iteration budget. The `--mode` CLI flag overrides the config value.
+- `test-cases/*.json` — benchmarks: **`spec` + `model`** always; **`strategy`** required for **`--mode=design`**; optional for **`incubate`** / **`e2e`**. Optional **`incubateHypothesisCount`** sets how many strategies the incubate step asks for (defaults in `config.json`). Example without strategy: `test-cases/spec-only-landing-saas.json`.
+- `history/` — per-session and per-candidate artifacts (gitignored). Each run creates **`history/session-<mode>-…/`** (`incubate` / `inputs` / `e2e` / `design` prefix before the timestamp) with `session.json`, **`skills-baseline/`** (copy of repo **`skills/`** at run start), `best-candidate.json`, and **`PROMOTION_REPORT.md`** at the session root after a full run (it names the winning `candidate-*` inside that session). Under the session folder, each **`candidate-*`** holds `proposal.md`, `prompt-overrides.json`, `skills-snapshot/`, `test-results/`, `aggregate.json`, etc. When **`history/candidate-0/aggregate.json`** is missing (not `--eval-only`), the runner evaluates **`candidate-0`** as a **baseline** first—even if other `candidate-*` folders exist from an old run—then runs the configured **`iterations`** of propose+eval. The runner **restores** repo **`skills/`** from **`skills-baseline/`** before each new candidate and when the run ends; prompt/rubric experiments stay under **`candidate-*`** until **`P`**. If the proposer exhausts its tool budget without **`submit_candidate`** but did change prompts or skills for that turn, those edits are still evaluated for that candidate.
 
 **Also:** Optional HTTP timeouts and other `config.json` fields are in [META_HARNESS_OUTER_LOOP.md §2](./META_HARNESS_OUTER_LOOP.md). The Ink dashboard marks a finished test **unscored** (warning) when there is no usable score — distinct from **error**. The proposer’s system prompts (`proposer-prompts.ts`) require an explicit **refine-on-leader** vs **explore** choice each turn; evaluation uses only prompt/rubric overrides queued in that turn (not auto-merged from the session best).
 
-## Promoting prompts to Langfuse
+## Promoting changes (prompts, skills, rubric weights)
 
-Harness overrides stay in **`history/…/prompt-overrides.json`** until you promote them. With a **TTY** preflight, **`P`** updates **`shared-defaults.ts`**, **`skills/`**, and runs **`pnpm langfuse:sync-prompts`** when Langfuse is configured. **Plain** mode or manual runs: copy into **`PROMPT_DEFAULTS`** and run sync yourself (root **AGENTS.md**).
+Harness overrides stay under **`history/…/candidate-*/`** until you promote them. With a **TTY** preflight, **`P`** updates **`shared-defaults.ts`**, **`skills/`**, **`src/lib/rubric-weights.json`** as needed, and runs **`pnpm langfuse:sync-prompts`** when Langfuse is configured and prompts changed. **Plain** mode or manual runs: use **`PROMOTION_REPORT.md`**, or copy into **`PROMPT_DEFAULTS`** / **`skills/`** / **`rubric-weights.json`** and run sync yourself (root **AGENTS.md**).
 
-Details, non-winner paths, and verification: [META_HARNESS_OUTER_LOOP.md §5.3](./META_HARNESS_OUTER_LOOP.md#53-promoting-prompt-overrides-to-langfuse).
+Prompts + Langfuse verification: [META_HARNESS_OUTER_LOOP.md §5.3](./META_HARNESS_OUTER_LOOP.md#53-promoting-prompt-overrides-to-langfuse). **Tunable surfaces** overview: [META_HARNESS_OUTER_LOOP.md §3.3](./META_HARNESS_OUTER_LOOP.md#33-tunable-surfaces-promotion-model).
 
 ## Live E2E (optional)
 

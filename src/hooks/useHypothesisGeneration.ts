@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { useSpecStore } from '../stores/spec-store';
-import { useCompilerStore, findStrategy } from '../stores/compiler-store';
+import { useIncubatorStore, findStrategy } from '../stores/incubator-store';
 import { useGenerationStore } from '../stores/generation-store';
 import { useCanvasStore } from '../stores/canvas-store';
 import { useAppConfig } from './useAppConfig';
@@ -29,10 +29,10 @@ export function useHypothesisGeneration({
   const { supportsVision } = useConnectedModel(nodeId);
 
   const spec = useSpecStore((s) => s.spec);
-  const strategy = useCompilerStore(
+  const strategy = useIncubatorStore(
     (s) => findStrategy(s.incubationPlans, strategyId),
   );
-  const setCompiledPrompts = useCompilerStore((s) => s.setCompiledPrompts);
+  const setCompiledPrompts = useIncubatorStore((s) => s.setCompiledPrompts);
   const setGenerating = useGenerationStore((s) => s.setGenerating);
   const addResult = useGenerationStore((s) => s.addResult);
   const updateResult = useGenerationStore((s) => s.updateResult);

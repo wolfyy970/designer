@@ -6,7 +6,7 @@ export const NODE_TYPES = {
   OBJECTIVES_METRICS: 'objectivesMetrics',
   DESIGN_CONSTRAINTS: 'designConstraints',
   DESIGN_SYSTEM: 'designSystem',
-  COMPILER: 'compiler',
+  INCUBATOR: 'incubator',
   HYPOTHESIS: 'hypothesis',
   PREVIEW: 'preview',
   MODEL: 'model',
@@ -15,10 +15,10 @@ export const NODE_TYPES = {
 export type NodeType = (typeof NODE_TYPES)[keyof typeof NODE_TYPES];
 
 /**
- * Section input node types (spec sections → incubator compile).
+ * Input node types (spec facets → incubator).
  * Single source of truth — use everywhere instead of duplicating the set.
  */
-export const SECTION_NODE_TYPES = new Set<string>([
+export const INPUT_NODE_TYPES = new Set<string>([
   NODE_TYPES.DESIGN_BRIEF,
   NODE_TYPES.EXISTING_DESIGN,
   NODE_TYPES.RESEARCH_CONTEXT,
@@ -43,8 +43,8 @@ export const EDGE_STATUS = {
 
 export type EdgeStatus = (typeof EDGE_STATUS)[keyof typeof EDGE_STATUS];
 
-/** IncubationPlan.compilerModel when prompts are built from a hypothesis workspace slice (not incubator compile). */
-export const HYPOTHESIS_COMPILER_MODEL = 'merged' as const;
+/** IncubationPlan.incubatorModel when prompts are built from a hypothesis workspace slice (not POST /incubate). */
+export const HYPOTHESIS_INCUBATOR_MODEL = 'merged' as const;
 
 /** Fallback `pinnedRunId` on preview nodes when forking before any completed generation exists. */
 export const UNKNOWN_PINNED_RUN_ID = 'unknown' as const;

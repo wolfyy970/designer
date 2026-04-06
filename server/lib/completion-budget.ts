@@ -16,7 +16,7 @@ import {
 import type { ChatMessage } from '../../src/types/provider.ts';
 import { getProviderModelContextWindow } from './provider-model-context.ts';
 
-export type CompletionPurpose = 'compile' | 'compaction' | 'agent_turn' | 'default';
+export type CompletionPurpose = 'incubate' | 'compaction' | 'agent_turn' | 'default';
 
 const MIN_COMPLETION = 256;
 const ABSOLUTE_CEILING = 2_097_152;
@@ -24,7 +24,7 @@ const ABSOLUTE_CEILING = 2_097_152;
 /** Reserved tokens: formatting, tool defs growth, reasoning, safety. */
 const MARGIN: Record<CompletionPurpose, number> = {
   /** Single structured JSON; smaller reserve. */
-  compile: 1_536,
+  incubate: 1_536,
   /** Summaries; moderate user blob. */
   compaction: 2_048,
   /** Long transcript + tools in context. */

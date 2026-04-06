@@ -23,12 +23,12 @@ export const createUiSlice: StateCreator<
     | 'setEdgeStatusByTarget'
     | 'clearPreviewNodeIdMap'
     | 'consumePendingFitView'
-    | 'clearSectionGhostToolbarNudge'
+    | 'clearInputGhostToolbarNudge'
   >
 > = (set, get) => ({
   consumePendingFitView: () => set({ pendingFitViewAfterTemplate: false }),
 
-  clearSectionGhostToolbarNudge: () => set({ sectionGhostToolbarNudge: false }),
+  clearInputGhostToolbarNudge: () => set({ inputGhostToolbarNudge: false }),
 
   setViewport: (viewport) => set({ viewport }),
 

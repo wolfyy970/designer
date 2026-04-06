@@ -25,7 +25,7 @@ function makeEdge(id: string, source: string, target: string, type = 'dataFlow')
 
 describe('v0/v1 → v4: complete reset', () => {
   it('returns fresh state for version 0', () => {
-    const result = migrateCanvasState({ nodes: [makeNode('x', 'compiler')] }, 0);
+    const result = migrateCanvasState({ nodes: [makeNode('x', 'incubator')] }, 0);
     expect(result.nodes).toEqual([]);
     expect(result.edges).toEqual([]);
   });
@@ -59,7 +59,7 @@ describe('v5 → current: generator nodes handled', () => {
     const state = {
       nodes: [
         makeNode('n1', 'generator'),
-        makeNode('n2', 'compiler'),
+        makeNode('n2', 'incubator'),
       ],
       edges: [makeEdge('e-generator-1', 'n1', 'n2')],
     };
@@ -67,7 +67,7 @@ describe('v5 → current: generator nodes handled', () => {
     const nodes = result.nodes as Array<Record<string, unknown>>;
     // v5→v6 renames generator→designer, then v8→v9 removes designer nodes
     expect(nodes).toHaveLength(1);
-    expect(nodes[0].type).toBe('compiler');
+    expect(nodes[0].type).toBe('incubator');
 
     const edges = result.edges as Array<Record<string, unknown>>;
     // Edge to/from designer also removed
@@ -126,7 +126,7 @@ describe('v8 → v9: remove designer nodes', () => {
   it('removes designer nodes and their edges', () => {
     const state = {
       nodes: [
-        makeNode('c1', 'compiler'),
+        makeNode('c1', 'incubator'),
         makeNode('d1', 'designer'),
         makeNode('h1', 'hypothesis', { refId: 'vs-1' }),
         makeNode('v1', 'variant', { variantStrategyId: 'vs-1' }),
@@ -304,7 +304,7 @@ describe('v12 → v13: extract inline model config into Model nodes', () => {
   it('creates Model nodes for unique (providerId, modelId) combos', () => {
     const state = {
       nodes: [
-        makeNode('c1', 'compiler', { providerId: 'openrouter', modelId: 'claude-3' }),
+        makeNode('c1', 'incubator', { providerId: 'openrouter', modelId: 'claude-3' }),
         makeNode('h1', 'hypothesis', { refId: 'vs-1', providerId: 'openrouter', modelId: 'claude-3' }),
         makeNode('h2', 'hypothesis', { refId: 'vs-2', providerId: 'lmstudio', modelId: 'llama-3' }),
       ],
@@ -328,7 +328,7 @@ describe('v12 → v13: extract inline model config into Model nodes', () => {
   it('creates edges from Model nodes to their targets', () => {
     const state = {
       nodes: [
-        makeNode('c1', 'compiler', { providerId: 'openrouter', modelId: 'claude-3' }),
+        makeNode('c1', 'incubator', { providerId: 'openrouter', modelId: 'claude-3' }),
         makeNode('h1', 'hypothesis', { refId: 'vs-1', providerId: 'openrouter', modelId: 'claude-3' }),
       ],
       edges: [],
@@ -348,7 +348,7 @@ describe('v12 → v13: extract inline model config into Model nodes', () => {
   it('strips providerId/modelId from processing nodes', () => {
     const state = {
       nodes: [
-        makeNode('c1', 'compiler', { providerId: 'openrouter', modelId: 'claude-3' }),
+        makeNode('c1', 'incubator', { providerId: 'openrouter', modelId: 'claude-3' }),
         makeNode('ds1', 'designSystem', { providerId: 'openrouter', modelId: 'claude-3', content: 'tokens' }),
         makeNode('h1', 'hypothesis', {
           refId: 'vs-1',
@@ -387,7 +387,7 @@ describe('v12 → v13: extract inline model config into Model nodes', () => {
   it('skips migration when no nodes have model config', () => {
     const state = {
       nodes: [
-        makeNode('c1', 'compiler'),
+        makeNode('c1', 'incubator'),
         makeNode('h1', 'hypothesis', { refId: 'vs-1' }),
       ],
       edges: [],
@@ -402,7 +402,7 @@ describe('v12 → v13: extract inline model config into Model nodes', () => {
   it('preserves existing edges', () => {
     const state = {
       nodes: [
-        makeNode('c1', 'compiler', { providerId: 'openrouter', modelId: 'claude-3' }),
+        makeNode('c1', 'incubator', { providerId: 'openrouter', modelId: 'claude-3' }),
       ],
       edges: [makeEdge('e1', 's1', 'c1')],
     };
@@ -460,7 +460,7 @@ describe('v15 → v16: remove critique nodes', () => {
   it('drops critique nodes and edges that touch them', () => {
     const state = {
       nodes: [
-        makeNode('c1', 'compiler'),
+        makeNode('c1', 'incubator'),
         makeNode('q1', 'critique', {}),
         makeNode('v1', 'variant', {}),
       ],
@@ -475,7 +475,7 @@ describe('v15 → v16: remove critique nodes', () => {
   });
 });
 
-describe('v16 → v17: strip sectionGhost nodes', () => {
+describe('v16 → v17: strip ghost placeholder nodes', () => {
   it('removes ephemeral ghost nodes from persisted snapshot', () => {
     const state = {
       nodes: [
@@ -492,27 +492,28 @@ describe('v16 → v17: strip sectionGhost nodes', () => {
     const result = migrateCanvasState(state, 16);
     const nodes = result.nodes as Array<Record<string, unknown>>;
     expect(nodes.some((n) => n.type === 'sectionGhost')).toBe(false);
+    expect(nodes.some((n) => n.type === 'inputGhost')).toBe(false);
     expect(nodes.map((n) => n.id)).toEqual(['b']);
   });
 });
 
 describe('v17 → v18: dismissedSectionGhostSlots default', () => {
-  it('adds empty dismissedSectionGhostSlots when missing', () => {
+  it('adds empty dismissedInputGhostSlots when missing (after full migrate chain)', () => {
     const state = { nodes: [makeNode('b', 'designBrief')], edges: [] };
     const result = migrateCanvasState(state, 17);
-    expect(result.dismissedSectionGhostSlots).toEqual([]);
+    expect(result.dismissedInputGhostSlots).toEqual([]);
   });
 });
 
 describe('v18 → v19: sanitize dismissedSectionGhostSlots', () => {
-  it('strips junk strings from dismissedSectionGhostSlots', () => {
+  it('strips junk strings from dismissed slots (normalized to dismissedInputGhostSlots)', () => {
     const state = {
       nodes: [makeNode('b', 'designBrief')],
       edges: [],
       dismissedSectionGhostSlots: ['researchContext', 'not-a-slot', 'existingDesign', ''],
     };
     const result = migrateCanvasState(state, 18);
-    expect(result.dismissedSectionGhostSlots).toEqual(['researchContext', 'existingDesign']);
+    expect(result.dismissedInputGhostSlots).toEqual(['researchContext', 'existingDesign']);
   });
 
   it('replaces non-array dismissedSectionGhostSlots with empty array', () => {
@@ -522,7 +523,7 @@ describe('v18 → v19: sanitize dismissedSectionGhostSlots', () => {
       dismissedSectionGhostSlots: 'invalid',
     };
     const result = migrateCanvasState(state, 18);
-    expect(result.dismissedSectionGhostSlots).toEqual([]);
+    expect(result.dismissedInputGhostSlots).toEqual([]);
   });
 });
 
@@ -583,7 +584,7 @@ describe('v19 → v20: rename variant to preview', () => {
   it('does not touch non-variant nodes', () => {
     const state = {
       nodes: [
-        makeNode('c1', 'compiler'),
+        makeNode('c1', 'incubator'),
         makeNode('h1', 'hypothesis', { refId: 'vs-1' }),
         makeNode('m1', 'model', { modelId: 'x' }),
       ],
@@ -592,8 +593,83 @@ describe('v19 → v20: rename variant to preview', () => {
     const result = migrateCanvasState(state, 19);
     const nodes = result.nodes as Array<Record<string, unknown>>;
 
-    expect(nodes.find((n) => n.id === 'c1')!.type).toBe('compiler');
+    expect(nodes.find((n) => n.id === 'c1')!.type).toBe('incubator');
     expect(nodes.find((n) => n.id === 'h1')!.type).toBe('hypothesis');
     expect(nodes.find((n) => n.id === 'm1')!.type).toBe('model');
+  });
+});
+
+// ── v20 → v21: compiler node type → incubator ───────────────────────
+
+describe('v20 → v21: rename compiler node type to incubator', () => {
+  it('rewrites compiler nodes to incubator', () => {
+    const state = {
+      nodes: [
+        makeNode('c1', 'compiler', { hypothesisCount: 2 }),
+        makeNode('h1', 'hypothesis'),
+      ],
+      edges: [makeEdge('e1', 'c1', 'h1')],
+    };
+    const result = migrateCanvasState(state, 20);
+    const nodes = result.nodes as Array<Record<string, unknown>>;
+    const c1 = nodes.find((n) => n.id === 'c1')!;
+    expect(c1.type).toBe('incubator');
+    expect((c1.data as Record<string, unknown>).hypothesisCount).toBe(2);
+  });
+});
+
+// ── v21 → v22: sectionGhost → inputGhost + persist keys ─────────────
+
+describe('v21 → v22: input ghost ids, node type, and dismissed-slot keys', () => {
+  it('rewrites ghost-section ids, renames node type, and migrates persist fields', () => {
+    const state = {
+      nodes: [
+        makeNode('b', 'designBrief'),
+        {
+          id: 'ghost-section-researchContext',
+          type: 'sectionGhost',
+          position: { x: 0, y: 0 },
+          data: { targetType: 'researchContext' },
+        },
+      ],
+      edges: [],
+      dismissedSectionGhostSlots: ['objectivesMetrics'],
+      sectionGhostToolbarNudge: true,
+    };
+    const result = migrateCanvasState(state, 21);
+    const nodes = result.nodes as Array<Record<string, unknown>>;
+    expect(nodes.find((n) => n.id === 'ghost-input-researchContext')?.type).toBe('inputGhost');
+    expect(nodes.some((n) => n.id === 'ghost-section-researchContext')).toBe(false);
+    expect(result.dismissedInputGhostSlots).toEqual(['objectivesMetrics']);
+    expect(result.inputGhostToolbarNudge).toBe(true);
+    expect(result).not.toHaveProperty('dismissedSectionGhostSlots');
+    expect(result).not.toHaveProperty('sectionGhostToolbarNudge');
+  });
+
+  it('rewrites edge endpoints when ghost ids change', () => {
+    const state = {
+      nodes: [
+        makeNode('b', 'designBrief'),
+        {
+          id: 'ghost-section-researchContext',
+          type: 'sectionGhost',
+          position: { x: 0, y: 0 },
+          data: { targetType: 'researchContext' },
+        },
+        makeNode('inc', 'incubator'),
+      ],
+      edges: [
+        makeEdge('e1', 'ghost-section-researchContext', 'inc'),
+        makeEdge('e2', 'b', 'ghost-section-researchContext'),
+      ],
+    };
+    const result = migrateCanvasState(state, 21);
+    const edges = result.edges as Array<Record<string, unknown>>;
+    expect(edges.some((e) => e.source === 'ghost-input-researchContext' || e.target === 'ghost-input-researchContext')).toBe(
+      true,
+    );
+    expect(edges.some((e) => e.source === 'ghost-section-researchContext' || e.target === 'ghost-section-researchContext')).toBe(
+      false,
+    );
   });
 });

@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Modal from './Modal';
 import { DesignTokensModal } from './DesignTokensModal';
 import PromptEditor from './PromptEditor';
+import { PartitionSlider } from './PartitionSlider';
+import { floatWeightsToPercents, percentsToFloatWeights } from '../../lib/partition-slider-utils';
 import type { PromptKey } from '../../stores/prompt-store';
 import { useCanvasStore } from '../../stores/canvas-store';
 import { useEvaluatorDefaultsStore } from '../../stores/evaluator-defaults-store';
@@ -30,6 +32,52 @@ interface SettingsModalProps {
 }
 
 type Tab = 'general' | 'prompts' | 'evaluator';
+
+function RubricWeightsPartitionCard({
+  rubricWeights,
+  setRubricWeights,
+}: {
+  rubricWeights: Record<EvaluatorRubricId, number>;
+  setRubricWeights: (patch: Partial<Record<EvaluatorRubricId, number>>) => void;
+}) {
+  const percents = useMemo(
+    () => floatWeightsToPercents(rubricWeights, EVALUATOR_RUBRIC_IDS),
+    [rubricWeights],
+  );
+
+  const onPartitionChange = useCallback(
+    (p: Record<string, number>) => {
+      const floats = percentsToFloatWeights(p, EVALUATOR_RUBRIC_IDS) as Record<EvaluatorRubricId, number>;
+      setRubricWeights(floats);
+    },
+    [setRubricWeights],
+  );
+
+  const segments = useMemo(
+    () =>
+      EVALUATOR_RUBRIC_IDS.map((rid) => ({
+        id: rid,
+        label: RUBRIC_LABELS[rid],
+      })),
+    [],
+  );
+
+  return (
+    <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">
+      <span className="block text-sm font-medium text-fg">Rubric weights</span>
+      <p className="mt-1 text-xs text-fg-secondary">
+        Relative importance of each rubric when computing the overall score (0–5 scale). Drag the dividers or click a
+        percentage to type a value—percentages always sum to 100 and are stored as weights for scoring. Defaults: 40%
+        design, 30% strategy, 20% implementation, 10% browser.
+      </p>
+      <PartitionSlider segments={segments} values={percents} onChange={onPartitionChange} />
+      <p className="mt-2 text-nano text-fg-secondary">
+        Keyboard: focus a divider, then Arrow Left/Right by 1% (Shift for 5%). Same weights are renormalized on the
+        server if needed.
+      </p>
+    </div>
+  );
+}
 
 export default function SettingsModal({
   open,
@@ -208,37 +256,10 @@ function EvaluatorSettingsTab() {
         ) : null}
       </div>
 
-      <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">
-        <span className="block text-sm font-medium text-fg">Rubric weights</span>
-        <p className="mt-1 text-xs text-fg-secondary">
-          Relative importance of each rubric when computing the overall score (0–5 scale). Values need not sum to
-          1—they are renormalized automatically. Defaults: 40% design, 30% strategy, 20% implementation, 10%
-          browser.
-        </p>
-        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-          {EVALUATOR_RUBRIC_IDS.map((rid) => (
-            <label key={rid} className="flex flex-col gap-0.5">
-              <span className="text-nano text-fg-secondary">{RUBRIC_LABELS[rid]}</span>
-              <input
-                type="number"
-                min={0}
-                max={1}
-                step={0.05}
-                value={rubricWeights[rid]}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  if (!Number.isFinite(v)) return;
-                  setRubricWeights({ [rid]: Math.max(0, v) });
-                }}
-                className="rounded-md border border-border bg-bg px-2 py-2 text-xs text-fg-secondary input-focus"
-              />
-            </label>
-          ))}
-        </div>
-        <p className="mt-2 text-nano text-fg-secondary">
-          Values you enter are renormalized so the four weights always sum to 1 for scoring.
-        </p>
-      </div>
+      <RubricWeightsPartitionCard
+        rubricWeights={rubricWeights}
+        setRubricWeights={setRubricWeights}
+      />
     </div>
   );
 }

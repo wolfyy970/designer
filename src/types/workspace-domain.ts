@@ -8,9 +8,9 @@ import type { ReferenceImage } from './spec';
 export type AgentMode = GenerationMode;
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high';
 
-/** Wired inputs for compile: section + preview node ids feeding an incubator. */
+/** Wired inputs for incubate: input + preview node ids feeding an incubator. */
 export interface DomainIncubatorWiring {
-  readonly sectionNodeIds: string[];
+  readonly inputNodeIds: string[];
   readonly previewNodeIds: string[];
 }
 
@@ -56,7 +56,7 @@ export interface DomainPreviewSlot {
 export interface WorkspaceDomainStateV1 {
   schemaVersion: 1;
   incubatorWirings: Record<string, DomainIncubatorWiring>;
-  /** Model nodes feeding the incubator (compile / connected-model for CompilerNode). */
+  /** Model nodes feeding the incubator (incubate / connected-model for IncubatorNode). */
   incubatorModelNodeIds: Record<string, string[]>;
   hypotheses: Record<string, DomainHypothesis>;
   modelProfiles: Record<string, DomainModelProfile>;
@@ -65,7 +65,7 @@ export interface WorkspaceDomainStateV1 {
 }
 
 export function defaultIncubatorWiring(): DomainIncubatorWiring {
-  return { sectionNodeIds: [], previewNodeIds: [] };
+  return { inputNodeIds: [], previewNodeIds: [] };
 }
 
 /** Slot key used in previewSlots map */

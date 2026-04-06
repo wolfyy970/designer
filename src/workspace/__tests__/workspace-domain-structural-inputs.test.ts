@@ -2,15 +2,15 @@ import { describe, it, expect } from 'vitest';
 import type { DomainIncubatorWiring } from '../../types/workspace-domain';
 
 function countStructuralInputs(w: DomainIncubatorWiring): number {
-  return w.sectionNodeIds.length + w.variantNodeIds.length;
+  return w.inputNodeIds.length + w.previewNodeIds.length;
 }
 
 describe('countStructuralInputs', () => {
-  it('sums section and variant ids', () => {
+  it('sums input and preview ids', () => {
     expect(
       countStructuralInputs({
-        sectionNodeIds: ['a', 'b'],
-        variantNodeIds: ['v'],
+        inputNodeIds: ['a', 'b'],
+        previewNodeIds: ['v'],
       }),
     ).toBe(3);
   });
@@ -18,8 +18,8 @@ describe('countStructuralInputs', () => {
   it('returns 0 for empty wiring', () => {
     expect(
       countStructuralInputs({
-        sectionNodeIds: [],
-        variantNodeIds: [],
+        inputNodeIds: [],
+        previewNodeIds: [],
       }),
     ).toBe(0);
   });

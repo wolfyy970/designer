@@ -14,9 +14,9 @@ export type CanvasNodeType =
   | 'objectivesMetrics'
   | 'designConstraints'
   /** UI-only placeholder; not persisted and not wired to the spec graph */
-  | 'sectionGhost'
+  | 'inputGhost'
   | 'designSystem'
-  | 'compiler'
+  | 'incubator'
   | 'hypothesis'
   | 'preview'
   | 'model';

@@ -4,7 +4,7 @@
  *
  * @see VALID_CONNECTIONS in `canvas-connections.ts` — domain rules cover the wired workflow pairs.
  */
-import { NODE_TYPES, SECTION_NODE_TYPES } from '../constants/canvas';
+import { NODE_TYPES, INPUT_NODE_TYPES } from '../constants/canvas';
 import {
   getHypothesisNodeData,
 } from '../lib/canvas-node-data';
@@ -61,15 +61,15 @@ export const INCREMENTAL_NEW_EDGE_RULES: readonly IncrementalNewEdgeRule[] = [
   },
   {
     id: 'model-compiler',
-    match: (s, t) => s === NODE_TYPES.MODEL && t === NODE_TYPES.COMPILER,
+    match: (s, t) => s === NODE_TYPES.MODEL && t === NODE_TYPES.INCUBATOR,
     apply: ({ d, src, tgt }) => {
       d.ensureIncubatorWiring(tgt.id);
-      d.attachModelToTarget(src.id, tgt.id, NODE_TYPES.COMPILER);
+      d.attachModelToTarget(src.id, tgt.id, NODE_TYPES.INCUBATOR);
     },
   },
   {
     id: 'compiler-hypothesis',
-    match: (s, t) => s === NODE_TYPES.COMPILER && t === NODE_TYPES.HYPOTHESIS,
+    match: (s, t) => s === NODE_TYPES.INCUBATOR && t === NODE_TYPES.HYPOTHESIS,
     apply: ({ d, src, tgt }) => {
       const refId = getHypothesisRefId(tgt);
       if (refId) d.linkHypothesisToIncubator(tgt.id, src.id, refId);
@@ -78,7 +78,7 @@ export const INCREMENTAL_NEW_EDGE_RULES: readonly IncrementalNewEdgeRule[] = [
   },
   {
     id: 'section-compiler',
-    match: (s, t) => SECTION_NODE_TYPES.has(s) && t === NODE_TYPES.COMPILER,
+    match: (s, t) => INPUT_NODE_TYPES.has(s) && t === NODE_TYPES.INCUBATOR,
     apply: ({ d, src, tgt }) => {
       d.ensureIncubatorWiring(tgt.id);
       d.attachIncubatorInput(tgt.id, src.id, src.type);
@@ -86,7 +86,7 @@ export const INCREMENTAL_NEW_EDGE_RULES: readonly IncrementalNewEdgeRule[] = [
   },
   {
     id: 'variant-compiler',
-    match: (s, t) => s === NODE_TYPES.PREVIEW && t === NODE_TYPES.COMPILER,
+    match: (s, t) => s === NODE_TYPES.PREVIEW && t === NODE_TYPES.INCUBATOR,
     apply: ({ d, src, tgt }) => {
       d.ensureIncubatorWiring(tgt.id);
       d.attachIncubatorInput(tgt.id, src.id, NODE_TYPES.PREVIEW);
@@ -129,21 +129,21 @@ export const INCREMENTAL_REMOVED_EDGE_RULES: readonly IncrementalRemovedEdgeRule
   },
   {
     id: 'model-compiler',
-    match: (s, t) => s === NODE_TYPES.MODEL && t === NODE_TYPES.COMPILER,
+    match: (s, t) => s === NODE_TYPES.MODEL && t === NODE_TYPES.INCUBATOR,
     apply: ({ d, src, tgt }) => {
-      d.detachModelFromTarget(src.id, tgt.id, NODE_TYPES.COMPILER);
+      d.detachModelFromTarget(src.id, tgt.id, NODE_TYPES.INCUBATOR);
     },
   },
   {
     id: 'section-compiler',
-    match: (s, t) => SECTION_NODE_TYPES.has(s) && t === NODE_TYPES.COMPILER,
+    match: (s, t) => INPUT_NODE_TYPES.has(s) && t === NODE_TYPES.INCUBATOR,
     apply: ({ d, src, tgt }) => {
       d.detachIncubatorInput(tgt.id, src.id, src.type);
     },
   },
   {
     id: 'variant-compiler',
-    match: (s, t) => s === NODE_TYPES.PREVIEW && t === NODE_TYPES.COMPILER,
+    match: (s, t) => s === NODE_TYPES.PREVIEW && t === NODE_TYPES.INCUBATOR,
     apply: ({ d, src, tgt }) => {
       d.detachIncubatorInput(tgt.id, src.id, NODE_TYPES.PREVIEW);
     },
@@ -179,10 +179,10 @@ export interface HydrateEdgeRule {
 export const HYDRATE_EDGE_RULES: readonly HydrateEdgeRule[] = [
   {
     id: 'model-compiler',
-    match: (s, t) => s === NODE_TYPES.MODEL && t === NODE_TYPES.COMPILER,
+    match: (s, t) => s === NODE_TYPES.MODEL && t === NODE_TYPES.INCUBATOR,
     apply: ({ store, src, tgt }) => {
       store.ensureIncubatorWiring(tgt.id);
-      store.attachModelToTarget(src.id, tgt.id, NODE_TYPES.COMPILER);
+      store.attachModelToTarget(src.id, tgt.id, NODE_TYPES.INCUBATOR);
     },
   },
   {
@@ -199,7 +199,7 @@ export const HYDRATE_EDGE_RULES: readonly HydrateEdgeRule[] = [
   },
   {
     id: 'compiler-hypothesis',
-    match: (s, t) => s === NODE_TYPES.COMPILER && t === NODE_TYPES.HYPOTHESIS,
+    match: (s, t) => s === NODE_TYPES.INCUBATOR && t === NODE_TYPES.HYPOTHESIS,
     apply: ({ store, src, tgt }) => {
       const h = getHypothesisNodeData(snapshotNodeToWorkspace(tgt));
       if (h?.refId) {
@@ -210,7 +210,7 @@ export const HYDRATE_EDGE_RULES: readonly HydrateEdgeRule[] = [
   },
   {
     id: 'section-compiler',
-    match: (s, t) => SECTION_NODE_TYPES.has(s) && t === NODE_TYPES.COMPILER,
+    match: (s, t) => INPUT_NODE_TYPES.has(s) && t === NODE_TYPES.INCUBATOR,
     apply: ({ store, src, tgt }) => {
       store.ensureIncubatorWiring(tgt.id);
       store.attachIncubatorInput(tgt.id, src.id, src.type);
@@ -218,7 +218,7 @@ export const HYDRATE_EDGE_RULES: readonly HydrateEdgeRule[] = [
   },
   {
     id: 'variant-compiler',
-    match: (s, t) => s === NODE_TYPES.PREVIEW && t === NODE_TYPES.COMPILER,
+    match: (s, t) => s === NODE_TYPES.PREVIEW && t === NODE_TYPES.INCUBATOR,
     apply: ({ store, src, tgt }) => {
       store.ensureIncubatorWiring(tgt.id);
       store.attachIncubatorInput(tgt.id, src.id, NODE_TYPES.PREVIEW);

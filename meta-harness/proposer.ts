@@ -67,14 +67,16 @@ export async function runMetaHarnessProposer(options: {
     skillsMutated: false,
   };
 
-  const [promptBodiesSection, historySection, prevSessionsSection, skillsSection] = await Promise.all([
-    loadPromptBodies(MODE_PROMPT_KEYS[options.mode], options.apiBaseUrl),
-    loadRichCandidateHistory(options.sessionHistoryDir),
-    loadPreviousSessionBests(options.historyRootDir, options.currentSessionFolderName),
-    options.mode !== 'compile'
-      ? loadCurrentSkills(path.join(repoRoot(), 'skills'))
-      : Promise.resolve(''),
-  ]);
+  const [promptBodiesSection, historySection, prevSessionsSection, skillsSection, rubricWeightsSection] =
+    await Promise.all([
+      loadPromptBodies(MODE_PROMPT_KEYS[options.mode], options.apiBaseUrl),
+      loadRichCandidateHistory(options.sessionHistoryDir),
+      loadPreviousSessionBests(options.historyRootDir, options.currentSessionFolderName),
+      options.mode !== 'incubate'
+        ? loadCurrentSkills(path.join(repoRoot(), 'skills'))
+        : Promise.resolve(''),
+      options.mode === 'incubate' ? Promise.resolve('') : formatRubricWeightsContext(options.apiBaseUrl),
+    ]);
 
   const contextBlock = [
     promptBodiesSection,
@@ -82,7 +84,7 @@ export async function runMetaHarnessProposer(options: {
     historySection,
     ...(prevSessionsSection ? ['', prevSessionsSection] : []),
     ...(skillsSection ? ['', skillsSection] : []),
-    ...(options.mode === 'compile' ? [] : ['', formatRubricWeightsContext()]),
+    ...(options.mode === 'incubate' ? [] : ['', rubricWeightsSection]),
   ].join('\n');
 
   const userBrief = [

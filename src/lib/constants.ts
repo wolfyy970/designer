@@ -47,8 +47,13 @@ export const SPEC_SECTIONS: SpecSectionMeta[] = [
   },
 ];
 
-// Default providers
-export const DEFAULT_COMPILER_PROVIDER = import.meta.env.VITE_DEFAULT_COMPILER_PROVIDER || 'openrouter';
+// Default providers (incubator / hypothesis workspace fallback)
+export const DEFAULT_INCUBATOR_PROVIDER =
+  import.meta.env.VITE_DEFAULT_INCUBATOR_PROVIDER ||
+  import.meta.env.VITE_DEFAULT_COMPILER_PROVIDER ||
+  'openrouter';
+/** @deprecated Use {@link DEFAULT_INCUBATOR_PROVIDER} */
+export const DEFAULT_COMPILER_PROVIDER = DEFAULT_INCUBATOR_PROVIDER;
 
 // Default model for auto-created Model nodes (OpenRouter slug; matches lockdown pin)
 export const DEFAULT_MODEL_ID = import.meta.env.VITE_DEFAULT_MODEL_ID || LOCKDOWN_MODEL_ID;
@@ -58,7 +63,7 @@ export const DEFAULT_MODEL_ID = import.meta.env.VITE_DEFAULT_MODEL_ID || LOCKDOW
  * Keyed by node type — extend this map when adding new prerequisite rules.
  */
 export const PREREQUISITE_DEFAULTS: Record<string, Record<string, unknown>> = {
-  model: { providerId: DEFAULT_COMPILER_PROVIDER, modelId: DEFAULT_MODEL_ID, thinkingLevel: 'minimal' },
+  model: { providerId: DEFAULT_INCUBATOR_PROVIDER, modelId: DEFAULT_MODEL_ID, thinkingLevel: 'minimal' },
   hypothesis: { agentMode: GENERATION_MODE.SINGLE },
 };
 

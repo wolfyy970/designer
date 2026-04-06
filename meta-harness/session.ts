@@ -32,9 +32,9 @@ export async function createMetaHarnessSession(options: {
         configSnapshot: {
           apiBaseUrl: options.cfg.apiBaseUrl,
           proposerModel: options.cfg.proposerModel,
-          compileModel: options.cfg.compileModel,
-          compileProvider: options.cfg.compileProvider,
-          defaultCompilerProvider: options.cfg.defaultCompilerProvider,
+          incubateModel: options.cfg.incubateModel,
+          incubateProvider: options.cfg.incubateProvider,
+          defaultIncubatorProvider: options.cfg.defaultIncubatorProvider,
           agenticMaxRevisionRounds: options.cfg.agenticMaxRevisionRounds,
         },
       },

@@ -5,7 +5,7 @@
 import { NODE_TYPES } from '../constants/canvas';
 import { GENERATION_MODE } from '../constants/generation';
 import { getDesignSystemNodeData, getModelNodeData } from '../lib/canvas-node-data';
-import type { HypothesisStrategy } from '../types/compiler';
+import type { HypothesisStrategy } from '../types/incubator';
 import type { EvaluationContextPayload } from '../types/evaluation';
 import type { ProvenanceContext } from '../types/provenance-context';
 import type { DesignSpec, ReferenceImage } from '../types/spec';
@@ -41,7 +41,7 @@ function isThinkingLevel(x: unknown): x is ThinkingLevel {
  */
 export function normalizeModelProfilesForApi(
   profiles: Record<string, DomainModelProfile>,
-  defaultCompilerProvider: string,
+  defaultIncubatorProvider: string,
   lockdown = false,
 ): Record<string, DomainModelProfile> {
   const out: Record<string, DomainModelProfile> = {};
@@ -50,7 +50,7 @@ export function normalizeModelProfilesForApi(
     let providerId =
       typeof raw.providerId === 'string' && raw.providerId.trim() !== ''
         ? raw.providerId
-        : defaultCompilerProvider;
+        : defaultIncubatorProvider;
     let modelId = typeof raw.modelId === 'string' ? raw.modelId : '';
     if (lockdown) {
       providerId = LOCKDOWN_PROVIDER_ID;
@@ -108,7 +108,7 @@ function nodeById(
 export function listIncomingModelCredentialsFromGraph(
   targetNodeId: string,
   snapshot: WorkspaceGraphSnapshot,
-  defaultCompilerProvider: string,
+  defaultIncubatorProvider: string,
 ): ModelCredential[] {
   const out: ModelCredential[] = [];
   for (const e of snapshot.edges) {
@@ -117,7 +117,7 @@ export function listIncomingModelCredentialsFromGraph(
     if (!src || src.type !== NODE_TYPES.MODEL) continue;
     const md = getModelNodeData(src);
     if (!md?.modelId) continue;
-    const providerId = md.providerId || defaultCompilerProvider;
+    const providerId = md.providerId || defaultIncubatorProvider;
     const thinkingLevel = (isThinkingLevel(md.thinkingLevel) ? md.thinkingLevel : undefined) ?? 'minimal';
     out.push({ providerId, modelId: md.modelId, thinkingLevel });
   }
@@ -174,7 +174,7 @@ function collectDesignSystemFromGraph(
 function listModelCredentialsFromDomain(
   hypothesis: DomainHypothesis | undefined,
   modelProfiles: Record<string, DomainModelProfile>,
-  defaultCompilerProvider: string,
+  defaultIncubatorProvider: string,
 ): ModelCredential[] {
   if (!hypothesis) return [];
   const out: ModelCredential[] = [];
@@ -182,7 +182,7 @@ function listModelCredentialsFromDomain(
     const p = modelProfiles[mid];
     if (!p?.modelId) continue;
     out.push({
-      providerId: p.providerId || defaultCompilerProvider,
+      providerId: p.providerId || defaultIncubatorProvider,
       modelId: p.modelId,
       thinkingLevel: p.thinkingLevel ?? 'minimal',
     });
@@ -198,20 +198,20 @@ export function buildHypothesisGenerationContextFromInputs(input: {
   domainHypothesis?: DomainHypothesis | null;
   modelProfiles: Record<string, DomainModelProfile>;
   designSystems: Record<string, DomainDesignSystemContent>;
-  defaultCompilerProvider: string;
+  defaultIncubatorProvider: string;
 }): HypothesisGenerationContext | null {
   const { hypothesisNodeId, hypothesisStrategy, spec, snapshot, domainHypothesis } = input;
 
   let modelCredentials = listModelCredentialsFromDomain(
     domainHypothesis ?? undefined,
     input.modelProfiles,
-    input.defaultCompilerProvider,
+    input.defaultIncubatorProvider,
   );
   if (modelCredentials.length === 0) {
     modelCredentials = listIncomingModelCredentialsFromGraph(
       hypothesisNodeId,
       snapshot,
-      input.defaultCompilerProvider,
+      input.defaultIncubatorProvider,
     );
   }
   if (modelCredentials.length === 0) return null;

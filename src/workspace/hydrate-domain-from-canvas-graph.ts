@@ -3,7 +3,7 @@
  * Lives outside `workspace-domain-store` so the domain module stays free of canvas wiring rules.
  */
 import { NODE_TYPES } from '../constants/canvas';
-import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
+import { DEFAULT_INCUBATOR_PROVIDER } from '../lib/constants';
 import { getDesignSystemNodeData, getModelNodeData } from '../lib/canvas-node-data';
 import type { CanvasNodeType } from '../types/workspace-graph';
 import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
@@ -22,7 +22,7 @@ export function hydrateDomainFromCanvasGraph(input: {
       const d = getModelNodeData(snapshotNodeToWorkspace(n));
       if (d) {
         store.upsertModelProfile(n.id, {
-          providerId: d.providerId || DEFAULT_COMPILER_PROVIDER,
+          providerId: d.providerId || DEFAULT_INCUBATOR_PROVIDER,
           modelId: d.modelId || '',
           title: d.title,
           thinkingLevel: d.thinkingLevel ?? 'minimal',
@@ -46,7 +46,7 @@ export function hydrateDomainFromCanvasGraph(input: {
   const compilerHypFirst = (e: { source: string; target: string }) => {
     const src = input.nodes.find((node) => node.id === e.source);
     const tgt = input.nodes.find((node) => node.id === e.target);
-    return src?.type === NODE_TYPES.COMPILER && tgt?.type === NODE_TYPES.HYPOTHESIS;
+    return src?.type === NODE_TYPES.INCUBATOR && tgt?.type === NODE_TYPES.HYPOTHESIS;
   };
   const orderedEdges = [
     ...input.edges.filter(compilerHypFirst),

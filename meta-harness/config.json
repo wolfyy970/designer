@@ -1,5 +1,5 @@
 {
-  "mode": "compile",
+  "mode": "incubate",
 
   "apiBaseUrl": "http://127.0.0.1:3001/api",
   "evalRunsBaseDir": "",
@@ -8,11 +8,11 @@
   "proposerModel": "anthropic/claude-sonnet-4",
   "proposerMaxToolRounds": 50,
 
-  "defaultCompilerProvider": "openrouter",
-  "compileProvider": "openrouter",
-  "compileModel": "minimax/minimax-m2.5",
+  "defaultIncubatorProvider": "openrouter",
+  "incubateProvider": "openrouter",
+  "incubateModel": "minimax/minimax-m2.5",
   "hypothesisEvalModel": "",
-  "compileHypothesisCount": 5,
+  "incubateHypothesisCount": 5,
   "hypothesisRubricTimeoutMs": 300000,
 
   "supportsVision": false,

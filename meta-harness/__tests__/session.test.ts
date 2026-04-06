@@ -29,7 +29,7 @@ describe('session helpers', () => {
       iterations: 1,
       proposerModel: 'm',
       proposerMaxToolRounds: 3,
-      defaultCompilerProvider: 'p',
+      defaultIncubatorProvider: 'p',
     };
     const { sessionDir, sessionFolderName } = await createMetaHarnessSession({
       historyRoot,

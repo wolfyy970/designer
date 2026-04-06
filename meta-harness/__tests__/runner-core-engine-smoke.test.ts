@@ -41,7 +41,7 @@ const baseCfg: MetaHarnessConfig = {
   iterations: 1,
   proposerModel: 'm',
   proposerMaxToolRounds: 3,
-  defaultCompilerProvider: 'openrouter',
+  defaultIncubatorProvider: 'openrouter',
 };
 
 describe('runMetaHarnessEngine smoke (stubbed test-case eval)', () => {

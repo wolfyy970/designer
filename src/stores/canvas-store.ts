@@ -14,7 +14,7 @@ import { createUiSlice } from './canvas/canvas-store-ui-slice';
 import { createSyncSlice } from './canvas/canvas-store-sync-slice';
 import { createLayoutSlice } from './canvas/canvas-store-layout-slice';
 
-export { SECTION_NODE_TYPES } from '../constants/canvas';
+export { INPUT_NODE_TYPES } from '../constants/canvas';
 export { GRID_SIZE } from '../lib/canvas-layout';
 export type { CanvasNodeData, CanvasNodeType } from '../types/workspace-graph';
 export { NODE_TYPE_TO_SECTION } from '../types/workspace-graph';
@@ -36,8 +36,8 @@ const initialCanvasState: Pick<
   | 'previewNodeIdMap'
   | 'connectingFrom'
   | 'pendingFitViewAfterTemplate'
-  | 'dismissedSectionGhostSlots'
-  | 'sectionGhostToolbarNudge'
+  | 'dismissedInputGhostSlots'
+  | 'inputGhostToolbarNudge'
 > = {
   nodes: [],
   edges: [],
@@ -53,8 +53,8 @@ const initialCanvasState: Pick<
   previewNodeIdMap: new Map<string, string>(),
   connectingFrom: null,
   pendingFitViewAfterTemplate: false,
-  dismissedSectionGhostSlots: [],
-  sectionGhostToolbarNudge: false,
+  dismissedInputGhostSlots: [],
+  inputGhostToolbarNudge: false,
 };
 
 export const useCanvasStore = create<CanvasStore>()(
@@ -68,7 +68,7 @@ export const useCanvasStore = create<CanvasStore>()(
     }),
     {
       name: STORAGE_KEYS.CANVAS,
-      version: 20,
+      version: 22,
       migrate: (persistedState: unknown, version: number) => {
         try {
           if (typeof persistedState === 'string') {
@@ -81,14 +81,14 @@ export const useCanvasStore = create<CanvasStore>()(
         }
       },
       partialize: (state) => ({
-        nodes: state.nodes.filter((n) => n.type !== 'sectionGhost'),
+        nodes: state.nodes.filter((n) => n.type !== 'inputGhost'),
         edges: state.edges,
         viewport: state.viewport,
         showMiniMap: state.showMiniMap,
         showGrid: state.showGrid,
         colGap: state.colGap,
         autoLayout: state.autoLayout,
-        dismissedSectionGhostSlots: state.dismissedSectionGhostSlots,
+        dismissedInputGhostSlots: state.dismissedInputGhostSlots,
       }),
     },
   ),

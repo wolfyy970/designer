@@ -9,6 +9,7 @@ import { ARTIFACT } from './constants.ts';
 import { fetchPromptBody } from './prompt-fetch.ts';
 import { diffSkillTrees } from './skill-diff.ts';
 import { BestCandidateJsonSchema, parsePromptOverridesJsonString } from './schemas.ts';
+import { parseRubricWeightsJson, rubricWeightsDiffer, type RubricWeightsRecord } from './rubric-weights-compare.ts';
 
 const PREFLIGHT_PROMPT_FETCH_TIMEOUT_MS = 5_000;
 const DEFAULT_MAX_SESSIONS_TO_SCAN = 5;
@@ -27,12 +28,18 @@ export type StaleSkill = {
   kind: 'modified' | 'added' | 'deleted';
 };
 
+export type StaleRubricWeights = {
+  liveWeights: RubricWeightsRecord;
+  winnerWeights: RubricWeightsRecord;
+};
+
 export type UnpromotedSession = {
   sessionFolder: string;
   candidateId: number;
   meanScore: number;
   stalePrompts: StalePrompt[];
   staleSkills: StaleSkill[];
+  staleRubricWeights: StaleRubricWeights | null;
   /** Repo-relative path for operator copy/paste */
   reportPath: string;
   allFetchesFailed: boolean;
@@ -181,7 +188,22 @@ export async function scanUnpromotedSessions(
 
     staleSkills.sort((a, b) => a.relPath.localeCompare(b.relPath));
 
-    if (stalePrompts.length === 0 && staleSkills.length === 0) continue;
+    let staleRubricWeights: StaleRubricWeights | null = null;
+    const winnerRwRaw = await readText(path.join(candidateDir, ARTIFACT.rubricWeightsJson));
+    const liveRwRaw = await readText(path.join(repoRoot, 'src/lib/rubric-weights.json'));
+    const winnerParsed = winnerRwRaw != null ? parseRubricWeightsJson(winnerRwRaw) : null;
+    const liveParsed = liveRwRaw != null ? parseRubricWeightsJson(liveRwRaw) : null;
+    if (winnerParsed && liveParsed && rubricWeightsDiffer(liveParsed, winnerParsed)) {
+      staleRubricWeights = { liveWeights: liveParsed, winnerWeights: winnerParsed };
+    }
+
+    if (
+      stalePrompts.length === 0 &&
+      staleSkills.length === 0 &&
+      staleRubricWeights == null
+    ) {
+      continue;
+    }
 
     const reportRel = path.relative(repoRoot, reportAbs).split(path.sep).join('/');
     return {
@@ -190,6 +212,7 @@ export async function scanUnpromotedSessions(
       meanScore,
       stalePrompts,
       staleSkills,
+      staleRubricWeights,
       reportPath: reportRel,
       allFetchesFailed,
     };

@@ -5,8 +5,10 @@ import {
   computeDefaultPosition,
   computeHypothesisPositions,
   computeAutoLayout,
-  reconcileSectionGhostNodes,
+  reconcileInputGhostNodes,
   layoutTypeOrder,
+  isEphemeralInputGhostId,
+  INPUT_GHOST_ID_PREFIX,
   GRID_SIZE,
   DEFAULT_COL_GAP,
 } from '../canvas-layout';
@@ -34,25 +36,36 @@ function makeEdge(source: string, target: string): WorkspaceEdge {
   };
 }
 
+// ─── isEphemeralInputGhostId ────────────────────────────────────────
+
+describe('isEphemeralInputGhostId', () => {
+  it('matches current and legacy ghost id prefixes', () => {
+    expect(isEphemeralInputGhostId(`${INPUT_GHOST_ID_PREFIX}researchContext`)).toBe(true);
+    expect(isEphemeralInputGhostId('ghost-section-researchContext')).toBe(true);
+    expect(isEphemeralInputGhostId('designBrief-abc')).toBe(false);
+    expect(isEphemeralInputGhostId('ghost-input')).toBe(false);
+  });
+});
+
 // ─── columnX ────────────────────────────────────────────────────────
 
 describe('columnX', () => {
-  it('returns sections at x=0', () => {
+  it('returns inputs column at x=0', () => {
     const col = columnX(DEFAULT_COL_GAP);
-    expect(col.sections).toBe(0);
+    expect(col.inputs).toBe(0);
   });
 
   it('spaces columns by node width + gap', () => {
     const col = columnX(100);
     // NODE_W_DEFAULT is 320
-    expect(col.compiler).toBe(420);  // 0 + 320 + 100
+    expect(col.incubator).toBe(420);  // 0 + 320 + 100
     expect(col.hypothesis).toBe(840); // 420 + 320 + 100
     expect(col.preview).toBe(1260);  // 840 + 320 + 100
   });
 
   it('handles minimum gap', () => {
     const col = columnX(80);
-    expect(col.compiler).toBe(400);  // 0 + 320 + 80
+    expect(col.incubator).toBe(400);  // 0 + 320 + 80
   });
 });
 
@@ -82,26 +95,26 @@ describe('snap', () => {
 describe('computeDefaultPosition', () => {
   const col = columnX(DEFAULT_COL_GAP);
 
-  it('places first section at sections column', () => {
+  it('places first input node at inputs column', () => {
     const pos = computeDefaultPosition('designBrief', [], col);
-    expect(pos.x).toBe(col.sections);
+    expect(pos.x).toBe(col.inputs);
   });
 
-  it('stacks sections vertically', () => {
+  it('stacks input nodes vertically', () => {
     const existing = [makeNode('n1', 'designBrief', { x: 0, y: 200 })];
     const pos = computeDefaultPosition('existingDesign', existing, col);
     expect(pos.y).toBeGreaterThan(200);
   });
 
-  it('places compiler at compiler column', () => {
-    const pos = computeDefaultPosition('compiler', [], col);
-    expect(pos.x).toBe(col.compiler);
+  it('places incubator at incubator column', () => {
+    const pos = computeDefaultPosition('incubator', [], col);
+    expect(pos.x).toBe(col.incubator);
     expect(pos.y).toBe(300);
   });
 
-  it('places designSystem in compiler column', () => {
+  it('places designSystem in incubator column', () => {
     const pos = computeDefaultPosition('designSystem', [], col);
-    expect(pos.x).toBe(col.compiler);
+    expect(pos.x).toBe(col.incubator);
   });
 
   it('places hypothesis at hypothesis column', () => {
@@ -183,7 +196,7 @@ describe('computeAutoLayout', () => {
   it('ranks nodes correctly with edges', () => {
     const nodes = [
       makeNode('brief', 'designBrief'),
-      makeNode('comp', 'compiler'),
+      makeNode('comp', 'incubator'),
       makeNode('hyp', 'hypothesis'),
     ];
     const edges = [
@@ -191,17 +204,17 @@ describe('computeAutoLayout', () => {
       makeEdge('comp', 'hyp'),
     ];
     const result = computeAutoLayout(nodes, edges, DEFAULT_COL_GAP);
-    // brief should be leftmost, compiler middle, hypothesis rightmost
+    // brief should be leftmost, incubator middle, hypothesis rightmost
     expect(result.find((n) => n.id === 'brief')!.position.x)
       .toBeLessThan(result.find((n) => n.id === 'comp')!.position.x);
     expect(result.find((n) => n.id === 'comp')!.position.x)
       .toBeLessThan(result.find((n) => n.id === 'hyp')!.position.x);
   });
 
-  it('forces designSystem to compiler rank', () => {
+  it('forces designSystem to incubator rank', () => {
     const nodes = [
       makeNode('brief', 'designBrief'),
-      makeNode('comp', 'compiler'),
+      makeNode('comp', 'incubator'),
       makeNode('ds', 'designSystem'),
       makeNode('hyp', 'hypothesis'),
     ];
@@ -219,7 +232,7 @@ describe('computeAutoLayout', () => {
   it('normalizes topmost node to y≈100', () => {
     const nodes = [
       makeNode('n1', 'designBrief'),
-      makeNode('n2', 'compiler'),
+      makeNode('n2', 'incubator'),
     ];
     const edges = [makeEdge('n1', 'n2')];
     const result = computeAutoLayout(nodes, edges, DEFAULT_COL_GAP);
@@ -230,7 +243,7 @@ describe('computeAutoLayout', () => {
   it('produces snapped positions', () => {
     const nodes = [
       makeNode('n1', 'designBrief'),
-      makeNode('n2', 'compiler'),
+      makeNode('n2', 'incubator'),
     ];
     const edges = [makeEdge('n1', 'n2')];
     const result = computeAutoLayout(nodes, edges, DEFAULT_COL_GAP);
@@ -243,7 +256,7 @@ describe('computeAutoLayout', () => {
   it('handles disconnected preview nodes', () => {
     const nodes = [
       makeNode('brief', 'designBrief'),
-      makeNode('comp', 'compiler'),
+      makeNode('comp', 'incubator'),
       makeNode('hyp', 'hypothesis'),
       makeNode('v1', 'preview'),       // connected
       makeNode('v2', 'preview'),       // disconnected (archived)
@@ -262,7 +275,7 @@ describe('computeAutoLayout', () => {
 
   it('is cycle-safe', () => {
     const nodes = [
-      makeNode('a', 'compiler'),
+      makeNode('a', 'incubator'),
       makeNode('b', 'hypothesis'),
     ];
     // Create a cycle: a→b→a
@@ -276,14 +289,14 @@ describe('computeAutoLayout', () => {
   });
 });
 
-// ─── reconcileSectionGhostNodes / layoutTypeOrder ──────────────────
+// ─── reconcileInputGhostNodes / layoutTypeOrder ─────────────────────
 
-describe('reconcileSectionGhostNodes', () => {
-  it('adds four ghosts when optional sections are absent', () => {
+describe('reconcileInputGhostNodes', () => {
+  it('adds four ghosts when optional input slots are absent', () => {
     const nodes = [makeNode('b', 'designBrief')];
-    const out = reconcileSectionGhostNodes(nodes as WorkspaceNode[]);
+    const out = reconcileInputGhostNodes(nodes as WorkspaceNode[]);
     expect(out).toHaveLength(5);
-    const ghosts = out.filter((n) => n.type === 'sectionGhost');
+    const ghosts = out.filter((n) => n.type === 'inputGhost');
     expect(ghosts).toHaveLength(4);
     expect(ghosts.map((g) => (g.data as { targetType: string }).targetType)).toEqual([
       'researchContext',
@@ -295,9 +308,9 @@ describe('reconcileSectionGhostNodes', () => {
 
   it('skips slots listed in dismissedSlots', () => {
     const nodes = [makeNode('b', 'designBrief')] as WorkspaceNode[];
-    const out = reconcileSectionGhostNodes(nodes, ['researchContext', 'existingDesign']);
+    const out = reconcileInputGhostNodes(nodes, ['researchContext', 'existingDesign']);
     const targets = out
-      .filter((n) => n.type === 'sectionGhost')
+      .filter((n) => n.type === 'inputGhost')
       .map((g) => (g.data as { targetType: string }).targetType);
     expect(targets).toEqual(['objectivesMetrics', 'designConstraints']);
   });
@@ -306,16 +319,16 @@ describe('reconcileSectionGhostNodes', () => {
     const nodes = [
       makeNode('b', 'designBrief'),
       {
-        id: 'ghost-section-existingDesign',
-        type: 'sectionGhost',
+        id: 'ghost-input-existingDesign',
+        type: 'inputGhost',
         position: { x: 0, y: 0 },
         data: { targetType: 'existingDesign' },
       },
       makeNode('e', 'existingDesign'),
     ] as WorkspaceNode[];
-    const out = reconcileSectionGhostNodes(nodes);
-    expect(out.some((n) => n.id === 'ghost-section-existingDesign')).toBe(false);
-    expect(out.filter((n) => n.type === 'sectionGhost')).toHaveLength(3);
+    const out = reconcileInputGhostNodes(nodes);
+    expect(out.some((n) => n.id === 'ghost-input-existingDesign')).toBe(false);
+    expect(out.filter((n) => n.type === 'inputGhost')).toHaveLength(3);
   });
 });
 
@@ -323,25 +336,25 @@ describe('layoutTypeOrder', () => {
   it('orders ghosts research before existing design', () => {
     const ghostResearch: WorkspaceNode = {
       id: 'g1',
-      type: 'sectionGhost',
+      type: 'inputGhost',
       position: { x: 0, y: 0 },
       data: { targetType: 'researchContext' },
     };
     const ghostExisting: WorkspaceNode = {
       id: 'g2',
-      type: 'sectionGhost',
+      type: 'inputGhost',
       position: { x: 0, y: 0 },
       data: { targetType: 'existingDesign' },
     };
     expect(layoutTypeOrder(ghostResearch)).toBeLessThan(layoutTypeOrder(ghostExisting));
   });
 
-  it('places real optional sections before ghosts and model last in layer 0', () => {
+  it('places real optional inputs before ghosts and model last in layer 0', () => {
     const brief = makeNode('b', 'designBrief') as WorkspaceNode;
     const real = makeNode('r', 'researchContext') as WorkspaceNode;
     const ghost: WorkspaceNode = {
       id: 'g',
-      type: 'sectionGhost',
+      type: 'inputGhost',
       position: { x: 0, y: 0 },
       data: { targetType: 'objectivesMetrics' },
     };

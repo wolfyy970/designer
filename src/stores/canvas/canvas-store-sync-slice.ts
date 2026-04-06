@@ -16,7 +16,7 @@ import { FORK_HYPOTHESIS_PREVIEW_STACK_OFFSET_PX } from '../../lib/constants';
 import { GENERATION_STATUS } from '../../constants/generation';
 import { useGenerationStore } from '../generation-store';
 import { syncVariantSlotsAfterFork, syncVariantSlotsAfterGenerate } from './canvas-sync-side-effects';
-import { linkHypothesesAfterCompile, syncDomainForNewEdge } from '../../workspace/domain-commands';
+import { linkHypothesesAfterIncubate, syncDomainForNewEdge } from '../../workspace/domain-commands';
 import {
   HYPOTHESIS_STACK_GAP,
   HYPOTHESIS_STACK_NODE_H,
@@ -33,18 +33,18 @@ export const createSyncSlice: StateCreator<
     CanvasStore,
     | 'addPlaceholderHypotheses'
     | 'removePlaceholders'
-    | 'syncAfterCompile'
+    | 'syncAfterIncubate'
     | 'syncAfterGenerate'
     | 'forkHypothesisPreviews'
   >
 > = (set, get) => ({
-  addPlaceholderHypotheses: (compilerNodeId, count) => {
+  addPlaceholderHypotheses: (incubatorNodeId, count) => {
     const state = get();
     const col = columnX(state.colGap);
 
-    let maxY = state.nodes.find((n) => n.id === compilerNodeId)?.position.y ?? 300;
+    let maxY = state.nodes.find((n) => n.id === incubatorNodeId)?.position.y ?? 300;
     for (const e of state.edges) {
-      if (e.source !== compilerNodeId) continue;
+      if (e.source !== incubatorNodeId) continue;
       const target = state.nodes.find((n) => n.id === e.target && n.type === 'hypothesis');
       if (target) {
         const bottom = target.position.y + (target.measured?.height ?? 300);
@@ -69,8 +69,8 @@ export const createSyncSlice: StateCreator<
         data: { placeholder: true },
       });
       newEdges.push({
-        id: buildEdgeId(compilerNodeId, phId),
-        source: compilerNodeId,
+        id: buildEdgeId(incubatorNodeId, phId),
+        source: incubatorNodeId,
         target: phId,
         type: EDGE_TYPES.DATA_FLOW,
         data: { status: EDGE_STATUS.PROCESSING },
@@ -90,11 +90,11 @@ export const createSyncSlice: StateCreator<
     });
   },
 
-  syncAfterCompile: (newVariants, compilerNodeId) => {
+  syncAfterIncubate: (newVariants, incubatorNodeId) => {
     if (newVariants.length === 0) return;
     const state = get();
     const col = columnX(state.colGap);
-    const compilerNode = state.nodes.find((n) => n.id === compilerNodeId);
+    const compilerNode = state.nodes.find((n) => n.id === incubatorNodeId);
     const compilerY = compilerNode?.position.y ?? 300;
 
     const existingHypIds = new Set(
@@ -103,7 +103,7 @@ export const createSyncSlice: StateCreator<
 
     let maxY = compilerY;
     for (const e of state.edges) {
-      if (e.source !== compilerNodeId) continue;
+      if (e.source !== incubatorNodeId) continue;
       const target = state.nodes.find((n) => n.id === e.target && n.type === 'hypothesis');
       if (target) {
         const bottom = target.position.y + (target.measured?.height ?? 300);
@@ -134,8 +134,8 @@ export const createSyncSlice: StateCreator<
       compileLinkPairs.push({ hypothesisNodeId: nodeId, strategyId: variant.id });
 
       addedEdges.push({
-        id: buildEdgeId(compilerNodeId, nodeId),
-        source: compilerNodeId,
+        id: buildEdgeId(incubatorNodeId, nodeId),
+        source: incubatorNodeId,
         target: nodeId,
         type: EDGE_TYPES.DATA_FLOW,
         data: { status: EDGE_STATUS.COMPLETE },
@@ -150,7 +150,7 @@ export const createSyncSlice: StateCreator<
     const newHypothesisIds = compileLinkPairs.map((p) => p.hypothesisNodeId);
 
     const modelEdges = buildModelEdgesFromParent(
-      compilerNodeId,
+      incubatorNodeId,
       newHypothesisIds,
       addedNodes,
       addedEdges,
@@ -158,7 +158,7 @@ export const createSyncSlice: StateCreator<
     addedEdges.push(...modelEdges);
 
     set({ nodes: addedNodes, edges: addedEdges });
-    linkHypothesesAfterCompile(compilerNodeId, compileLinkPairs);
+    linkHypothesesAfterIncubate(incubatorNodeId, compileLinkPairs);
     const prevEdgeIds = new Set(state.edges.map((e) => e.id));
     const graphNodes = get().nodes;
     const graphEdges = get().edges;

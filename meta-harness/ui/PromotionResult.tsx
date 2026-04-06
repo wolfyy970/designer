@@ -64,6 +64,28 @@ export function PromotionResultScreen({
           </Box>
         ) : null}
 
+        {result.rubricWeightsPatched != null ? (
+          <Box flexDirection="column">
+            <Text bold>Rubric weights</Text>
+            <Text>
+              {'  '}
+              <Text color={result.rubricWeightsPatched.ok ? 'green' : 'red'}>
+                {result.rubricWeightsPatched.ok ? 'OK' : 'FAIL'}
+              </Text>
+              {'  '}
+              src/lib/rubric-weights.json
+              {result.rubricWeightsPatched.error ? (
+                <Text color="red"> — {result.rubricWeightsPatched.error}</Text>
+              ) : null}
+            </Text>
+            {result.rubricWeightsPatched.ok ? (
+              <Text color={dimText}>
+                {'  '}Restart the API server so GET /api/config serves the new defaults.
+              </Text>
+            ) : null}
+          </Box>
+        ) : null}
+
         <Text>
           <Text bold>Langfuse</Text>
           {'  '}

@@ -41,7 +41,7 @@ const baseCfg: MetaHarnessConfig = {
   iterations: 1,
   proposerModel: 'm',
   proposerMaxToolRounds: 3,
-  defaultCompilerProvider: 'openrouter',
+  defaultIncubatorProvider: 'openrouter',
 };
 
 describe('runMetaHarnessEngine guards', () => {
@@ -122,11 +122,11 @@ describe('runMetaHarnessEngine guards', () => {
     expect(createMetaHarnessSessionMock).toHaveBeenCalled();
   });
 
-  it('throws in compile mode with --eval-only when OPENROUTER_API_KEY is missing', async () => {
+  it('throws in incubate mode with --eval-only when OPENROUTER_API_KEY is missing', async () => {
     listTestCaseFilesMock.mockResolvedValue([path.join('meta-harness', 'test-cases', 'alpha.json')]);
 
     const args: MetaHarnessCliArgs = {
-      mode: 'compile',
+      mode: 'incubate',
       once: false,
       evalOnly: true,
       dryRun: false,
@@ -137,7 +137,27 @@ describe('runMetaHarnessEngine guards', () => {
     };
 
     await expect(runMetaHarnessEngine(args, stubCallbacks, { config: baseCfg })).rejects.toThrow(
-      /compile mode needs OPENROUTER_API_KEY/,
+      /incubate mode needs OPENROUTER_API_KEY/,
+    );
+    expect(createMetaHarnessSessionMock).toHaveBeenCalled();
+  });
+
+  it('throws in inputs mode with --eval-only when OPENROUTER_API_KEY is missing', async () => {
+    listTestCaseFilesMock.mockResolvedValue([path.join('meta-harness', 'test-cases', 'alpha.json')]);
+
+    const args: MetaHarnessCliArgs = {
+      mode: 'inputs',
+      once: false,
+      evalOnly: true,
+      dryRun: false,
+      plain: true,
+      skipPromotionCheck: true,
+      promoteOnly: false,
+      testFilters: [],
+    };
+
+    await expect(runMetaHarnessEngine(args, stubCallbacks, { config: baseCfg })).rejects.toThrow(
+      /inputs mode needs OPENROUTER_API_KEY/,
     );
     expect(createMetaHarnessSessionMock).toHaveBeenCalled();
   });

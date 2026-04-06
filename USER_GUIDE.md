@@ -72,7 +72,7 @@ Write in prose, not bullets. Precision is the product.
 
 **Optional inputs:** The default template focuses on Design Brief + Model + Incubator. Other sections may show as **ghost** prompts on the canvas until you add the node from the toolbar (or load a saved canvas whose spec already fills that section—see **Managing Canvases**).
 
-**Auto-generate (Research / Objectives / Constraints):** On those three section nodes, an **auto-generate** action (when shown) drafts or refines the section body from your **Design Brief** and any other spec sections you have already filled in. It uses the **first Model node** on the canvas (document order—the same fallback as auto-connect). **Lockdown** still pins provider/model server-side. Prompt Studio overrides apply via the three Langfuse keys `section-gen-research-context`, `section-gen-objectives-metrics`, and `section-gen-design-constraints` ([LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)).
+**Auto-generate (Research / Objectives / Constraints):** On those three input nodes, an **auto-generate** action (when shown) drafts or refines the spec facet body from your **Design Brief** and any other spec sections you have already filled in. It uses the **first Model node** on the canvas (document order—the same fallback as auto-connect). **Lockdown** still pins provider/model server-side. Prompt Studio overrides apply via the Langfuse keys `inputs-gen-research-context`, `inputs-gen-objectives-metrics`, and `inputs-gen-design-constraints` (legacy `section-gen-*` names still alias in the server) ([LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)).
 
 ### 2. Connect a Model Node
 
@@ -140,15 +140,15 @@ Preview nodes render the generated code in sandboxed iframes. Open the **run wor
 
 To iterate on results:
 - **Screenshot feedback** — Drag a connection from a preview's right handle to the Existing Design node. This captures a screenshot and adds it as a reference image.
-- **Reference code** — Connect a preview to an Incubator to pass the prior design into the next compile as a **reference design** in the prompt.
-- **Re-incubate** — The Incubator reads **reference designs** (and section inputs) from its connected nodes, producing improved hypotheses. In **agentic** mode, evaluator feedback and revision passes are built into the generation run (see the preview run workspace scorecard).
+- **Reference code** — Connect a preview to an Incubator to pass the prior design into the next **incubate** run as a **reference design** in the prompt.
+- **Re-incubate** — The Incubator reads **reference designs** (and input-node facets from the spec) from its connected nodes, producing improved hypotheses. In **agentic** mode, evaluator feedback and revision passes are built into the generation run (see the preview run workspace scorecard).
 
 ### Auto-Layout
 
 Open **Settings** (gear) → **General** and toggle **Auto layout**. When on:
 - All nodes are positioned automatically based on their connections
 - Nodes are not draggable (prevents accidental misalignment)
-- Layout updates after compilation, generation, adding/removing nodes, or new connections
+- Layout updates after incubation, generation, adding/removing nodes, or new connections
 
 When off, drag nodes freely.
 

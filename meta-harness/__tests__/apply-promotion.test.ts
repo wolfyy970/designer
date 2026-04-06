@@ -9,6 +9,7 @@ import {
   escapeForTemplateLiteral,
   findClosingBacktick,
   findPromptEntryRange,
+  patchRubricWeightsFile,
   patchSharedDefaults,
   promotionSucceeded,
 } from '../apply-promotion.ts';
@@ -141,6 +142,7 @@ describe('promotionSucceeded', () => {
       promotionSucceeded({
         promptsPatched: [{ key: 'k', ok: true }],
         skillsCopied: [],
+        rubricWeightsPatched: null,
         langfuseSyncExitCode: 1,
         langfuseSyncOutput: 'bad',
       }),
@@ -149,6 +151,7 @@ describe('promotionSucceeded', () => {
       promotionSucceeded({
         promptsPatched: [{ key: 'k', ok: true }],
         skillsCopied: [],
+        rubricWeightsPatched: null,
         langfuseSyncExitCode: 0,
         langfuseSyncOutput: '',
       }),
@@ -157,10 +160,32 @@ describe('promotionSucceeded', () => {
       promotionSucceeded({
         promptsPatched: [],
         skillsCopied: [],
+        rubricWeightsPatched: null,
         langfuseSyncExitCode: null,
         langfuseSyncOutput: 'skip',
       }),
     ).toBe(true);
+    expect(
+      promotionSucceeded({
+        promptsPatched: [],
+        skillsCopied: [],
+        rubricWeightsPatched: { ok: false, error: 'disk' },
+        langfuseSyncExitCode: null,
+        langfuseSyncOutput: 'skip',
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('patchRubricWeightsFile', () => {
+  it('writes formatted JSON under src/lib/rubric-weights.json', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mh-rw-'));
+    const weights = { design: 0.35, strategy: 0.3, implementation: 0.25, browser: 0.1 };
+    const r = await patchRubricWeightsFile(root, weights);
+    expect(r.ok).toBe(true);
+    const p = path.join(root, 'src', 'lib', 'rubric-weights.json');
+    const raw = await readFile(p, 'utf8');
+    expect(JSON.parse(raw)).toEqual(weights);
   });
 });
 
@@ -193,6 +218,7 @@ describe('applyPromotion', () => {
         staleSkills: [
           { relPath: 'x/SKILL.md', liveBody: 'live', winnerBody: 'win', kind: 'modified' },
         ],
+        staleRubricWeights: null,
         reportPath: 'r.md',
         allFetchesFailed: false,
       },
@@ -201,8 +227,60 @@ describe('applyPromotion', () => {
 
     expect(r.promptsPatched).toHaveLength(0);
     expect(r.skillsCopied.every((s) => s.ok)).toBe(true);
+    expect(r.rubricWeightsPatched).toBeNull();
     expect(r.langfuseSyncExitCode).toBeNull();
     expect(r.langfuseSyncOutput).toContain('No prompt');
+    expect(spawnSyncMock).not.toHaveBeenCalled();
+  });
+
+  it('rubric-only drift patches rubric-weights.json and skips Langfuse', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mh-rubric-only-'));
+    const sd = path.join(root, 'src', 'lib', 'prompts');
+    await mkdir(sd, { recursive: true });
+    await writeFile(
+      path.join(sd, 'shared-defaults.ts'),
+      `export const PROMPT_DEFAULTS: Record<string, string> = {};`,
+      'utf8',
+    );
+    await mkdir(path.join(root, 'skills'), { recursive: true });
+    const lib = path.join(root, 'src', 'lib');
+    await mkdir(lib, { recursive: true });
+    await writeFile(
+      path.join(lib, 'rubric-weights.json'),
+      `${JSON.stringify(
+        { design: 0.4, strategy: 0.3, implementation: 0.2, browser: 0.1 },
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    );
+
+    const winner = { design: 0.35, strategy: 0.3, implementation: 0.25, browser: 0.1 };
+    const r = await applyPromotion(
+      {
+        sessionFolder: 'sess',
+        candidateId: 2,
+        meanScore: 4,
+        stalePrompts: [],
+        staleSkills: [],
+        staleRubricWeights: {
+          liveWeights: {
+            design: 0.4,
+            strategy: 0.3,
+            implementation: 0.2,
+            browser: 0.1,
+          },
+          winnerWeights: winner,
+        },
+        reportPath: 'r.md',
+        allFetchesFailed: false,
+      },
+      root,
+    );
+
+    expect(r.rubricWeightsPatched?.ok).toBe(true);
+    expect(JSON.parse(await readFile(path.join(lib, 'rubric-weights.json'), 'utf8'))).toEqual(winner);
+    expect(r.langfuseSyncOutput).toContain('No prompt drift');
     expect(spawnSyncMock).not.toHaveBeenCalled();
   });
 
@@ -227,6 +305,7 @@ describe('applyPromotion', () => {
         meanScore: 1,
         stalePrompts: [{ key: 'hypotheses-generator-system', liveBody: 'a', winnerBody: 'NEW' }],
         staleSkills: [],
+        staleRubricWeights: null,
         reportPath: 'r.md',
         allFetchesFailed: false,
       },

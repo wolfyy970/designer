@@ -2,7 +2,7 @@
  * Debug-oriented Markdown snapshots for hypotheses and design runs.
  * Structured for human reading + later diffing in Git or IDE.
  */
-import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../types/compiler';
+import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../types/incubator';
 import type { DesignSpec } from '../types/spec';
 import { SPEC_SECTIONS } from './constants';
 import type {
@@ -202,7 +202,7 @@ function formatDimensionContext(map: IncubationPlan | undefined, strategy: Hypot
   }
   let body = `- **map id:** \`${map.id}\`\n`;
   body += `- **specId:** \`${map.specId}\`\n`;
-  body += `- **compilerModel:** ${map.compilerModel}\n`;
+  body += `- **incubatorModel:** ${map.incubatorModel}\n`;
   body += `- **generatedAt:** ${map.generatedAt}\n\n`;
   body += '### Dimensions\n\n';
   body +=

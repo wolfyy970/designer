@@ -4,7 +4,7 @@ import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
 import { LOCKDOWN_MODEL_ID, LOCKDOWN_PROVIDER_ID } from '../lib/lockdown-model';
 import { useAppConfig } from './useAppConfig';
 import { useProviderModels } from './useProviderModels';
-import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
+import { DEFAULT_INCUBATOR_PROVIDER } from '../lib/constants';
 import { getModelNodeData } from '../lib/canvas-node-data';
 import { findFirstUpstreamModelNodeId } from '../workspace/graph-queries';
 
@@ -32,14 +32,14 @@ export function useConnectedModel(nodeId: string) {
   const modelNodeId = domainModelNodeId ?? graphModelNodeId;
 
   // Read primitive values from Model node data (stable selectors).
-  // Fall back to DEFAULT_COMPILER_PROVIDER when the Model node exists
+  // Fall back to DEFAULT_INCUBATOR_PROVIDER when the Model node exists
   // but hasn't had its provider explicitly set yet — matches the
   // fallback in useNodeProviderModel used by ModelNode itself.
   const providerId = useCanvasStore(
     (s) => {
       if (!modelNodeId) return null;
       const data = getModelNodeData(s.nodes.find((n) => n.id === modelNodeId));
-      return data?.providerId || DEFAULT_COMPILER_PROVIDER;
+      return data?.providerId || DEFAULT_INCUBATOR_PROVIDER;
     },
   );
 

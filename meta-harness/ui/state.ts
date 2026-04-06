@@ -227,11 +227,14 @@ export type RunnerAction =
   | { type: 'SKIPPED_TEST'; filePath: string; message: string }
   /** Per-test heartbeat while waiting on non-SSE work (compile poll, rubric). */
   | { type: 'HEARTBEAT'; testName: string; elapsedSec: number }
-  | { type: 'COMPILE_START'; testName: string; hypothesisCount: number }
-  | { type: 'COMPILE_DONE'; testName: string; hypothesisNames: string[] }
+  | { type: 'INCUBATE_START'; testName: string; hypothesisCount: number }
+  | { type: 'INCUBATE_DONE'; testName: string; hypothesisNames: string[] }
   | { type: 'HYPOTHESIS_EVAL_START'; testName: string; hypothesisName: string }
   | { type: 'HYPOTHESIS_EVAL_DONE'; testName: string; hypothesisName: string; score: number }
-  | { type: 'HYPOTHESIS_PICKED'; testName: string; hypothesisName: string };
+  | { type: 'HYPOTHESIS_PICKED'; testName: string; hypothesisName: string }
+  | { type: 'INPUTS_GENERATE_START'; testName: string; target: string }
+  | { type: 'INPUTS_GENERATE_DONE'; testName: string; target: string; charCount: number }
+  | { type: 'INPUTS_RUBRIC_DONE'; testName: string; target: string; mean: number };
 
 function reducePreflight(
   state: RunnerState,
@@ -549,7 +552,7 @@ function reducePromotionReport(
   };
   next = pushActivity(
     next,
-    `Promotion report: ${action.reportPath} · prompts ${s.promptOverrideKeys.length}, skill paths ${nSkill}, new tests ${s.testCasesAdded.length}`,
+    `Promotion report: ${action.reportPath} · prompts ${s.promptOverrideKeys.length}, skill paths ${nSkill}, rubric ${s.rubricWeightsChanged ? 'changed' : 'unchanged'}, new tests ${s.testCasesAdded.length}`,
   );
   return next;
 }
@@ -603,32 +606,32 @@ function reduceSkippedTest(
   return next;
 }
 
-function reduceCompileStart(
+function reduceIncubateStart(
   state: RunnerState,
-  action: Extract<RunnerAction, { type: 'COMPILE_START' }>,
+  action: Extract<RunnerAction, { type: 'INCUBATE_START' }>,
 ): RunnerState {
   const rows = state.testRows.map((r) =>
     r.name === action.testName
-      ? { ...r, liveLine: `compile: requesting ${action.hypothesisCount} hypotheses…` }
+      ? { ...r, liveLine: `incubate: requesting ${action.hypothesisCount} hypotheses…` }
       : r,
   );
   return { ...state, testRows: rows };
 }
 
-function reduceCompileDone(
+function reduceIncubateDone(
   state: RunnerState,
-  action: Extract<RunnerAction, { type: 'COMPILE_DONE' }>,
+  action: Extract<RunnerAction, { type: 'INCUBATE_DONE' }>,
 ): RunnerState {
   const rows = state.testRows.map((r) =>
     r.name === action.testName
       ? {
           ...r,
-          liveLine: `compile ✓ ${action.hypothesisNames.length} hypotheses (${action.hypothesisNames.slice(0, 2).join(', ')}${action.hypothesisNames.length > 2 ? '…' : ''})`,
+          liveLine: `incubate ✓ ${action.hypothesisNames.length} hypotheses (${action.hypothesisNames.slice(0, 2).join(', ')}${action.hypothesisNames.length > 2 ? '…' : ''})`,
         }
       : r,
   );
   let next = { ...state, testRows: rows };
-  next = pushActivity(next, `${action.testName}: compile done (${action.hypothesisNames.length} hypotheses)`);
+  next = pushActivity(next, `${action.testName}: incubate done (${action.hypothesisNames.length} hypotheses)`);
   return next;
 }
 
@@ -671,6 +674,47 @@ function reduceHypothesisPicked(
   return next;
 }
 
+function reduceInputsGenerateStart(
+  state: RunnerState,
+  action: Extract<RunnerAction, { type: 'INPUTS_GENERATE_START' }>,
+): RunnerState {
+  const rows = state.testRows.map((r) =>
+    r.name === action.testName
+      ? { ...r, liveLine: `inputs-gen: ${action.target}…` }
+      : r,
+  );
+  return { ...state, testRows: rows };
+}
+
+function reduceInputsGenerateDone(
+  state: RunnerState,
+  action: Extract<RunnerAction, { type: 'INPUTS_GENERATE_DONE' }>,
+): RunnerState {
+  const rows = state.testRows.map((r) =>
+    r.name === action.testName
+      ? { ...r, liveLine: `inputs-gen ✓ ${action.target} (${action.charCount} chars)` }
+      : r,
+  );
+  return { ...state, testRows: rows };
+}
+
+function reduceInputsRubricDone(
+  state: RunnerState,
+  action: Extract<RunnerAction, { type: 'INPUTS_RUBRIC_DONE' }>,
+): RunnerState {
+  const rows = state.testRows.map((r) =>
+    r.name === action.testName
+      ? { ...r, liveLine: `inputs rubric: ${action.target}=${action.mean.toFixed(2)}` }
+      : r,
+  );
+  let next = { ...state, testRows: rows };
+  next = pushActivity(
+    next,
+    `${action.testName}: inputs ${action.target} rubric mean=${action.mean.toFixed(2)}`,
+  );
+  return next;
+}
+
 export function reduceRunnerState(state: RunnerState, action: RunnerAction): RunnerState {
   switch (action.type) {
     case 'PREFLIGHT':
@@ -709,16 +753,22 @@ export function reduceRunnerState(state: RunnerState, action: RunnerAction): Run
       return { ...state, globalPhase: action.phase };
     case 'SKIPPED_TEST':
       return reduceSkippedTest(state, action);
-    case 'COMPILE_START':
-      return reduceCompileStart(state, action);
-    case 'COMPILE_DONE':
-      return reduceCompileDone(state, action);
+    case 'INCUBATE_START':
+      return reduceIncubateStart(state, action);
+    case 'INCUBATE_DONE':
+      return reduceIncubateDone(state, action);
     case 'HYPOTHESIS_EVAL_START':
       return reduceHypothesisEvalStart(state, action);
     case 'HYPOTHESIS_EVAL_DONE':
       return reduceHypothesisEvalDone(state, action);
     case 'HYPOTHESIS_PICKED':
       return reduceHypothesisPicked(state, action);
+    case 'INPUTS_GENERATE_START':
+      return reduceInputsGenerateStart(state, action);
+    case 'INPUTS_GENERATE_DONE':
+      return reduceInputsGenerateDone(state, action);
+    case 'INPUTS_RUBRIC_DONE':
+      return reduceInputsRubricDone(state, action);
     default:
       return state;
   }

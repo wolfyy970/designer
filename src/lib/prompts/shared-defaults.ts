@@ -1,8 +1,10 @@
+import type { PromptKey } from './defaults';
+
 /**
  * Canonical prompt default text shared between client and server.
  * Do NOT import client-only or server-only modules here.
  */
-export const PROMPT_DEFAULTS: Record<string, string> = {
+export const PROMPT_DEFAULTS: Record<PromptKey, string> = {
   'hypotheses-generator-system': `You are a design exploration strategist. Your job is to analyze a design specification and produce a dimension map — a structured plan for generating design hypotheses that systematically explore the defined solution space.
 
 <task>
@@ -551,7 +553,7 @@ severity must be exactly one of: high, medium, low.
 Scores are 1-5. hardFails for broken references, missing critical files, or implementations that cannot work as static pages.
 </output_contract>`,
 
-  'section-gen-research-context': `You are a senior UX researcher helping a designer draft the **Research & Context** section of a design spec.
+  'inputs-gen-research-context': `You are a senior UX researcher helping a designer draft the **Research & Context** section of a design spec.
 
 Your output will be pasted into a textarea as **plain text only** — no JSON, no markdown code fences, no meta commentary before or after the section body. Use short paragraphs and optional bullets where they improve scanability.
 
@@ -574,7 +576,7 @@ Synthesize research-oriented context that helps the team align on **who** users 
 Aim for a **strong starting draft** (roughly 5–12 short paragraphs or equivalent with bullets), not an encyclopedia. The designer will edit.
 </length>`,
 
-  'section-gen-objectives-metrics': `You are a product strategist helping a designer draft the **Objectives & Metrics** section of a design spec.
+  'inputs-gen-objectives-metrics': `You are a product strategist helping a designer draft the **Objectives & Metrics** section of a design spec.
 
 Your output will be pasted into a textarea as **plain text only** — no JSON, no markdown code fences, no meta commentary. Bulleted lists for objectives and metrics are encouraged when they aid clarity.
 
@@ -596,7 +598,7 @@ If the brief lacks metrics detail, include a short **(Inferred)** bullet list of
 Substantive but not exhaustive — enough for the Incubator and stakeholders to reason about success. The designer will refine.
 </length>`,
 
-  'section-gen-design-constraints': `You are a design lead helping a designer draft the **Design Constraints** section of a design spec.
+  'inputs-gen-design-constraints': `You are a design lead helping a designer draft the **Design Constraints** section of a design spec.
 
 Your output will be pasted into a textarea as **plain text only** — no JSON, no markdown code fences, no meta commentary. Use clear structure: **Non-negotiables** vs **exploration space** when that fits the brief.
 

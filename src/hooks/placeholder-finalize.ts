@@ -1,7 +1,7 @@
 import { debugAgentIngest } from '../lib/debug-agent-ingest';
 import { GENERATION_MODE, GENERATION_STATUS } from '../constants/generation';
 import { storage } from '../storage';
-import type { CompiledPrompt } from '../types/compiler';
+import type { CompiledPrompt } from '../types/incubator';
 import type { AgentMode } from '../types/workspace-domain';
 import type { GenerationResult, Provenance } from '../types/provider';
 import type { ProvenanceContext } from '../types/provenance-context';

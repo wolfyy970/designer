@@ -2,9 +2,9 @@ import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { DesignSpecSchema } from '../../src/types/spec.ts';
-import type { CompilerPromptOptions } from '../../src/lib/prompts/compiler-user.ts';
+import type { IncubatorPromptOptions } from '../../src/lib/prompts/incubator-user.ts';
 import { HypothesisStrategySchema } from '../lib/hypothesis-schemas.ts';
-import { compileSpecStream } from '../services/compiler.ts';
+import { incubateSpecStream } from '../services/incubator.ts';
 import { createResolvePromptBody, sanitizePromptOverrides } from '../lib/prompt-overrides.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import { clampProviderModel } from '../lib/lockdown-model.ts';
@@ -12,28 +12,32 @@ import { parseRequestJson } from '../lib/parse-request.ts';
 import { createWriteGate } from '../lib/sse-write-gate.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 
-const compile = new Hono();
+const incubate = new Hono();
 
-const CompilerPromptOptionsSchema = z.object({
+const IncubatorPromptOptionsSchema = z.object({
   count: z.number().int().positive().optional(),
   existingStrategies: z.array(HypothesisStrategySchema).optional(),
-}) satisfies z.ZodType<CompilerPromptOptions>;
+}) satisfies z.ZodType<IncubatorPromptOptions>;
 
-const CompileRequestSchema = z.object({
+const IncubateRequestSchema = z.object({
   spec: DesignSpecSchema,
   providerId: z.string().min(1),
   modelId: z.string().min(1),
-  referenceDesigns: z.array(z.object({
-    name: z.string(),
-    code: z.string(),
-  })).optional(),
+  referenceDesigns: z
+    .array(
+      z.object({
+        name: z.string(),
+        code: z.string(),
+      }),
+    )
+    .optional(),
   supportsVision: z.boolean().optional(),
-  promptOptions: CompilerPromptOptionsSchema.optional(),
+  promptOptions: IncubatorPromptOptionsSchema.optional(),
   promptOverrides: z.record(z.string(), z.string()).optional(),
 });
 
-compile.post('/', async (c) => {
-  const parsed = await parseRequestJson(c, CompileRequestSchema);
+incubate.post('/', async (c) => {
+  const parsed = await parseRequestJson(c, IncubateRequestSchema);
   if (!parsed.ok) return parsed.response;
   const pinned = clampProviderModel(parsed.data.providerId, parsed.data.modelId);
   const body = { ...parsed.data, providerId: pinned.providerId, modelId: pinned.modelId };
@@ -59,8 +63,8 @@ compile.post('/', async (c) => {
     };
 
     try {
-      await write(SSE_EVENT_NAMES.progress, { status: 'Compiling spec to hypotheses…' });
-      const result = await compileSpecStream(
+      await write(SSE_EVENT_NAMES.progress, { status: 'Incubating spec to hypotheses…' });
+      const result = await incubateSpecStream(
         body.spec,
         body.modelId,
         body.providerId,
@@ -79,7 +83,7 @@ compile.post('/', async (c) => {
         },
       );
       const planJson = JSON.parse(JSON.stringify(result)) as Record<string, unknown>;
-      await write(SSE_EVENT_NAMES.compile_result, planJson);
+      await write(SSE_EVENT_NAMES.incubate_result, planJson);
       await write(SSE_EVENT_NAMES.done, {});
     } catch (err) {
       await write(SSE_EVENT_NAMES.error, { error: normalizeError(err) });
@@ -88,4 +92,4 @@ compile.post('/', async (c) => {
   });
 });
 
-export default compile;
+export default incubate;

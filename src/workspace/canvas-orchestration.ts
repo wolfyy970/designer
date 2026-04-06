@@ -1,19 +1,19 @@
 /**
- * Cross-store canvas orchestration: compiler, spec, and workspace-domain updates tied to graph edits.
+ * Cross-store canvas orchestration: incubator, spec, and workspace-domain updates tied to graph edits.
  *
- * Dependencies are explicit: `useCompilerStore`, `useSpecStore`, `useWorkspaceDomainStore` via `.getState()`.
+ * Dependencies are explicit: `useIncubatorStore`, `useSpecStore`, `useWorkspaceDomainStore` via `.getState()`.
  * The canvas graph slice calls these entry points; it does not mutate sibling stores directly.
  */
 import type { CanvasNodeType, WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 import { NODE_TYPE_TO_SECTION } from '../types/workspace-graph';
-import { NODE_TYPES, SECTION_NODE_TYPES } from '../constants/canvas';
+import { NODE_TYPES, INPUT_NODE_TYPES } from '../constants/canvas';
 import {
   getDesignSystemNodeData,
   getHypothesisNodeData,
   getModelNodeData,
 } from '../lib/canvas-node-data';
 import { generateId, now } from '../lib/utils';
-import { useCompilerStore } from '../stores/compiler-store';
+import { useIncubatorStore } from '../stores/incubator-store';
 import { useSpecStore } from '../stores/spec-store';
 import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
 import { findIncubatorForHypothesis } from './graph-queries';
@@ -28,9 +28,9 @@ export function ensureCompilerVariantAndDomainForHypothesis(
   canvasNodes: WorkspaceNode[],
   edges: Pick<WorkspaceEdge, 'source' | 'target'>[],
 ): string | undefined {
-  const compilerStore = useCompilerStore.getState();
+  const compilerStore = useIncubatorStore.getState();
   const compilerNodes = canvasNodes
-    .filter((n) => n.type === NODE_TYPES.COMPILER)
+    .filter((n) => n.type === NODE_TYPES.INCUBATOR)
     .slice()
     .sort((a, b) => a.id.localeCompare(b.id));
   const fromGraph = findIncubatorForHypothesis(
@@ -54,7 +54,7 @@ export function ensureCompilerVariantAndDomainForHypothesis(
       dimensions: [],
       hypotheses: [],
       generatedAt: now(),
-      compilerModel: 'manual',
+      incubatorModel: 'manual',
     });
   }
   compilerStore.addStrategyToNode(targetCompilerId);
@@ -72,7 +72,7 @@ export function ensureCompilerVariantAndDomainForHypothesis(
 /** Reset spec section when removing a section-type canvas node. */
 export function resetSpecSectionForRemovedNode(node: WorkspaceNode): void {
   const removedType = node.type as CanvasNodeType;
-  if (!SECTION_NODE_TYPES.has(removedType)) return;
+  if (!INPUT_NODE_TYPES.has(removedType)) return;
   const sectionId = NODE_TYPE_TO_SECTION[removedType];
   if (sectionId) {
     useSpecStore.getState().resetSectionContent(sectionId);
@@ -80,11 +80,11 @@ export function resetSpecSectionForRemovedNode(node: WorkspaceNode): void {
 }
 
 export function removeCompilerPlanForNode(compilerNodeId: string): void {
-  useCompilerStore.getState().removePlanForNode(compilerNodeId);
+  useIncubatorStore.getState().removePlanForNode(compilerNodeId);
 }
 
 export function removeCompilerStrategyByRefId(refId: string): void {
-  useCompilerStore.getState().removeStrategy(refId);
+  useIncubatorStore.getState().removeStrategy(refId);
 }
 
 /** Re-hydrate domain from full graph after optional sections materialize. */

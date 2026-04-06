@@ -33,7 +33,7 @@ export type RunnerCallbacks = {
   ) => void;
   onTestCaseStart: (index: number, total: number, name: string) => void;
   onWireEvent: (testName: string, event: string, payload: unknown) => void;
-  /** Every ~3s while compile stream is idle or during non-streaming rubric calls. */
+  /** Every ~3s while incubate stream is idle or during non-streaming rubric calls. */
   onTestCaseHeartbeat?: (testName: string, elapsedSec: number) => void;
   onTestCaseDone: (
     name: string,
@@ -64,9 +64,12 @@ export type RunnerCallbacks = {
     promotionReportRelPath?: string,
   ) => void;
   shouldStop?: () => boolean;
-  onCompileStart?: (testName: string, hypothesisCount: number) => void;
-  onCompileDone?: (testName: string, hypotheses: { name: string; id: string }[]) => void;
+  onIncubateStart?: (testName: string, hypothesisCount: number) => void;
+  onIncubateDone?: (testName: string, hypotheses: { name: string; id: string }[]) => void;
   onHypothesisEvalStart?: (testName: string, hypothesisName: string) => void;
   onHypothesisEvalDone?: (testName: string, hypothesisName: string, score: number) => void;
   onHypothesisPicked?: (testName: string, hypothesisName: string) => void;
+  onInputsGenerateStart?: (testName: string, target: string) => void;
+  onInputsGenerateDone?: (testName: string, target: string, charCount: number) => void;
+  onInputsRubricDone?: (testName: string, target: string, mean: number) => void;
 };

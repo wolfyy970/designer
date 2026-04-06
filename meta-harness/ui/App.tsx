@@ -63,11 +63,11 @@ export function App({ args, config }: { args: MetaHarnessCliArgs; config: MetaHa
             dispatchAction({ type: 'TEST_DONE', name, score, stopReason, elapsedMs, error, outcome }),
           onSkippedTestCase: (filePath, message) =>
             dispatchAction({ type: 'SKIPPED_TEST', filePath, message }),
-          onCompileStart: (testName, hypothesisCount) =>
-            dispatchAction({ type: 'COMPILE_START', testName, hypothesisCount }),
-          onCompileDone: (testName, hypotheses) =>
+          onIncubateStart: (testName, hypothesisCount) =>
+            dispatchAction({ type: 'INCUBATE_START', testName, hypothesisCount }),
+          onIncubateDone: (testName, hypotheses) =>
             dispatchAction({
-              type: 'COMPILE_DONE',
+              type: 'INCUBATE_DONE',
               testName,
               hypothesisNames: hypotheses.map((h) => h.name),
             }),
@@ -77,6 +77,12 @@ export function App({ args, config }: { args: MetaHarnessCliArgs; config: MetaHa
             dispatchAction({ type: 'HYPOTHESIS_EVAL_DONE', testName, hypothesisName, score }),
           onHypothesisPicked: (testName, hypothesisName) =>
             dispatchAction({ type: 'HYPOTHESIS_PICKED', testName, hypothesisName }),
+          onInputsGenerateStart: (testName, target) =>
+            dispatchAction({ type: 'INPUTS_GENERATE_START', testName, target }),
+          onInputsGenerateDone: (testName, target, charCount) =>
+            dispatchAction({ type: 'INPUTS_GENERATE_DONE', testName, target, charCount }),
+          onInputsRubricDone: (testName, target, mean) =>
+            dispatchAction({ type: 'INPUTS_RUBRIC_DONE', testName, target, mean }),
           onIterationDone: (info) =>
             dispatchAction({
               type: 'ITERATION_DONE',

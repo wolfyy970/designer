@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useWorkspaceDomainStore } from '../../stores/workspace-domain-store';
 import { buildHypothesisGenerationContext } from '../workspace-session';
-import type { HypothesisStrategy } from '../../types/compiler';
+import type { HypothesisStrategy } from '../../types/incubator';
 import type { DesignSpec } from '../../types/spec';
 
 const strategy: HypothesisStrategy = {

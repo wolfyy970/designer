@@ -72,11 +72,11 @@ export function createPlainCallbacks(args: MetaHarnessCliArgs): RunnerCallbacks 
     onTestCaseStart(index, total, name) {
       banner(`Test ${index + 1}/${total}: ${name} [${args.mode}]`);
     },
-    onCompileStart(testName, hypothesisCount) {
-      console.log(`  compile: ${testName} → request ${hypothesisCount} hypotheses`);
+    onIncubateStart(testName, hypothesisCount) {
+      console.log(`  incubate: ${testName} → request ${hypothesisCount} hypotheses`);
     },
-    onCompileDone(testName, hypotheses) {
-      console.log(`  compile done: ${testName} (${hypotheses.length} hypotheses)`);
+    onIncubateDone(testName, hypotheses) {
+      console.log(`  incubate done: ${testName} (${hypotheses.length} hypotheses)`);
     },
     onHypothesisEvalStart(testName, hypothesisName) {
       console.log(`  hypothesis rubric: ${testName} · ${hypothesisName}…`);
@@ -86,6 +86,15 @@ export function createPlainCallbacks(args: MetaHarnessCliArgs): RunnerCallbacks 
     },
     onHypothesisPicked(testName, hypothesisName) {
       console.log(`  random pick: ${testName} → ${hypothesisName}`);
+    },
+    onInputsGenerateStart(testName, target) {
+      console.log(`  inputs-generate: ${testName} · ${target}…`);
+    },
+    onInputsGenerateDone(testName, target, charCount) {
+      console.log(`  inputs-generate done: ${testName} · ${target} (${charCount} chars)`);
+    },
+    onInputsRubricDone(testName, target, mean) {
+      console.log(`  inputs rubric: ${testName} · ${target} → ${mean.toFixed(2)}`);
     },
     onWireEvent(testName, event, payload) {
       const prefix = `[${testName}]`;
@@ -141,12 +150,12 @@ export function createPlainCallbacks(args: MetaHarnessCliArgs): RunnerCallbacks 
       console.log(`  file         ${reportRelPath}`);
       const nSkill = summary.skillsAdded.length + summary.skillsModified.length + summary.skillsDeleted.length;
       console.log(
-        `  summary      ${summary.promptOverrideKeys.length} prompt key(s), ${nSkill} skill path(s) differ, ${summary.testCasesAdded.length} new test case(s)`,
+        `  summary      ${summary.promptOverrideKeys.length} prompt key(s), ${nSkill} skill path(s) differ, rubric ${summary.rubricWeightsChanged ? 'differs' : 'matches repo'}, ${summary.testCasesAdded.length} new test case(s)`,
       );
       if (summary.hasChanges) {
         console.log(`  next step    open the report for step-by-step instructions`);
       } else {
-        console.log(`  note         no prompt/skill/test deltas detected vs repo — still read §6 for proposer notes`);
+        console.log(`  note         no prompt/skill/rubric/test deltas detected vs repo — still read §7 for proposer notes`);
       }
       console.log();
     },

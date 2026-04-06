@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { compileVariantPrompts } from '../compiler';
 import { PROMPT_DEFAULTS } from '../../lib/prompts/shared-defaults';
 import type { DesignSpec, SpecSectionId, ReferenceImage } from '../../types/spec';
-import type { IncubationPlan, HypothesisStrategy } from '../../types/compiler';
+import type { IncubationPlan, HypothesisStrategy } from '../../types/incubator';
 
 const VARIANT_TEMPLATE = PROMPT_DEFAULTS['designer-hypothesis-inputs'];
 
@@ -53,7 +53,7 @@ function makeIncubationPlan(hypotheses: HypothesisStrategy[]): IncubationPlan {
     dimensions: [{ name: 'layout', range: 'single to multi-column', isConstant: false }],
     hypotheses,
     generatedAt: '2024-01-01T00:00:00Z',
-    compilerModel: 'gpt-4',
+    incubatorModel: 'gpt-4',
   };
 }
 

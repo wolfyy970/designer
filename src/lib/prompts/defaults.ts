@@ -14,9 +14,9 @@ export type PromptKey =
   | 'evaluator-design-quality'
   | 'evaluator-strategy-fidelity'
   | 'evaluator-implementation'
-  | 'section-gen-research-context'
-  | 'section-gen-objectives-metrics'
-  | 'section-gen-design-constraints';
+  | 'inputs-gen-research-context'
+  | 'inputs-gen-objectives-metrics'
+  | 'inputs-gen-design-constraints';
 
 export interface PromptMeta {
   key: PromptKey;
@@ -30,7 +30,7 @@ export const PROMPT_META: PromptMeta[] = [
     key: 'hypotheses-generator-system',
     label: 'Incubator — Hypotheses generator (system)',
     description:
-      'System prompt for the Incubator compile step: read the five-section spec and return a JSON incubation plan (dimensions, ranges, hypothesis strategies).',
+      'System prompt for the Incubator incubate step: read the five-section spec and return a JSON incubation plan (dimensions, ranges, hypothesis strategies).',
   },
   {
     key: 'incubator-user-inputs',
@@ -125,8 +125,8 @@ export const PROMPT_META: PromptMeta[] = [
     description: 'Rubric for static HTML/CSS/JS engineering review. JSON output per contract.',
   },
   {
-    key: 'section-gen-research-context',
-    label: 'Section — Generate research context (system)',
+    key: 'inputs-gen-research-context',
+    label: 'Inputs — Generate research context (system)',
     description:
       'Auto-fill Research Context from the design brief: plausible user/context narrative without fabricating studies or data.',
     variables: [
@@ -138,8 +138,8 @@ export const PROMPT_META: PromptMeta[] = [
     ],
   },
   {
-    key: 'section-gen-objectives-metrics',
-    label: 'Section — Generate objectives & metrics (system)',
+    key: 'inputs-gen-objectives-metrics',
+    label: 'Inputs — Generate objectives & metrics (system)',
     description:
       'Auto-fill Objectives & Metrics from the design brief: measurable outcomes and success signals, no invented KPI numbers.',
     variables: [
@@ -151,8 +151,8 @@ export const PROMPT_META: PromptMeta[] = [
     ],
   },
   {
-    key: 'section-gen-design-constraints',
-    label: 'Section — Generate design constraints (system)',
+    key: 'inputs-gen-design-constraints',
+    label: 'Inputs — Generate design constraints (system)',
     description:
       'Auto-fill Design Constraints from the design brief: non-negotiables and exploration ranges grounded in the brief.',
     variables: [
@@ -184,4 +184,7 @@ export const LEGACY_PROMPT_KEY_ALIASES = {
   evalDesignSystem: 'evaluator-design-quality',
   evalStrategySystem: 'evaluator-strategy-fidelity',
   evalImplementationSystem: 'evaluator-implementation',
+  'section-gen-research-context': 'inputs-gen-research-context',
+  'section-gen-objectives-metrics': 'inputs-gen-objectives-metrics',
+  'section-gen-design-constraints': 'inputs-gen-design-constraints',
 } as const satisfies Record<string, PromptKey>;

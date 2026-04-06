@@ -7,7 +7,7 @@ import {
 import type { GenerationResult } from '../../types/provider';
 import type { HypothesisGenerationContext } from '../../workspace/hypothesis-generation-pure';
 import type { HypothesisGenerateApiPayload } from '../../api/types';
-import type { HypothesisStrategy } from '../../types/compiler';
+import type { HypothesisStrategy } from '../../types/incubator';
 
 const hypothesisStrategy = { id: 'vs-1' } as HypothesisStrategy;
 

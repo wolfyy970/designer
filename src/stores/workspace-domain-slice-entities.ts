@@ -1,4 +1,4 @@
-import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
+import { DEFAULT_INCUBATOR_PROVIDER } from '../lib/constants';
 import type { DomainModelProfile } from '../types/workspace-domain';
 import { removeId } from './workspace-domain-helpers';
 import type { WorkspaceDomainStore } from './workspace-domain-store-types';
@@ -22,7 +22,7 @@ export function createWorkspaceDomainEntitiesSlice(set: DomainSet): Pick<
       set((s) => {
         const cur = s.modelProfiles[nodeId] ?? {
           nodeId,
-          providerId: DEFAULT_COMPILER_PROVIDER,
+          providerId: DEFAULT_INCUBATOR_PROVIDER,
           modelId: '',
         };
         type ProfilePatch = Omit<Partial<DomainModelProfile>, 'nodeId'>;

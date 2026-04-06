@@ -5,28 +5,23 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { env } from '../env.ts';
 import type { ObservabilityLine } from './observability-line.ts';
+import { truncateUtf16WithSuffix } from './string-truncate.ts';
 
-const TRUNC_SUFFIX = '\n…[truncated]';
 const TRACE_LABEL_MAX = 4000;
 const TRACE_TOOL_FIELD_MAX = 4000;
 
-function truncBody(s: string, maxChars: number): string {
-  if (maxChars <= 0 || s.length <= maxChars) return s;
-  return s.slice(0, maxChars) + TRUNC_SUFFIX;
-}
-
 /** Deep clone line and truncate LLM bodies / trace label for file only. */
-export function observabilityLineForFile(line: ObservabilityLine): ObservabilityLine {
+function observabilityLineForFile(line: ObservabilityLine): ObservabilityLine {
   if (line.type === 'trace') {
     const ev = { ...(line.payload.event as Record<string, unknown>) };
     const lab = ev.label;
     if (typeof lab === 'string' && lab.length > TRACE_LABEL_MAX) {
-      ev.label = lab.slice(0, TRACE_LABEL_MAX) + TRUNC_SUFFIX;
+      ev.label = truncateUtf16WithSuffix(lab, TRACE_LABEL_MAX);
     }
     for (const key of ['detail', 'toolArgs', 'toolResult'] as const) {
       const v = ev[key];
       if (typeof v === 'string' && v.length > TRACE_TOOL_FIELD_MAX) {
-        ev[key] = v.slice(0, TRACE_TOOL_FIELD_MAX) + TRUNC_SUFFIX;
+        ev[key] = truncateUtf16WithSuffix(v, TRACE_TOOL_FIELD_MAX);
       }
     }
     return {
@@ -37,9 +32,9 @@ export function observabilityLineForFile(line: ObservabilityLine): Observability
   const max = env.LLM_LOG_MAX_BODY_CHARS;
   if (max <= 0) return line;
   const p = { ...(line.payload as Record<string, unknown>) };
-  if (typeof p.systemPrompt === 'string') p.systemPrompt = truncBody(p.systemPrompt, max);
-  if (typeof p.userPrompt === 'string') p.userPrompt = truncBody(p.userPrompt, max);
-  if (typeof p.response === 'string') p.response = truncBody(p.response, max);
+  if (typeof p.systemPrompt === 'string') p.systemPrompt = truncateUtf16WithSuffix(p.systemPrompt, max);
+  if (typeof p.userPrompt === 'string') p.userPrompt = truncateUtf16WithSuffix(p.userPrompt, max);
+  if (typeof p.response === 'string') p.response = truncateUtf16WithSuffix(p.response, max);
   return { ...line, payload: p };
 }
 

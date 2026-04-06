@@ -2,7 +2,7 @@
  * Shared literals for meta-harness (URLs, timeouts, filenames).
  */
 
-/** Canonical spec section ids for simplified benchmarks + compile-mode rubric context (must stay aligned with `SpecSectionId`). */
+/** Canonical spec section ids for simplified benchmarks + incubate-mode rubric context (must stay aligned with `SpecSectionId`). */
 export const SECTION_KEYS = [
   'design-brief',
   'existing-design',
@@ -19,7 +19,7 @@ export const NO_BEST_SENTINEL = -1;
 
 export const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-export const DEFAULT_COMPILE_MODEL = 'minimax/minimax-m2.5';
+export const DEFAULT_INCUBATE_MODEL = 'minimax/minimax-m2.5';
 
 /** Default OpenRouter hypothesis-rubric timeout when config omits hypothesisRubricTimeoutMs */
 export const DEFAULT_HYPOTHESIS_RUBRIC_TIMEOUT_MS = 300_000;
@@ -47,8 +47,8 @@ export const EVAL_META_JSON_WAIT_MS = 60_000;
 /** Poll interval for meta.json */
 export const EVAL_META_JSON_POLL_MS = 400;
 
-/** Truncate compile error body in runCompileStep */
-export const COMPILE_ERROR_BODY_MAX = 800;
+/** Truncate incubate error body in runIncubateStep */
+export const INCUBATE_ERROR_BODY_MAX = 800;
 
 /** Proposer `search` tool: max substring hits returned */
 export const SEARCH_MAX_HITS = 40;
@@ -62,11 +62,17 @@ export const SEARCH_MAX_DEPTH = 8;
 /** Truncate `revisionBrief` in per-test summary.json written by meta-harness */
 export const REVISION_BRIEF_MAX_CHARS = 800;
 
-/** Snippet length in compile-mode rubric LLM parse / JSON error messages */
+/** Snippet length in incubate-mode rubric LLM parse / JSON error messages */
 export const RUBRIC_ERROR_SNIPPET_MAX = 200;
 
 /** Max chars of non-OK `/hypothesis/generate` response body embedded in evaluator errors */
 export const EVAL_FETCH_ERROR_BODY_MAX = 500;
+
+/** Default timeout for a single POST /api/inputs/generate call (single LLM call, not SSE) */
+export const DEFAULT_INPUTS_GENERATE_TIMEOUT_MS = 120_000;
+
+/** Snippet length in inputs-mode rubric LLM parse / JSON error messages */
+export const INPUTS_RUBRIC_ERROR_SNIPPET_MAX = 200;
 
 /** Plain-mode heartbeat log throttle */
 export const PLAIN_HEARTBEAT_LOG_THROTTLE_MS = 10_000;
@@ -74,7 +80,7 @@ export const PLAIN_HEARTBEAT_LOG_THROTTLE_MS = 10_000;
 /** Default timeout for POST /hypothesis/generate (SSE) when config omits hypothesisGenerateTimeoutMs */
 export const DEFAULT_HYPOTHESIS_GENERATE_TIMEOUT_MS = 600_000;
 
-/** Default timeout per OpenRouter chat request (proposer rounds, compile-mode rubric when no other signal) */
+/** Default timeout per OpenRouter chat request (proposer rounds, incubate-mode rubric when no other signal) */
 export const DEFAULT_OPENROUTER_CHAT_TIMEOUT_MS = 600_000;
 
 /** Truncate OpenRouter error response bodies in thrown errors */
@@ -94,6 +100,8 @@ export const ARTIFACT = {
   promotionReportMd: 'PROMOTION_REPORT.md',
   /** Per-candidate copy of `skills/` at evaluation time (directory name, not a file). */
   skillsSnapshot: 'skills-snapshot',
+  /** Session copy of repo `skills/` before any candidate mutates disk — used to restore after each candidate and in `finally`. */
+  skillsBaseline: 'skills-baseline',
 } as const;
 
 /**

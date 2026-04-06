@@ -9,6 +9,7 @@ const fixtureSession = (): UnpromotedSession => ({
   meanScore: 3.5,
   stalePrompts: [{ key: 'designer-agentic-system', liveBody: 'live\n', winnerBody: 'winner\n' }],
   staleSkills: [],
+  staleRubricWeights: null,
   reportPath: 'meta-harness/history/session-design-test/PROMOTION_REPORT.md',
   allFetchesFailed: false,
 });
@@ -63,6 +64,6 @@ describe('PreflightReview', () => {
       <PreflightReview session={fixtureSession()} promoteOnly onDone={vi.fn()} />,
     );
     const frame = lastFrame() ?? '';
-    expect(frame).toContain('apply winner to repo + Langfuse sync');
+    expect(frame).toContain('apply winner (prompts, skills, rubric weights)');
   });
 });

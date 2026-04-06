@@ -1,14 +1,14 @@
 import { NODE_TYPES } from '../constants/canvas';
 import { GENERATION_STATUS } from '../constants/generation';
-import { allStrategyIds } from '../stores/compiler-store';
-import type { IncubationPlan } from '../types/compiler';
+import { allStrategyIds } from '../stores/incubator-store';
+import type { IncubationPlan } from '../types/incubator';
 import type { GenerationResult } from '../types/provider';
 import type { WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 import { getHypothesisRefId, isPlaceholderHypothesis } from '../lib/hypothesis-node-utils';
 
 /**
- * Hypothesis/variant nodes whose backing compiler or generation state is gone
- * (or stale placeholders when not compiling).
+ * Hypothesis/preview nodes whose backing incubator or generation state is gone
+ * (or stale placeholders when not incubating).
  */
 export function collectOrphanNodeIds(
   nodes: WorkspaceNode[],

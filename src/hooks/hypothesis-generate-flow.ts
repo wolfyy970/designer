@@ -1,12 +1,12 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { FitViewOptions } from '@xyflow/react';
 import type { DesignSpec } from '../types/spec';
-import type { HypothesisStrategy } from '../types/compiler';
+import type { HypothesisStrategy } from '../types/incubator';
 import { useCanvasStore } from '../stores/canvas-store';
 import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
 import { useGenerationStore, nextRunNumber } from '../stores/generation-store';
 import { scheduleCanvasFitView } from '../lib/canvas-fit-view';
-import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
+import { DEFAULT_INCUBATOR_PROVIDER } from '../lib/constants';
 import { warnIfWorkspaceSnapshotInvalid } from '../lib/workspace-snapshot-warn';
 import { normalizeError } from '../lib/error-utils';
 import { pinModelCredentialsIfLockdown } from '../lib/lockdown-model';
@@ -33,10 +33,10 @@ import {
   swapGenerationAbortController,
 } from '../lib/generation-abort-registry';
 import type { CanvasStore } from '../stores/canvas/canvas-store-types';
-import type { CompiledPrompt } from '../types/compiler';
+import type { CompiledPrompt } from '../types/incubator';
 import type { GenerationResult } from '../types/provider';
 import { resolveEvaluatorSettings } from './resolveEvaluatorSettings';
-import { getActivePromptOverrides, usePromptOverridesStore } from '../stores/prompt-overrides-store';
+import { getActivePromptOverrides, spreadPromptOverrides, usePromptOverridesStore } from '../stores/prompt-overrides-store';
 
 export interface GenerationProgress {
   completed: number;
@@ -92,7 +92,6 @@ export async function runHypothesisGenerateFlow({
 
   const domain = useWorkspaceDomainStore.getState();
   const evalSettings = resolveEvaluatorSettings(nodeId);
-  const promptOverrides = getActivePromptOverrides(usePromptOverridesStore.getState().overrides);
   const workspacePayload: HypothesisGenerateApiPayload = {
     hypothesisNodeId: nodeId,
     hypothesisStrategy: strategy,
@@ -101,17 +100,17 @@ export async function runHypothesisGenerateFlow({
     domainHypothesis: domain.hypotheses[nodeId] ?? null,
     modelProfiles: normalizeModelProfilesForApi(
       domain.modelProfiles,
-      DEFAULT_COMPILER_PROVIDER,
+      DEFAULT_INCUBATOR_PROVIDER,
       lockdown,
     ),
     designSystems: domain.designSystems,
-    defaultCompilerProvider: DEFAULT_COMPILER_PROVIDER,
+    defaultIncubatorProvider: DEFAULT_INCUBATOR_PROVIDER,
     correlationId: runId,
     agenticMaxRevisionRounds: evalSettings.maxRevisionRounds,
     agenticMinOverallScore: evalSettings.minOverallScore ?? undefined,
     rubricWeights: evalSettings.rubricWeights,
     ...(supportsVision != null ? { supportsVision } : {}),
-    ...(promptOverrides ? { promptOverrides } : {}),
+    ...spreadPromptOverrides(getActivePromptOverrides(usePromptOverridesStore.getState().overrides)),
   };
   warnIfWorkspaceSnapshotInvalid(workspacePayload.snapshot, 'useHypothesisGeneration');
 
@@ -123,7 +122,7 @@ export async function runHypothesisGenerateFlow({
     domainHypothesis: workspacePayload.domainHypothesis ?? undefined,
     modelProfiles: workspacePayload.modelProfiles,
     designSystems: workspacePayload.designSystems,
-    defaultCompilerProvider: workspacePayload.defaultCompilerProvider,
+    defaultIncubatorProvider: workspacePayload.defaultIncubatorProvider,
   });
   if (!genCtxRaw) return;
   const genCtx = {

@@ -1,9 +1,9 @@
 /**
- * LLM rubric for meta-harness --mode=compile: score generated hypotheses without building designs.
+ * LLM rubric for meta-harness --mode=incubate: score generated hypotheses without building designs.
  */
 import { z } from 'zod';
 import type { DesignSpec } from '../src/types/spec.ts';
-import type { HypothesisStrategy } from '../src/types/compiler.ts';
+import type { HypothesisStrategy } from '../src/types/incubator.ts';
 
 import { fetchOpenRouterChat } from './openrouter-client.ts';
 import { RUBRIC_ERROR_SNIPPET_MAX, SECTION_KEYS } from './constants.ts';

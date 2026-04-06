@@ -30,7 +30,7 @@ function minimalCore(overrides: Record<string, unknown> = {}) {
       m1: { nodeId: 'm1', providerId: 'openrouter', modelId: 'x' },
     },
     designSystems: {},
-    defaultCompilerProvider: 'openrouter',
+    defaultIncubatorProvider: 'openrouter',
     ...overrides,
   };
 }

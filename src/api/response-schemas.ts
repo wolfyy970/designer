@@ -17,15 +17,15 @@ const HypothesisStrategyWireSchema = z.object({
   dimensionValues: z.record(z.string(), z.string()),
 });
 
-/** POST /api/compile response (`IncubationPlan`). */
-export const CompileResponseSchema = z.object({
+/** POST /api/incubate response (`IncubationPlan`). */
+export const IncubateResponseSchema = z.object({
   id: z.string(),
   specId: z.string(),
   dimensions: z.array(DimensionSchema),
   hypotheses: z.array(HypothesisStrategyWireSchema),
   generatedAt: z.string(),
   approvedAt: z.string().optional(),
-  compilerModel: z.string(),
+  incubatorModel: z.string(),
 });
 
 const CompiledPromptSchema = z.object({
@@ -106,7 +106,7 @@ const LlmLogEntrySchema = z
     status: z.enum(['in_progress', 'complete', 'error']).optional(),
     correlationId: z.string().optional(),
     source: z.enum([
-      'compiler',
+      'incubator',
       'planner',
       'builder',
       'designSystem',
@@ -155,11 +155,19 @@ export const DesignSystemExtractResponseSchema = z.object({
   result: z.string(),
 });
 
-/** POST /api/section/generate */
-export const SectionGenerateResponseSchema = z.object({
+/** POST /api/inputs/generate */
+export const InputsGenerateResponseSchema = z.object({
   result: z.string(),
 });
 
+
+/** GET /api/config — default rubric blend (repo: src/lib/rubric-weights.json) */
+export const DefaultRubricWeightsSchema = z.object({
+  design: z.number(),
+  strategy: z.number(),
+  implementation: z.number(),
+  browser: z.number(),
+});
 
 /** GET /api/config */
 export const AppConfigResponseSchema = z.object({
@@ -170,6 +178,8 @@ export const AppConfigResponseSchema = z.object({
   /** Server operator default; client Settings may override per session. */
   agenticMaxRevisionRounds: z.number().int().min(0).max(20),
   agenticMinOverallScore: z.number().min(0).max(5).nullable(),
+  /** Matches repo defaults until promotion or manual edit + server restart. */
+  defaultRubricWeights: DefaultRubricWeightsSchema,
 });
 
 export type AppConfigResponse = z.infer<typeof AppConfigResponseSchema>;

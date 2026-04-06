@@ -9,13 +9,13 @@ export type PermanentDeleteCopy = {
   cancelLabel?: string;
 };
 
-/** Tier S — section cards: removal clears persisted spec for that section. */
-export function sectionCardDeleteCopy(sectionTitle: string): PermanentDeleteCopy {
+/** Tier S — input cards: removal clears persisted spec for that spec facet. */
+export function inputCardDeleteCopy(inputTitle: string): PermanentDeleteCopy {
   return {
-    title: `Remove “${sectionTitle}” from the canvas?`,
+    title: `Remove “${inputTitle}” from the canvas?`,
     description:
-      'This removes the card and clears this section in your saved document (text and images for this facet). An empty optional slot may show a placeholder again until you dismiss it. Connections are removed.',
-    confirmLabel: 'Remove and clear section',
+      'This removes the card and clears this facet in your saved document (text and images). An empty optional slot may show a placeholder again until you dismiss it. Connections are removed.',
+    confirmLabel: 'Remove and clear facet',
   };
 }
 
@@ -94,7 +94,7 @@ export const STATIC_NODE_DELETE_COPY = {
 } as const;
 
 /**
- * Keyboard-driven multi-delete: one warning for the current selection (Tier G/T only; section cards are protected).
+ * Keyboard-driven multi-delete: one warning for the current selection (Tier G/T only; input cards are protected).
  */
 export function keyboardMultiDeleteCopy(
   removable: readonly WorkspaceNode[],

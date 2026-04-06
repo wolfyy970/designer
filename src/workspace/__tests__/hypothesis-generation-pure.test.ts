@@ -5,7 +5,7 @@ import {
   normalizeModelProfilesForApi,
   workspaceSnapshotWireToGraph,
 } from '../hypothesis-generation-pure';
-import type { HypothesisStrategy } from '../../types/compiler';
+import type { HypothesisStrategy } from '../../types/incubator';
 import type { DesignSpec } from '../../types/spec';
 import { EDGE_STATUS, NODE_TYPES } from '../../constants/canvas';
 import { LOCKDOWN_MODEL_ID, LOCKDOWN_PROVIDER_ID } from '../../lib/lockdown-model';
@@ -150,7 +150,7 @@ describe('hypothesis-generation-pure', () => {
       designSystems: {
         ds1: { nodeId: 'ds1', title: 'T', content: 'Body', images: [] },
       },
-      defaultCompilerProvider: 'openrouter',
+      defaultIncubatorProvider: 'openrouter',
     });
     expect(ctx).not.toBeNull();
     expect(ctx!.agentMode).toBe('agentic');
@@ -201,7 +201,7 @@ describe('hypothesis-generation-pure', () => {
       },
       modelProfiles: {},
       designSystems: {},
-      defaultCompilerProvider: 'openrouter',
+      defaultIncubatorProvider: 'openrouter',
     });
     expect(ctx).not.toBeNull();
     expect(ctx!.agentMode).toBe('single');
@@ -234,7 +234,7 @@ describe('hypothesis-generation-pure', () => {
       },
       modelProfiles: normalized,
       designSystems: {},
-      defaultCompilerProvider: 'openrouter',
+      defaultIncubatorProvider: 'openrouter',
     });
     expect(ctx).not.toBeNull();
     expect(ctx!.modelCredentials).toEqual([

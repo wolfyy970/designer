@@ -131,6 +131,7 @@ hypothesis.post('/generate', async (c) => {
           event: SSE_EVENT_NAMES.error,
           id: allocId(),
         });
+        await stream.writeSSE({ data: '{}', event: SSE_EVENT_NAMES.done, id: allocId() });
       });
     }
   });

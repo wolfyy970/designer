@@ -1,4 +1,5 @@
 import type { GenerationStatus } from '../constants/generation';
+import type { RunTraceEvent, RunTraceKind } from '../lib/run-trace-event-schema';
 import type {
   AgenticCheckpoint,
   AggregatedEvaluationReport,
@@ -11,6 +12,7 @@ import type {
 export type { EvaluationContextPayload } from './evaluation';
 
 export type { GenerationStatus };
+export type { RunTraceEvent, RunTraceKind };
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -38,7 +40,7 @@ export interface ProviderOptions {
    * Server: selects completion margin when deriving `max_tokens` from context − prompt.
    * @see server/lib/completion-budget.ts
    */
-  completionPurpose?: 'compile' | 'compaction' | 'agent_turn' | 'default';
+  completionPurpose?: 'incubate' | 'compaction' | 'agent_turn' | 'default';
 }
 
 export interface Provenance {
@@ -66,45 +68,6 @@ export interface TodoItem {
   id: string;
   task: string;
   status: 'pending' | 'in_progress' | 'completed';
-}
-
-export type RunTraceKind =
-  | 'run_started'
-  | 'phase'
-  | 'model_turn_start'
-  | 'model_first_token'
-  | 'tool_started'
-  | 'tool_finished'
-  | 'tool_failed'
-  | 'files_planned'
-  | 'file_written'
-  | 'evaluation_progress'
-  | 'evaluation_worker'
-  | 'evaluation_report'
-  | 'revision_round'
-  | 'checkpoint'
-  | 'compaction'
-  | 'skills_loaded'
-  | 'skill_activated';
-
-export interface RunTraceEvent {
-  id: string;
-  at: string;
-  kind: RunTraceKind;
-  label: string;
-  /** PI model turn index (1-based), set on `model_turn_start` for timeline grouping */
-  turnId?: number;
-  phase?: AgenticPhase;
-  round?: number;
-  toolName?: string;
-  path?: string;
-  status?: 'info' | 'success' | 'warning' | 'error';
-  /** Extra context (e.g. evaluator worker failure message) for observability UI */
-  detail?: string;
-  /** JSON snapshot of Pi tool `args` at tool_execution_start (truncated on the server). */
-  toolArgs?: string;
-  /** Truncated text from tool result content (tool_execution_end). */
-  toolResult?: string;
 }
 
 /** One PI model turn's streamed reasoning (collapsible timeline). */

@@ -95,10 +95,30 @@ describe('workspace domain persist migration v5 → v6', () => {
     expect(result.previewSlots).toEqual({});
   });
 
-  it('runs full migration from v0 through v6', () => {
+  it('runs full migration from v0 through latest', () => {
     const v0State = { incubatorWirings: {}, hypotheses: {}, modelProfiles: {} };
     const result = migrate(structuredClone(v0State), 0) as Record<string, unknown>;
     expect(result.incubatorModelNodeIds).toBeDefined();
     expect(result.previewSlots).toBeDefined();
+  });
+});
+
+describe('workspace domain persist migration v6 → v7', () => {
+  it('renames sectionNodeIds to inputNodeIds on incubator wirings', () => {
+    const v6State = {
+      incubatorWirings: {
+        inc1: { sectionNodeIds: ['n1', 'n2'], previewNodeIds: ['p1'] },
+      },
+      incubatorModelNodeIds: {},
+      hypotheses: {},
+      modelProfiles: {},
+      designSystems: {},
+      previewSlots: {},
+    };
+    const result = migrate(structuredClone(v6State), 6) as Record<string, unknown>;
+    const w = (result.incubatorWirings as Record<string, { inputNodeIds: string[]; previewNodeIds: string[] }>).inc1;
+    expect(w.inputNodeIds).toEqual(['n1', 'n2']);
+    expect(w.previewNodeIds).toEqual(['p1']);
+    expect(w).not.toHaveProperty('sectionNodeIds');
   });
 });

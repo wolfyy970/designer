@@ -44,10 +44,44 @@ describe('proposer-tools', () => {
     expect(resolveSafeRead(ctx, '/etc/passwd')).toBeNull();
   });
 
-  it('dispatchTool rejects skill writes in compile mode', async () => {
-    const ctx = fakeCtx('compile');
+  it('dispatchTool rejects skill writes in incubate mode', async () => {
+    const ctx = fakeCtx('incubate');
     const out = await dispatchTool(ctx, 'write_skill', JSON.stringify({ key: 'k', content: 'x' }));
-    expect(out).toMatch(/compile mode/);
+    expect(out).toMatch(/incubate mode/);
+  });
+
+  it('dispatchTool rejects skill/rubric-weight tools in inputs mode', async () => {
+    const ctx = fakeCtx('inputs');
+    expect(await dispatchTool(ctx, 'write_skill', JSON.stringify({ key: 'k', content: 'x' }))).toMatch(
+      /inputs mode/,
+    );
+    expect(await dispatchTool(ctx, 'delete_skill', JSON.stringify({ key: 'k' }))).toMatch(
+      /inputs mode/,
+    );
+    expect(
+      await dispatchTool(ctx, 'set_rubric_weights', JSON.stringify({ design: 1 })),
+    ).toMatch(/inputs mode/);
+  });
+
+  it('set_prompt_override rejects non-inputs keys in inputs mode', async () => {
+    const ctx = fakeCtx('inputs');
+    const out = await dispatchTool(
+      ctx,
+      'set_prompt_override',
+      JSON.stringify({ key: 'hypotheses-generator-system', body: 'override' }),
+    );
+    expect(out).toMatch(/inputs mode only allows/);
+  });
+
+  it('set_prompt_override allows inputs-gen keys in inputs mode', async () => {
+    const ctx = fakeCtx('inputs');
+    const out = await dispatchTool(
+      ctx,
+      'set_prompt_override',
+      JSON.stringify({ key: 'inputs-gen-research-context', body: 'new prompt body' }),
+    );
+    expect(out).toMatch(/Stored override/);
+    expect(ctx.promptOverrides['inputs-gen-research-context']).toBe('new prompt body');
   });
 
   it('dispatchTool rejects invalid tool JSON args', async () => {

@@ -1,5 +1,5 @@
 import type { DesignSpec, ReferenceImage } from '../types/spec';
-import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../types/compiler';
+import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../types/incubator';
 import { buildHypothesisPrompt } from '../lib/prompts/hypothesis-prompt';
 import { generateId, now } from '../lib/utils';
 

@@ -2,7 +2,7 @@
 
 **Read the [North Star](PRODUCT.md#north-star) first.** Every decision in this repo serves that ambition.
 
-A design brief compiles into hypothesis strategies that systematically explore the solution space. Each hypothesis generates as a complete design — either a single-shot HTML document or an agentic multi-file project with reasoning, self-critique, and revision passes. Everything connects on a visual node-graph canvas.
+A design brief feeds the **Incubator**, which produces hypothesis strategies that systematically explore the solution space. Each hypothesis generates as a complete design — either a single-shot HTML document or an agentic multi-file project with reasoning, self-critique, and revision passes. Everything connects on a visual node-graph canvas.
 
 ## Quick Start
 
@@ -38,7 +38,7 @@ With `LOCKDOWN` disabled, you can mix providers — e.g. OpenRouter for one node
 
 The primary interface is a visual node-graph canvas (`/canvas`, the default route):
 
-1. **Input nodes** (left) — Design Brief, Existing Design, Research Context, Objectives & Metrics, Design Constraints. On a fresh canvas, optional inputs may appear as **ghost placeholders**; opening **Canvas Manager** → **Load** materializes real section nodes when the saved spec already has text or images for those sections. **Research Context**, **Objectives & Metrics**, and **Design Constraints** offer an optional **auto-generate** control (from the Design Brief and other filled sections) using the **first Model node** on the canvas and `POST /api/section/generate` — details in [USER_GUIDE.md](USER_GUIDE.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
+1. **Input nodes** (left) — Design Brief, Existing Design, Research Context, Objectives & Metrics, Design Constraints. On a fresh canvas, optional inputs may appear as **ghost placeholders**; opening **Canvas Manager** → **Load** materializes real **input nodes** when the saved spec already has text or images for those **facets** (stored under `spec.sections` in data). **Research Context**, **Objectives & Metrics**, and **Design Constraints** offer an optional **auto-generate** control (from the Design Brief and other filled facets) using the **first Model node** on the canvas and `POST /api/inputs/generate` — details in [USER_GUIDE.md](USER_GUIDE.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
 2. **Model node** — Connect to the Incubator or Hypotheses to configure which provider and model they use
 3. **Incubator** — Connect input nodes and a Model node, then click Generate to produce hypothesis strategies
 4. **Hypotheses** — Editable strategy cards. Connect a Model node, choose **Direct** (one-shot) or **Agentic**, then **Generate** or **Run agent**
@@ -47,7 +47,7 @@ The primary interface is a visual node-graph canvas (`/canvas`, the default rout
 
 Nodes connect left-to-right. Auto-layout arranges everything based on connections. Previews can connect back to Existing Design for iterative feedback loops.
 
-The header also opens **Settings** (General preferences; **Prompt Studio** under Prompts — **Save** / ⌘S stores drafts in **this browser** and sends them as **per-request overrides** on compile / generate / extract; baseline text still comes from **Langfuse** via the API. In **development**, a **design tokens kitchen sink** modal is on the General tab) and **Observability** (LLM + trace logs — primarily for development). Details: [USER_GUIDE.md](USER_GUIDE.md) and [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
+The header also opens **Settings** (General preferences; **Prompt Studio** under Prompts — **Save** / ⌘S stores drafts in **this browser** and sends them as **per-request overrides** on incubate / generate / extract / inputs-generate; baseline text still comes from **Langfuse** via the API. In **development**, a **design tokens kitchen sink** modal is on the General tab) and **Observability** (LLM + trace logs — primarily for development). Details: [USER_GUIDE.md](USER_GUIDE.md) and [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 
 ## Scripts
 

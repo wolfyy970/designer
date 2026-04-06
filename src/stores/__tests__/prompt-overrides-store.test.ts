@@ -1,6 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { getActivePromptOverrides } from '../prompt-overrides-store';
+import { getActivePromptOverrides, spreadPromptOverrides } from '../prompt-overrides-store';
 import type { PromptKey } from '../../lib/prompts/defaults';
+
+describe('spreadPromptOverrides', () => {
+  it('returns empty object when overrides undefined', () => {
+    expect(spreadPromptOverrides(undefined)).toEqual({});
+  });
+
+  it('wraps non-empty map as promptOverrides', () => {
+    const o = { 'designer-direct-system': 'x' };
+    expect(spreadPromptOverrides(o)).toEqual({ promptOverrides: o });
+  });
+});
 
 describe('getActivePromptOverrides', () => {
   it('returns undefined when there are no usable entries', () => {

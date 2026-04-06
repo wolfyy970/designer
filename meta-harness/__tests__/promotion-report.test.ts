@@ -59,7 +59,7 @@ describe('generatePromotionReportMarkdown', () => {
       winningCandidateDir: winner,
       winningCandidateId: 0,
       winningMeanScore: 4,
-      mode: 'compile',
+      mode: 'incubate',
       candidateRows: [
         { candidateId: 0, meanScore: 4, iteration: 0 },
         { candidateId: 1, meanScore: 3.9, iteration: 1 },
@@ -97,5 +97,50 @@ describe('generatePromotionReportMarkdown', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('includes rubric weight table when winner differs from repo', async () => {
+    const repo = path.join(tmpRoot, 'repo-rw');
+    const winner = path.join(tmpRoot, 'cand-rw');
+    await mkdir(path.join(repo, 'skills'), { recursive: true });
+    await mkdir(path.join(winner, ARTIFACT.skillsSnapshot), { recursive: true });
+    await mkdir(path.join(repo, 'meta-harness', 'test-cases'), { recursive: true });
+    const lib = path.join(repo, 'src', 'lib');
+    await mkdir(lib, { recursive: true });
+    await writeFile(
+      path.join(lib, 'rubric-weights.json'),
+      `${JSON.stringify(
+        { design: 0.4, strategy: 0.3, implementation: 0.2, browser: 0.1 },
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    );
+    await writeFile(
+      path.join(winner, ARTIFACT.rubricWeightsJson),
+      `${JSON.stringify(
+        { design: 0.35, strategy: 0.3, implementation: 0.25, browser: 0.1 },
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    );
+    await writeFile(path.join(winner, ARTIFACT.proposalMd), '# Hi\n', 'utf8');
+    await writeFile(path.join(winner, ARTIFACT.promptOverridesJson), '{}\n', 'utf8');
+
+    const { markdown, summary } = await generatePromotionReportMarkdown({
+      repoRoot: repo,
+      winningCandidateDir: winner,
+      winningCandidateId: 1,
+      winningMeanScore: 3,
+      mode: 'design',
+      candidateRows: [{ candidateId: 1, meanScore: 3, iteration: 1 }],
+      initialTestCaseNames: new Set(),
+      currentTestCasesDir: path.join(repo, 'meta-harness', 'test-cases'),
+    });
+    expect(summary.rubricWeightsChanged).toBe(true);
+    expect(markdown).toContain('## 4. Rubric weight changes');
+    expect(markdown).toContain('0.3500');
+    expect(markdown).toContain('restart the API server');
   });
 });

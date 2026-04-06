@@ -23,7 +23,7 @@ describe.skipIf(!live)('meta-harness live API (META_HARNESS_LIVE=1)', () => {
       await readFile(path.join(__dirname, '../test-cases/onboarding-checklist.json'), 'utf8'),
     ) as unknown;
     const body = hydrateMetaHarnessTestCase(raw, {
-      defaultCompilerProvider: 'openrouter',
+      defaultIncubatorProvider: 'openrouter',
       correlationId: `mh-live-${Date.now()}`,
       agenticMaxRevisionRounds: 1,
     });

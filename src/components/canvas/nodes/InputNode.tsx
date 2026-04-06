@@ -1,42 +1,43 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
-import { ClipboardCopy, Loader2, Wand2 } from 'lucide-react';
+import { Loader2, Wand2 } from 'lucide-react';
 import { useSpecStore } from '../../../stores/spec-store';
 import {
   NODE_TYPE_TO_SECTION,
   type CanvasNodeType,
 } from '../../../stores/canvas-store';
-import type { SectionNodeData } from '../../../types/canvas-data';
+import type { InputNodeData } from '../../../types/canvas-data';
 import { NODE_STATUS, RF_INTERACTIVE } from '../../../constants/canvas';
 import { SPEC_SECTIONS } from '../../../lib/constants';
 import { filledOrEmpty } from '../../../lib/node-status';
 import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
-import { sectionCardDeleteCopy } from '../../../lib/canvas-permanent-delete-copy';
+import { inputCardDeleteCopy } from '../../../lib/canvas-permanent-delete-copy';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
 import { useFirstCanvasModel } from '../../../hooks/useFirstCanvasModel';
-import { getActivePromptOverrides, usePromptOverridesStore } from '../../../stores/prompt-overrides-store';
-import { generateSectionContent } from '../../../api/client';
-import type { SectionGenerateTargetApiId } from '../../../api/types';
-import { normalizeError } from '../../../lib/error-utils';
+import { spreadPromptOverrides } from '../../../stores/prompt-overrides-store';
+import { usePromptOverrideAsyncAction } from '../../../hooks/usePromptOverrideAsyncAction';
+import { generateInputContent } from '../../../api/client';
+import type { InputsGenerateTargetApiId } from '../../../api/types';
 import ReferenceImageUpload from '../../shared/ReferenceImageUpload';
 import GeneratingSkeleton from './GeneratingSkeleton';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
+import { NodeErrorBlock } from './shared/NodeErrorBlock';
 
-const GENERATE_SECTION_API_ID: Partial<
-  Record<CanvasNodeType, SectionGenerateTargetApiId>
+const GENERATE_INPUT_API_ID: Partial<
+  Record<CanvasNodeType, InputsGenerateTargetApiId>
 > = {
   researchContext: 'research-context',
   objectivesMetrics: 'objectives-metrics',
   designConstraints: 'design-constraints',
 };
 
-type SectionNodeType = Node<SectionNodeData, CanvasNodeType>;
+type InputNodeFlowType = Node<InputNodeData, CanvasNodeType>;
 
-function SectionNode({ id, type, selected }: NodeProps<SectionNodeType>) {
+function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
   const sectionId = NODE_TYPE_TO_SECTION[type as CanvasNodeType]!;
   const meta = SPEC_SECTIONS.find((s) => s.id === sectionId)!;
-  const deleteCopy = useMemo(() => sectionCardDeleteCopy(meta.title), [meta.title]);
+  const deleteCopy = useMemo(() => inputCardDeleteCopy(meta.title), [meta.title]);
   const onRemove = useCanvasNodePermanentRemove(id, deleteCopy);
   const section = useSpecStore((s) => s.spec.sections[sectionId]);
   const updateSection = useSpecStore((s) => s.updateSection);
@@ -47,7 +48,7 @@ function SectionNode({ id, type, selected }: NodeProps<SectionNodeType>) {
   const hasImages = isExistingDesign;
   const isCapturing = isExistingDesign && capturingImage === sectionId;
 
-  const generateApiId = GENERATE_SECTION_API_ID[type as CanvasNodeType];
+  const generateApiId = GENERATE_INPUT_API_ID[type as CanvasNodeType];
   const showMagicWand = generateApiId != null;
   const designBriefContent =
     useSpecStore((s) => s.spec.sections['design-brief']?.content ?? '');
@@ -55,38 +56,38 @@ function SectionNode({ id, type, selected }: NodeProps<SectionNodeType>) {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const elapsed = useElapsedTimer(generating);
+  const runPromptAction = usePromptOverrideAsyncAction();
 
   const handleGenerateFromBrief = useCallback(async () => {
-    const apiId = GENERATE_SECTION_API_ID[type as CanvasNodeType];
+    const apiId = GENERATE_INPUT_API_ID[type as CanvasNodeType];
     if (!apiId || !hasModel || !providerId || !modelId) return;
     const spec = useSpecStore.getState().spec.sections;
     const brief = spec['design-brief']?.content ?? '';
     if (!brief.trim()) return;
-    setGenerating(true);
-    setGenerateError(null);
-    try {
-      const promptOverrides = getActivePromptOverrides(
-        usePromptOverridesStore.getState().overrides,
-      );
-      const response = await generateSectionContent({
-        sectionId: apiId,
-        designBrief: brief,
-        existingDesign: spec['existing-design']?.content,
-        researchContext: spec['research-context']?.content,
-        objectivesMetrics: spec['objectives-metrics']?.content,
-        designConstraints: spec['design-constraints']?.content,
-        providerId,
-        modelId,
-        ...(promptOverrides ? { promptOverrides } : {}),
-      });
+    const response = await runPromptAction(
+      (promptOverrides) =>
+        generateInputContent({
+          inputId: apiId,
+          designBrief: brief,
+          existingDesign: spec['existing-design']?.content,
+          researchContext: spec['research-context']?.content,
+          objectivesMetrics: spec['objectives-metrics']?.content,
+          designConstraints: spec['design-constraints']?.content,
+          providerId,
+          modelId,
+          ...spreadPromptOverrides(promptOverrides),
+        }),
+      {
+        setLoading: setGenerating,
+        setError: setGenerateError,
+        errorMessage: 'Generation failed',
+      },
+    );
+    if (response) {
       const sid = NODE_TYPE_TO_SECTION[type as CanvasNodeType]!;
       useSpecStore.getState().updateSection(sid, response.result);
-    } catch (err) {
-      setGenerateError(normalizeError(err, 'Generation failed'));
-    } finally {
-      setGenerating(false);
     }
-  }, [type, hasModel, providerId, modelId]);
+  }, [type, hasModel, providerId, modelId, runPromptAction]);
 
   const status = generating
     ? NODE_STATUS.PROCESSING
@@ -109,7 +110,7 @@ function SectionNode({ id, type, selected }: NodeProps<SectionNodeType>) {
         )}
       </NodeHeader>
 
-      {/* Content — same textarea footprint across all section inputs */}
+      {/* Content — same textarea footprint across all spec input nodes */}
       <div className="px-3 pt-1 pb-2.5">
         {generating ? (
           <GeneratingSkeleton variant="contentOnly" elapsed={elapsed} />
@@ -123,7 +124,7 @@ function SectionNode({ id, type, selected }: NodeProps<SectionNodeType>) {
                 : `Describe the ${meta.title.toLowerCase()}...`
             }
             rows={10}
-            className={`${RF_INTERACTIVE} min-h-[var(--min-height-section-textarea)] w-full resize-y rounded border border-border px-2.5 py-2 text-xs leading-relaxed text-fg-secondary placeholder:text-fg-faint outline-none input-focus`}
+            className={`${RF_INTERACTIVE} min-h-[var(--min-height-input-textarea)] w-full resize-y rounded border border-border px-2.5 py-2 text-xs leading-relaxed text-fg-secondary placeholder:text-fg-faint outline-none input-focus`}
           />
         )}
 
@@ -161,22 +162,7 @@ function SectionNode({ id, type, selected }: NodeProps<SectionNodeType>) {
                 )}
               </button>
             </div>
-            {generateError && (
-              <div className="mb-2 rounded bg-error-subtle px-2 py-1.5 text-nano text-error select-text">
-                <pre className="max-h-36 overflow-y-auto whitespace-pre-wrap break-words font-sans leading-snug text-inherit [font-size:inherit]">
-                  {generateError}
-                </pre>
-                <button
-                  type="button"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => void navigator.clipboard?.writeText(generateError)}
-                  className={`${RF_INTERACTIVE} mt-1 flex items-center gap-1 rounded px-0.5 py-0.5 text-nano font-medium text-error hover:bg-error-surface hover:text-error`}
-                >
-                  <ClipboardCopy size={10} className="shrink-0 opacity-90" aria-hidden />
-                  Copy message
-                </button>
-              </div>
-            )}
+            {generateError && <NodeErrorBlock message={generateError} />}
           </div>
         )}
 
@@ -197,4 +183,4 @@ function SectionNode({ id, type, selected }: NodeProps<SectionNodeType>) {
   );
 }
 
-export default memo(SectionNode);
+export default memo(InputNode);

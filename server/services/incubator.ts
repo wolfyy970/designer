@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import type { DesignSpec, ReferenceImage } from '../../src/types/spec.ts';
-import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../../src/types/compiler.ts';
+import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../../src/types/incubator.ts';
 import type { ChatMessage } from '../../src/types/provider.ts';
 import {
-  buildCompilerUserPrompt,
-  type CompilerPromptOptions,
-} from '../../src/lib/prompts/compiler-user.ts';
+  buildIncubatorUserPrompt,
+  type IncubatorPromptOptions,
+} from '../../src/lib/prompts/incubator-user.ts';
 import { buildHypothesisPrompt } from '../../src/lib/prompts/hypothesis-prompt.ts';
 import { generateId, now } from '../../src/lib/utils.ts';
 import { env } from '../env.ts';
@@ -64,24 +64,24 @@ function parseIncubationPlan(raw: unknown, specId: string, model: string): Incub
     dimensions,
     hypotheses,
     generatedAt: now(),
-    compilerModel: model,
+    incubatorModel: model,
   };
 }
 
-export interface CompileOptions {
+export interface IncubateOptions {
   systemPrompt: string;
   userPromptTemplate: string;
   referenceDesigns?: { name: string; code: string }[];
   supportsVision?: boolean;
-  promptOptions?: CompilerPromptOptions;
+  promptOptions?: IncubatorPromptOptions;
 }
 
 /** Throttle compile stream previews (mirrors single-shot generate). */
-const COMPILE_STREAM_PREVIEW_MIN_NEW_CHARS = 160;
-const COMPILE_STREAM_PREVIEW_MIN_INTERVAL_MS = 100;
-const COMPILE_STREAM_STALL_HEARTBEAT_MS = 12_000;
+const INCUBATE_STREAM_PREVIEW_MIN_NEW_CHARS = 160;
+const INCUBATE_STREAM_PREVIEW_MIN_INTERVAL_MS = 100;
+const INCUBATE_STREAM_STALL_HEARTBEAT_MS = 12_000;
 
-export type CompileSpecStreamHooks = {
+export type IncubateSpecStreamHooks = {
   signal?: AbortSignal;
   correlationId?: string;
   /** Heartbeat while waiting for first token / idle (maps to SSE `progress`). */
@@ -90,13 +90,13 @@ export type CompileSpecStreamHooks = {
   onAccumulatedDelta?: (accumulated: string) => void | Promise<void>;
 };
 
-export async function compileSpec(
+export async function incubateSpec(
   spec: DesignSpec,
   model: string,
   providerId: string,
-  options: CompileOptions,
+  options: IncubateOptions,
 ): Promise<IncubationPlan> {
-  const userPrompt = buildCompilerUserPrompt(
+  const userPrompt = buildIncubatorUserPrompt(
     spec,
     options.userPromptTemplate,
     options.referenceDesigns,
@@ -115,8 +115,8 @@ export async function compileSpec(
     ],
     model,
     providerId,
-    { temperature: 0.7, images, completionPurpose: 'compile' },
-    { source: 'compiler', phase: 'Compile spec → dimension map' },
+    { temperature: 0.7, images, completionPurpose: 'incubate' },
+    { source: 'incubator', phase: 'Incubate spec → dimension map' },
   );
 
   const jsonStr = extractLlmJsonObjectSegment(chat);
@@ -126,8 +126,8 @@ export async function compileSpec(
   } catch {
     const reg = getProvider(providerId);
     logLlmCall({
-      source: 'compiler',
-      phase: 'Compile spec → dimension map',
+      source: 'incubator',
+      phase: 'Incubate spec → dimension map',
       model,
       provider: providerId,
       ...(reg?.name && reg.name !== providerId ? { providerName: reg.name } : {}),
@@ -148,7 +148,7 @@ export async function compileSpec(
           ? `${jsonStr.slice(0, 800)}…`
           : jsonStr;
     throw new Error(
-      `Compiler returned invalid JSON. Try re-compiling or switching models.\n\nRaw response:\n${rawPreview}\n\nJSON segment attempted:\n${jsonProbe}`,
+      `incubator returned invalid JSON. Try re-incubating or switching models.\n\nRaw response:\n${rawPreview}\n\nJSON segment attempted:\n${jsonProbe}`,
     );
   }
 
@@ -160,7 +160,7 @@ export async function compileSpec(
     process.env.NODE_ENV !== 'production'
   ) {
     console.warn(
-      `[compile] Received ${map.hypotheses.length} hypothesis(es) but ${asked} were requested — often output truncation or the model stopping early. max_tokens=${
+      `[incubate] Received ${map.hypotheses.length} hypothesis(es) but ${asked} were requested — often output truncation or the model stopping early. max_tokens=${
         env.MAX_OUTPUT_TOKENS ?? 'omitted (provider / model default)'
       }`,
     );
@@ -169,17 +169,17 @@ export async function compileSpec(
 }
 
 /**
- * Streamed compile: same output as {@link compileSpec}, but forwards token deltas via `onAccumulatedDelta`.
+ * Streamed compile: same output as {@link incubateSpec}, but forwards token deltas via `onAccumulatedDelta`.
  */
-export async function compileSpecStream(
+export async function incubateSpecStream(
   spec: DesignSpec,
   model: string,
   providerId: string,
-  options: CompileOptions,
-  streamHooks: CompileSpecStreamHooks = {},
+  options: IncubateOptions,
+  streamHooks: IncubateSpecStreamHooks = {},
 ): Promise<IncubationPlan> {
   const { signal: abortSignal, correlationId, onProgressStatus, onAccumulatedDelta } = streamHooks;
-  const userPrompt = buildCompilerUserPrompt(
+  const userPrompt = buildIncubatorUserPrompt(
     spec,
     options.userPromptTemplate,
     options.referenceDesigns,
@@ -209,9 +209,9 @@ export async function compileSpecStream(
     const status =
       lastChunkAt === streamStart
         ? `Waiting for model… ${totalSec}s`
-        : `Receiving compiler output… idle ${idleSec}s · ${totalSec}s total`;
+        : `Receiving incubator output… idle ${idleSec}s · ${totalSec}s total`;
     void onProgressStatus?.(status);
-  }, COMPILE_STREAM_STALL_HEARTBEAT_MS);
+  }, INCUBATE_STREAM_STALL_HEARTBEAT_MS);
 
   let lastCodeEmitAt = 0;
   let lastEmittedPreviewLen = 0;
@@ -219,8 +219,8 @@ export async function compileSpecStream(
     const now = Date.now();
     if (
       !force &&
-      raw.length - lastEmittedPreviewLen < COMPILE_STREAM_PREVIEW_MIN_NEW_CHARS &&
-      now - lastCodeEmitAt < COMPILE_STREAM_PREVIEW_MIN_INTERVAL_MS
+      raw.length - lastEmittedPreviewLen < INCUBATE_STREAM_PREVIEW_MIN_NEW_CHARS &&
+      now - lastCodeEmitAt < INCUBATE_STREAM_PREVIEW_MIN_INTERVAL_MS
     ) {
       return;
     }
@@ -237,13 +237,13 @@ export async function compileSpecStream(
       finalMessages,
       {
         model,
-        completionPurpose: 'compile',
+        completionPurpose: 'incubate',
         signal: abortSignal,
         ...(images && images.length > 0 ? { supportsVision: true } : {}),
       },
       {
-        source: 'compiler',
-        phase: 'Compile spec → dimension map (stream)',
+        source: 'incubator',
+        phase: 'Incubate spec → dimension map (stream)',
         ...(correlationId ? { correlationId } : {}),
         signal: abortSignal,
       },
@@ -254,7 +254,7 @@ export async function compileSpecStream(
     );
     chat = response.raw;
     if (abortSignal?.aborted) {
-      throw new Error('Compile aborted');
+      throw new Error('Incubate aborted');
     }
     await emitPreview(chat, true);
   } finally {
@@ -268,8 +268,8 @@ export async function compileSpecStream(
   } catch {
     const reg = getProvider(providerId);
     logLlmCall({
-      source: 'compiler',
-      phase: 'Compile spec → dimension map (stream)',
+      source: 'incubator',
+      phase: 'Incubate spec → dimension map (stream)',
       model,
       provider: providerId,
       ...(reg?.name && reg.name !== providerId ? { providerName: reg.name } : {}),
@@ -290,7 +290,7 @@ export async function compileSpecStream(
           ? `${jsonStr.slice(0, 800)}…`
           : jsonStr;
     throw new Error(
-      `Compiler returned invalid JSON. Try re-compiling or switching models.\n\nRaw response:\n${rawPreview}\n\nJSON segment attempted:\n${jsonProbe}`,
+      `incubator returned invalid JSON. Try re-incubating or switching models.\n\nRaw response:\n${rawPreview}\n\nJSON segment attempted:\n${jsonProbe}`,
     );
   }
 
@@ -302,7 +302,7 @@ export async function compileSpecStream(
     process.env.NODE_ENV !== 'production'
   ) {
     console.warn(
-      `[compile] Received ${map.hypotheses.length} hypothesis(es) but ${asked} were requested — often output truncation or the model stopping early. max_tokens=${
+      `[incubate] Received ${map.hypotheses.length} hypothesis(es) but ${asked} were requested — often output truncation or the model stopping early. max_tokens=${
         env.MAX_OUTPUT_TOKENS ?? 'omitted (provider / model default)'
       }`,
     );
@@ -310,7 +310,7 @@ export async function compileSpecStream(
   return map;
 }
 
-export function compileHypothesisPrompts(
+export function incubateHypothesisPrompts(
   spec: DesignSpec,
   incubationPlan: IncubationPlan,
   hypothesisTemplate: string,

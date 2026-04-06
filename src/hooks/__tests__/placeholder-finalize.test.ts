@@ -5,7 +5,7 @@ import {
   createInitialPlaceholderSessionState,
   type PlaceholderRafBatchers,
 } from '../placeholder-session-state';
-import type { CompiledPrompt } from '../../types/compiler';
+import type { CompiledPrompt } from '../../types/incubator';
 
 vi.mock('../../storage', () => ({
   storage: {

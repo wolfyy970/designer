@@ -2,7 +2,7 @@ import type { DesignSpec } from '../types/spec';
 import type { GenerationResult } from '../types/provider';
 import { getPreviewNodeData } from './canvas-node-data';
 import { loadCode } from '../services/idb-storage';
-import { SECTION_NODE_TYPES } from '../constants/canvas';
+import { INPUT_NODE_TYPES } from '../constants/canvas';
 import {
   NODE_TYPE_TO_SECTION,
   type CanvasNodeType,
@@ -57,45 +57,45 @@ export function computeLineage(
   return { nodeIds, edgeIds };
 }
 
-// ── Compile inputs ──────────────────────────────────────────────────
+// ── Incubate inputs ─────────────────────────────────────────────────
 
-export interface CompileInputs {
+export interface IncubateInputs {
   partialSpec: DesignSpec;
   referenceDesigns: { name: string; code: string }[];
 }
 
 /**
- * Walk the graph from a compiler node to build all inputs
- * needed for compilation — spec sections wired to this compiler **or** non-empty in the shared
+ * Walk the graph from an incubator node to build all inputs
+ * needed for incubation — spec sections wired to this incubator **or** non-empty in the shared
  * spec store, and reference designs (from connected preview nodes).
  *
  * Async because generated code is now stored in IndexedDB.
  */
-export async function buildCompileInputs(
+export async function buildIncubateInputs(
   nodes: AnyNode[],
   edges: AnyEdge[],
   spec: DesignSpec,
-  compilerId: string,
+  incubatorId: string,
   results: GenerationResult[],
   wiring?: DomainIncubatorWiring | null,
-): Promise<CompileInputs> {
+): Promise<IncubateInputs> {
   let connectedNodes: AnyNode[];
   if (
     wiring &&
-    (wiring.sectionNodeIds.length > 0 || wiring.previewNodeIds.length > 0)
+    (wiring.inputNodeIds.length > 0 || wiring.previewNodeIds.length > 0)
   ) {
     const idSet = new Set<string>([
-      ...wiring.sectionNodeIds,
+      ...wiring.inputNodeIds,
       ...wiring.previewNodeIds,
     ]);
     connectedNodes = nodes.filter((n) => idSet.has(n.id));
   } else {
-    const incomingEdges = edges.filter((e) => e.target === compilerId);
+    const incomingEdges = edges.filter((e) => e.target === incubatorId);
     const connectedNodeIds = new Set(incomingEdges.map((e) => e.source));
     connectedNodes = nodes.filter((n) => connectedNodeIds.has(n.id));
   }
 
-  // Section node types wired to this compiler (graph or domain wiring).
+  // Input node types wired to this incubator (graph or domain wiring); each maps to a spec facet id.
   const connectedSectionIds = new Set<string>();
   for (const node of connectedNodes) {
     const sid = NODE_TYPE_TO_SECTION[node.type as CanvasNodeType];
@@ -106,7 +106,7 @@ export async function buildCompileInputs(
    * Include spec content when the section is wired OR when the user filled it (or added images)
    * in the global spec store. Previously only wired sections were kept — the default canvas wires
    * only the design brief, so Research / Objectives / Constraints looked empty in incubator logs
-   * even though section nodes were filled.
+   * even though input nodes were filled.
    */
   const includeSection = (sectionId: string, section: DesignSpec['sections'][string]): boolean => {
     if (connectedSectionIds.has(sectionId)) return true;
@@ -148,11 +148,11 @@ export async function buildCompileInputs(
 
   const codePromises: Promise<void>[] = [];
   for (const node of connectedNodes) {
-    // Direct preview → compiler
+    // Direct preview → incubator
     codePromises.push(collectPreviewCode(node));
 
-    // Indirect preview → section → compiler (follow edges into section nodes)
-    if (SECTION_NODE_TYPES.has(node.type as CanvasNodeType)) {
+    // Indirect preview → input → incubator (follow edges into input nodes)
+    if (INPUT_NODE_TYPES.has(node.type as CanvasNodeType)) {
       const sectionInputEdges = edges.filter((e) => e.target === node.id);
       for (const e of sectionInputEdges) {
         const sourceNode = nodes.find((n) => n.id === e.source);

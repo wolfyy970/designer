@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, Columns2, ChevronLeft, ChevronRight, Loader2, AlertCircle, Star } from 'lucide-react';
-import { useCompilerStore, findStrategy } from '../../stores/compiler-store';
+import { useIncubatorStore, findStrategy } from '../../stores/incubator-store';
 import { useCanvasStore } from '../../stores/canvas-store';
 import { useGenerationStore } from '../../stores/generation-store';
 import { useWorkspaceDomainStore } from '../../stores/workspace-domain-store';
@@ -92,7 +92,7 @@ function useHypothesisScopedPreviewNodeIds(expandedPreviewId: string | null): st
 export default function VariantPreviewOverlay() {
   const expandedPreviewId = useCanvasStore((s) => s.expandedPreviewId);
   const setExpandedPreview = useCanvasStore((s) => s.setExpandedPreview);
-  const incubationPlans = useCompilerStore((s) => s.incubationPlans);
+  const incubationPlans = useIncubatorStore((s) => s.incubationPlans);
 
   const strategyId = useCanvasStore(
     (s) => {

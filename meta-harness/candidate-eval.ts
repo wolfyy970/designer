@@ -1,5 +1,5 @@
 /**
- * Per-candidate test-case evaluation loop (compile / e2e / design paths).
+ * Per-candidate test-case evaluation loop (incubate / e2e / design paths).
  */
 import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -18,10 +18,11 @@ type TestCasesEvalParams = {
   rubricWeights?: Record<string, number>;
   testFiles: string[];
   evalRunsBase: string;
-  compileProvider: string;
-  compileModel: string;
+  incubateProvider: string;
+  incubateModel: string;
   hypothesisEvalModel: string;
-  compileHypothesisCountDefault: number;
+  inputsRubricModel: string;
+  incubateHypothesisCountDefault: number;
   apiKey: string;
   candidateDir: string;
   callbacks: RunnerCallbacks;
@@ -40,10 +41,11 @@ export async function runTestCasesEvaluation(params: TestCasesEvalParams): Promi
     rubricWeights,
     testFiles,
     evalRunsBase,
-    compileProvider,
-    compileModel,
+    incubateProvider,
+    incubateModel,
     hypothesisEvalModel,
-    compileHypothesisCountDefault,
+    inputsRubricModel,
+    incubateHypothesisCountDefault,
     apiKey,
     candidateDir,
     callbacks,
@@ -100,10 +102,11 @@ export async function runTestCasesEvaluation(params: TestCasesEvalParams): Promi
       evalStart,
       testResultsDir,
       evalRunsBase,
-      compileProvider,
-      compileModel,
+      incubateProvider,
+      incubateModel,
       hypothesisEvalModel,
-      compileHypothesisCountDefault,
+      inputsRubricModel,
+      incubateHypothesisCountDefault,
       apiKey,
       promptOverrides: po,
       rubricWeights: rw,

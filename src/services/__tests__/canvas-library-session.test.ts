@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   mockGenerationReset: vi.fn(),
   mockResetCanvas: vi.fn(),
   mockDomainReset: vi.fn(),
-  mockMaterializeOptionalSectionNodesFromSpec: vi.fn(),
+  mockMaterializeOptionalInputNodesFromSpec: vi.fn(),
 }));
 
 const activeSpec: DesignSpec = {
@@ -76,8 +76,8 @@ vi.mock('../../stores/spec-store.ts', () => ({
   },
 }));
 
-vi.mock('../../stores/compiler-store.ts', () => ({
-  useCompilerStore: {
+vi.mock('../../stores/incubator-store.ts', () => ({
+  useIncubatorStore: {
     getState: () => ({ reset: mocks.mockCompilerReset }),
   },
 }));
@@ -92,7 +92,7 @@ vi.mock('../../stores/canvas-store.ts', () => ({
   useCanvasStore: {
     getState: () => ({
       resetCanvas: mocks.mockResetCanvas,
-      materializeOptionalSectionNodesFromSpec: mocks.mockMaterializeOptionalSectionNodesFromSpec,
+      materializeOptionalInputNodesFromSpec: mocks.mockMaterializeOptionalInputNodesFromSpec,
     }),
   },
 }));
@@ -120,7 +120,7 @@ describe('canvas-library-session', () => {
     expect(mocks.mockGenerationReset).toHaveBeenCalledOnce();
     expect(mocks.mockResetCanvas).toHaveBeenCalledOnce();
     expect(mocks.mockLoadCanvas).toHaveBeenCalledWith(saved);
-    expect(mocks.mockMaterializeOptionalSectionNodesFromSpec).toHaveBeenCalledWith(saved);
+    expect(mocks.mockMaterializeOptionalInputNodesFromSpec).toHaveBeenCalledWith(saved);
   });
 
   it('activateSavedSpecById with skipCheckpoint does not save current spec before load', () => {
@@ -130,7 +130,7 @@ describe('canvas-library-session', () => {
     expect(mocks.mockSaveSpecToLibrary).not.toHaveBeenCalled();
     expect(mocks.mockDomainReset).toHaveBeenCalledOnce();
     expect(mocks.mockLoadCanvas).toHaveBeenCalledWith(saved);
-    expect(mocks.mockMaterializeOptionalSectionNodesFromSpec).toHaveBeenCalledWith(saved);
+    expect(mocks.mockMaterializeOptionalInputNodesFromSpec).toHaveBeenCalledWith(saved);
   });
 
   it('activateSavedSpecById returns not_found and skips reset when missing', () => {

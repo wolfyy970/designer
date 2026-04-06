@@ -11,7 +11,7 @@ interface UseNodeProviderModelOptions {
 
 /**
  * Shared provider/model selection state for canvas processing nodes
- * (CompilerNode and HypothesisNode). Values are persisted in canvas node data
+ * (IncubatorNode and HypothesisNode). Values are persisted in canvas node data
  * so they survive page reload.
  *
  * Uses primitive Zustand selectors to avoid useSyncExternalStore infinite loops.

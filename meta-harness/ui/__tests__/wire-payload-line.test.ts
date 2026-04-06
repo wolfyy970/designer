@@ -2,12 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { oneLinePreviewTail, wireDetailSnippet, wirePayloadLine } from '../wire-formatters.ts';
 
 describe('wirePayloadLine (meta-harness TUI)', () => {
-  it('formats compile_result hypothesis count', () => {
+  it('formats incubate_result hypothesis count', () => {
     expect(
-      wirePayloadLine('compile_result', {
+      wirePayloadLine('incubate_result', {
         hypotheses: [{ id: '1' }, { id: '2' }],
       }),
-    ).toBe('compile done: 2 hypotheses');
+    ).toBe('incubate done: 2 hypotheses');
   });
 
   it('formats meta_json_wait', () => {

@@ -7,7 +7,7 @@ import type { PromptKey } from '../../stores/prompt-store';
 function promptKeyFromLlmLogEntry(entry: LlmLogEntry): PromptKey | null {
   const { source, phase = '' } = entry;
 
-  if (source === 'compiler') return 'hypotheses-generator-system';
+  if (source === 'incubator') return 'hypotheses-generator-system';
 
   if (source === 'designSystem') return 'design-system-extract-system';
 
@@ -55,8 +55,8 @@ describe('prompt-log-mapping', () => {
     expect(parsePromptKey('variant')).toBe('designer-hypothesis-inputs');
   });
 
-  it('maps compiler, designSystem, and agent compaction', () => {
-    expect(promptKeyFromLlmLogEntry(baseEntry({ source: 'compiler' }))).toBe(
+  it('maps incubator, designSystem, and agent compaction', () => {
+    expect(promptKeyFromLlmLogEntry(baseEntry({ source: 'incubator' }))).toBe(
       'hypotheses-generator-system',
     );
     expect(promptKeyFromLlmLogEntry(baseEntry({ source: 'designSystem' }))).toBe(

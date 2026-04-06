@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   hypothesisDeleteCopy,
   keyboardMultiDeleteCopy,
-  sectionCardDeleteCopy,
+  inputCardDeleteCopy,
 } from '../canvas-permanent-delete-copy';
 import type { WorkspaceNode } from '../../types/workspace-graph';
 
 describe('canvas-permanent-delete-copy', () => {
-  it('sectionCardDeleteCopy includes section title', () => {
-    const { title } = sectionCardDeleteCopy('Brief');
+  it('inputCardDeleteCopy includes input title', () => {
+    const { title } = inputCardDeleteCopy('Brief');
     expect(title).toContain('Brief');
   });
 

@@ -76,10 +76,10 @@ export function wirePayloadLine(event: string, payload: unknown): string {
     const p = payload as { name?: string; key?: string } | null;
     return `skill: ${p?.name ?? p?.key ?? '?'}`;
   }
-  if (event === 'compile_result') {
+  if (event === 'incubate_result') {
     const p = payload as { hypotheses?: unknown[] } | null;
     const n = Array.isArray(p?.hypotheses) ? p.hypotheses.length : 0;
-    return `compile done: ${n} hypotheses`;
+    return `incubate done: ${n} hypotheses`;
   }
   if (event === 'meta_json_wait') {
     const p = payload as { elapsedSec?: number } | null;

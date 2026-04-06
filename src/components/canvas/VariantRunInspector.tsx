@@ -3,7 +3,7 @@ import { Loader2, X } from 'lucide-react';
 import { EVALUATOR_RUBRIC_IDS, EVALUATOR_WORKER_COUNT } from '../../types/evaluation';
 import { storage } from '../../storage';
 import { useCanvasStore } from '../../stores/canvas-store';
-import { useCompilerStore, findStrategy } from '../../stores/compiler-store';
+import { useIncubatorStore, findStrategy } from '../../stores/incubator-store';
 import { getPreviewNodeData } from '../../lib/canvas-node-data';
 import { useVersionStack } from '../../hooks/useVersionStack';
 import { useResultCode } from '../../hooks/useResultCode';
@@ -92,7 +92,7 @@ export default function VariantRunInspector() {
   const result = activeResult ?? legacyResult;
   const laneStrategyIdForAbort = strategyId ?? result?.strategyId;
 
-  const strategy = useCompilerStore((s) => {
+  const strategy = useIncubatorStore((s) => {
     const vsId = strategyId ?? result?.strategyId;
     if (!vsId) return undefined;
     return findStrategy(s.incubationPlans, vsId);
@@ -493,7 +493,7 @@ export default function VariantRunInspector() {
               <ArtifactPreviewFrame
                 files={designPreviewFiles}
                 title={`Design preview: ${variantName}`}
-                className="min-h-[var(--min-height-section-textarea)] flex-1 border-0 bg-preview-canvas"
+                className="min-h-[var(--min-height-input-textarea)] flex-1 border-0 bg-preview-canvas"
               />
             )}
             {!codeLoading &&
@@ -505,7 +505,7 @@ export default function VariantRunInspector() {
                 title={`Design preview: ${variantName}`}
                 sandbox="allow-scripts"
                 srcDoc={singleFileSrc}
-                className="min-h-[var(--min-height-section-textarea)] flex-1 border-0 bg-preview-canvas"
+                className="min-h-[var(--min-height-input-textarea)] flex-1 border-0 bg-preview-canvas"
               />
             )}
             {!codeLoading &&

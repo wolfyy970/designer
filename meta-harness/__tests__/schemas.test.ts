@@ -20,7 +20,7 @@ describe('meta-harness schemas', () => {
       iterations: 1,
       proposerModel: 'x',
       proposerMaxToolRounds: 3,
-      defaultCompilerProvider: 'openrouter',
+      defaultIncubatorProvider: 'openrouter',
     });
     expect(r.success).toBe(true);
   });
@@ -30,7 +30,7 @@ describe('meta-harness schemas', () => {
       iterations: 1,
       proposerModel: 'x',
       proposerMaxToolRounds: 3,
-      defaultCompilerProvider: 'openrouter',
+      defaultIncubatorProvider: 'openrouter',
     });
     expect(r.success).toBe(false);
   });

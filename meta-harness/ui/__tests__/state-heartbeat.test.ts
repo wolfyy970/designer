@@ -13,7 +13,7 @@ const samplePreflight = (names: string[]): RunnerPreflightInfo => ({
     iterations: 1,
     proposerModel: 'm',
     proposerMaxToolRounds: 3,
-    defaultCompilerProvider: 'p',
+    defaultIncubatorProvider: 'p',
   },
   mode: 'design',
   iterations: 1,

@@ -52,7 +52,7 @@ const cfg: MetaHarnessConfig = {
   iterations: 1,
   proposerModel: 'm',
   proposerMaxToolRounds: 3,
-  defaultCompilerProvider: 'openrouter',
+  defaultIncubatorProvider: 'openrouter',
 };
 
 const args: MetaHarnessCliArgs = {
@@ -118,10 +118,11 @@ describe('runOneMetaHarnessTest design mode (evaluator stubbed)', () => {
       evalStart: Date.now(),
       testResultsDir,
       evalRunsBase: path.join(root, 'eval'),
-      compileProvider: 'openrouter',
-      compileModel: 'm',
+      incubateProvider: 'openrouter',
+      incubateModel: 'm',
       hypothesisEvalModel: 'm',
-      compileHypothesisCountDefault: 1,
+      inputsRubricModel: 'm',
+      incubateHypothesisCountDefault: 1,
       apiKey: 'k',
       callbacks: stubCallbacks(),
     });
@@ -156,10 +157,11 @@ describe('runOneMetaHarnessTest design mode (evaluator stubbed)', () => {
       evalStart: Date.now(),
       testResultsDir,
       evalRunsBase: path.join(root, 'eval'),
-      compileProvider: 'openrouter',
-      compileModel: 'm',
+      incubateProvider: 'openrouter',
+      incubateModel: 'm',
       hypothesisEvalModel: 'm',
-      compileHypothesisCountDefault: 1,
+      inputsRubricModel: 'm',
+      incubateHypothesisCountDefault: 1,
       apiKey: 'k',
       callbacks: { ...stubCallbacks(), onTestCaseDone },
     });

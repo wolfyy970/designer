@@ -2,7 +2,7 @@
 
 How to **run and operate** the `pnpm meta-harness` CLI: the standalone **outer optimization loop** inspired by [Meta-Harness](https://arxiv.org/abs/2603.28052). One **proposer** model (with filesystem tools) proposes harness changes; a **runner** measures them by calling your API and reading `**eval-runs/`** on disk.
 
-This is **not** the main web app—it is a script that talks to `**pnpm dev:server`** and can edit repo files (especially `**skills/**`) when the proposer runs.
+This is **not** the main web app—it is a script that talks to **`pnpm dev:server`**. Prompt and rubric weight edits stay in **`history/…/candidate-*/`** until you **`P`** promote. For **skills**, the proposer still writes **`skills/<key>/SKILL.md`** during a candidate so the API can **`discoverSkills`**, but the runner saves a **`skills-baseline/`** copy at session start, **restores** repo **`skills/`** from it before each new candidate, and restores again in **`finally`** when the run ends—so the repo tree matches the pre-run baseline until promotion.
 
 ---
 
@@ -29,7 +29,7 @@ This is **not** the main web app—it is a script that talks to `**pnpm dev:serv
 | `**meta-harness/config.json**` (required) | API URL, iteration count, proposer model + tool budget, provider defaults, optional inner revision cap, optional `evalRunsBaseDir`.                                                                            |
 | **Command line**                          | `**--mode**`, `**--dry-run**`, `**--eval-only**`, `**--once**`, `**--plain**`, `**--promote**`, `**--improve**`, `**--skip-promotion-check**`, `**--test=**` (see §3). Everything else comes from `config.json` or env.                                                                         |
 | `**.env.local` / `.env**`                 | `OPENROUTER_API_KEY` (and the server’s keys when you run `dev:server`). Optional `OBSERVABILITY_LOG_DIR` / `LLM_LOG_DIR` so `**eval-runs/**` land where the runner expects (unless you set `evalRunsBaseDir`). |
-| `**meta-harness/test-cases/*.json**`      | Each file is one scenario: **`spec` + `model`** always; **`strategy`** required for default **`--mode=design`**; optional for **`compile`** / **`e2e`** (hypotheses come from `POST /api/compile`). See §3.1.   |
+| `**meta-harness/test-cases/*.json**`      | Each file is one scenario: **`spec` + `model`** always; **`strategy`** required for default **`--mode=design`**; optional for **`incubate`** / **`e2e`** (hypotheses come from `POST /api/incubate`). See §3.1.   |
 
 
 ### 2.1 `config.json` fields
@@ -37,19 +37,20 @@ This is **not** the main web app—it is a script that talks to `**pnpm dev:serv
 
 | Field                      | Meaning                                                                                                                                                                                |
 | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`                     | Default mode: `compile`, `e2e`, or `design`. Overridden by `--mode` on the CLI. Falls back to `design` if omitted.                      |
+| `mode`                     | Default mode: `incubate`, `e2e`, `design`, or `inputs`. Overridden by `--mode` on the CLI. Falls back to `design` if omitted.                      |
+| `inputsGenerateTimeoutMs` | Optional per-call timeout for `POST /api/inputs/generate` (default 120 000 ms).                                                                    |
 | `apiBaseUrl`               | Origin + `/api` prefix, e.g. `http://127.0.0.1:3001/api`.                                                                                                                              |
 | `evalRunsBaseDir`          | Optional. Absolute path or path relative to repo root. If empty, the runner uses `OBSERVABILITY_LOG_DIR` → `LLM_LOG_DIR` → `logs/observability` (aligned with server defaults in dev). |
 | `iterations`               | How many **candidate** loops to run (each loop: optional proposer → evaluate all test cases). Overridden for that run if you pass `**--once`** (forces **1** iteration).               |
 | `proposerModel`            | OpenRouter model id for the proposer (tool-calling).                                                                                                                                   |
 | `proposerMaxToolRounds`    | Max assistant/tool rounds per proposer turn (safety cap).                                                                                                                              |
-| `defaultCompilerProvider`  | Passed through on hydrated payloads (e.g. `openrouter`).                                                                                                                               |
+| `defaultIncubatorProvider`  | Passed through on hydrated payloads (e.g. `openrouter`).                                                                                                                               |
 | `supportsVision`           | Optional; forwarded to generate if set.                                                                                                                                                |
 | `agenticMaxRevisionRounds` | Optional cap for inner revision rounds per generation.                                                                                                                                 |
-| `compileProvider`          | Provider id for **`POST /api/compile`**. Defaults to `defaultCompilerProvider` if omitted.                                                                                              |
-| `compileModel`             | Model id for compile. Defaults to `minimax/minimax-m2.5` if omitted.                                                                                                                     |
-| `hypothesisEvalModel`      | OpenRouter model for **compile-mode** hypothesis rubric (six 1–5 scores). If empty, **`proposerModel`** is used.                                                                        |
-| `compileHypothesisCount`   | Default `promptOptions.count` when a test case omits **`compile.hypothesisCount`**. Default **5**.                                                                                     |
+| `incubateProvider`          | Provider id for **`POST /api/incubate`**. Defaults to `defaultIncubatorProvider` if omitted.                                                                                              |
+| `incubateModel`             | Model id for incubate. Defaults to `minimax/minimax-m2.5` if omitted.                                                                                                                     |
+| `hypothesisEvalModel`      | OpenRouter model for **incubate-mode** hypothesis rubric (six 1–5 scores). If empty, **`proposerModel`** is used.                                                                        |
+| `incubateHypothesisCount`   | Default `promptOptions.count` when a test case omits **`incubate.hypothesisCount`**. Default **5**.                                                                                     |
 
 
 ### 2.2 Example `config.json` snippets
@@ -58,17 +59,17 @@ This is **not** the main web app—it is a script that talks to `**pnpm dev:serv
 
 ```json
 {
-  "mode": "compile",
+  "mode": "incubate",
   "apiBaseUrl": "http://127.0.0.1:3001/api",
   "evalRunsBaseDir": "",
   "iterations": 1,
   "proposerModel": "anthropic/claude-sonnet-4",
   "proposerMaxToolRounds": 24,
-  "defaultCompilerProvider": "openrouter",
-  "compileProvider": "openrouter",
-  "compileModel": "minimax/minimax-m2.5",
+  "defaultIncubatorProvider": "openrouter",
+  "incubateProvider": "openrouter",
+  "incubateModel": "minimax/minimax-m2.5",
   "hypothesisEvalModel": "",
-  "compileHypothesisCount": 5,
+  "incubateHypothesisCount": 5,
   "designGenerationModel": "minimax/minimax-m2.5",
   "supportsVision": false,
   "agenticMaxRevisionRounds": 3
@@ -91,7 +92,7 @@ Key points about the defaults:
   "iterations": 10,
   "proposerModel": "anthropic/claude-sonnet-4",
   "proposerMaxToolRounds": 24,
-  "defaultCompilerProvider": "openrouter",
+  "defaultIncubatorProvider": "openrouter",
   "agenticMaxRevisionRounds": 2
 }
 ```
@@ -105,7 +106,7 @@ Key points about the defaults:
   "iterations": 1,
   "proposerModel": "anthropic/claude-3.5-sonnet",
   "proposerMaxToolRounds": 20,
-  "defaultCompilerProvider": "openrouter"
+  "defaultIncubatorProvider": "openrouter"
 }
 ```
 
@@ -119,7 +120,7 @@ The script loads `**.env.local**` then `**.env**` before reading `**config.json*
 
 **Startup order:** if **`--promote`** → **`GET /api/health`** → **preflight only** → **exit** (no test-case load, no **`OPENROUTER_API_KEY`**). Otherwise: validate test cases → optional **`--dry-run` exit** → require **`OPENROUTER_API_KEY`** (unless **`--eval-only`** rules say otherwise) → **`GET /api/health`** → **preflight** (unless **`--dry-run`**, **`--skip-promotion-check`**, or **`--improve`**) → **Ink dashboard** or **`--plain`** engine.
 
-**Preflight (unpromoted winner):** walks recent **`meta-harness/history/session-*`** for `PROMOTION_REPORT.md` + `best-candidate.json`, compares the winner’s **`prompt-overrides.json`** to **`GET /api/prompts/:key`** (5s timeout per key) and **`skills-snapshot/`** to **`skills/`**. The **first** session (newest) with any drift is shown. **TTY:** Ink panel with unified diff lines. **`P`** writes drift into **`src/lib/prompts/shared-defaults.ts`** and **`skills/`**, runs **`pnpm langfuse:sync-prompts`** when Langfuse env is set (each changed key: **new** Langfuse prompt **version** via `prompt.create`; configured **label** moves forward; older versions stay in the UI for history), then either runs the harness (default) or exits (**`--promote`**). Failures log per step and exit **1**. **`S`** / **`Q`** exit without file changes. **`[`** / **`]`** prev/next item, **`j`** / **`k`** scroll. **Plain / CI:** prints diffs only (no auto-apply); **`--promote`** exits after diffs with a hint to use TTY for **`P`**. **`--promote` uses the same preflight scan as a default run**; post-review behavior differs. Scan errors only warn on full runs; **`--promote`** ends after the warning. **`--dry-run`** skips preflight. **`--improve`** = **`--skip-promotion-check`**. Detail table: [meta-harness/README.md § CLI flow](README.md#cli-flow-boundaries).
+**Preflight (unpromoted winner):** walks recent **`meta-harness/history/session-*`** for `PROMOTION_REPORT.md` + `best-candidate.json`, compares the winner’s **`prompt-overrides.json`** to **`GET /api/prompts/:key`** (5s timeout per key), **`skills-snapshot/`** to **`skills/`**, and (when present) **`candidate-*/rubric-weights.json`** to **`src/lib/rubric-weights.json`**. The **first** session (newest) with any drift is shown. **TTY:** Ink panel with section tabs (Prompts / Skills / Rubric weights) and unified diff lines per item. **`P`** writes drift into **`src/lib/prompts/shared-defaults.ts`**, **`skills/`**, and **`src/lib/rubric-weights.json`** as needed, runs **`pnpm langfuse:sync-prompts`** when Langfuse env is set **and** prompts were updated (each changed key: **new** Langfuse prompt **version** via `prompt.create`; configured **label** moves forward; older versions stay in the UI for history), then either runs the harness (default) or exits (**`--promote`**). **After rubric promotion, restart the API** so **`GET /api/config`** serves updated **`defaultRubricWeights`**. Failures log per step and exit **1**. **`S`** / **`Q`** exit without file changes. **`[`** / **`]`** prev/next item, **`j`** / **`k`** scroll. **Plain / CI:** prints diffs only (no auto-apply); **`--promote`** exits after diffs with a hint to use TTY for **`P`**. **`--promote` uses the same preflight scan as a default run**; post-review behavior differs. Scan errors only warn on full runs; **`--promote`** ends after the warning. **`--dry-run`** skips preflight. **`--improve`** = **`--skip-promotion-check`**. Detail table: [meta-harness/README.md § CLI flow](README.md#cli-flow-boundaries).
 
 **Flags:** there are no positional arguments, no `--model`, no `--url` on the CLI—change those in `**config.json`**. In an interactive terminal the runner opens an **Ink** dashboard; use `**--plain**` or redirect/pipe stdout to get classic line-by-line logs (CI, `tee`, etc.).
 
@@ -128,29 +129,31 @@ The script loads `**.env.local**` then `**.env**` before reading `**config.json*
 | Mode | Behavior | Proposer focuses on |
 |------|----------|---------------------|
 | **`design`** (default) | Fixed **`strategy`** from each test case → **`POST /api/hypothesis/generate`** (agentic + eval). | Designer prompts, **`skills/`**, evaluators, benchmarks. |
-| **`compile`** | **`POST /api/compile`** from spec → OpenRouter **hypothesis rubric** per hypothesis (no design build). Mean rubric score = fitness. | **`hypotheses-generator-system`**, **`incubator-user-inputs`** only (no skills). |
-| **`e2e`** | Compile → **random** hypothesis → same agentic generate + eval as design mode. | Full pipeline: compile prompts, designer prompts, skills, evaluators. |
+| **`incubate`** | **`POST /api/incubate`** from spec → OpenRouter **hypothesis rubric** per hypothesis (no design build). Mean rubric score = fitness. | **`hypotheses-generator-system`**, **`incubator-user-inputs`** only (no skills). |
+| **`inputs`** | **`POST /api/inputs/generate`** ×3 per test case → 5-dimension rubric per section (grounding, completeness, actionability, conciseness, brief alignment). Mean = fitness. | **`inputs-gen-*`** prompts only (no skills, no rubric weights). |
+| **`e2e`** | Inputs-generate → incubate → **random** hypothesis → agentic generate + eval. | Full pipeline: inputs-gen, incubate, designer prompts, skills, evaluators. |
 
-**Recommended workflow:** run **`compile`** for many iterations (cheap), then **`e2e`** for holistic tuning. Spec-only benchmarks (no `strategy`) are **skipped** in **`design`** mode—use them with **`compile`** / **`e2e`**, or split test folders.
+**Recommended workflow:** run **`inputs`** to tune upstream research/framing (cheap), **`incubate`** for hypothesis quality, then **`e2e`** for holistic tuning. Spec-only benchmarks (no `strategy`) are **skipped** in **`design`** mode—use them with **`incubate`** / **`e2e`**, or split test folders.
 
 Set the default in **`config.json`** → **`"mode"`** so you don't have to type the flag every time. The CLI flag **`--mode=X`** overrides whatever is in config. If neither is set, defaults to `design`.
 
 ```bash
-pnpm meta-harness --mode=compile
+pnpm meta-harness --mode=incubate
+pnpm meta-harness --mode=inputs
 pnpm meta-harness --mode=e2e
 ```
 
-**`--eval-only`:** No proposer. In **`compile`** mode you still need **`OPENROUTER_API_KEY`** for the hypothesis rubric. In **`design`** / **`e2e`**, generations use the server; rubric calls do not apply.
+**`--eval-only`:** No proposer. In **`incubate`** and **`inputs`** modes you still need **`OPENROUTER_API_KEY`** for the rubric. In **`design`** / **`e2e`**, generations use the server; rubric calls do not apply.
 
 ```bash
-# Dry-run: first sorted test case after any `--test=` filters. For compile/e2e → POST /api/compile JSON; for design → hypothesis generate JSON.
+# Dry-run: first sorted test case after any `--test=` filters. For incubate/e2e → POST /api/incubate JSON; for design → hypothesis generate JSON.
 pnpm meta-harness --dry-run
 
 # Run only benchmarks whose JSON filename (without .json) contains a substring; repeat for OR match.
 pnpm meta-harness --test=dashboard-analytics --once
 
 # Evaluate only: no proposer. Design/e2e still run agentic generations via the API (keys per server).
-# Compile + eval-only still requires OPENROUTER_API_KEY for the rubric.
+# Incubate + eval-only still requires OPENROUTER_API_KEY for the rubric.
 pnpm meta-harness --eval-only
 
 # Single candidate cycle (proposer once + all test cases), then stop.
@@ -168,10 +171,10 @@ pnpm meta-harness --plain
 
 | Flag          | Effect                                                                                                                                  |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `--mode`      | `compile` / `e2e` / `design`. Overrides `mode` in `config.json`. See §3.1.                                                               |
-| `--dry-run`   | Validates hydration + prints JSON; exits. Mode-aware: compile/e2e → compile body; design → generate body.                                |
+| `--mode`      | `incubate` / `e2e` / `design` / `inputs`. Overrides `mode` in `config.json`. See §3.1.                                                    |
+| `--dry-run`   | Validates hydration + prints JSON; exits. Mode-aware: incubate/e2e → incubate body; design → generate body.                                |
 | `--test=`     | Keep only test cases whose basename (no `.json`) contains the substring (case-insensitive). Multiple flags are **OR**’d. Errors if none match. |
-| `--eval-only` | Skips OpenRouter **proposer**; `prompt-overrides.json` for that candidate is `{}`. **`compile`** still needs **`OPENROUTER_API_KEY`** for the rubric. **`design`** / **`e2e`** use the API for generation (keys per server lockdown). Skips the automatic **baseline** pass (see §4)—every iteration is eval-only. |
+| `--eval-only` | Skips OpenRouter **proposer**; `prompt-overrides.json` for that candidate is `{}`. **`incubate`** still needs **`OPENROUTER_API_KEY`** for the rubric. **`design`** / **`e2e`** use the API for generation (keys per server lockdown). Skips the automatic **baseline** pass (see §4)—every iteration is eval-only. |
 | `--once`      | Sets iteration count to **1** for this invocation (ignores `iterations` in `config.json` for that run).                                 |
 | `--plain`     | Use line-based `console` output only (no Ink TUI).                                                                                      |
 | `--skip-promotion-check` | Skip the preflight scan for an unpromoted last-session winner (no diff UI / plain diff block). Same effect as **`--improve`**. |
@@ -207,22 +210,60 @@ pnpm meta-harness
 
 **Lay terms:** think of `**config.json`** as the “knobs panel,” **flags** as short overrides (`--once`, `--eval-only`, `--dry-run`, `--plain`), and `**.env.local`** as where your API key lives.
 
+### 3.3 Tunable surfaces (promotion model)
+
+The proposer can change **three** repo-backed surfaces. Preflight **`P`** applies all that have drift for the winning session.
+
+| Surface | Repo source | Proposer tools | Candidate artifacts | Preflight compares | **`P`** writes |
+|---------|-------------|----------------|---------------------|--------------------|----------------|
+| **Prompts** | `shared-defaults.ts` | `set_prompt_override`, etc. | `prompt-overrides.json` | Winner vs **`GET /api/prompts/:key`** | Surgical patch → Langfuse **`pnpm langfuse:sync-prompts`** if configured |
+| **Skills** | `skills/` | `write_skill`, `delete_skill` | `skills-snapshot/` | Snapshot tree vs **`skills/`** | File copy / delete |
+| **Rubric weights** | `src/lib/rubric-weights.json` | `set_rubric_weights` | `rubric-weights.json` | Winner JSON vs repo JSON | Overwrite JSON; **restart API** |
+
+**Skills note:** During a run, **`skills-baseline/`** under the session folder is the frozen copy of repo **`skills/`** at start. The runner restores **`skills/`** from it before each proposed candidate and after the outer loop (`**finally**`), so live **`skills/`** does not accumulate cross-candidate edits. Only **`P`** (or manual steps) writes the winner’s snapshot into the real tree.
+
+```mermaid
+flowchart LR
+  subgraph repoSoT [Repo_truth]
+    Prompts[shared_defaults_ts]
+    Skills[skills_dir]
+    Weights[rubric_weights_json]
+  end
+  subgraph runtime [Runtime]
+    Langfuse[Langfuse]
+    SkillDisc[skill_discovery]
+    ApiConfig[GET_api_config]
+  end
+  subgraph harness [Meta_harness]
+    Proposer[proposer]
+    Preflight[preflight_P]
+  end
+  Prompts --> Langfuse
+  Skills --> SkillDisc
+  Weights --> ApiConfig
+  Proposer -->|candidate_artifacts| Preflight
+  Preflight -->|P_promote| Prompts
+  Preflight -->|P_promote| Skills
+  Preflight -->|P_promote| Weights
+```
+
 ---
 
 ## 4. What one iteration does
 
 The exact evaluate step depends on the mode you chose (section 3.1). Here is the full sequence:
 
-0. **New session directory**: Each run creates **`meta-harness/history/session-<mode>-<ISO-timestamp>/`** (e.g. **`session-design-…`**, **`session-compile-…`**, **`session-e2e-…`**) with a **`session.json`** (mode, iterations, config snapshot). All candidates for that run live under that folder only — prior runs stay in sibling **`session-*`** folders (gitignored), so the proposer never confuses another run’s **`candidate-*`** with this one.
+0. **New session directory**: Each run creates **`meta-harness/history/session-<mode>-<ISO-timestamp>/`** (e.g. **`session-design-…`**, **`session-incubate-…`**, **`session-e2e-…`**) with a **`session.json`** (mode, iterations, config snapshot). All candidates for that run live under that folder only — prior runs stay in sibling **`session-*`** folders (gitignored), so the proposer never confuses another run’s **`candidate-*`** with this one.
+0b. **Skills baseline** (outer-loop startup, not promotion preflight): Once the session directory exists, the runner copies repo **`skills/`** into **`session-…/skills-baseline/`** (or creates an empty directory if **`skills/`** is missing). This snapshot is the restore source for the rest of the run.
 1. **Baseline `candidate-0`** (when not `--eval-only`): Evaluates the **current repo** (empty prompt overrides, current `skills/`) as **`candidate-0 (baseline)`** inside the **new session directory** before any proposer runs. Baseline **always** runs for a new session (no resume skip across runs). Baseline does **not** count against **`iterations`** in `config.json`.
-2. **Proposer** (skipped if `--eval-only`): Calls OpenRouter with a mode-specific system prompt and tools. In compile mode, skills tools are disabled and only compile-related prompt keys are writable. Context includes **this session’s** prior **`candidate-*`** (scores, overrides, per-test **`summary.json`** rubric means, **`proposal.md`** excerpt) plus a **reference table** of prior sessions’ best scores from **`best-candidate.json`**. It may **write** `skills/<key>/SKILL.md`, **queue** `promptOverrides` for this candidate only, or **add** `meta-harness/test-cases/*.json`. It should finish with **`submit_candidate`** and a short **reasoning** written to **`session-…/candidate-N/proposal.md`**. If it **runs out of tool rounds** without calling **`submit_candidate`** but **did** queue prompt overrides or edit skills, those changes are **still applied** for that candidate with an auto-reason string; if it made **no** changes, the reasoning explains that (suggest checking history / tool budget).
-3. **Snapshot**: Copies the current **`skills/`** tree to **`session-…/candidate-N/skills-snapshot/`**.
-4. **Evaluate**: For each selected test-case JSON (all under `**test-cases/**`, or the subset matched by **`--test=`**), behavior is mode-dependent. In design mode, hydrates each test case into a full `**/api/hypothesis/generate**` payload (agentic), attaches this candidate’s **prompt overrides**, streams SSE until done, then waits for `**eval-runs/<correlation-id>:lane-0/meta.json`** . In compile mode, calls POST /api/compile per test case and runs an OpenRouter LLM rubric on each hypothesis (no design build). In e2e mode, calls compile, randomly picks one hypothesis, then generates and evaluates like design mode.
+2. **Proposer loop** (skipped if `--eval-only`): For each configured iteration, the runner **restores** repo **`skills/`** from **`skills-baseline/`** (clean slate per candidate), then calls OpenRouter with a mode-specific system prompt and tools. In **incubate** / **inputs** mode, skills and rubric-weight tools are disabled. Context includes **this session’s** prior **`candidate-*`** (scores, overrides, per-test **`summary.json`** rubric means, **`proposal.md`** excerpt) plus a **reference table** of prior sessions’ best scores from **`best-candidate.json`**. The proposer may **write** `skills/<key>/SKILL.md` (when tools exist), **queue** `promptOverrides` for this candidate only, or **add** `meta-harness/test-cases/*.json`. It should finish with **`submit_candidate`** and a short **reasoning** written to **`session-…/candidate-N/proposal.md`**. If it **runs out of tool rounds** without calling **`submit_candidate`** but **did** queue prompt overrides or edit skills, those changes are **still evaluated** for that candidate with an auto-reason string; if it made **no** changes, the reasoning explains that (suggest checking history / tool budget).
+3. **Snapshot**: Copies the current **`skills/`** tree (after this candidate’s proposer + before eval consumes it) to **`session-…/candidate-N/skills-snapshot/`**.
+4. **Evaluate**: For each selected test-case JSON (all under `**test-cases/**`, or the subset matched by **`--test=`**), behavior is mode-dependent. In design mode, hydrates each test case into a full `**/api/hypothesis/generate**` payload (agentic), attaches this candidate’s **prompt overrides**, streams SSE until done, then waits for `**eval-runs/<correlation-id>:lane-0/meta.json`** . In incubate mode, calls POST /api/incubate per test case and runs an OpenRouter LLM rubric on each hypothesis (no design build). In e2e mode, calls incubate, randomly picks one hypothesis, then generates and evaluates like design mode.
 5. **Scores**: Writes per-test `**test-results/<case>/summary.json`** (includes **`rubricMeans`** for agentic runs when available) and `**aggregate.json**` (mean overall score). Updates **`session-…/best-candidate.json**` when the mean improves.
 6. **Changelog**: Writes `**CHANGELOG.md`** inside the candidate folder, summarizing what changed, prompt overrides applied, and a per-test score table (see §5.1).
 7. **Promotion report** (end of the full run): Writes **`session-…/PROMOTION_REPORT.md`** at the **session root** (alongside `session.json` / `best-candidate.json`). The report still names the winning `candidate-*` folder and prints a short summary in the terminal (Ink summary panel or `--plain` logs). This is the **manual apply guide**: prompt bodies, skill snapshot vs current `skills/`, new test cases, and a checklist (see §5.2).
 
-**Important:** Skills edits from the proposer are **real files** in the repo. Use git if you want to revert. Prompt overrides from the proposer are **not** saved to Langfuse; they live in `**history/.../prompt-overrides.json`** and are only sent on API requests for that candidate.
+**Important:** Repo **`skills/`** is **restored** from **`skills-baseline/`** after each candidate and when the run exits (`**finally**`), so you do **not** need git to undo cross-candidate skill experiments. **`skills-snapshot/`** still records what that candidate evaluated against. Prompt overrides from the proposer are **not** saved to Langfuse; they live in **`history/.../prompt-overrides.json`** and are only sent on API requests for that candidate. **Test-case** JSON edits under **`meta-harness/test-cases/`** do persist on disk across candidates (not reverted by the runner).
 
 ### 4.1 Preflight checks
 
@@ -278,16 +319,16 @@ When stdout is a TTY and you do **not** pass `--plain`, the runner renders a Rea
 | Path                    | Role                                                                                                                                                  |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `config.json`           | CLI settings.                                                                                                                                         |
-| `test-cases/*.json`     | **Simplified** benchmarks (`spec` + `model`; `strategy` optional for compile/e2e). See `test-case-hydrator.ts`.                                      |
+| `test-cases/*.json`     | **Simplified** benchmarks (`spec` + `model`; `strategy` optional for incubate/e2e). See `test-case-hydrator.ts`.                                      |
 | `history/session-…/`    | **Gitignored.** Per-run folder: **`session.json`**, **`best-candidate.json`**, **`PROMOTION_REPORT.md`** (after a full run, when there is a best candidate), and **`candidate-0`**, **`candidate-1`**, … (per-candidate proposals, overrides, skills snapshot, test results, aggregates, changelog). |
 | `runner.tsx`            | CLI entry (Ink vs plain).                                                                                                                             |
 | `runner-core.ts`       | Outer-loop engine; `RunnerCallbacks` only (no UI).                                                                                                     |
 | `ui/`                   | Ink app (`App.tsx`, panels, reducer state).                                                                                                            |
-| `proposer.ts`           | OpenRouter tool loop; **mode-aware** prompts and tools (`compile` disables skills).                                                                   |
+| `proposer.ts`           | OpenRouter tool loop; **mode-aware** prompts and tools (`incubate` disables skills).                                                                   |
 | `modes.ts`              | Shared `MetaHarnessMode` type.                                                                                                                        |
-| `hypothesis-evaluator.ts` | OpenRouter **compile-mode** rubric (six 1–5 dimensions per hypothesis).                                                                           |
+| `hypothesis-evaluator.ts` | OpenRouter **incubate-mode** rubric (six 1–5 dimensions per hypothesis).                                                                           |
 | `evaluator.ts`          | SSE + `eval-runs` wait (design / e2e generate path).                                                                                                  |
-| `test-case-hydrator.ts` | Simplified JSON → compile body or `HypothesisGenerateRequestSchema`.                                                                                  |
+| `test-case-hydrator.ts` | Simplified JSON → incubate body or `HypothesisGenerateRequestSchema`.                                                                                  |
 | `promotion-report.ts`   | Builds `PROMOTION_REPORT.md` + `PromotionSummary` (prompt / skill / test-case deltas + checklist).                                                  |
 
 
@@ -338,12 +379,13 @@ Open that file for:
 |--------|----------------|
 | **1. Result summary** | Winning candidate, mean score, mode, and a table of every candidate’s mean score |
 | **2. Prompt overrides** | Full text for each overridden key → paste into `src/lib/prompts/shared-defaults.ts` (`PROMPT_DEFAULTS`) |
-| **3. Skill changes** | Diff of **`skills-snapshot/`** (winner) vs **`skills/`** in the repo **after** the run — modified paths with byte sizes; files only on one side |
-| **4. New test cases** | Test-case JSON names that appeared under `meta-harness/test-cases/` since the run **started** |
-| **5. How to apply** | Numbered checklist: edit defaults → `pnpm langfuse:sync-prompts` (if you use Langfuse) → sync skills from snapshot → `pnpm test` / `pnpm lint` |
-| **6. Proposer reasoning** | Copy of `proposal.md` |
+| **3. Skill changes** | Diff of **`skills-snapshot/`** (winner) vs repo **`skills/`** — after a full run, live **`skills/`** has been restored to the pre-run baseline, so this is effectively **winner vs original app tree** |
+| **4. Rubric weight changes** | Table of current vs winner blend when **`rubric-weights.json`** differs from **`src/lib/rubric-weights.json`** |
+| **5. New test cases** | Test-case JSON names that appeared under `meta-harness/test-cases/` since the run **started** |
+| **6. How to apply** | Numbered checklist: edit defaults → `pnpm langfuse:sync-prompts` (if prompts changed and you use Langfuse) → sync skills → rubric JSON + API restart if needed → `pnpm test` / `pnpm lint` |
+| **7. Proposer reasoning** | Copy of `proposal.md` |
 
-**Lay terms:** the harness experiments on a copy of your prompts and skills in memory and on disk, but **nothing is pushed to Langfuse** automatically. This report is your “ship list” so you can promote the winner into the real app by hand.
+**Lay terms:** prompts and rubric weights for each candidate live in **artifact JSON** under **`history/`**; skills are mirrored temporarily under **`skills/`** during a candidate and then **restored**. **Nothing** is pushed to Langfuse automatically from the report file itself. This report is your “ship list” so you can promote the winner into the real app by hand (or use preflight **`P`**).
 
 The terminal also shows a **short line count** (how many prompts / skill paths / new tests) so you know whether to open the report before you leave the desk.
 
@@ -370,7 +412,7 @@ Skipping step 2 or 3 leaves **`shared-defaults.ts`** or Langfuse out of sync wit
 2. **Name vs filename:** the JSON **`"name"`** field must match the file basename **without** `.json` (e.g. `foo.json` → `"name": "foo"`). A mismatch is skipped so the TUI rows, disk folders, and summaries cannot silently diverge.
 3. Keep the required shape: `name`, `spec.title`, `spec.sections` (map of section id → string or `{ "content": "..." }`), `model` (`providerId`, `modelId`, optional `thinkingLevel`).
    - **For `--mode=design`:** also include `strategy` (`id`, `name`, `hypothesis`, `rationale`, `measurements`, `dimensionValues`). Test cases **without** `strategy` are skipped in design mode.
-   - **For `--mode=compile` / `--mode=e2e`:** `strategy` is **optional** (hypotheses come from the compile endpoint). Add an optional `compile` block: `{ "hypothesisCount": 5 }` to control how many hypotheses are requested.
+   - **For `--mode=incubate` / `--mode=e2e` / `--mode=inputs`:** `strategy` is **optional** (hypotheses come from the incubate endpoint; inputs mode does not use strategy). `inputs` mode requires a non-empty `design-brief` in `spec.sections`. Add an optional `incubate` block: `{ "hypothesisCount": 5 }` to control how many hypotheses are requested.
 4. Run `**pnpm meta-harness --dry-run --mode=<your-mode>**` to ensure hydration passes.
 
 The proposer may also call `**add_test_case**`; new files must still pass `**SimplifiedMetaHarnessTestCaseSchema**`.
@@ -405,7 +447,7 @@ This performs one real agentic generation and asserts `**eval-runs/.../meta.json
 
 ## 9. Relation to the main app
 
-- **Does not** replace the canvas or change the server code path—only **calls** `POST /api/compile` and `POST /api/hypothesis/generate` like the UI does.
+- **Does not** replace the canvas or change the server code path—only **calls** `POST /api/incubate` and `POST /api/hypothesis/generate` like the UI does.
 - **Does** implement the paper’s “outer loop” **shape**: filesystem history + proposer + repeated evaluate. Full automation quality depends on models, budget, and benchmarks—same as in the paper’s experiments.
 
 ---

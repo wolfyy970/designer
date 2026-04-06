@@ -7,7 +7,7 @@
 import { Type } from '@sinclair/typebox';
 import type { Bash } from 'just-bash';
 import type { ExtensionContext, ToolDefinition } from './pi-sdk/types.ts';
-import { snapshotDesignFiles } from './agent-bash-sandbox.ts';
+import { SANDBOX_PROJECT_ROOT, snapshotDesignFiles } from './agent-bash-sandbox.ts';
 
 const MAX_TOOL_CHARS = 51_200;
 
@@ -26,7 +26,7 @@ export function createSandboxBashTool(
     name: 'bash',
     label: 'bash',
     description:
-      'Run a shell command in the just-bash virtual shell at /home/user/project (your cwd). ' +
+      `Run a shell command in the just-bash virtual shell at ${SANDBOX_PROJECT_ROOT} (your cwd). ` +
       'This is not a full Linux machine: no npm, node, python, or external binaries — only just-bash built-ins (text tools like rg, grep, sed, awk, jq, pipes). ' +
       'For creating or editing design files, prefer the `write` and `edit` tools; use `read` instead of `cat`. ' +
       'Use bash for multi-step text pipelines or utilities when no dedicated tool fits.',

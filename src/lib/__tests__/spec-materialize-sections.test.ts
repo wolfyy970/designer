@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { DesignSpec, SpecSectionId } from '../../types/spec';
-import { optionalSectionSlotsWithSpecMaterial } from '../spec-materialize-sections';
+import { optionalInputSlotsWithSpecMaterial } from '../spec-materialize-sections';
 
 function emptySection(id: SpecSectionId) {
   return { id, content: '', images: [], lastModified: '2024-01-01' };
@@ -29,31 +29,31 @@ function minimalSpec(sections: Partial<Record<SpecSectionId, { content?: string 
   };
 }
 
-describe('optionalSectionSlotsWithSpecMaterial', () => {
-  it('returns empty when all optional sections are blank', () => {
-    expect(optionalSectionSlotsWithSpecMaterial(minimalSpec({}))).toEqual([]);
+describe('optionalInputSlotsWithSpecMaterial', () => {
+  it('returns empty when all optional facets are blank', () => {
+    expect(optionalInputSlotsWithSpecMaterial(minimalSpec({}))).toEqual([]);
   });
 
   it('includes slots with non-whitespace content', () => {
     const spec = minimalSpec({ 'research-context': { content: 'Notes' } });
-    expect(optionalSectionSlotsWithSpecMaterial(spec)).toEqual(['researchContext']);
+    expect(optionalInputSlotsWithSpecMaterial(spec)).toEqual(['researchContext']);
   });
 
-  it('includes multiple slots in OPTIONAL_SECTION_SLOTS order', () => {
+  it('includes multiple slots in OPTIONAL_INPUT_SLOTS order', () => {
     const spec = minimalSpec({
       'existing-design': { content: 'x' },
       'research-context': { content: 'y' },
     });
-    expect(optionalSectionSlotsWithSpecMaterial(spec)).toEqual(['researchContext', 'existingDesign']);
+    expect(optionalInputSlotsWithSpecMaterial(spec)).toEqual(['researchContext', 'existingDesign']);
   });
 
-  it('includes a slot when the section has images but empty text', () => {
+  it('includes a slot when the facet has images but empty text', () => {
     const spec = minimalSpec({});
     spec.sections['existing-design'] = {
       ...spec.sections['existing-design'],
       content: '',
       images: [{ id: 'i1', filename: 'x.png', dataUrl: 'data:', description: '', createdAt: '2024-01-01' }],
     };
-    expect(optionalSectionSlotsWithSpecMaterial(spec)).toEqual(['existingDesign']);
+    expect(optionalInputSlotsWithSpecMaterial(spec)).toEqual(['existingDesign']);
   });
 });

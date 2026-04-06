@@ -1,16 +1,37 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../types/compiler';
-import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
+import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../types/incubator';
+import { DEFAULT_INCUBATOR_PROVIDER } from '../lib/constants';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 import { generateId, now } from '../lib/utils';
+
+const LEGACY_INCUBATOR_STORAGE_KEY = 'auto-designer-compiler';
+
+/** One-time copy from pre-rename persist key so users keep incubation plans. */
+function migrateIncubatorPersistStorageKey(): void {
+  if (typeof globalThis === 'undefined') return;
+  const ls = (globalThis as typeof globalThis & { localStorage?: Storage }).localStorage;
+  if (!ls) return;
+  try {
+    if (ls.getItem(STORAGE_KEYS.INCUBATOR)) return;
+    const legacy = ls.getItem(LEGACY_INCUBATOR_STORAGE_KEY);
+    if (legacy) {
+      ls.setItem(STORAGE_KEYS.INCUBATOR, legacy);
+      ls.removeItem(LEGACY_INCUBATOR_STORAGE_KEY);
+    }
+  } catch {
+    /* non-browser or private mode */
+  }
+}
+
+migrateIncubatorPersistStorageKey();
 
 // ── Selector helpers (for callers that need a single plan) ──────────
 
 /** Find a hypothesis strategy by ID across all incubation plans */
 export function findStrategy(
   incubationPlans: Record<string, IncubationPlan>,
-  strategyId: string
+  strategyId: string,
 ): HypothesisStrategy | undefined {
   for (const plan of Object.values(incubationPlans)) {
     const found = plan.hypotheses.find((h) => h.id === strategyId);
@@ -20,9 +41,7 @@ export function findStrategy(
 }
 
 /** Get all strategy IDs across all incubation plans */
-export function allStrategyIds(
-  incubationPlans: Record<string, IncubationPlan>
-): Set<string> {
+export function allStrategyIds(incubationPlans: Record<string, IncubationPlan>): Set<string> {
   const ids = new Set<string>();
   for (const plan of Object.values(incubationPlans)) {
     for (const h of plan.hypotheses) ids.add(h.id);
@@ -32,10 +51,10 @@ export function allStrategyIds(
 
 // ── Store interface ────────────────────────────────────────────────
 
-interface CompilerStore {
+interface IncubatorStore {
   /**
-   * Incubation plans keyed by incubator id (1:1 with compiler canvas node id).
-   * Domain / compile flows treat this as `incubatorId`, not graph layout.
+   * Incubation plans keyed by incubator id (1:1 with incubator canvas node id).
+   * Domain / incubate flows treat this as `incubatorId`, not graph layout.
    */
   incubationPlans: Record<string, IncubationPlan>;
   compiledPrompts: CompiledPrompt[];
@@ -80,14 +99,14 @@ function mutateStrategy(
 
 // ── Store implementation ────────────────────────────────────────────
 
-export const useCompilerStore = create<CompilerStore>()(
+export const useIncubatorStore = create<IncubatorStore>()(
   persist(
     (set) => ({
       incubationPlans: {},
       compiledPrompts: [],
       isCompiling: false,
       error: null,
-      selectedProvider: DEFAULT_COMPILER_PROVIDER,
+      selectedProvider: DEFAULT_INCUBATOR_PROVIDER,
       selectedModel: '',
 
       setPlanForNode: (nodeId, plan) =>
@@ -110,7 +129,7 @@ export const useCompilerStore = create<CompilerStore>()(
                 dimensions: newPlan.dimensions,
                 hypotheses: [...existing.hypotheses, ...newPlan.hypotheses],
                 generatedAt: newPlan.generatedAt,
-                compilerModel: newPlan.compilerModel,
+                incubatorModel: newPlan.incubatorModel,
               },
             },
             error: null,
@@ -188,7 +207,7 @@ export const useCompilerStore = create<CompilerStore>()(
         }),
     }),
     {
-      name: STORAGE_KEYS.COMPILER,
+      name: STORAGE_KEYS.INCUBATOR,
       version: 3,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Record<string, unknown>;
@@ -202,7 +221,9 @@ export const useCompilerStore = create<CompilerStore>()(
         }
 
         if (version < 2) {
-          const maps = (state.dimensionMaps ?? state.incubationPlans) as Record<string, Record<string, unknown>> | undefined;
+          const maps = (state.dimensionMaps ?? state.incubationPlans) as
+            | Record<string, Record<string, unknown>>
+            | undefined;
           if (maps) {
             for (const map of Object.values(maps)) {
               const items = (map.variants ?? map.hypotheses) as Record<string, unknown>[] | undefined;
@@ -248,6 +269,6 @@ export const useCompilerStore = create<CompilerStore>()(
         selectedProvider: state.selectedProvider,
         selectedModel: state.selectedModel,
       }),
-    }
-  )
+    },
+  ),
 );

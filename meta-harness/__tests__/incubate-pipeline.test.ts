@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { IncubationPlan } from '../../src/types/compiler.ts';
-import { runCompilePipeline } from '../compile-pipeline.ts';
+import type { IncubationPlan } from '../../src/types/incubator.ts';
+import { runIncubatePipeline } from '../incubate-pipeline.ts';
 import type { MetaHarnessConfig } from '../schemas.ts';
 import type { RunnerCallbacks } from '../runner-types.ts';
 import { SimplifiedMetaHarnessTestCaseSchema } from '../test-case-hydrator.ts';
@@ -19,47 +19,47 @@ const stubCallbacks = (): RunnerCallbacks =>
     onComplete: () => {},
   }) as RunnerCallbacks;
 
-vi.mock('../compile-step.ts', () => ({
-  runCompileStep: vi.fn(),
+vi.mock('../incubate-step.ts', () => ({
+  runIncubateStep: vi.fn(),
 }));
 
-import { runCompileStep } from '../compile-step.ts';
+import { runIncubateStep } from '../incubate-step.ts';
 
 const cfg: MetaHarnessConfig = {
   apiBaseUrl: 'http://127.0.0.1:3001/api',
   iterations: 1,
   proposerModel: 'm',
   proposerMaxToolRounds: 3,
-  defaultCompilerProvider: 'openrouter',
+  defaultIncubatorProvider: 'openrouter',
   supportsVision: false,
 };
 
-describe('runCompilePipeline', () => {
+describe('runIncubatePipeline', () => {
   beforeEach(() => {
-    vi.mocked(runCompileStep).mockReset();
+    vi.mocked(runIncubateStep).mockReset();
   });
   afterEach(() => {
-    vi.mocked(runCompileStep).mockReset();
+    vi.mocked(runIncubateStep).mockReset();
   });
 
-  it('returns plan and requestedCount; invokes compile callbacks', async () => {
+  it('returns plan and requestedCount; invokes incubate callbacks', async () => {
     const plan = {
       id: 'p1',
       specId: 's',
       dimensions: [],
       hypotheses: [{ id: 'h1', name: 'H', hypothesis: 'x', rationale: '', measurements: '', dimensionValues: {} }],
       generatedAt: '2020-01-01T00:00:00.000Z',
-      compilerModel: 'cm',
+      incubatorModel: 'cm',
     } as IncubationPlan;
-    vi.mocked(runCompileStep).mockResolvedValue(plan);
+    vi.mocked(runIncubateStep).mockResolvedValue(plan);
 
-    const onCompileStart = vi.fn();
-    const onCompileDone = vi.fn();
+    const onIncubateStart = vi.fn();
+    const onIncubateDone = vi.fn();
     const onWireEvent = vi.fn();
     const callbacks: RunnerCallbacks = {
       ...stubCallbacks(),
-      onCompileStart,
-      onCompileDone,
+      onIncubateStart,
+      onIncubateDone,
       onWireEvent,
     };
 
@@ -76,37 +76,37 @@ describe('runCompilePipeline', () => {
         },
       },
       model: { providerId: 'openrouter', modelId: 'x/y' },
-      compile: { hypothesisCount: 3 },
+      incubate: { hypothesisCount: 3 },
     };
 
-    const out = await runCompilePipeline({
+    const out = await runIncubatePipeline({
       testCase: SimplifiedMetaHarnessTestCaseSchema.parse(raw),
       name: 'alpha',
       cfg,
-      compileProvider: 'openrouter',
-      compileModel: 'minimax/minimax-m2.5',
-      compileHypothesisCountDefault: 99,
+      incubateProvider: 'openrouter',
+      incubateModel: 'minimax/minimax-m2.5',
+      incubateHypothesisCountDefault: 99,
       apiBaseUrl: cfg.apiBaseUrl,
       callbacks,
     });
 
     expect(out.plan).toBe(plan);
     expect(out.requestedCount).toBe(3);
-    expect(onCompileStart).toHaveBeenCalledWith('alpha', 3);
-    expect(onCompileDone).toHaveBeenCalledWith('alpha', [{ name: 'H', id: 'h1' }]);
-    expect(runCompileStep).toHaveBeenCalled();
+    expect(onIncubateStart).toHaveBeenCalledWith('alpha', 3);
+    expect(onIncubateDone).toHaveBeenCalledWith('alpha', [{ name: 'H', id: 'h1' }]);
+    expect(runIncubateStep).toHaveBeenCalled();
   });
 
-  it('throws when compile returns no hypotheses', async () => {
+  it('throws when incubate returns no hypotheses', async () => {
     const plan = {
       id: 'p1',
       specId: 's',
       dimensions: [],
       hypotheses: [],
       generatedAt: '2020-01-01T00:00:00.000Z',
-      compilerModel: 'cm',
+      incubatorModel: 'cm',
     } as IncubationPlan;
-    vi.mocked(runCompileStep).mockResolvedValue(plan);
+    vi.mocked(runIncubateStep).mockResolvedValue(plan);
 
     const raw = {
       name: 'c0',
@@ -124,13 +124,13 @@ describe('runCompilePipeline', () => {
     };
 
     await expect(
-      runCompilePipeline({
+      runIncubatePipeline({
         testCase: SimplifiedMetaHarnessTestCaseSchema.parse(raw),
         name: 'n',
         cfg,
-        compileProvider: 'openrouter',
-        compileModel: 'm',
-        compileHypothesisCountDefault: 3,
+        incubateProvider: 'openrouter',
+        incubateModel: 'm',
+        incubateHypothesisCountDefault: 3,
         apiBaseUrl: cfg.apiBaseUrl,
         callbacks: stubCallbacks(),
       }),

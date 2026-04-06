@@ -6,7 +6,7 @@ import {
   pruneIncubationPlansToLinkedRefIds,
   staleGeneratingResultIds,
 } from '../canvas-graph-cleanup';
-import type { IncubationPlan } from '../../types/compiler';
+import type { IncubationPlan } from '../../types/incubator';
 import type { GenerationResult } from '../../types/provider';
 import type { WorkspaceNode } from '../../types/workspace-graph';
 
@@ -25,7 +25,7 @@ function mapWithStrategies(ids: string[]): Record<string, IncubationPlan> {
         dimensionValues: {},
       })),
       generatedAt: 'x',
-      compilerModel: '',
+      incubatorModel: '',
     },
   };
 }

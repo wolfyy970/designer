@@ -38,9 +38,9 @@ const SimplifiedSpecSchema = z.object({
   ),
 });
 
-const SimplifiedCompileBlockSchema = z
+const SimplifiedIncubateBlockSchema = z
   .object({
-    /** Requested number of hypotheses from POST /api/compile (promptOptions.count). */
+    /** Requested number of hypotheses from POST /api/incubate (promptOptions.count). */
     hypothesisCount: z.number().int().positive().max(20).optional(),
   })
   .optional();
@@ -50,7 +50,7 @@ export const SimplifiedMetaHarnessTestCaseSchema = z.object({
   description: z.string().optional(),
   spec: SimplifiedSpecSchema,
   strategy: SimplifiedStrategySchema.optional(),
-  compile: SimplifiedCompileBlockSchema,
+  incubate: SimplifiedIncubateBlockSchema,
   model: SimplifiedModelSchema,
 });
 
@@ -111,7 +111,7 @@ export function buildDesignSpecFromSimplified(spec: SimplifiedMetaHarnessTestCas
 }
 
 type HydrateOptions = {
-  defaultCompilerProvider: string;
+  defaultIncubatorProvider: string;
   correlationId?: string;
   promptOverrides?: Record<string, string>;
   supportsVision?: boolean;
@@ -124,27 +124,27 @@ type HydrateOptions = {
   strategyOverride?: z.infer<typeof SimplifiedStrategySchema>;
 };
 
-type HydrateCompileRequestOptions = {
-  compileProvider: string;
-  compileModel: string;
+type HydrateIncubateRequestOptions = {
+  incubateProvider: string;
+  incubateModel: string;
   supportsVision?: boolean;
-  /** Default when test case omits `compile.hypothesisCount`. */
+  /** Default when test case omits `incubate.hypothesisCount`. */
   defaultHypothesisCount?: number;
   promptOverrides?: Record<string, string>;
 };
 
-/** Build POST /api/compile JSON body from an already-validated simplified test case. */
-export function hydrateCompileRequestFromParsed(
+/** Build POST /api/incubate JSON body from an already-validated simplified test case. */
+export function hydrateIncubateRequestFromParsed(
   simplified: SimplifiedMetaHarnessTestCase,
-  options: HydrateCompileRequestOptions,
+  options: HydrateIncubateRequestOptions,
 ): Record<string, unknown> {
   const spec = buildDesignSpecFromSimplified(simplified.spec);
   const count =
-    simplified.compile?.hypothesisCount ?? options.defaultHypothesisCount ?? DEFAULT_HYPOTHESIS_COUNT;
+    simplified.incubate?.hypothesisCount ?? options.defaultHypothesisCount ?? DEFAULT_HYPOTHESIS_COUNT;
   return {
     spec,
-    providerId: options.compileProvider,
-    modelId: options.compileModel,
+    providerId: options.incubateProvider,
+    modelId: options.incubateModel,
     ...(options.supportsVision !== undefined ? { supportsVision: options.supportsVision } : {}),
     promptOptions: { count },
     ...(options.promptOverrides && Object.keys(options.promptOverrides).length > 0
@@ -153,12 +153,12 @@ export function hydrateCompileRequestFromParsed(
   };
 }
 
-/** Build POST /api/compile JSON body from a simplified benchmark file. */
-export function hydrateCompileRequest(
+/** Build POST /api/incubate JSON body from a simplified benchmark file. */
+export function hydrateIncubateRequest(
   raw: unknown,
-  options: HydrateCompileRequestOptions,
+  options: HydrateIncubateRequestOptions,
 ): Record<string, unknown> {
-  return hydrateCompileRequestFromParsed(SimplifiedMetaHarnessTestCaseSchema.parse(raw), options);
+  return hydrateIncubateRequestFromParsed(SimplifiedMetaHarnessTestCaseSchema.parse(raw), options);
 }
 
 /** Build hypothesis generate body from an already-validated simplified test case. */
@@ -197,7 +197,7 @@ export function hydrateMetaHarnessTestCaseFromParsed(
       },
     },
     designSystems: {},
-    defaultCompilerProvider: options.defaultCompilerProvider,
+    defaultIncubatorProvider: options.defaultIncubatorProvider,
     ...(options.supportsVision !== undefined ? { supportsVision: options.supportsVision } : {}),
     ...(options.promptOverrides && Object.keys(options.promptOverrides).length > 0
       ? { promptOverrides: options.promptOverrides }

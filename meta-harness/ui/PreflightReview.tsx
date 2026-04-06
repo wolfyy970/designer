@@ -7,7 +7,10 @@ import { dimText } from './theme.ts';
 
 type ReviewItem =
   | { kind: 'prompt'; key: string; liveBody: string; winnerBody: string; fetchError?: string }
-  | { kind: 'skill'; relPath: string; liveBody: string; winnerBody: string };
+  | { kind: 'skill'; relPath: string; liveBody: string; winnerBody: string }
+  | { kind: 'rubricWeights'; liveBody: string; winnerBody: string };
+
+type SectionKind = 'prompt' | 'skill' | 'rubric';
 
 function flattenItems(session: UnpromotedSession): ReviewItem[] {
   const prompts = [...session.stalePrompts]
@@ -31,13 +34,28 @@ function flattenItems(session: UnpromotedSession): ReviewItem[] {
         winnerBody: s.winnerBody,
       }),
     );
-  return [...prompts, ...skills];
+  const extra: ReviewItem[] = [];
+  if (session.staleRubricWeights) {
+    extra.push({
+      kind: 'rubricWeights',
+      liveBody: JSON.stringify(session.staleRubricWeights.liveWeights, null, 2),
+      winnerBody: JSON.stringify(session.staleRubricWeights.winnerWeights, null, 2),
+    });
+  }
+  return [...prompts, ...skills, ...extra];
 }
 
 function itemLabel(item: ReviewItem, index: number, total: number): string {
   const prefix = `[${index + 1}/${total}]`;
   if (item.kind === 'prompt') return `${prefix} Prompt: ${item.key}`;
-  return `${prefix} Skill: ${item.relPath}`;
+  if (item.kind === 'skill') return `${prefix} Skill: ${item.relPath}`;
+  return `${prefix} Rubric weights`;
+}
+
+function sectionAtIndex(index: number, nPrompt: number, nSkill: number): SectionKind {
+  if (index < nPrompt) return 'prompt';
+  if (index < nPrompt + nSkill) return 'skill';
+  return 'rubric';
 }
 
 function diffLineColor(kind: DiffLine['kind']): string | undefined {
@@ -69,6 +87,10 @@ export function PreflightReview({
 
   const item = items[currentIndex]!;
   const viewportLines = Math.max(8, (process.stdout.rows ?? 24) - 10);
+
+  const nPrompt = session.stalePrompts.length;
+  const nSkill = session.staleSkills.length;
+  const nRubric = session.staleRubricWeights ? 1 : 0;
 
   const diffLines = useMemo(() => {
     const lines = buildUnifiedDiffLines(item.liveBody, item.winnerBody);
@@ -127,13 +149,15 @@ export function PreflightReview({
   const totalItems = items.length;
   const meanStr = session.meanScore >= 0 ? session.meanScore.toFixed(2) : 'n/a';
 
-  const nPrompt = session.stalePrompts.length;
-  const nSkill = session.staleSkills.length;
+  const curSection = sectionAtIndex(currentIndex, nPrompt, nSkill);
 
   const promoteLabel = promoteOnly
-    ? 'apply winner to repo + Langfuse sync, then exit'
-    : 'apply winner to repo + Langfuse sync, then run harness';
+    ? 'apply winner (prompts, skills, rubric weights) + Langfuse sync if prompts changed, then exit'
+    : 'apply winner (prompts, skills, rubric weights) + Langfuse sync if prompts changed, then run harness';
   const skipLabel = 'exit without changing files';
+
+  const totalStale = nPrompt + nSkill + nRubric;
+  const rubricSummary = nRubric ? `, ${nRubric} rubric weight change` : '';
 
   return (
     <Box flexDirection="column" width="100%">
@@ -143,13 +167,27 @@ export function PreflightReview({
           {session.sessionFolder} <Text color={dimText}>(candidate-{session.candidateId}, mean {meanStr})</Text>
         </Text>
         <Text color={dimText}>
-          {nPrompt + nSkill} unpromoted item(s): {nPrompt} prompt(s), {nSkill} skill(s)
+          {totalStale} unpromoted item(s): {nPrompt} prompt(s), {nSkill} skill(s){rubricSummary}
         </Text>
       </Box>
 
       {session.allFetchesFailed ? (
         <Text color="yellow">Could not fetch live prompts from API — overrides may show as additions only.</Text>
       ) : null}
+
+      <Box flexDirection="row" flexWrap="wrap" marginBottom={1}>
+        <Text bold={curSection === 'prompt'} color={curSection === 'prompt' ? undefined : dimText}>
+          Prompts ({nPrompt})
+        </Text>
+        <Text color={dimText}> · </Text>
+        <Text bold={curSection === 'skill'} color={curSection === 'skill' ? undefined : dimText}>
+          Skills ({nSkill})
+        </Text>
+        <Text color={dimText}> · </Text>
+        <Text bold={curSection === 'rubric'} color={curSection === 'rubric' ? undefined : dimText}>
+          Rubric weights ({nRubric})
+        </Text>
+      </Box>
 
       <Box marginBottom={0} width="100%">
         <Text bold>{itemLabel(item, currentIndex, totalItems)}</Text>
@@ -194,6 +232,11 @@ export function PreflightReview({
         ) : (
           <Text color={dimText}>j/k scroll</Text>
         )}
+        {nRubric ? (
+          <Text color={dimText}>
+            After promoting rubric weights: restart the API server so GET /api/config picks up the new file.
+          </Text>
+        ) : null}
       </Box>
 
       <Text color={dimText}>Full report: {session.reportPath}</Text>

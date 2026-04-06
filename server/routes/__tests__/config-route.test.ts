@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import app from '../../app.ts';
 import { LOCKDOWN_MODEL_ID, LOCKDOWN_PROVIDER_ID } from '../../../src/lib/lockdown-model.ts';
+import { DEFAULT_RUBRIC_WEIGHTS } from '../../../src/types/evaluation.ts';
 
 describe('GET /api/config', () => {
   it('returns lockdown true and pinned model when LOCKDOWN is unset', async () => {
@@ -18,6 +19,7 @@ describe('GET /api/config', () => {
       expect(
         body.agenticMinOverallScore === null || typeof body.agenticMinOverallScore === 'number',
       ).toBe(true);
+      expect(body.defaultRubricWeights).toEqual(DEFAULT_RUBRIC_WEIGHTS);
     } finally {
       if (prev === undefined) delete process.env.LOCKDOWN;
       else process.env.LOCKDOWN = prev;
@@ -37,6 +39,7 @@ describe('GET /api/config', () => {
         (body as Record<string, unknown>).agenticMinOverallScore === null ||
           typeof (body as Record<string, unknown>).agenticMinOverallScore === 'number',
       ).toBe(true);
+      expect(body.defaultRubricWeights).toEqual(DEFAULT_RUBRIC_WEIGHTS);
     } finally {
       if (prev === undefined) delete process.env.LOCKDOWN;
       else process.env.LOCKDOWN = prev;

@@ -7,18 +7,18 @@ import { loggedCallLLM } from '../lib/llm-call-logger.ts';
 import { clampProviderModel } from '../lib/lockdown-model.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
 import {
-  buildSectionGenerateUserMessage,
-  promptKeyForSectionGenerate,
-} from '../../src/lib/prompts/section-generate.ts';
+  buildInputsGenerateUserMessage,
+  promptKeyForInputsGenerate,
+} from '../../src/lib/prompts/inputs-generate.ts';
 
-const SectionGenerateTargetSchema = z.enum([
+const InputsGenerateTargetSchema = z.enum([
   'research-context',
   'objectives-metrics',
   'design-constraints',
 ]);
 
-const SectionGenerateRequestSchema = z.object({
-  sectionId: SectionGenerateTargetSchema,
+const InputsGenerateRequestSchema = z.object({
+  inputId: InputsGenerateTargetSchema,
   designBrief: z.string().min(1),
   existingDesign: z.string().optional(),
   researchContext: z.string().optional(),
@@ -29,19 +29,19 @@ const SectionGenerateRequestSchema = z.object({
   promptOverrides: z.record(z.string(), z.string()).optional(),
 });
 
-const sectionGenerate = new Hono();
+const inputsGenerate = new Hono();
 
-sectionGenerate.post('/generate', async (c) => {
-  const parsed = await parseRequestJson(c, SectionGenerateRequestSchema);
+inputsGenerate.post('/generate', async (c) => {
+  const parsed = await parseRequestJson(c, InputsGenerateRequestSchema);
   if (!parsed.ok) return parsed.response;
   const pinned = clampProviderModel(parsed.data.providerId, parsed.data.modelId);
   const body = { ...parsed.data, providerId: pinned.providerId, modelId: pinned.modelId };
 
   const resolvePrompt = createResolvePromptBody(sanitizePromptOverrides(body.promptOverrides));
-  const promptKey = promptKeyForSectionGenerate(body.sectionId);
+  const promptKey = promptKeyForInputsGenerate(body.inputId);
   const systemPrompt = await resolvePrompt(promptKey);
-  const userPrompt = buildSectionGenerateUserMessage({
-    targetSection: body.sectionId,
+  const userPrompt = buildInputsGenerateUserMessage({
+    targetInput: body.inputId,
     designBrief: body.designBrief,
     existingDesign: body.existingDesign,
     researchContext: body.researchContext,
@@ -60,7 +60,7 @@ sectionGenerate.post('/generate', async (c) => {
       {},
       {
         source: 'other',
-        phase: `Section auto-generate (${body.sectionId})`,
+        phase: `Inputs auto-generate (${body.inputId})`,
       },
     );
     const result = raw.trim();
@@ -70,4 +70,4 @@ sectionGenerate.post('/generate', async (c) => {
   }
 });
 
-export default sectionGenerate;
+export default inputsGenerate;

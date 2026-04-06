@@ -27,7 +27,12 @@ export type EvaluatorDefaultsStore = EvaluatorSettings & {
   /** Merge partial weights, renormalize so the four sum to 1. */
   setRubricWeights: (patch: Partial<Record<EvaluatorRubricId, number>>) => void;
   /** Apply server env defaults once (before user customizes or after fresh storage). */
-  seedFromServerConfig: (config: Pick<AppConfigResponse, 'agenticMaxRevisionRounds' | 'agenticMinOverallScore'>) => void;
+  seedFromServerConfig: (
+    config: Pick<
+      AppConfigResponse,
+      'agenticMaxRevisionRounds' | 'agenticMinOverallScore' | 'defaultRubricWeights'
+    >,
+  ) => void;
 };
 
 function clampRounds(n: number): number {
@@ -93,6 +98,10 @@ export const useEvaluatorDefaultsStore = create<EvaluatorDefaultsStore>()(
             config.agenticMinOverallScore != null && Number.isFinite(config.agenticMinOverallScore)
               ? clampScore(config.agenticMinOverallScore)
               : null,
+          rubricWeights: normalizeRubricWeights(
+            DEFAULT_RUBRIC_WEIGHTS,
+            config.defaultRubricWeights,
+          ),
           serverBaselineApplied: true,
         });
       },

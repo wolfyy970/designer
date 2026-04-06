@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { runCompileStep } from '../compile-step.ts';
+import { runIncubateStep } from '../incubate-step.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 
 function sseResponse(events: { name: string; data: Record<string, unknown> }[]): Response {
@@ -31,28 +31,28 @@ const planPayload = {
     },
   ],
   generatedAt: '2020-01-01T00:00:00.000Z',
-  compilerModel: 'm',
+  incubatorModel: 'm',
 };
 
-describe('runCompileStep (SSE)', () => {
+describe('runIncubateStep (SSE)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('parses compile_result and forwards onWireEvent', async () => {
+  it('parses incubate_result and forwards onWireEvent', async () => {
     const events: string[] = [];
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
         sseResponse([
-          { name: SSE_EVENT_NAMES.progress, data: { status: 'Compiling…' } },
-          { name: SSE_EVENT_NAMES.compile_result, data: planPayload },
+          { name: SSE_EVENT_NAMES.progress, data: { status: 'Incubating…' } },
+          { name: SSE_EVENT_NAMES.incubate_result, data: planPayload },
           { name: SSE_EVENT_NAMES.done, data: {} },
         ]),
       ),
     );
 
-    const plan = await runCompileStep('http://localhost:3001/api', { foo: 1 }, {
+    const plan = await runIncubateStep('http://localhost:3001/api', { foo: 1 }, {
       onWireEvent: (ev) => {
         events.push(ev);
       },
@@ -61,25 +61,25 @@ describe('runCompileStep (SSE)', () => {
     expect(plan.id).toBe('plan-1');
     expect(plan.hypotheses).toHaveLength(1);
     expect(events).toContain(SSE_EVENT_NAMES.progress);
-    expect(events).toContain(SSE_EVENT_NAMES.compile_result);
+    expect(events).toContain(SSE_EVENT_NAMES.incubate_result);
     expect(events).toContain(SSE_EVENT_NAMES.done);
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'http://localhost:3001/api/compile',
+      'http://localhost:3001/api/incubate',
       expect.objectContaining({ method: 'POST' }),
     );
   });
 
   it('throws on HTTP error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('x', { status: 503 })));
-    await expect(runCompileStep('http://h/api', {})).rejects.toThrow(/POST \/compile 503/);
+    await expect(runIncubateStep('http://h/api', {})).rejects.toThrow(/POST \/incubate 503/);
   });
 
-  it('throws when compile_result never arrives', async () => {
+  it('throws when incubate_result never arrives', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(sseResponse([{ name: SSE_EVENT_NAMES.done, data: {} }])),
     );
-    await expect(runCompileStep('http://h/api', {})).rejects.toThrow(/without compile_result/);
+    await expect(runIncubateStep('http://h/api', {})).rejects.toThrow(/without incubate_result/);
   });
 
   it('throws on SSE error event', async () => {
@@ -87,24 +87,24 @@ describe('runCompileStep (SSE)', () => {
       'fetch',
       vi.fn().mockResolvedValue(
         sseResponse([
-          { name: SSE_EVENT_NAMES.error, data: { error: 'bad compile' } },
+          { name: SSE_EVENT_NAMES.error, data: { error: 'bad incubate' } },
           { name: SSE_EVENT_NAMES.done, data: {} },
         ]),
       ),
     );
-    await expect(runCompileStep('http://h/api', {})).rejects.toThrow(/bad compile/);
+    await expect(runIncubateStep('http://h/api', {})).rejects.toThrow(/bad incubate/);
   });
 
-  it('throws when compile_result fails CompileResponseSchema', async () => {
+  it('throws when incubate_result fails IncubateResponseSchema', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
         sseResponse([
-          { name: SSE_EVENT_NAMES.compile_result, data: { notAPlan: true } },
+          { name: SSE_EVENT_NAMES.incubate_result, data: { notAPlan: true } },
           { name: SSE_EVENT_NAMES.done, data: {} },
         ]),
       ),
     );
-    await expect(runCompileStep('http://h/api', {})).rejects.toThrow(/Invalid compile_result payload/);
+    await expect(runIncubateStep('http://h/api', {})).rejects.toThrow(/Invalid incubate_result payload/);
   });
 });

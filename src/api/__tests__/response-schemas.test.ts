@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CompileResponseSchema,
+  IncubateResponseSchema,
   HypothesisPromptBundleResponseSchema,
   DesignSystemExtractResponseSchema,
   ObservabilityLogsResponseSchema,
 } from '../response-schemas';
 
-describe('CompileResponseSchema', () => {
-  it('accepts plan shaped like POST /api/compile SSE compile_result payload', () => {
-    const r = CompileResponseSchema.safeParse({
+describe('IncubateResponseSchema', () => {
+  it('accepts plan shaped like POST /api/incubate SSE incubate_result payload', () => {
+    const r = IncubateResponseSchema.safeParse({
       id: 'plan-sse',
       specId: 's-sse',
       dimensions: [],
@@ -23,13 +23,13 @@ describe('CompileResponseSchema', () => {
         },
       ],
       generatedAt: '2026-01-01T00:00:00.000Z',
-      compilerModel: 'openrouter/x',
+      incubatorModel: 'openrouter/x',
     });
     expect(r.success).toBe(true);
   });
 
   it('accepts minimal incubation plan', () => {
-    const r = CompileResponseSchema.safeParse({
+    const r = IncubateResponseSchema.safeParse({
       id: 'd1',
       specId: 's1',
       dimensions: [{ name: 'a', range: '1', isConstant: false }],
@@ -44,7 +44,7 @@ describe('CompileResponseSchema', () => {
         },
       ],
       generatedAt: 'now',
-      compilerModel: 'm',
+      incubatorModel: 'm',
     });
     expect(r.success).toBe(true);
   });
@@ -79,7 +79,7 @@ describe('ObservabilityLogsResponseSchema', () => {
         {
           id: '1',
           timestamp: new Date().toISOString(),
-          source: 'compiler',
+          source: 'incubator',
           model: 'm',
           provider: 'openrouter',
           systemPrompt: 's',

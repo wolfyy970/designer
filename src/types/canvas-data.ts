@@ -9,32 +9,32 @@ import type { ReferenceImage } from './spec';
 /** Base constraint required by React Flow */
 type NodeData<T> = Record<string, unknown> & T;
 
-/** Section nodes (designBrief, existingDesign, etc.) store data in spec-store */
-export type SectionNodeData = NodeData<Record<string, never>>;
+/** Input nodes (designBrief, existingDesign, etc.) store data in spec-store */
+export type InputNodeData = NodeData<Record<string, never>>;
 
-/** Placeholder cards for optional sections not yet on the canvas */
-export type SectionGhostTargetType =
+/** Placeholder cards for optional input nodes not yet on the canvas */
+export type InputGhostTargetType =
   | 'existingDesign'
   | 'researchContext'
   | 'objectivesMetrics'
   | 'designConstraints';
 
-const SECTION_GHOST_TARGET_TYPE_SET = new Set<string>([
+const INPUT_GHOST_TARGET_TYPE_SET = new Set<string>([
   'existingDesign',
   'researchContext',
   'objectivesMetrics',
   'designConstraints',
 ]);
 
-export function isSectionGhostTargetType(v: string): v is SectionGhostTargetType {
-  return SECTION_GHOST_TARGET_TYPE_SET.has(v);
+export function isInputGhostTargetType(v: string): v is InputGhostTargetType {
+  return INPUT_GHOST_TARGET_TYPE_SET.has(v);
 }
 
-export type SectionGhostData = NodeData<{
-  targetType: SectionGhostTargetType;
+export type InputGhostData = NodeData<{
+  targetType: InputGhostTargetType;
 }>;
 
-export type CompilerNodeData = NodeData<{
+export type IncubatorNodeData = NodeData<{
   hypothesisCount?: number;
 }>;
 

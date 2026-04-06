@@ -2,7 +2,7 @@
  * Pure graph topology queries over `WorkspaceNode` / `WorkspaceEdge`.
  * Centralizes edge-walking so alternate UIs or persistence can reuse or replace this layer.
  */
-import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
+import { DEFAULT_INCUBATOR_PROVIDER } from '../lib/constants';
 import { NODE_TYPES } from '../constants/canvas';
 import type { CanvasNodeType, WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 
@@ -56,7 +56,7 @@ export function findIncubatorForHypothesis(
   for (const e of snapshot.edges) {
     if (e.target !== hypothesisId) continue;
     const n = snapshot.nodes.find((x) => x.id === e.source);
-    if (n?.type === NODE_TYPES.COMPILER) return n.id;
+    if (n?.type === NODE_TYPES.INCUBATOR) return n.id;
   }
   return null;
 }
@@ -119,7 +119,7 @@ export function listIncomingModelCredentials(
     if (src.type !== NODE_TYPES.MODEL) continue;
     const modelId = src.data.modelId as string | undefined;
     if (!modelId) continue;
-    const providerId = (src.data.providerId as string) || DEFAULT_COMPILER_PROVIDER;
+    const providerId = (src.data.providerId as string) || DEFAULT_INCUBATOR_PROVIDER;
     out.push({ providerId, modelId });
   }
   return out;

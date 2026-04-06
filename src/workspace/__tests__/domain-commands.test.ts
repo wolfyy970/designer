@@ -26,7 +26,7 @@ const model: WorkspaceNode = {
 };
 const compiler: WorkspaceNode = {
   id: 'c1',
-  type: NODE_TYPES.COMPILER,
+  type: NODE_TYPES.INCUBATOR,
   position: { x: 0, y: 0 },
   data: {},
 };

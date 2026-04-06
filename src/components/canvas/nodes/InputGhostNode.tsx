@@ -5,11 +5,11 @@ import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { SPEC_SECTIONS } from '../../../lib/constants';
 import { NODE_TYPE_TO_SECTION } from '../../../types/workspace-graph';
-import type { SectionGhostData } from '../../../types/canvas-data';
+import type { InputGhostData } from '../../../types/canvas-data';
 
-type SectionGhostFlowNode = Node<SectionGhostData, 'sectionGhost'>;
+type InputGhostFlowNode = Node<InputGhostData, 'inputGhost'>;
 
-function SectionGhostNode({ data }: NodeProps<SectionGhostFlowNode>) {
+function InputGhostNode({ data }: NodeProps<InputGhostFlowNode>) {
   const { targetType } = data;
   const sectionId = NODE_TYPE_TO_SECTION[targetType]!;
   const meta = SPEC_SECTIONS.find((s) => s.id === sectionId)!;
@@ -27,7 +27,7 @@ function SectionGhostNode({ data }: NodeProps<SectionGhostFlowNode>) {
     (e: React.PointerEvent) => {
       e.stopPropagation();
       e.preventDefault();
-      useCanvasStore.getState().dismissSectionGhostSlot(targetType);
+      useCanvasStore.getState().dismissInputGhostSlot(targetType);
     },
     [targetType],
   );
@@ -68,4 +68,4 @@ function SectionGhostNode({ data }: NodeProps<SectionGhostFlowNode>) {
   );
 }
 
-export default memo(SectionGhostNode);
+export default memo(InputGhostNode);

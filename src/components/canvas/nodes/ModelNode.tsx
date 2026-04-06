@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
-import { DEFAULT_COMPILER_PROVIDER } from '../../../lib/constants';
+import { DEFAULT_INCUBATOR_PROVIDER } from '../../../lib/constants';
 import { LOCKDOWN_MODEL_LABEL } from '../../../lib/lockdown-model';
 import { useAppConfig } from '../../../hooks/useAppConfig';
 import { filledOrEmpty } from '../../../lib/node-status';
@@ -46,7 +46,7 @@ function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
     supportsReasoning,
     handleProviderChange,
     handleModelChange,
-  } = useNodeProviderModel(DEFAULT_COMPILER_PROVIDER, id, { disconnectOnChange: false });
+  } = useNodeProviderModel(DEFAULT_INCUBATOR_PROVIDER, id, { disconnectOnChange: false });
 
   useEffect(() => {
     if (!supportsReasoning && thinkingLevel !== 'off') {
