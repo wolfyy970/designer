@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 
 /** HTTP statuses used by `/api/*` JSON errors (matches Hono `ContentfulStatusCode` subset). */
-type ApiJsonErrorStatus = 400 | 404 | 422 | 500 | 503;
+type ApiJsonErrorStatus = 400 | 404 | 413 | 422 | 500 | 503;
 
 /** Standard JSON error body for `/api/*` routes (non-raw responses). */
 export type ApiJsonErrorBody = { error: string; details?: unknown };

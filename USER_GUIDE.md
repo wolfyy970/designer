@@ -32,7 +32,9 @@ Both processes are needed for local development.
 
 ## Observability (development)
 
-Open **Observability** from the canvas header. The **LLM** and **Run trace** tabs poll **`GET /api/logs`**: in-memory rings on the API server (plus optional local NDJSON in dev; see [ARCHITECTURE.md](ARCHITECTURE.md)). They are a **session/dev audit view**, not a full copy of nested traces. **Run trace** entries for Pi tool use can include truncated **`toolArgs`** / **`toolResult`** (and **`detail`**) on start/finish events for quick inspection.
+Open **Observability** from the canvas header. The **Run trace** tab polls **`GET /api/logs`** when the server runs in **development** (`NODE_ENV` not `production`): in-memory rings on the API (plus optional local NDJSON in dev; see [ARCHITECTURE.md](ARCHITECTURE.md)). On **production** deploys (e.g. Vercel), that route returns **404**; the modal explains that the API ring is dev-only—use **Langfuse** (or similar) for full traces.
+
+**Run trace** entries for Pi tool use can include truncated **`toolArgs`** / **`toolResult`** (and **`detail`**) on start/finish events for quick inspection.
 
 The **Langfuse** tab does not load traces into the app; it links to the **Langfuse UI** for full traces, generations, and spans. That requires `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL`, and **`VITE_LANGFUSE_BASE_URL`** set to the same host so the button opens the correct region.
 

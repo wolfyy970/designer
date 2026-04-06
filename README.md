@@ -73,18 +73,24 @@ The header also opens **Settings** (General preferences; **Prompt Studio** under
 
 | Document                                               | Purpose                                                                                                                                                 |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [AGENTS.md](AGENTS.md)                                 | **Canonical** agent instructions: commands, architecture, Pi sandbox, Langfuse sync, gotchas                                                          |
+| [AGENTS.md](AGENTS.md)                                 | **Canonical** agent instructions: commands, architecture **pointers**, Langfuse sync, gotchas ([Pi sandbox detail](ARCHITECTURE.md#pi-design-sandbox-three-layer-contract) in **ARCHITECTURE**) |
 | [CLAUDE.md](CLAUDE.md)                                 | Stub for Claude Code → links **AGENTS.md**                                                                                                              |
 | [LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)             | Langfuse prompt **names** → what each is for (Prompt Studio)                                                                                            |
 | [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)               | Narrative: canvas, prompts, agentic loop, evaluation                                                                                                    |
 | [PRODUCT.md](PRODUCT.md)                               | **North Star** + feature-level description: modes, nodes, providers                                                                                     |
 | [USER_GUIDE.md](USER_GUIDE.md)                         | Setup and day-to-day canvas workflow                                                                                                                    |
 | [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)                   | SPA design tokens: accent vs status, typography, typefaces, file-role colors (`src/index.css`)                                                          |
-| [ARCHITECTURE.md](ARCHITECTURE.md)                     | Technical reference: routes, stores, data flow, Pi adapter boundary                                                                                     |
+| [ARCHITECTURE.md](ARCHITECTURE.md)                     | Technical reference: routes, stores, data flow, Pi adapter boundary, **Pi sandbox** (layers, tool inventory, edit cascade)                                |
 | [docker/langfuse/README.md](docker/langfuse/README.md) | Optional **self-hosted** Langfuse via Docker (default is Langfuse Cloud)                                                                                |
 | [meta-harness/README.md](meta-harness/README.md)       | Optional meta-harness CLI for systematic API benchmarks and prompt/skill search ([META_HARNESS_OUTER_LOOP.md](meta-harness/META_HARNESS_OUTER_LOOP.md)) |
 | [DOCUMENTATION.md](DOCUMENTATION.md)                   | How this doc set is organized (hub = this README)                                                                                                       |
 
+
+## Deploying (Vercel)
+
+Production uses **Vercel** (`vercel.json` + `api/[[...route]].ts` → Hono). The serverless function **`maxDuration` is 800s** on Pro so long agentic SSE streams fit; Hobby max is shorter—use **Pro** for agentic runs with revision rounds. Set **`OPENROUTER_API_KEY`** (and Langfuse keys if used) in the Vercel project env. **`ALLOWED_ORIGINS`** in env may be required when the SPA is on a custom domain or preview URL that is not same-origin with `/api`—see `.env.example`. `/api/logs` and prompt **write** routes (`PUT /api/prompts/...`, revert-baseline) are **disabled when `NODE_ENV=production`**; use Langfuse for traces in production.
+
+Ephemeral **preview sessions** may not persist across separate serverless invocations—the UI falls back to bundled **`srcDoc`** when a preview URL 404s (relative links in that mode are limited).
 
 ## Tech Stack
 

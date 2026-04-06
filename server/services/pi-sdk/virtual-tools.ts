@@ -28,6 +28,11 @@ import type {
   GrepToolDetails,
   ToolDefinition,
 } from './types.ts';
+import {
+  attemptMatchCascade,
+  isEditNotFoundError,
+  normalizeEditToolParams,
+} from './edit-match-cascade.ts';
 
 /** Same default as SDK grep (see `pi-coding-agent` grep tool). */
 const GREP_MAX_LINE_LENGTH = 500;
@@ -42,7 +47,8 @@ const SANDBOX_READ_MAX_LINES = 2000;
  * no `customPrompt` is set. We pass `designer-agentic-system` as `customPrompt`, so that branch is skipped.
  * Tool descriptions still reach the LLM via the API tool schema (JSON function definitions).
  *
- * Keep in sync with [agent-bash-sandbox.ts](../agent-bash-sandbox.ts) and `<sandbox_environment>` in shared-defaults.
+ * Keep in sync with [agent-bash-sandbox.ts](../agent-bash-sandbox.ts), `<sandbox_environment>` in shared-defaults,
+ * and [ARCHITECTURE.md § Pi design sandbox](../../../ARCHITECTURE.md#pi-design-sandbox-three-layer-contract) (tool inventory + edit wrapper behavior).
  */
 const SANDBOX_TOOL_OVERRIDES = {
   read: {
@@ -52,7 +58,7 @@ const SANDBOX_TOOL_OVERRIDES = {
     description: `Create or overwrite a UTF-8 text file under ${SANDBOX_PROJECT_ROOT}. Parent directories are created as needed. Use for **new files** or **complete file rewrites**; prefer **edit** for partial changes to existing files.`,
   },
   edit: {
-    description: `Apply exact search-and-replace edits to an existing file under ${SANDBOX_PROJECT_ROOT}. Each \`oldText\` must appear **exactly once** in the **original** file before edits are applied. Prefer **edit** over bash/sed for file changes.`,
+    description: `Apply exact search-and-replace edits to an existing file under ${SANDBOX_PROJECT_ROOT}. Each \`oldText\` must appear **exactly once** in the **original** file before edits are applied. CRITICAL: Include **at least 3 lines of surrounding context** in each \`oldText\` so it uniquely identifies one occurrence — e.g. the full CSS rule block (selector + braces), not a single property line when that value repeats. Prefer **edit** over bash/sed for file changes.`,
   },
   ls: {
     description: `List directory contents in the virtual project at ${SANDBOX_PROJECT_ROOT}. Returns entries sorted alphabetically, with '/' suffix for directories. Includes dotfiles. Output is truncated to 500 entries or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first).`,
@@ -238,11 +244,17 @@ function createVirtualGrepTool(bash: Bash, sessionCwd: string) {
   } as ToolDefinition;
 }
 
+function resolveSandboxPathForSession(relativeOrAbsolute: string | undefined, cwd: string): string {
+  return resolveVirtualPath(relativeOrAbsolute, cwd);
+}
+
 export function createVirtualPiCodingTools(
   bash: Bash,
   onDesignFile: (rel: string, content: string) => void,
 ) {
   const sessionCwd = SANDBOX_PROJECT_ROOT;
+  /** Absolute paths the model has read or written this session — strict read-before-edit for existing files (FileTime-style). */
+  const pathsSeenBeforeEdit = new Set<string>();
 
   const readInner = createReadToolDefinition(sessionCwd, {
     autoResizeImages: false,
@@ -257,7 +269,31 @@ export function createVirtualPiCodingTools(
       },
     },
   });
-  const read = { ...readInner, ...SANDBOX_TOOL_OVERRIDES.read };
+  type ReadExecute = (typeof readInner)['execute'];
+  const read = {
+    ...readInner,
+    ...SANDBOX_TOOL_OVERRIDES.read,
+    execute: async (
+      toolCallId: string,
+      params: Parameters<ReadExecute>[1],
+      signal: Parameters<ReadExecute>[2],
+      onUpdate: Parameters<ReadExecute>[3],
+      extCtx: Parameters<ReadExecute>[4],
+    ) => {
+      const result = await readInner.execute(toolCallId, params, signal, onUpdate, extCtx);
+      const rawPath =
+        params != null &&
+        typeof params === 'object' &&
+        'path' in params &&
+        typeof (params as { path?: unknown }).path === 'string'
+          ? (params as { path: string }).path
+          : '';
+      if (rawPath) {
+        pathsSeenBeforeEdit.add(resolveSandboxPathForSession(rawPath, sessionCwd));
+      }
+      return result;
+    },
+  } as (typeof readInner);
 
   const writeInner = createWriteToolDefinition(sessionCwd, {
     operations: {
@@ -271,7 +307,31 @@ export function createVirtualPiCodingTools(
       },
     },
   });
-  const write = { ...writeInner, ...SANDBOX_TOOL_OVERRIDES.write };
+  type WriteExecute = (typeof writeInner)['execute'];
+  const write = {
+    ...writeInner,
+    ...SANDBOX_TOOL_OVERRIDES.write,
+    execute: async (
+      toolCallId: string,
+      params: Parameters<WriteExecute>[1],
+      signal: Parameters<WriteExecute>[2],
+      onUpdate: Parameters<WriteExecute>[3],
+      extCtx: Parameters<WriteExecute>[4],
+    ) => {
+      const result = await writeInner.execute(toolCallId, params, signal, onUpdate, extCtx);
+      const rawPath =
+        params != null &&
+        typeof params === 'object' &&
+        'path' in params &&
+        typeof (params as { path?: unknown }).path === 'string'
+          ? (params as { path: string }).path
+          : '';
+      if (rawPath) {
+        pathsSeenBeforeEdit.add(resolveSandboxPathForSession(rawPath, sessionCwd));
+      }
+      return result;
+    },
+  } as (typeof writeInner);
 
   const editInner = createEditToolDefinition(sessionCwd, {
     operations: {
@@ -290,7 +350,74 @@ export function createVirtualPiCodingTools(
       },
     },
   });
-  const edit = { ...editInner, ...SANDBOX_TOOL_OVERRIDES.edit };
+  type EditExecute = (typeof editInner)['execute'];
+  const edit = {
+    ...editInner,
+    ...SANDBOX_TOOL_OVERRIDES.edit,
+    execute: async (
+      toolCallId: string,
+      params: Parameters<EditExecute>[1],
+      signal: Parameters<EditExecute>[2],
+      onUpdate: Parameters<EditExecute>[3],
+      extCtx: Parameters<EditExecute>[4],
+    ) => {
+      const rawPath =
+        params != null &&
+        typeof params === 'object' &&
+        'path' in params &&
+        typeof (params as { path?: unknown }).path === 'string'
+          ? (params as { path: string }).path
+          : '';
+      const abs = resolveSandboxPathForSession(rawPath || '.', sessionCwd);
+      const fileExists = await bash.fs.exists(abs);
+      if (fileExists && !pathsSeenBeforeEdit.has(abs)) {
+        throw new Error(
+          `You must read "${rawPath}" before editing it. Use the read tool first to see the current file content.`,
+        );
+      }
+      try {
+        const result = await editInner.execute(toolCallId, params, signal, onUpdate, extCtx);
+        pathsSeenBeforeEdit.delete(abs);
+        return result;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!isEditNotFoundError(msg)) {
+          throw err;
+        }
+        const normalized = normalizeEditToolParams(params);
+        if (!normalized) {
+          throw err;
+        }
+        let fileContent: string;
+        try {
+          fileContent = await bash.fs.readFile(abs, 'utf8');
+        } catch {
+          throw err;
+        }
+        const corrected = attemptMatchCascade(fileContent, normalized.edits);
+        if (!corrected) {
+          throw err;
+        }
+        const retryParams = {
+          path: normalized.path,
+          edits: corrected,
+        } as Parameters<EditExecute>[1];
+        try {
+          const result = await editInner.execute(
+            toolCallId,
+            retryParams,
+            signal,
+            onUpdate,
+            extCtx,
+          );
+          pathsSeenBeforeEdit.delete(abs);
+          return result;
+        } catch {
+          throw err;
+        }
+      }
+    },
+  } as (typeof editInner);
 
   const lsInner = createLsToolDefinition(sessionCwd, {
     operations: {

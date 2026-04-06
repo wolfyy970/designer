@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import path from 'node:path';
 import {
   buildSandboxSeedMaps,
   createAgentBashSandbox,
   extractDesignFiles,
   SANDBOX_PROJECT_ROOT,
+  snapshotDesignFiles,
 } from '../agent-bash-sandbox.ts';
 
 describe('agent-bash-sandbox', () => {
@@ -22,5 +24,63 @@ describe('agent-bash-sandbox', () => {
     const map = await extractDesignFiles(bash);
     expect(map['app.js']).toBe('x');
     expect(map['skills/s/SKILL.md']).toBe('ro');
+  });
+
+  it('extracts nothing when no seed files exist', async () => {
+    const bash = createAgentBashSandbox({});
+    const map = await extractDesignFiles(bash);
+    expect(Object.keys(map)).toHaveLength(0);
+  });
+
+  it('round-trips deeply nested seed paths', async () => {
+    const bash = createAgentBashSandbox({
+      seedFiles: { 'a/b/c/d/e.txt': 'deep' },
+    });
+    const map = await extractDesignFiles(bash);
+    expect(map['a/b/c/d/e.txt']).toBe('deep');
+  });
+
+  it('strips leading slashes from seed keys', () => {
+    const files = buildSandboxSeedMaps({
+      seedFiles: { '/index.html': '<p>x</p>' } as Record<string, string>,
+    });
+    expect(files[`${SANDBOX_PROJECT_ROOT}/index.html`]).toBe('<p>x</p>');
+  });
+
+  it('extractDesignFiles includes files written after construction', async () => {
+    const bash = createAgentBashSandbox({ seedFiles: { 'a.txt': '1' } });
+    const p = path.posix.join(SANDBOX_PROJECT_ROOT, 'b.txt');
+    await bash.fs.mkdir(path.posix.dirname(p), { recursive: true });
+    await bash.fs.writeFile(p, '2', 'utf8');
+    const map = await extractDesignFiles(bash);
+    expect(map['a.txt']).toBe('1');
+    expect(map['b.txt']).toBe('2');
+  });
+
+  it('extract omits a file removed via shell', async () => {
+    const bash = createAgentBashSandbox({ seedFiles: { 'gone.txt': 'bye' } });
+    await bash.exec(`rm ${SANDBOX_PROJECT_ROOT}/gone.txt`, {});
+    const map = await extractDesignFiles(bash);
+    expect(map['gone.txt']).toBeUndefined();
+  });
+
+  it('SANDBOX_PROJECT_ROOT is the documented virtual root', () => {
+    expect(SANDBOX_PROJECT_ROOT).toBe('/home/user/project');
+  });
+
+  it('snapshotDesignFiles returns a Map with relative path keys', async () => {
+    const bash = createAgentBashSandbox({ seedFiles: { 'x/y.txt': 'z' } });
+    const snap = await snapshotDesignFiles(bash);
+    expect(snap.get('x/y.txt')).toBe('z');
+    expect([...snap.keys()].every((k) => !k.startsWith('/'))).toBe(true);
+  });
+
+  it('extracts a large batch of seeded files', async () => {
+    const seeds: Record<string, string> = {};
+    for (let i = 0; i < 100; i++) seeds[`batch/f${i}.txt`] = String(i);
+    const bash = createAgentBashSandbox({ seedFiles: seeds });
+    const map = await extractDesignFiles(bash);
+    expect(Object.keys(map)).toHaveLength(100);
+    expect(map['batch/f99.txt']).toBe('99');
   });
 });

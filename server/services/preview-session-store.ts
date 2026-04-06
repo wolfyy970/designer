@@ -3,14 +3,31 @@
  * Sessions expire to bound memory — not a durable artifact store.
  */
 
+import { env } from '../env.ts';
+
 const DEFAULT_TTL_MS = 30 * 60 * 1000;
 
 type SessionRow = {
   files: Record<string, string>;
   expiresAt: number;
+  createdAt: number;
 };
 
 const store = new Map<string, SessionRow>();
+
+function evictOldestSessionIfAtCap(): void {
+  const cap = env.MAX_PREVIEW_SESSIONS;
+  if (store.size < cap) return;
+  let oldestId: string | null = null;
+  let oldestCreated = Infinity;
+  for (const [id, row] of store) {
+    if (row.createdAt < oldestCreated) {
+      oldestCreated = row.createdAt;
+      oldestId = id;
+    }
+  }
+  if (oldestId != null) store.delete(oldestId);
+}
 
 function prune(): void {
   const now = Date.now();
@@ -40,8 +57,10 @@ export function createPreviewSession(
 ): string {
   ensurePruneLoop();
   prune();
+  evictOldestSessionIfAtCap();
   const id = crypto.randomUUID();
-  store.set(id, { files: { ...files }, expiresAt: Date.now() + ttlMs });
+  const now = Date.now();
+  store.set(id, { files: { ...files }, expiresAt: now + ttlMs, createdAt: now });
   return id;
 }
 

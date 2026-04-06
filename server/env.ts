@@ -20,8 +20,19 @@ function optionalScore(value: string | undefined): number | undefined {
   return n;
 }
 
+/** Integer env helper — empty string uses `fallback` (unlike clampInt which treats empty as NaN). */
+function clampIndEnv(value: string | undefined, fallback: number, min: number, max: number): number {
+  if (value === undefined || String(value).trim() === '') return fallback;
+  return clampInt(value, fallback, min, max);
+}
+
 export const env = {
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY ?? '',
+  /**
+   * OpenRouter key **only** for Vitest sandbox LLM tool tests (`SANDBOX_LLM_TEST=1` →
+   * `server/services/__tests__/sandbox-llm-*.ts`). The Hono API and Pi agent **never** read this.
+   */
+  OPENROUTER_API_KEY_TESTS: process.env.OPENROUTER_API_KEY_TESTS ?? '',
   OPENROUTER_BASE_URL: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai',
   LMSTUDIO_URL: process.env.LMSTUDIO_URL ?? process.env.VITE_LMSTUDIO_URL ?? 'http://localhost:1234',
   NODE_ENV: process.env.NODE_ENV ?? 'development',
@@ -29,6 +40,17 @@ export const env = {
   DATABASE_URL: process.env.DATABASE_URL ?? '',
   get isDev() {
     return this.NODE_ENV !== 'production';
+  },
+  /**
+   * Comma-separated browser origins allowed for CORS (e.g. `https://app.vercel.app`).
+   * When empty, only localhost dev origins are allowed. Set on production when the SPA is on
+   * a custom domain or Vercel preview URL that is not same-origin as the API.
+   */
+  get ALLOWED_ORIGINS(): string[] {
+    return (process.env.ALLOWED_ORIGINS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
   },
   /**
    * Optional hard cap on **completion** tokens in outbound API bodies and Pi `streamSimple`.
@@ -52,6 +74,17 @@ export const env = {
   AGENTIC_MIN_OVERALL_SCORE: optionalScore(process.env.AGENTIC_MIN_OVERALL_SCORE),
   /** Dev LLM observability log (`/api/logs`): max rows kept in memory (FIFO drop). */
   LLM_LOG_MAX_ENTRIES: clampInt(process.env.LLM_LOG_MAX_ENTRIES, 400, 50, 10_000),
+  /** Ephemeral preview sessions (`/api/preview/sessions`); oldest evicted when over cap. */
+  MAX_PREVIEW_SESSIONS: clampIndEnv(process.env.MAX_PREVIEW_SESSIONS, 200, 1, 50_000),
+  /** Max approx UTF-8 bytes for POST/PUT preview `files` map (rejects with 413). */
+  MAX_PREVIEW_PAYLOAD_BYTES: clampIndEnv(
+    process.env.MAX_PREVIEW_PAYLOAD_BYTES,
+    5 * 1024 * 1024,
+    64 * 1024,
+    50 * 1024 * 1024,
+  ),
+  /** Max concurrent agentic orchestration runs per server instance (503 when full). */
+  MAX_CONCURRENT_AGENTIC_RUNS: clampIndEnv(process.env.MAX_CONCURRENT_AGENTIC_RUNS, 5, 1, 100),
   /**
    * Override directory for observability NDJSON. Falls back to `LLM_LOG_DIR`, then in development
    * defaults to `logs/observability` under `process.cwd()`. Empty in production unless explicitly set.
@@ -67,9 +100,17 @@ export const env = {
   /** @deprecated Use OBSERVABILITY_LOG_BASE_DIR (same resolution when set). Kept for docs/tools. */
   LLM_LOG_DIR: (process.env.LLM_LOG_DIR ?? '').trim(),
   /**
-   * Max characters per of systemPrompt, userPrompt, response in the file sink only (`0` = no cap).
+   * Max characters per systemPrompt, userPrompt, response in the NDJSON file sink only.
+   * In production, defaults to **2000** when unset (defensive); set `0` for no cap.
    */
-  LLM_LOG_MAX_BODY_CHARS: clampInt(process.env.LLM_LOG_MAX_BODY_CHARS, 0, 0, 10_000_000),
+  get LLM_LOG_MAX_BODY_CHARS(): number {
+    const raw = process.env.LLM_LOG_MAX_BODY_CHARS;
+    if (raw === undefined || String(raw).trim() === '') {
+      if (process.env.NODE_ENV === 'production') return 2000;
+      return 0;
+    }
+    return clampInt(raw, 0, 0, 10_000_000);
+  },
   /** `daily` → `llm-YYYY-MM-DD.ndjson`; `single` → `llm.ndjson`. */
   LLM_LOG_FILE_MODE: process.env.LLM_LOG_FILE_MODE === 'single' ? 'single' : 'daily',
   /** Set to `0` to skip Playwright browser-grounded eval (preflight only). Disabled under Vitest by default. */
@@ -125,4 +166,4 @@ export const env = {
   get LOCKDOWN(): boolean {
     return parseLockdownEnvValue(process.env.LOCKDOWN);
   },
-} as const;
+};

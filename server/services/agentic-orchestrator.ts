@@ -43,6 +43,7 @@ import { GENERATION_MODE } from '../../src/constants/generation.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import { env } from '../env.ts';
 import { writeAgenticEvalRunLog } from '../lib/eval-run-logger.ts';
+import { acquireAgenticSlotOrReject, releaseAgenticSlot } from '../lib/agentic-concurrency.ts';
 
 const AGENTIC_ROOT_SPAN_ID = '0000000000000001';
 
@@ -362,7 +363,18 @@ async function runAgenticWithEvaluationImpl(
       ? { minOverallScore: options.minOverallScore }
       : undefined;
 
-  let piTracePhase: AgenticPhase = 'building';
+  const acquired = await acquireAgenticSlotOrReject();
+  if (!acquired) {
+    await emit(streamCtx, {
+      type: 'error',
+      payload:
+        'Too many agentic design runs are active on this server. Please wait a moment and try again.',
+    });
+    return null;
+  }
+
+  try {
+    let piTracePhase: AgenticPhase = 'building';
   const forward = async (e: AgentRunEvent) => {
     if (e.type === 'skill_activated') {
       await emit(streamCtx, {
@@ -562,4 +574,7 @@ async function runAgenticWithEvaluationImpl(
       revisionBriefApplied: lastRevisionBrief,
     }),
   );
+  } finally {
+    releaseAgenticSlot();
+  }
 }

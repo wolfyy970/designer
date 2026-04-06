@@ -2,4 +2,4 @@
 
 Claude Code automatically loads **`CLAUDE.md`** at the project root. **All agent guidance for this repository is maintained in [AGENTS.md](AGENTS.md).**
 
-Open **AGENTS.md** for commands, release metadata, server/frontend architecture, the Pi design sandbox (three-layer contract), mandatory Langfuse sync after prompt edits, and critical gotchas. Edit **AGENTS.md** when changing that guidance—do not duplicate long-form content here.
+Open **AGENTS.md** for commands, release metadata, architecture quick links (including where the Pi design sandbox is documented), mandatory Langfuse sync after prompt edits, and critical gotchas. **Pi sandbox** (three-layer contract, tool inventory, edit resilience) lives in **[ARCHITECTURE.md](ARCHITECTURE.md)**. Edit **AGENTS.md** when changing agent workflow/gotchas; put system design changes in **ARCHITECTURE.md**—do not duplicate long-form content in **CLAUDE.md**.

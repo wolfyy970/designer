@@ -10,6 +10,8 @@ import {
 import { mimeForPath } from '../lib/preview-mime.ts';
 import { encodeVirtualPathForUrl, resolvePreviewEntryPath } from '../../src/lib/preview-entry.ts';
 import { apiJsonError } from '../lib/api-json-error.ts';
+import { env } from '../env.ts';
+import { approximatePreviewFilesUtf8Bytes } from '../lib/preview-payload-bytes.ts';
 
 const bodySchema = z.object({
   files: z.record(z.string(), z.string()),
@@ -32,6 +34,9 @@ preview.post('/sessions', async (c) => {
   const { files } = parsed.data;
   if (Object.keys(files).length === 0) {
     return apiJsonError(c, 400, 'files must be non-empty');
+  }
+  if (approximatePreviewFilesUtf8Bytes(files) > env.MAX_PREVIEW_PAYLOAD_BYTES) {
+    return apiJsonError(c, 413, 'Preview files payload too large');
   }
   const id = createPreviewSession(files);
   const entry = resolvePreviewEntryPath(files);
@@ -58,6 +63,9 @@ preview.put('/sessions/:id', async (c) => {
   const { files } = parsed.data;
   if (Object.keys(files).length === 0) {
     return apiJsonError(c, 400, 'files must be non-empty');
+  }
+  if (approximatePreviewFilesUtf8Bytes(files) > env.MAX_PREVIEW_PAYLOAD_BYTES) {
+    return apiJsonError(c, 413, 'Preview files payload too large');
   }
   const ok = replacePreviewSessionFiles(id, files);
   if (!ok) return apiJsonError(c, 404, 'Unknown or expired session');

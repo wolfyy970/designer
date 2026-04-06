@@ -32,7 +32,7 @@ export function ViewportGate({ children }: { children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-start bg-bg px-8 pt-[min(40vh,12rem)] sm:pt-[40vh]">
       <div className="flex w-full max-w-xs flex-col gap-4 text-left font-sans">
-        <span className="font-logo text-nano font-medium uppercase tracking-widest text-fg-muted">
+        <span className="shrink-0 font-logo text-nano font-medium leading-none tracking-wide text-fg-muted">
           AutoDesigner
         </span>
         <p className="text-base font-medium leading-snug text-fg sm:text-lg">Desktop only.</p>

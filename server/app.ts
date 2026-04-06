@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { bodyLimit } from 'hono/body-limit';
 import incubate from './routes/incubate.ts';
 import generate from './routes/generate.ts';
 import models from './routes/models.ts';
@@ -10,18 +11,41 @@ import hypothesis from './routes/hypothesis.ts';
 import preview from './routes/preview.ts';
 import configRoute from './routes/config.ts';
 import inputsGenerate from './routes/inputs-generate.ts';
+import { env } from './env.ts';
+import { apiJsonError } from './lib/api-json-error.ts';
+
+const DEFAULT_DEV_CORS_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'http://localhost:4173',
+] as const;
+
+function effectiveCorsOrigins(): string[] {
+  const extra = env.ALLOWED_ORIGINS;
+  if (extra.length === 0) return [...DEFAULT_DEV_CORS_ORIGINS];
+  return extra;
+}
 
 const app = new Hono().basePath('/api');
+
+const BODY_LIMIT_BYTES = 2 * 1024 * 1024;
+
+app.use(
+  '*',
+  bodyLimit({
+    maxSize: BODY_LIMIT_BYTES,
+    onError: (c) => apiJsonError(c, 413, 'Request body too large'),
+  }),
+);
 
 app.use(
   '*',
   cors({
-    origin: [
-      'http://localhost:5173',
-      'http://localhost:5174',
-      'http://localhost:5175',
-      'http://localhost:4173',
-    ],
+    origin: (origin) => {
+      if (!origin) return origin;
+      return effectiveCorsOrigins().includes(origin) ? origin : null;
+    },
   }),
 );
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Trash2 } from 'lucide-react';
 import { getLogs as apiGetLogs, clearLogs as apiClearLogs } from '../../api/client';
 import { useObservabilityLogStore } from '../../stores/observability-log-store';
@@ -91,16 +91,26 @@ export default function LogViewer({ open, onClose, onOpenPromptStudio: _onOpenPr
   const snapshot = useObservabilityLogStore((s) => s.snapshot);
   const setObservabilitySnapshot = useObservabilityLogStore((s) => s.setSnapshot);
   const [tab, setTab] = useState<'langfuse' | 'trace'>('trace');
+  const [logsRingAvailable, setLogsRingAvailable] = useState(true);
+  const logsRingPollRef = useRef(true);
   const results = useGenerationStore((s) => s.results);
   const incubationPlans = useIncubatorStore((s) => s.incubationPlans);
 
   useEffect(() => {
     if (!open) return;
+    logsRingPollRef.current = true;
     const load = () => {
-      void apiGetLogs().then(setObservabilitySnapshot);
+      void apiGetLogs().then(({ data, ringAvailable }) => {
+        setObservabilitySnapshot(data);
+        setLogsRingAvailable(ringAvailable);
+        logsRingPollRef.current = ringAvailable;
+      });
     };
     load();
-    const id = window.setInterval(load, LOG_POLL_MS);
+    const id = window.setInterval(() => {
+      if (!logsRingPollRef.current) return;
+      load();
+    }, LOG_POLL_MS);
     return () => window.clearInterval(id);
   }, [open, setObservabilitySnapshot]);
 
@@ -195,12 +205,27 @@ export default function LogViewer({ open, onClose, onOpenPromptStudio: _onOpenPr
           </div>
         ) : (
           <>
-            <p className="rounded-md border border-border-subtle bg-surface px-3 py-2 text-nano leading-relaxed text-fg-muted">
-              Run trace rows come from <strong className="text-fg-secondary">GET /api/logs</strong>{' '}
-              (server ring + optional NDJSON in dev). Inline Variant Inspector still uses live client
-              traces; this tab is the audit view.
-            </p>
-            {traceEntries.length === 0 ? (
+            {!logsRingAvailable ? (
+              <div className="rounded-md border border-border-subtle bg-surface-note px-3 py-3 text-nano leading-relaxed text-fg-secondary">
+                <strong className="text-fg">Run trace (API ring)</strong> is only available in
+                development. On production deploys, use the{' '}
+                <button
+                  type="button"
+                  onClick={() => setTab('langfuse')}
+                  className="text-accent underline underline-offset-2 hover:text-accent-hover"
+                >
+                  Langfuse
+                </button>{' '}
+                tab or your observability provider for full traces.
+              </div>
+            ) : (
+              <p className="rounded-md border border-border-subtle bg-surface px-3 py-2 text-nano leading-relaxed text-fg-muted">
+                Run trace rows come from <strong className="text-fg-secondary">GET /api/logs</strong>{' '}
+                (server ring + optional NDJSON in dev). Inline Variant Inspector still uses live client
+                traces; this tab is the audit view.
+              </p>
+            )}
+            {!logsRingAvailable ? null : traceEntries.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border py-12 text-center text-xs text-fg-muted">
                 No run trace yet. Start an agentic run to inspect tool flow, file writes, and hand-offs.
               </div>

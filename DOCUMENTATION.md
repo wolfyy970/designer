@@ -18,7 +18,7 @@
   - **[PRODUCT.md](PRODUCT.md)** — **North Star** + feature spec (what exists)
   - **[USER_GUIDE.md](USER_GUIDE.md)** — Setup and canvas workflow
   - **[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)** — SPA design tokens: accent vs status, typography scale, typeface roles (body / mono / wordmark), file-role colors
-  - **[ARCHITECTURE.md](ARCHITECTURE.md)** — Technical reference: routes, modules, data flow
+  - **[ARCHITECTURE.md](ARCHITECTURE.md)** — Technical reference: routes, modules, data flow, Pi sandbox (layers + tool inventory + edit resilience), preview sessions
   - **[docker/langfuse/README.md](docker/langfuse/README.md)** — Optional self-hosted Langfuse (most setups use cloud)
   - **[meta-harness/README.md](meta-harness/README.md)** — Optional **meta-harness** CLI (`pnpm meta-harness`): outer optimization loop against the local API; detail in [META_HARNESS_OUTER_LOOP.md](meta-harness/META_HARNESS_OUTER_LOOP.md)
   - **[AGENTS.md](AGENTS.md)** — Canonical conventions for AI coding agents; **[CLAUDE.md](CLAUDE.md)** is a Claude Code stub pointing here
@@ -35,8 +35,8 @@
 | **PRODUCT.md** | **North Star** + feature source of truth (prevents hallucination) | Feature launches, mission/scope changes |
 | **USER_GUIDE.md** | Setup, canvas workflow, managing specs | UX changes |
 | **DESIGN_SYSTEM.md** | SPA token semantics (`@theme`), severity vs accent, typography scale, typeface roles | New semantic colors/roles, **font stack / wordmark** changes, or token naming |
-| **ARCHITECTURE.md** | System design, module boundaries, data flow | Architecture changes |
-| **AGENTS.md** | Agent-focused commands, Husky semver patch bump, release banner/env, Pi/Langfuse gotchas | Workflow, hooks, release metadata, or agent-convention changes |
+| **ARCHITECTURE.md** | System design, module boundaries, data flow, Pi sandbox (three-layer contract + tool inventory + edit resilience) | Architecture changes |
+| **AGENTS.md** | Agent-focused commands, Husky semver patch bump, release banner/env, Langfuse workflow + links to **ARCHITECTURE.md** for Pi/sandbox detail | Workflow, hooks, release metadata, or agent-convention changes |
 | **CLAUDE.md** | Stub so Claude Code finds guidance → **AGENTS.md** | Only if the pointer or onboarding wording changes |
 | **docker/langfuse/README.md** | Optional self-hosted Langfuse (Docker) | Compose stack or seed path changes |
 | **meta-harness/README.md** (+ **META_HARNESS_OUTER_LOOP.md**) | Optional benchmark/proposer CLI, config, artifacts | CLI behavior, flags, `history/session-<mode>-*/` layout, promotion report, preflight unpromoted-winner check (diff UI), timeouts / TUI states / proposer strategy |
