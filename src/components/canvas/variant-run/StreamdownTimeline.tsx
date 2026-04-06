@@ -1,18 +1,12 @@
 import { lazy, Suspense, type ComponentProps } from 'react';
 import { streamdownTimelineComponents } from '../../../lib/streamdown-timeline-components';
+import { resolveStreamdownTimelineControls } from './streamdown-timeline-controls';
 
 const Streamdown = lazy(() =>
   import('streamdown').then((m) => ({ default: m.Streamdown })),
 );
 
 type StreamdownProps = ComponentProps<(typeof import('streamdown'))['Streamdown']>;
-
-/** Default Streamdown controls for variant timelines: hide table copy/download/fullscreen chrome. */
-export function resolveStreamdownTimelineControls(
-  controls: StreamdownProps['controls'],
-): StreamdownProps['controls'] {
-  return controls === undefined ? { table: false } : controls;
-}
 
 function StreamdownFallback() {
   return (

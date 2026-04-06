@@ -23,7 +23,6 @@ export interface CanvasStore {
   viewport: WorkspaceViewport;
 
   showMiniMap: boolean;
-  showGrid: boolean;
   colGap: number;
   autoLayout: boolean;
   expandedPreviewId: string | null;
@@ -44,7 +43,6 @@ export interface CanvasStore {
   setViewport: (viewport: WorkspaceViewport) => void;
 
   toggleMiniMap: () => void;
-  toggleGrid: () => void;
   setColGap: (gap: number) => void;
   toggleAutoLayout: () => void;
 

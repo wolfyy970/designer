@@ -20,7 +20,6 @@ const FRESH_STATE = {
   edges: [],
   viewport: { x: 0, y: 0, zoom: 0.85 },
   showMiniMap: true,
-  showGrid: true,
   colGap: DEFAULT_COL_GAP,
   autoLayout: true,
 };
@@ -526,6 +525,13 @@ function migrateV22ToV23(s: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
+/** v23 → v24: remove unused `showGrid` (toggle never affected rendering). */
+function migrateV23ToV24(s: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...s };
+  delete out.showGrid;
+  return out;
+}
+
 // ── Top-level migration runner ────────────────────────────────────────
 
 /**
@@ -563,6 +569,7 @@ export function migrateCanvasState(
   if (fromVersion < 21) s = migrateV20ToV21(s);
   if (fromVersion < 22) s = migrateV21ToV22(s);
   if (fromVersion < 23) s = migrateV22ToV23(s);
+  if (fromVersion < 24) s = migrateV23ToV24(s);
 
   return s;
 }

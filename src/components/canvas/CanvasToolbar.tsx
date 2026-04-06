@@ -3,7 +3,6 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
-  LayoutGrid,
   Map,
   RotateCcw,
   Plus,
@@ -21,11 +20,9 @@ const GAP_STEP = 40;
 export default function CanvasToolbar() {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const showMiniMap = useCanvasStore((s) => s.showMiniMap);
-  const showGrid = useCanvasStore((s) => s.showGrid);
   const colGap = useCanvasStore((s) => s.colGap);
   const autoLayout = useCanvasStore((s) => s.autoLayout);
   const toggleMiniMap = useCanvasStore((s) => s.toggleMiniMap);
-  const toggleGrid = useCanvasStore((s) => s.toggleGrid);
   const setColGap = useCanvasStore((s) => s.setColGap);
   const toggleAutoLayout = useCanvasStore((s) => s.toggleAutoLayout);
   const applyAutoLayout = useCanvasStore((s) => s.applyAutoLayout);
@@ -109,12 +106,6 @@ export default function CanvasToolbar() {
           label="Toggle minimap"
           onClick={toggleMiniMap}
           active={showMiniMap}
-        />
-        <ToolButton
-          icon={<LayoutGrid size={16} />}
-          label="Toggle grid"
-          onClick={toggleGrid}
-          active={showGrid}
         />
       </div>
 

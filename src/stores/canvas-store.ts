@@ -26,7 +26,6 @@ const initialCanvasState: Pick<
   | 'edges'
   | 'viewport'
   | 'showMiniMap'
-  | 'showGrid'
   | 'colGap'
   | 'autoLayout'
   | 'expandedPreviewId'
@@ -43,7 +42,6 @@ const initialCanvasState: Pick<
   edges: [],
   viewport: { x: 0, y: 0, zoom: 0.85 },
   showMiniMap: true,
-  showGrid: true,
   colGap: DEFAULT_COL_GAP,
   autoLayout: true,
   expandedPreviewId: null,
@@ -68,7 +66,7 @@ export const useCanvasStore = create<CanvasStore>()(
     }),
     {
       name: STORAGE_KEYS.CANVAS,
-      version: 23,
+      version: 24,
       migrate: (persistedState: unknown, version: number) => {
         try {
           if (typeof persistedState === 'string') {
@@ -85,7 +83,6 @@ export const useCanvasStore = create<CanvasStore>()(
         edges: state.edges,
         viewport: state.viewport,
         showMiniMap: state.showMiniMap,
-        showGrid: state.showGrid,
         colGap: state.colGap,
         autoLayout: state.autoLayout,
         dismissedInputGhostSlots: state.dismissedInputGhostSlots,

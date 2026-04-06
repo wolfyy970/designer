@@ -11,7 +11,6 @@ export const createUiSlice: StateCreator<
     CanvasStore,
     | 'setViewport'
     | 'toggleMiniMap'
-    | 'toggleGrid'
     | 'setColGap'
     | 'toggleAutoLayout'
     | 'setExpandedPreview'
@@ -33,7 +32,6 @@ export const createUiSlice: StateCreator<
   setViewport: (viewport) => set({ viewport }),
 
   toggleMiniMap: () => set((s) => ({ showMiniMap: !s.showMiniMap })),
-  toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   setColGap: (gap) => {
     const clamped = Math.max(MIN_COL_GAP, Math.min(MAX_COL_GAP, gap));
     set({ colGap: clamped });

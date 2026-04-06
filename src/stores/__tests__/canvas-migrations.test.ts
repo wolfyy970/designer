@@ -689,3 +689,15 @@ describe('v22 → v23: strip hypothesis agentMode from canvas', () => {
     expect((h!.data as Record<string, unknown>)).not.toHaveProperty('agentMode');
   });
 });
+
+describe('v23 → v24: remove dead showGrid flag', () => {
+  it('drops showGrid from persisted canvas state', () => {
+    const state = {
+      nodes: [],
+      edges: [],
+      showGrid: false,
+    };
+    const result = migrateCanvasState(state, 23);
+    expect(result).not.toHaveProperty('showGrid');
+  });
+});

@@ -396,7 +396,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
                       className="accent-accent mt-0.5 shrink-0"
                     />
                     <span className="text-nano text-fg-secondary">
-                      Target quality score (early stop when reached, no hard fails)
+                      Target quality score (early stop when reached)
                     </span>
                   </label>
                   {targetScoreChecked ? (

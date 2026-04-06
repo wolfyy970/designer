@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveStreamdownTimelineControls } from '../StreamdownTimeline';
+import { resolveStreamdownTimelineControls } from '../streamdown-timeline-controls';
 
 describe('resolveStreamdownTimelineControls', () => {
   it('disables Streamdown table chrome when controls are omitted', () => {
