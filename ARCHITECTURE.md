@@ -53,7 +53,7 @@ flowchart TB
   end
 
   subgraph server [Hono API]
-    routes[Routes generate hypothesis compile]
+    routes[Hono routes — incubate, hypothesis, generate, models, …]
     genExec[executeGenerateStream]
     singleShot[Single-shot LLM generateChat]
     providers[Provider registry]
@@ -113,9 +113,9 @@ flowchart TB
 flowchart TB
   ui["UI Layer — React components, Canvas"]
   spec["1. Spec Model — DesignSpec, 5 SpecSections, images, types/spec.ts"]
-  api["2. API Client + prompt stitching — compileVariantPrompts locally; incubate + hypothesis generate on server"]
+  api["2. API client — per-hypothesis prompt assembly via compileVariantPrompts() (code name); incubate + hypothesis generate on server"]
   storage["3. Storage Abstraction — StoragePort interface, BrowserStorage, IndexedDB"]
-  output["4. Output Rendering — iframe preview (URL-backed VFS or bundled fallback), VariantNode"]
+  output["4. Output Rendering — iframe preview (URL-backed VFS or bundled fallback); preview node (React: VariantNode.tsx)"]
 
   ui --> spec --> api --> storage --> output
 ```
@@ -144,12 +144,12 @@ The **server** LLM engine stays UI-agnostic; client-only modules under `src/work
 flowchart TB
   designSpec[DesignSpec text and images]
   incubationPlan[IncubationPlan dimensions and hypothesis strategies]
-  compiledPrompt["CompiledPrompt[] one per hypothesis"]
+  compiledPrompt["CompiledPrompt[] — one stored user prompt per hypothesis (browser)"]
   generate[POST /api/generate SSE stream]
 
   designSpec -->|POST /api/incubate| incubationPlan
   incubationPlan -->|user edits on canvas| compiledPrompt
-  compiledPrompt -->|compileVariantPrompts client-side| generate
+  compiledPrompt -->|merge strategy + template: compileVariantPrompts()| generate
 
   generate --> singleMode
   generate --> agenticMode
@@ -178,7 +178,7 @@ flowchart TB
 | `/api/config` | GET | App flags (`lockdown` + pinned models when locked) and **agentic evaluator defaults** (`agenticMaxRevisionRounds`, `agenticMinOverallScore` from env) for Settings → Evaluator seeding | JSON |
 | `/api/incubate` | POST | Incubate spec into incubation plan (SSE: `incubate_result`); optional body **`promptOverrides`** (known prompt keys only, sanitized server-side) | SSE → `IncubationPlan` |
 | `/api/generate` | POST | Generate one design (single-shot or agentic) | SSE stream |
-| `/api/hypothesis/prompt-bundle` | POST | Build compiled prompts + eval/provenance from workspace slice; optional **`promptOverrides`** | JSON |
+| `/api/hypothesis/prompt-bundle` | POST | Build **per-hypothesis prompt bundles** (`CompiledPrompt[]`) + eval/provenance from workspace slice; optional **`promptOverrides`** | JSON |
 | `/api/hypothesis/generate` | POST | Run all models for one hypothesis; multiplexed SSE (`laneIndex` on events, `lane_done` per lane); optional **`promptOverrides`** threaded into stream + agentic eval | SSE stream |
 | `/api/models/:provider` | GET | List available models | JSON: `ProviderModel[]` |
 | `/api/models` | GET | List available providers | JSON: `ProviderInfo[]` |
@@ -301,7 +301,7 @@ The primary interface is a node-graph canvas built on `@xyflow/react` v12.
 
 ### Node Types
 
-10 node types in 3 categories: 5 input nodes rendered by shared `InputNode.tsx`, plus `ModelNode`, `DesignSystemNode`, `IncubatorNode`, `HypothesisNode`, and `PreviewNode` (`VariantNode.tsx`). `ModelNode` centralizes provider/model selection. Design System is self-contained (data in `node.data`, not spec store). Each node uses a typed data interface from `types/canvas-data.ts`.
+10 node types in 3 categories: 5 input nodes rendered by shared `InputNode.tsx`, plus `ModelNode`, `DesignSystemNode`, `IncubatorNode`, `HypothesisNode`, and **preview** nodes (canvas type `preview`; React component still named `VariantNode.tsx` for history). `ModelNode` centralizes provider/model selection. Design System is self-contained (data in `node.data`, not spec store). Each node uses a typed data interface from `types/canvas-data.ts`.
 
 ### HypothesisNode — Generation Controls
 
@@ -309,7 +309,7 @@ The primary interface is a node-graph canvas built on `@xyflow/react` v12.
 
 ### Preview Node — Multi-File Display
 
-When a result has files (agentic output), `VariantNode` (renders the `preview` canvas node type) shows:
+When a result has files (agentic output), the preview UI (`VariantNode` / canvas type `preview`) shows:
 - **Generating state:** file explorer sidebar (planned + written files with status dots) + activity log + progress bar
 - **Complete state:** Preview/Code tab bar. **Preview** registers the file map with **`/api/preview/sessions`** and loads the default entry in a sandboxed iframe via **`src`** (real relative URLs between HTML/CSS/JS). If the API is unreachable, **`bundleVirtualFS()`** inlines linked assets into **`srcDoc`** as a fallback. Code tab shows the file explorer + raw file content.
 - **Download:** produces a `.zip` via `fflate`.
@@ -356,7 +356,7 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 | File | Purpose |
 |------|---------|
 | `client.ts` | REST + SSE fetch wrappers. `GenerateStreamCallbacks` includes `onFile(path, content)` and `onPlan(files)` for agentic events. |
-| `types.ts` | Request/response interfaces for incubate, hypothesis, and observability. `GenerateSSEEvent` includes `file` and `plan` variants. Legacy `/api/generate` wire types live on the server. |
+| `types.ts` | Request/response interfaces for incubate, hypothesis, and observability. `GenerateSSEEvent` includes alternate **event shapes** (e.g. `file`, `plan`). Legacy `/api/generate` wire types live on the server. |
 
 ### Storage (`src/storage/`)
 
@@ -404,7 +404,7 @@ Single source of truth for string literals shared across the codebase. Eliminate
 | `iframe-utils.ts` | Re-exports `bundleVirtualFS` — optional **fallback** for multi-file `srcDoc` when preview API registration fails; `prepareIframeContent(code)` — single-file pass-through; `renderErrorHtml(msg)` |
 | `preview-entry.ts` | `resolvePreviewEntryPath`, `encodeVirtualPathForUrl`, `preferredArtifactFileOrder` — shared by bundler, preview URLs, and eval |
 | `zip-utils.ts` | `downloadFilesAsZip(files, filename)` — bundles virtual FS into a `.zip` via `fflate` and triggers browser download |
-| `node-status.ts` | `filledOrEmpty`, `processingOrFilled`, `variantStatus` — pure helpers for node visual state |
+| `node-status.ts` | `filledOrEmpty`, `processingOrFilled`, `variantStatus` (legacy name; covers preview/hypothesis visual state) — pure helpers |
 | `provider-fetch.ts` | Environment-agnostic fetch utilities shared by client and server (`fetchChatCompletion`, `fetchModelList`, `parseChatResponse`, `extractMessageText`) |
 | `canvas-connections.ts` | Connection validation rules and auto-connect edge builders |
 | `canvas-graph.ts` | Lineage BFS (`computeLineage`); `buildIncubateInputs` for `/api/incubate` (optional domain wiring) |

@@ -64,7 +64,7 @@ A single-page app with one route: `/canvas`. Everything else redirects there. **
 - `canvas-store` — React Flow nodes, edges, viewport, layout (persist v22); kept in sync with domain via `workspace/domain-commands.ts`. Prefer `removeNode` for deletions so domain + incubator maps stay consistent; orchestrator-only graph filters must pair with `syncDomainForRemovedNode`.
 - `generation-store` — result metadata only; code is in IndexedDB (persist v5)
 - `spec-store` — 8-section spec document
-- `incubator-store` — `IncubationPlan` per incubator id + compiled prompts (localStorage key `auto-designer-incubator`; legacy `auto-designer-compiler` is migrated once on load)
+- `incubator-store` — `IncubationPlan` per incubator id + per-hypothesis **`CompiledPrompt[]`** (browser-assembled user prompts; localStorage key `auto-designer-incubator`; legacy `auto-designer-compiler` is migrated once on load)
 - `prompt-store` — Prompt Studio **metadata** / types (`PROMPT_META`, `PromptKey` re-exports)
 - `prompt-overrides-store` — local-only prompt draft bodies (`persist` → `STORAGE_KEYS.PROMPTS`); **`getActivePromptOverrides()`** for API payloads
 

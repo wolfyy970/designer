@@ -32,7 +32,7 @@ The API’s `**getPromptBody`** (when Langfuse is configured) tries the **new** 
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `**designer-direct-system`**     | **Direct / single-shot** generation: system rules for outputting one self-contained **HTML** page from the hypothesis + context.                                               |
 | `**designer-agentic-system`**    | **Agentic** generation: system rules for the **tool-using agent** (virtual files, milestones, self-critique) before the static artifact is finalized.                          |
-| `**designer-agentic-revision-user`** | **Agentic revision rounds only**: user instructions merged after the compiled hypothesis context and before the evaluator **revision brief** (post-evaluation Pi passes).   |
+| `**designer-agentic-revision-user`** | **Agentic revision rounds only**: user instructions merged after the **assembled** hypothesis context and before the evaluator **revision brief** (post-evaluation Pi passes).   |
 | `**designer-hypothesis-inputs`** | The **per-hypothesis user prompt**: strategy name, hypothesis, dimensions, design brief, optional design-system block — what tells the model *which* design to build this run. |
 
 

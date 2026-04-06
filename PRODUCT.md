@@ -35,9 +35,9 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 | Research Context | Input | User research, behavioral insights |
 | Objectives & Metrics | Input | Success criteria and evaluation measures |
 | Design Constraints | Input | Non-negotiable boundaries + exploration ranges |
-| Model | Processing | Centralizes provider + model selection. Connect to Compiler, Hypothesis, or Design System nodes to configure which LLM they use. |
+| Model | Processing | Centralizes provider + model selection. Connect to **Incubator**, **Hypothesis**, or **Design System** nodes to configure which LLM they use. |
 | Design System | Processing | Self-contained design token definitions. Supports multiple instances (e.g., Material Design vs custom tokens). Content stored in node data, not spec store. Optional vision-based extraction from uploaded images. |
-| Incubator | Processing | Compiles connected inputs → hypothesis strategies via LLM |
+| Incubator | Processing | **Incubates** connected inputs into hypothesis strategies via LLM |
 | Hypothesis | Processing | Editable strategy card with built-in generation controls. Mode **Direct** (one forward generation) vs **Agentic** (tool loop + evaluation). Connect a Model node, then **Generate** or **Run agent**. |
 | Preview | Output | Rendered design preview. Single-file results show an HTML iframe. Multi-file (agentic) results show a file explorer + preview/code tabs + zip download. Completed agentic runs show an **evaluation scorecard** (aggregate score, prioritized fixes, runtime QA) and, when available, a **headless browser thumbnail**. Version navigation across all results. |
 
@@ -45,7 +45,7 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 
 - **Desktop viewport gate** — Viewports under **1024px** width show a full-screen fallback (design-system styled) explaining the canvas workspace requires a larger display.
 - **Auto-layout** — Edge-driven Sugiyama-style layout. Toggleable checkbox in header. Positions all nodes based on connections, prevents overlap, centers layers vertically.
-- **Auto-connect** — Adding a node auto-connects structural edges (sections→incubator, design systems→hypotheses). Model connections are scoped: when hypotheses are generated from an Incubator, they inherit that Incubator's model — not every model on the canvas.
+- **Auto-connect** — Adding a node auto-connects structural edges (inputs→incubator, design systems→hypotheses). Model connections are scoped: when hypotheses are generated from an Incubator, they inherit that Incubator's model — not every model on the canvas.
 - **Context menu** — Right-click canvas to add nodes at click position
 - **Node palette** — Grouped picker (input/processing/output) in toolbar
 - **Lineage highlighting** — Select a node to highlight its full connected component (siblings, ancestors, descendants). Unconnected nodes dim to 40% opacity.
@@ -79,7 +79,7 @@ Each hypothesis-model pair produces a design via one of two modes. Server routes
 
 ### Single-Shot Mode
 
-The server sends the compiled hypothesis prompt (hypothesis + spec context) to the LLM with the `designer-direct-system` system prompt, in one call. The response is extracted as a complete, self-contained HTML document with inline CSS and JS. Code streams back via SSE and renders immediately.
+The server sends the **assembled** hypothesis user prompt (hypothesis + spec context) to the LLM with the `designer-direct-system` system prompt, in one call. The response is extracted as a complete, self-contained HTML document with inline CSS and JS. Code streams back via SSE and renders immediately.
 
 **Parallel generation.** Multiple hypotheses generate simultaneously. Progress and completion update independently per preview.
 

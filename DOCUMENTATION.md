@@ -46,6 +46,8 @@
 
 ## Writing Rules
 
+**Product vs code names:** In prose, prefer **incubate**, **inputs** (auto-generate), and **preview** (canvas node). The codebase may still use historical identifiers (`compileVariantPrompts`, `CompiledPrompt`, `VariantNode.tsx`, `variantStatus`) — when docs mention them, label them as **code names** or **legacy** so readers are not pulled back to old product language.
+
 1. **One source of truth** — Each fact lives in exactly one place
 2. **Link, don't duplicate** — Reference other docs instead of copying
 3. **Practical over theoretical** — Working code > abstract explanations

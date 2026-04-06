@@ -22,8 +22,8 @@ For a **plain-English map** of each Langfuse prompt name (`hypotheses-generator-
 
 | Role | Purpose | Typical storage |
 |------|---------|-----------------|
-| **Compiler** | Turn the design spec into dimensions + hypothesis strategies | Langfuse (`hypotheses-generator-system`, `incubator-user-inputs`); `pnpm db:seed` creates missing prompts from `shared-defaults` / legacy SQLite — not a full overwrite |
-| **Hypothesis prompt** | Per-hypothesis user-facing generation prompt template | Langfuse `designer-hypothesis-inputs` + `compileVariantPrompts()` on client; bundle API uses same template server-side |
+| **Incubator (plan)** | Turn connected inputs into dimensions + hypothesis strategies | Langfuse (`hypotheses-generator-system`, `incubator-user-inputs`); `pnpm db:seed` creates missing prompts from `shared-defaults` / legacy SQLite — not a full overwrite |
+| **Hypothesis prompt** | Per-hypothesis user-facing generation prompt template | Langfuse `designer-hypothesis-inputs` + client **`compileVariantPrompts()`** (merges strategy into the template — function name is historical); bundle API uses same template server-side |
 | **Single-shot system** | Constraints for one HTML response | Langfuse `designer-direct-system` |
 | **Agentic system** | Multi-file static artifact rules (entry `index.html`, local assets, etc.) | Langfuse `designer-agentic-system` (optional sandbox **`AGENTS.md`** from `agents-md-file`) |
 | **Skills** | Repo-backed Agent Skills packages | Files under repo-root **`skills/<key>/SKILL.md`**. Each Pi session embeds **`<available_skills>`** in the **`use_skill`** tool (non-**`manual`**) and pre-seeds packages under **`skills/<key>/…`** in **`just-bash`**; the agent calls **`use_skill`** or **`read`** when needed |
@@ -46,8 +46,8 @@ Evaluators use separate LLM rubrics (browser / design / strategy / implementatio
 
 ## Client/server boundary (mental model)
 
-- **Browser:** Canvas UI, Zustand, IndexedDB for code/files, local prompt compilation for preview, API client with **Zod-validated** JSON for stable endpoints and **SSE framing** helpers for generate streams.
-- **Server:** All provider keys, compile, generate, hypothesis multiplex, design-system extract, logs. Hypothesis routes validate workspace payloads (including **DesignSpec** and **design system** shapes) before building context from `hypothesis-generation-pure.ts`.
+- **Browser:** Canvas UI, Zustand, IndexedDB for code/files, local **prompt assembly** (`compileVariantPrompts`) before generate, API client with **Zod-validated** JSON for stable endpoints and **SSE framing** helpers for generate streams.
+- **Server:** All provider keys, **incubate**, generate, hypothesis multiplex, design-system extract, logs. Hypothesis routes validate workspace payloads (including **DesignSpec** and **design system** shapes) before building context from `hypothesis-generation-pure.ts`.
 
 ---
 
