@@ -14,6 +14,7 @@ import {
   EVALUATOR_MIN_SCORE,
 } from '../../types/evaluator-settings';
 import { EVALUATOR_RUBRIC_IDS, type EvaluatorRubricId } from '../../types/evaluation';
+import { isPromptOverrideEditingEnabled } from '../../lib/prompt-override-policy';
 
 const RUBRIC_LABELS: Record<EvaluatorRubricId, string> = {
   design: 'Design quality',
@@ -92,9 +93,17 @@ export default function SettingsModal({
   const wasOpenRef = useRef(false);
 
   useEffect(() => {
-    if (open && !wasOpenRef.current && initialTab) setTab(initialTab);
+    if (open && !wasOpenRef.current && initialTab) {
+      const safeInitial =
+        initialTab === 'prompts' && !isPromptOverrideEditingEnabled ? 'general' : initialTab;
+      setTab(safeInitial);
+    }
     wasOpenRef.current = open;
   }, [open, initialTab]);
+
+  useEffect(() => {
+    if (!isPromptOverrideEditingEnabled && tab === 'prompts') setTab('general');
+  }, [tab]);
 
   return (
     <>
@@ -102,7 +111,7 @@ export default function SettingsModal({
       open={open}
       onClose={onClose}
       title="Settings"
-      size={tab === 'prompts' ? 'xl' : 'md'}
+      size={tab === 'prompts' && isPromptOverrideEditingEnabled ? 'xl' : 'md'}
     >
       <div className="-mx-5 -mt-4 mb-4 flex border-b border-border px-5">
         <button
@@ -127,17 +136,19 @@ export default function SettingsModal({
         >
           Evaluator defaults
         </button>
-        <button
-          type="button"
-          onClick={() => setTab('prompts')}
-          className={`border-b-2 px-3 py-2 text-xs font-medium transition-colors ${
-            tab === 'prompts'
-              ? 'border-fg text-fg'
-              : 'border-transparent text-fg-secondary hover:text-fg-secondary'
-          }`}
-        >
-          Prompts
-        </button>
+        {isPromptOverrideEditingEnabled ? (
+          <button
+            type="button"
+            onClick={() => setTab('prompts')}
+            className={`border-b-2 px-3 py-2 text-xs font-medium transition-colors ${
+              tab === 'prompts'
+                ? 'border-fg text-fg'
+                : 'border-transparent text-fg-secondary hover:text-fg-secondary'
+            }`}
+          >
+            Prompts
+          </button>
+        ) : null}
       </div>
 
       {tab === 'general' && (
@@ -181,7 +192,9 @@ export default function SettingsModal({
 
       {tab === 'evaluator' && <EvaluatorSettingsTab />}
 
-      {tab === 'prompts' && <PromptEditor initialPromptKey={initialPromptKey} />}
+      {tab === 'prompts' && isPromptOverrideEditingEnabled ? (
+        <PromptEditor initialPromptKey={initialPromptKey} />
+      ) : null}
     </Modal>
     {import.meta.env.DEV ? (
       <DesignTokensModal open={designTokensOpen} onClose={() => setDesignTokensOpen(false)} />

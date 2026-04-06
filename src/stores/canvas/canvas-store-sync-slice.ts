@@ -133,16 +133,19 @@ export const createSyncSlice: StateCreator<
       placed++;
       strategyLinkPairs.push({ hypothesisNodeId: nodeId, strategyId: strategy.id });
 
-      addedEdges.push({
-        id: buildEdgeId(incubatorNodeId, nodeId),
-        source: incubatorNodeId,
-        target: nodeId,
-        type: EDGE_TYPES.DATA_FLOW,
-        data: { status: EDGE_STATUS.COMPLETE },
-      });
-
+      // Incubator→hypothesis is already included in buildAutoConnectEdges — do not push it twice
+      // (duplicate ids break React Flow keys and cause flaky sync).
       const structuralEdges = buildAutoConnectEdges(nodeId, 'hypothesis', addedNodes);
-      addedEdges.push(...structuralEdges);
+      for (const se of structuralEdges) {
+        const incubationComplete =
+          se.source === incubatorNodeId && se.target === nodeId;
+        addedEdges.push({
+          ...se,
+          data: {
+            status: incubationComplete ? EDGE_STATUS.COMPLETE : se.data.status,
+          },
+        });
+      }
     });
 
     if (placed === 0) return;

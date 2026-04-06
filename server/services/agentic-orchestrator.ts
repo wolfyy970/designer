@@ -322,6 +322,7 @@ async function runAgenticPiSessionRound(
       ...extras,
       systemPrompt: ctx.systemPrompt,
       skillCatalog: ctx.skillCatalog,
+      getPromptBody: options.getPromptBody,
     },
     forward,
   );

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { isPromptOverrideEditingEnabled } from '../lib/prompt-override-policy';
 import { PROMPT_KEYS, type PromptKey } from '../lib/prompts/defaults';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 
@@ -11,10 +12,11 @@ interface PromptOverridesState {
   clearAll: () => void;
 }
 
-/** Non-empty trimmed strings only, suitable for API `promptOverrides`. */
+/** Non-empty trimmed strings only, suitable for API `promptOverrides` (dev builds only). */
 export function getActivePromptOverrides(
   overrides: Partial<Record<PromptKey, string>>,
 ): Record<string, string> | undefined {
+  if (!isPromptOverrideEditingEnabled) return undefined;
   const out: Record<string, string> = {};
   for (const key of PROMPT_KEYS) {
     const v = overrides[key];

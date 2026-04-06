@@ -79,7 +79,9 @@ export const useCanvasStore = create<CanvasStore>()(
         }
       },
       partialize: (state) => ({
-        nodes: state.nodes.filter((n) => n.type !== 'inputGhost'),
+        nodes: state.nodes.filter(
+          (n) => n.type !== 'inputGhost' && n.type !== 'hypothesisGhost',
+        ),
         edges: state.edges,
         viewport: state.viewport,
         showMiniMap: state.showMiniMap,

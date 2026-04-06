@@ -46,9 +46,11 @@ The **Langfuse** tab does not load traces into the app; it links to the **Langfu
 
 **Development only:** **Settings** (gear) → **General** → **Open design tokens kitchen sink** opens a scrollable modal of live `@theme` colors, typography, and composition classes (`ds-*`, `.input-focus`). The same content is available at **`/dev/design-tokens`**. Semantics and rules: [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 
-## System prompts (Settings → Prompts)
+## System prompts (Settings → Prompts — **local development builds only**)
 
-**Settings** (gear) → **Prompts** opens **Prompt Studio**. The editor **loads** the current production prompt from the server (**Langfuse** when configured, otherwise shared defaults). **Save** / ⌘S stores your draft **in this browser only** (local persistence) and attaches **`promptOverrides`** on **incubate**, hypothesis **generate**, Design System **extract**, and **inputs** auto-generate — it does **not** write a new Langfuse version. Compare/diff uses the **database baseline** from the API. Use **Clear local override** / **Reset all** to drop browser drafts. To change **shared** production text in Langfuse, use **`pnpm langfuse:sync-prompts`** (from repo bodies) or the Langfuse UI / **`PUT /api/prompts/:key`** (automation); see [ARCHITECTURE.md](ARCHITECTURE.md).
+**Production** (e.g. `pnpm build` + deploy): the **Prompts** tab is **hidden**. The API **does not apply** client-sent **`promptOverrides`** when `NODE_ENV=production` — prompts come from **Langfuse** / server defaults only.
+
+**Local `pnpm dev`:** **Settings** (gear) → **Prompts** opens **Prompt Studio**. The editor **loads** the current baseline from the server (**Langfuse** when configured, otherwise shared defaults). **Save** / ⌘S stores your draft **in this browser only** (local persistence) and attaches **`promptOverrides`** on **incubate**, hypothesis **generate**, Design System **extract**, and **inputs** auto-generate — it does **not** write a new Langfuse version. Compare/diff uses the **database baseline** from the API. Use **Clear local override** / **Reset all** to drop browser drafts. To change **shared** production text in Langfuse, use **`pnpm langfuse:sync-prompts`** (from repo bodies) or the Langfuse UI / **`PUT /api/prompts/:key`** (dev automation); see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Prompt keys are **kebab-case** (e.g. `hypotheses-generator-system`, `designer-hypothesis-inputs`); plain-English map: [LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md). **`pnpm db:seed`** creates **missing** Langfuse prompts only. Agent **skills** are **not** Langfuse prompts — they live in the repo’s **`skills/`** tree (see [ARCHITECTURE.md](ARCHITECTURE.md) / [PRODUCT.md](PRODUCT.md)).
 
@@ -74,7 +76,7 @@ Write in prose, not bullets. Precision is the product.
 
 **Optional inputs:** The default template focuses on Design Brief + Model + Incubator. Other sections may show as **ghost** prompts on the canvas until you add the node from the toolbar (or load a saved canvas whose spec already fills that section—see **Managing Canvases**).
 
-**Auto-generate (Research / Objectives / Constraints):** On those three input nodes, an **auto-generate** action (when shown) drafts or refines the spec facet body from your **Design Brief** and any other spec sections you have already filled in. It uses the **first Model node** on the canvas (document order—the same fallback as auto-connect). **Lockdown** still pins provider/model server-side. Prompt Studio overrides apply via the Langfuse keys `inputs-gen-research-context`, `inputs-gen-objectives-metrics`, and `inputs-gen-design-constraints` (legacy `section-gen-*` names still alias in the server) ([LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)).
+**Auto-generate (Research / Objectives / Constraints):** On those three input nodes, an **auto-generate** action (when shown) drafts or refines the spec facet body from your **Design Brief** and any other spec sections you have already filled in. It uses the **first Model node** on the canvas (document order—the same fallback as auto-connect). **Lockdown** still pins provider/model server-side. In **dev**, Prompt Studio overrides apply via the Langfuse keys `inputs-gen-research-context`, `inputs-gen-objectives-metrics`, and `inputs-gen-design-constraints` (legacy `section-gen-*` names still alias in the server) ([LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)).
 
 ### 2. Connect a Model Node
 
@@ -85,6 +87,8 @@ Add a **Model** node (Processing group) and connect it to the Incubator. Select 
 Connect input nodes to the **Incubator** (edges auto-connect on add). With a Model node connected, click **Generate**. The Incubator sends your connected inputs to the LLM and produces hypothesis strategies.
 
 ### 4. Edit Hypotheses
+
+The **New hypothesis** placeholder (dashed card) offers **Blank** (empty card) or **Generate** (runs the same incubation LLM with **count = 1** to fill the new card from your **Design Brief** and sibling strategies — requires a connected **Model** and a non-empty brief).
 
 Hypothesis nodes appear to the right of the Incubator. Each represents a hypothesis strategy with:
 - **Name** — Editable label (double-click or pencil icon)

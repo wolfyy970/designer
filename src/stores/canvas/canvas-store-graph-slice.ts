@@ -15,8 +15,9 @@ import {
   columnX,
   computeAdjacentPosition,
   computeDefaultPosition,
-  reconcileInputGhostNodes,
+  reconcileEphemeralGhostNodes,
   OPTIONAL_INPUT_SLOTS,
+  isEphemeralHypothesisGhostId,
   isEphemeralInputGhostId,
   snap,
 } from '../../lib/canvas-layout';
@@ -72,7 +73,7 @@ export const createGraphSlice: StateCreator<
     const filtered = changes.filter((ch) => {
       if (ch.type !== 'remove') return true;
       const id = 'id' in ch ? (ch.id as string) : '';
-      return !isEphemeralInputGhostId(id);
+      return !isEphemeralInputGhostId(id) && !isEphemeralHypothesisGhostId(id);
     });
     set({ nodes: applyWorkspaceNodeChanges(filtered, get().nodes) });
     if (shouldScheduleAutoLayoutOnDimensionChange(get().autoLayout, filtered)) {
@@ -97,7 +98,12 @@ export const createGraphSlice: StateCreator<
     const sourceNode = nodes.find((n) => n.id === connection.source);
     const targetNode = nodes.find((n) => n.id === connection.target);
     if (!sourceNode || !targetNode) return false;
-    if (sourceNode.type === 'inputGhost' || targetNode.type === 'inputGhost') {
+    if (
+      sourceNode.type === 'inputGhost' ||
+      targetNode.type === 'inputGhost' ||
+      sourceNode.type === 'hypothesisGhost' ||
+      targetNode.type === 'hypothesisGhost'
+    ) {
       return false;
     }
     return checkValidConnection(sourceNode.type ?? '', targetNode.type ?? '');
@@ -110,7 +116,7 @@ export const createGraphSlice: StateCreator<
     set({
       dismissedInputGhostSlots,
       inputGhostToolbarNudge: true,
-      nodes: reconcileInputGhostNodes(get().nodes, dismissedInputGhostSlots),
+      nodes: reconcileEphemeralGhostNodes(get().nodes, dismissedInputGhostSlots),
     });
     if (get().autoLayout) get().applyAutoLayout();
   },
@@ -134,8 +140,8 @@ export const createGraphSlice: StateCreator<
   addNode: (type, position) => {
     const state = get();
 
-    if (INPUT_NODE_TYPES.has(type) && state.nodes.some((n) => n.type === type)) return;
-    if (type === NODE_TYPES.HYPOTHESIS && !state.nodes.some((n) => n.type === NODE_TYPES.INCUBATOR)) return;
+    if (INPUT_NODE_TYPES.has(type) && state.nodes.some((n) => n.type === type)) return undefined;
+    if (type === NODE_TYPES.HYPOTHESIS && !state.nodes.some((n) => n.type === NODE_TYPES.INCUBATOR)) return undefined;
 
     const dismissedInputGhostSlots = (OPTIONAL_INPUT_SLOTS as readonly string[]).includes(type)
       ? state.dismissedInputGhostSlots.filter((s) => s !== type)
@@ -179,13 +185,14 @@ export const createGraphSlice: StateCreator<
 
     set({
       dismissedInputGhostSlots,
-      nodes: reconcileInputGhostNodes(
+      nodes: reconcileEphemeralGhostNodes(
         [...intermediateNodes, newNode],
         dismissedInputGhostSlots,
       ),
       edges: [...state.edges, ...structuralEdges, ...modelEdges],
     });
     if (get().autoLayout) get().applyAutoLayout();
+    return id;
   },
 
   materializeOptionalInputNodesFromSpec: (spec: DesignSpec) => {
@@ -203,7 +210,7 @@ export const createGraphSlice: StateCreator<
     const state = get();
     const node = state.nodes.find((n) => n.id === nodeId);
     if (!node) return;
-    if (node.type === 'inputGhost') return;
+    if (node.type === 'inputGhost' || node.type === 'hypothesisGhost') return;
 
     resetSpecSectionForRemovedNode(node);
 
@@ -235,7 +242,7 @@ export const createGraphSlice: StateCreator<
       if (removeIds.has(v)) nextPreviewMap.delete(k);
     }
     set({
-      nodes: reconcileInputGhostNodes(
+      nodes: reconcileEphemeralGhostNodes(
         state.nodes.filter((n) => !removeIds.has(n.id)),
         state.dismissedInputGhostSlots,
       ),

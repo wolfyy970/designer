@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { type NodeProps, type Node, Handle, Position } from '@xyflow/react';
 import { FileText, Loader2, Pencil, X, Zap } from 'lucide-react';
 import { useIncubatorStore, findStrategy } from '../../../stores/incubator-store';
@@ -9,6 +9,8 @@ import { useWorkspaceDomainStore } from '../../../stores/workspace-domain-store'
 import { useEvaluatorDefaultsStore } from '../../../stores/evaluator-defaults-store';
 import type { HypothesisNodeData } from '../../../types/canvas-data';
 import { useHypothesisGeneration } from '../../../hooks/useHypothesisGeneration';
+import { useHypothesisAutoGenerate } from '../../../hooks/useHypothesisAutoGenerate';
+import { consumePendingAutoGenerate } from '../../../lib/hypothesis-pending-generate';
 import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
 import { useRequestPermanentDelete } from '../../../hooks/useRequestPermanentDelete';
 import { hypothesisDeleteCopy } from '../../../lib/canvas-permanent-delete-copy';
@@ -96,6 +98,21 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
 
   const { handleGenerate, generationProgress, generationError } =
     useHypothesisGeneration({ nodeId, strategyId });
+
+  const hypoAutoGen = useHypothesisAutoGenerate({ nodeId, strategyId });
+
+  // Stable ref so the mount effect always calls the latest generate function
+  // without needing it in the dep array (nodeId is stable for a mounted node).
+  const generateRef = useRef(hypoAutoGen.generate);
+  generateRef.current = hypoAutoGen.generate;
+
+  useEffect(() => {
+    if (consumePendingAutoGenerate(nodeId)) {
+      void generateRef.current();
+    }
+    // nodeId is stable for the lifetime of this node instance — intentional single-run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeId]);
 
   const handleStopGeneration = useCallback(() => {
     abortGenerationForStrategy(strategyId);
@@ -275,6 +292,16 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
           </div>
         )}
       </NodeHeader>
+
+      {hypoAutoGen.isGenerating ? (
+        <div className={`${RF_INTERACTIVE} border-b border-border-subtle px-3 py-2`}>
+          {hypoAutoGen.error ? <NodeErrorBlock variant="plain" message={hypoAutoGen.error} /> : null}
+          <div className="flex items-center justify-center gap-2 rounded-md border border-border-subtle bg-surface-raised py-2 text-nano text-fg-muted">
+            <Loader2 size={14} className="shrink-0 animate-spin" aria-hidden />
+            Generating hypothesis…
+          </div>
+        </div>
+      ) : null}
 
       <div className="flex min-h-[var(--min-height-hypothesis-shell)] flex-col px-3 pb-2 pt-1">
         <div

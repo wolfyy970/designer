@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { CanvasNodeType } from '../../types/workspace-graph';
 import { generateId } from '../../lib/utils';
-import { columnX, computeAutoLayout, reconcileInputGhostNodes, snap } from '../../lib/canvas-layout';
+import { columnX, computeAutoLayout, reconcileEphemeralGhostNodes, snap } from '../../lib/canvas-layout';
 import { buildEdgeId, EDGE_TYPES, EDGE_STATUS } from '../../constants/canvas';
 import { PREREQUISITE_DEFAULTS } from '../../lib/constants';
 import { hydrateDomainFromCanvasGraph } from '../../workspace/hydrate-domain-from-canvas-graph';
@@ -27,7 +27,7 @@ export const createLayoutSlice: StateCreator<
         edges: state.edges,
       });
       set({
-        nodes: reconcileInputGhostNodes(get().nodes, get().dismissedInputGhostSlots),
+        nodes: reconcileEphemeralGhostNodes(get().nodes, get().dismissedInputGhostSlots),
       });
       if (get().autoLayout) get().applyAutoLayout();
       return;
@@ -59,7 +59,7 @@ export const createLayoutSlice: StateCreator<
       },
     ];
     set({
-      nodes: reconcileInputGhostNodes(coreNodes, get().dismissedInputGhostSlots),
+      nodes: reconcileEphemeralGhostNodes(coreNodes, get().dismissedInputGhostSlots),
       edges: [
         {
           id: buildEdgeId(briefId, incubatorId),

@@ -8,6 +8,7 @@ export const NODE_TYPES = {
   DESIGN_SYSTEM: 'designSystem',
   INCUBATOR: 'incubator',
   HYPOTHESIS: 'hypothesis',
+  HYPOTHESIS_GHOST: 'hypothesisGhost',
   PREVIEW: 'preview',
   MODEL: 'model',
 } as const;

@@ -31,6 +31,20 @@ describe('sanitizePromptOverrides', () => {
       }),
     ).toEqual({ 'designer-agentic-system': 'local-body' });
   });
+
+  it('returns undefined in production (NODE_ENV=production)', () => {
+    const prev = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      expect(
+        sanitizePromptOverrides({
+          'designer-agentic-system': 'nope',
+        }),
+      ).toBeUndefined();
+    } finally {
+      process.env.NODE_ENV = prev;
+    }
+  });
 });
 
 describe('createResolvePromptBody', () => {

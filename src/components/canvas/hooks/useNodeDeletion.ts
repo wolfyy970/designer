@@ -31,6 +31,7 @@ export function useNodeDeletion() {
         const PROTECTED = new Set<string>([
           'incubator',
           'inputGhost',
+          'hypothesisGhost',
           ...INPUT_NODE_TYPES,
         ]);
 

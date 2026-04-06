@@ -49,7 +49,6 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
   const isCapturing = isExistingDesign && capturingImage === sectionId;
 
   const generateApiId = GENERATE_INPUT_API_ID[type as CanvasNodeType];
-  const showMagicWand = generateApiId != null;
   const designBriefContent =
     useSpecStore((s) => s.spec.sections['design-brief']?.content ?? '');
   const { providerId, modelId, hasModel } = useFirstCanvasModel();
@@ -57,6 +56,9 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const elapsed = useElapsedTimer(generating);
   const runPromptAction = usePromptOverrideAsyncAction();
+  /** Research / objectives / constraints only: hide wand once this facet has text; keep during an in-flight generate. */
+  const showGenerateSection =
+    generateApiId != null && (generating || !content.trim());
 
   const handleGenerateFromBrief = useCallback(async () => {
     const apiId = GENERATE_INPUT_API_ID[type as CanvasNodeType];
@@ -128,7 +130,7 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
           />
         )}
 
-        {showMagicWand && (
+        {showGenerateSection && (
           <div className={`${RF_INTERACTIVE} mt-2 flex flex-col gap-2`}>
             <div className="flex flex-wrap items-center justify-end gap-2">
               {!generating && !hasModel && (

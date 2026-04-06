@@ -93,6 +93,9 @@ describe('PROMPT_DEFAULTS', () => {
   it('incubator-user-inputs prompt contains template variables', () => {
     expect(PROMPT_DEFAULTS['incubator-user-inputs']).toContain('{{SPEC_TITLE}}');
     expect(PROMPT_DEFAULTS['incubator-user-inputs']).toContain('{{DESIGN_CONSTRAINTS}}');
+    expect(PROMPT_DEFAULTS['incubator-user-inputs']).toContain('{{REFERENCE_DESIGNS_BLOCK}}');
+    expect(PROMPT_DEFAULTS['incubator-user-inputs']).toContain('{{EXISTING_HYPOTHESES_BLOCK}}');
+    expect(PROMPT_DEFAULTS['incubator-user-inputs']).toContain('{{INCUBATOR_HYPOTHESIS_COUNT_LINE}}');
   });
 
   it('evaluator prompts require JSON output', () => {

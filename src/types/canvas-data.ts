@@ -33,6 +33,9 @@ export type InputGhostData = NodeData<{
   targetType: InputGhostTargetType;
 }>;
 
+/** Ephemeral “add hypothesis” placeholder; no fields beyond React Flow bag */
+export type HypothesisGhostData = NodeData<object>;
+
 export type IncubatorNodeData = NodeData<{
   hypothesisCount?: number;
 }>;

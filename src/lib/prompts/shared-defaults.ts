@@ -82,7 +82,7 @@ Return ONLY valid JSON. No markdown fences, no explanation, no text outside the 
 
 </specification>
 
-Produce the dimension map as JSON. Every hypothesis must satisfy all non-negotiable constraints while exploring within the defined ranges.`,
+Produce the dimension map as JSON. Every hypothesis must satisfy all non-negotiable constraints while exploring within the defined ranges.{{REFERENCE_DESIGNS_BLOCK}}{{EXISTING_HYPOTHESES_BLOCK}}{{INCUBATOR_HYPOTHESIS_COUNT_LINE}}`,
 
   'design-system-extract-system': `You are a senior design systems engineer. Given screenshots of a UI, extract every repeatable visual decision into the JSON structure below.
 
@@ -167,39 +167,34 @@ Return ONLY valid JSON. No markdown fences, no explanation, no text outside the 
 
   'design-system-extract-user-input': `Extract the design system from the provided screenshots.`,
 
-  'agent-context-compaction': `You are summarizing a design agent session for context window management.
+  'agent-context-compaction': `DESIGNER ADD-ON (appended after Pi's summarization template as "Additional focus" only — do not repeat the base instructions).
 
-Output a structured checkpoint another model will use to continue seamlessly.
+**Verbatim carry-forward:** Quote the latest user-visible goal / hypothesis wording and any blocking error message **exactly** (word-for-word) inside the checkpoint.
 
-Use this EXACT section structure (markdown headings):
+**Structured checkpoint:** After Pi's normal markdown sections, append ONE block in this exact tagged shape (fill every tag; use "(none)" if empty):
 
-## Goal
-What design hypothesis or user intent is being implemented (one short paragraph).
+<designer_checkpoint>
+<goal_verbatim></goal_verbatim>
+<user_intent></user_intent>
+<active_hypothesis></active_hypothesis>
+<constraints></constraints>
+<todo_state></todo_state>
+<file_trail></file_trail>
+<recent_edits></recent_edits>
+<critical_errors></critical_errors>
+<evaluator_feedback></evaluator_feedback>
+<next_action></next_action>
+<must_rehydrate>
+- AGENTS.md
+- Last todo_write snapshot + open todos
+- 3–5 most touched files from modified/read lists
+- Preview entry (usually index.html) if UX work in flight
+</must_rehydrate>
+</designer_checkpoint>
 
-## Constraints & Preferences
-Product rules that matter (e.g. static local web artifact with a clear HTML entry such as index.html, flexible multi-file layout, relative local asset links; **only** allowlisted Google Fonts URLs for external typography — fonts.googleapis.com / fonts.gstatic.com — no other CDNs).
+**Rehydration contract:** The next turns must re-ground from the sandbox (files + todos are durable). The summary is not enough — call out which paths to **read** again first.
 
-## Progress
-### Done
-- [x] substantive milestones completed
-
-### In Progress
-- [ ] what is being worked on now
-
-### Blocked
-- issues, if any (or "(none)")
-
-## Key Decisions
-- Bullet list: palette, typography, layout, motion, content choices tied to the hypothesis.
-
-## Next Steps
-1. Ordered list of what to do next (concrete, tool-oriented).
-
-## Critical Context
-- Anything that must not be lost: exact error messages, evaluator feedback, or risky edge cases.
-- Short note on important file roles only if essential (paths only, not full contents).
-
-Be specific. Do NOT continue the conversation. Do NOT answer questions from the transcript.`,
+**Tool-output hygiene:** Older tool results may appear truncated in the transcript — prefer file paths and decision text over assuming full prior dumps are still in context.`,
 
   'designer-agentic-system': `You are a coding-style design agent: you explore a virtual workspace with tools, then ship a static web artifact that embodies one design hypothesis.
 

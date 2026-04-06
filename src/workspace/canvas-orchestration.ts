@@ -24,7 +24,6 @@ export function ensureHypothesisStrategyBinding(
   canvasNodes: WorkspaceNode[],
   edges: Pick<WorkspaceEdge, 'source' | 'target'>[],
 ): string | undefined {
-  const incubatorStore = useIncubatorStore.getState();
   const incubatorNodes = canvasNodes
     .filter((n) => n.type === NODE_TYPES.INCUBATOR)
     .slice()
@@ -42,9 +41,9 @@ export function ensureHypothesisStrategyBinding(
   const targetIncubatorId =
     fromGraph ?? (domainIsValid ? domainIncubator : null) ?? incubatorNodes[0]?.id ?? 'manual';
 
-  if (!incubatorStore.incubationPlans[targetIncubatorId]) {
+  if (!useIncubatorStore.getState().incubationPlans[targetIncubatorId]) {
     const spec = useSpecStore.getState().spec;
-    incubatorStore.setPlanForNode(targetIncubatorId, {
+    useIncubatorStore.getState().setPlanForNode(targetIncubatorId, {
       id: generateId(),
       specId: spec.id,
       dimensions: [],
@@ -53,8 +52,9 @@ export function ensureHypothesisStrategyBinding(
       incubatorModel: 'manual',
     });
   }
-  incubatorStore.addStrategyToNode(targetIncubatorId);
-  const map = incubatorStore.incubationPlans[targetIncubatorId];
+  useIncubatorStore.getState().addStrategyToNode(targetIncubatorId);
+  // Must read fresh state after `addStrategyToNode` — a captured getState() snapshot is stale.
+  const map = useIncubatorStore.getState().incubationPlans[targetIncubatorId];
   const lastStrategy = map?.hypotheses[map.hypotheses.length - 1];
   if (lastStrategy) {
     useWorkspaceDomainStore

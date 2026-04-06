@@ -12,11 +12,11 @@ import {
 } from '../canvas';
 
 describe('NODE_TYPES', () => {
-  it('contains all 10 expected node types', () => {
+  it('contains all 11 expected node types', () => {
     const expected = [
       'designBrief', 'existingDesign', 'researchContext',
       'objectivesMetrics', 'designConstraints', 'designSystem',
-      'incubator', 'hypothesis', 'preview', 'model',
+      'incubator', 'hypothesis', 'hypothesisGhost', 'preview', 'model',
     ];
     expect(Object.values(NODE_TYPES)).toEqual(expect.arrayContaining(expected));
     expect(Object.values(NODE_TYPES)).toHaveLength(expected.length);

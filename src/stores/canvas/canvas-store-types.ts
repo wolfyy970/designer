@@ -46,7 +46,8 @@ export interface CanvasStore {
   setColGap: (gap: number) => void;
   toggleAutoLayout: () => void;
 
-  addNode: (type: CanvasNodeType, position?: { x: number; y: number }) => void;
+  /** Returns the new node's ID, or undefined when the node was not created (e.g. duplicate input type). */
+  addNode: (type: CanvasNodeType, position?: { x: number; y: number }) => string | undefined;
   /** After loading a spec from the library/import, add optional input nodes that have spec content (avoids bogus ghosts). */
   materializeOptionalInputNodesFromSpec: (spec: DesignSpec) => void;
   dismissInputGhostSlot: (targetType: InputGhostTargetType) => void;

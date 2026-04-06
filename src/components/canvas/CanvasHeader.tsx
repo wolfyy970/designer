@@ -10,6 +10,7 @@ import { parsePromptKey } from '../../lib/prompt-log-mapping';
 import type { PromptKey } from '../../stores/prompt-store';
 import { scheduleLibraryTitleSyncIfEntryExists } from '../../services/canvas-library-session';
 import { appReleaseLabel } from '../../lib/app-release';
+import { isPromptOverrideEditingEnabled } from '../../lib/prompt-override-policy';
 
 export default function CanvasHeader() {
   const title = useSpecStore((s) => s.spec.title);
@@ -33,15 +34,17 @@ export default function CanvasHeader() {
     const promptKeyRaw = searchParams.get('promptKey');
     if (settings !== 'prompts') return;
 
-    const key = promptKeyRaw ? parsePromptKey(promptKeyRaw) : null;
-    setSettingsInitialTab('prompts');
-    setSettingsPromptKey(key ?? undefined);
-    setShowSettings(true);
-
     const next = new URLSearchParams(searchParams);
     next.delete('settings');
     next.delete('promptKey');
     setSearchParams(next, { replace: true });
+
+    if (!isPromptOverrideEditingEnabled) return;
+
+    const key = promptKeyRaw ? parsePromptKey(promptKeyRaw) : null;
+    setSettingsInitialTab('prompts');
+    setSettingsPromptKey(key ?? undefined);
+    setShowSettings(true);
   }, [searchParams, setSearchParams]);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -169,12 +172,16 @@ export default function CanvasHeader() {
       <LogViewer
         open={showLogs}
         onClose={() => setShowLogs(false)}
-        onOpenPromptStudio={(key) => {
-          setShowLogs(false);
-          setSettingsInitialTab('prompts');
-          setSettingsPromptKey(key);
-          setShowSettings(true);
-        }}
+        onOpenPromptStudio={
+          isPromptOverrideEditingEnabled
+            ? (key) => {
+                setShowLogs(false);
+                setSettingsInitialTab('prompts');
+                setSettingsPromptKey(key);
+                setShowSettings(true);
+              }
+            : undefined
+        }
       />
     </>
   );

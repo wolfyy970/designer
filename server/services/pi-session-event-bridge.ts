@@ -10,6 +10,10 @@ import {
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import type { AgentSessionEvent, AgentSession, AssistantMessage } from './pi-sdk/types.ts';
 import { appendLlmCallResponse } from '../log-store.ts';
+import {
+  AGENTIC_PROGRESS_WORKING,
+  RUN_TRACE_LABEL_AGENT_WORKING,
+} from '../lib/agentic-user-copy.ts';
 import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
 import { extractPiToolPathFromArguments, parsePiToolExecutionArgs } from '../lib/pi-tool-args.ts';
 import {
@@ -164,11 +168,11 @@ function handleTurnStart(ctx: PiSessionBridgeContext, maps: BridgeMaps): void {
   const { toolStartMs } = maps;
   bumpStreamActivity(ctx);
   ctx.modelTurnId.current += 1;
-  safeBridgeEmit(ctx, { type: 'progress', payload: 'Model turn…' });
+  safeBridgeEmit(ctx, { type: 'progress', payload: AGENTIC_PROGRESS_WORKING });
   ctx.waitingForFirstToken.current = true;
   safeBridgeEmit(
     ctx,
-    ctx.trace('model_turn_start', 'Model turn started', {
+    ctx.trace('model_turn_start', RUN_TRACE_LABEL_AGENT_WORKING, {
       phase: 'building',
     }),
   );
@@ -385,13 +389,59 @@ function handleToolExecutionEnd(ctx: PiSessionBridgeContext, maps: BridgeMaps, e
   ctx.toolArgsByCallId.delete(event.toolCallId);
 }
 
-function handleCompactionStart(ctx: PiSessionBridgeContext): void {
-  safeBridgeEmit(ctx, { type: 'progress', payload: 'Compacting context…' });
+function handleCompactionStart(
+  ctx: PiSessionBridgeContext,
+  event: Extract<AgentSessionEvent, { type: 'compaction_start' }>,
+): void {
+  const reasonLabel =
+    event.reason === 'overflow'
+      ? 'overflow recovery'
+      : event.reason === 'threshold'
+        ? 'threshold'
+        : 'manual';
+  safeBridgeEmit(ctx, { type: 'progress', payload: `Compacting context (${reasonLabel})…` });
   safeBridgeEmit(
     ctx,
     ctx.trace('compaction', 'Compacting context window', {
       phase: 'building',
+      detail: `reason=${event.reason}`,
     }),
+  );
+}
+
+function handleCompactionEnd(
+  ctx: PiSessionBridgeContext,
+  event: Extract<AgentSessionEvent, { type: 'compaction_end' }>,
+): void {
+  const result = event.result;
+  const detailBits: string[] = [`reason=${event.reason}`];
+  if (event.aborted) detailBits.push('aborted');
+  if (event.willRetry) detailBits.push('willRetry');
+  if (event.errorMessage) detailBits.push(`error=${event.errorMessage}`);
+  if (result) {
+    detailBits.push(`tokensBefore=${result.tokensBefore}`);
+    detailBits.push(`summaryChars=${result.summary.length}`);
+    const d = result.details as { readFiles?: string[]; modifiedFiles?: string[] } | undefined;
+    if (d?.modifiedFiles?.length) detailBits.push(`modifiedFiles=${d.modifiedFiles.length}`);
+    if (d?.readFiles?.length) detailBits.push(`readFiles=${d.readFiles.length}`);
+  }
+  const rehydrationHint =
+    'Rehydrate: read AGENTS.md; use last todo_write / checkpoint lists; re-read key HTML/CSS/JS you were editing; grep if uncertain.';
+  safeBridgeEmit(
+    ctx,
+    ctx.trace(
+      'compaction',
+      event.aborted
+        ? 'Context compaction aborted'
+        : event.errorMessage
+          ? 'Context compaction finished with warning'
+          : 'Context compaction finished',
+      {
+        phase: 'building',
+        status: event.errorMessage ? 'warning' : event.aborted ? 'warning' : 'success',
+        detail: `${detailBits.join('; ')} — ${rehydrationHint}`,
+      },
+    ),
   );
 }
 
@@ -423,7 +473,11 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
         return;
       case 'compaction_start':
         handled = true;
-        handleCompactionStart(ctx);
+        handleCompactionStart(ctx, event);
+        return;
+      case 'compaction_end':
+        handled = true;
+        handleCompactionEnd(ctx, event);
         return;
       // Pi session framing-only events (no app SSE); treat as handled so we don't spam dev logs.
       case 'message_start':

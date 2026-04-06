@@ -1,6 +1,9 @@
 /**
  * Sanitize client-sent promptOverrides: only known {@link PromptKey} entries,
  * non-empty strings. Used for per-request experimentation (not persisted server-side).
+ *
+ * **Production:** Request bodies must not change prompts from the server/Langfuse source of truth;
+ * overrides are ignored when `NODE_ENV === 'production'`.
  */
 import { getPromptBody } from '../db/prompts.ts';
 import { PROMPT_KEYS, type PromptKey } from '../../src/lib/prompts/defaults.ts';
@@ -10,6 +13,7 @@ const KEY_SET = new Set<string>(PROMPT_KEYS);
 export function sanitizePromptOverrides(
   raw: Record<string, string> | undefined,
 ): Partial<Record<PromptKey, string>> | undefined {
+  if (process.env.NODE_ENV === 'production') return undefined;
   if (!raw) return undefined;
   const out: Partial<Record<PromptKey, string>> = {};
   for (const [k, v] of Object.entries(raw)) {

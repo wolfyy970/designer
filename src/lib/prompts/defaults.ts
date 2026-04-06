@@ -35,7 +35,7 @@ export const PROMPT_META: PromptMeta[] = [
     key: 'incubator-user-inputs',
     label: 'Incubator — Spec inputs (user)',
     description:
-      'User prompt template for the Incubator. Interpolates brief, constraints, research, objectives, and images as the data payload.',
+      'User prompt template for the Incubator. Interpolates spec sections and optional run-time blocks (reference designs from prior iterations, existing hypothesis strategies to differentiate against, exact hypothesis count). Empty blocks omit their section.',
     variables: [
       'SPEC_TITLE',
       'DESIGN_BRIEF',
@@ -44,6 +44,9 @@ export const PROMPT_META: PromptMeta[] = [
       'OBJECTIVES_METRICS',
       'DESIGN_CONSTRAINTS',
       'IMAGE_BLOCK',
+      'REFERENCE_DESIGNS_BLOCK',
+      'EXISTING_HYPOTHESES_BLOCK',
+      'INCUBATOR_HYPOTHESIS_COUNT_LINE',
     ],
   },
   {
@@ -92,7 +95,7 @@ export const PROMPT_META: PromptMeta[] = [
     key: 'agent-context-compaction',
     label: 'Agent — Context compaction',
     description:
-      'When the agentic session truncates history, defines how to summarize prior work into a checkpoint (Goal, Progress, Decisions, Next Steps).',
+      'Supplementary “Additional focus” for Pi’s compaction summarizer (wired in `designer-compaction-extension.ts`). Adds structured <designer_checkpoint> tags, verbatim goal/errors, and a rehydration list — keep additive; Pi already supplies the base section template.',
   },
   {
     key: 'agents-md-file',

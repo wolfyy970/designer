@@ -125,6 +125,16 @@ export async function runDesignAgentSession(
 
   const llmTurnLogRef: { current?: string } = {};
 
+  const { resourceLoader, settingsManager } = await createSandboxResourceLoader({
+    systemPrompt: params.systemPrompt.trim(),
+    contextWindow,
+    ...(params.getPromptBody
+      ? {
+          getCompactionPromptBody: () => params.getPromptBody!('agent-context-compaction'),
+        }
+      : {}),
+  });
+
   const { session, modelFallbackMessage } = await createAgentSession({
     authStorage,
     model,
@@ -142,9 +152,8 @@ export async function runDesignAgentSession(
     ] as ToolDefinition[],
     sessionManager: SessionManager.inMemory(),
     cwd: SANDBOX_PROJECT_ROOT,
-    resourceLoader: createSandboxResourceLoader({
-      systemPrompt: params.systemPrompt.trim(),
-    }),
+    settingsManager,
+    resourceLoader,
   });
 
   if (modelFallbackMessage && process.env.NODE_ENV !== 'production') {

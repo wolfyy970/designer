@@ -63,6 +63,8 @@ describe('canvas-store syncAfterIncubate', () => {
       expect(edges.some((e) => e.source === 'inc1' && e.target === h.id)).toBe(true);
     }
 
+    expect(new Set(edges.map((e) => e.id)).size).toBe(edges.length);
+
     expect(byRef.get('st-a')!.position.y).toBeGreaterThan(incubatorY + HYPOTHESIS_STACK_GAP - 1);
 
     const domain = useWorkspaceDomainStore.getState();

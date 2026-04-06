@@ -191,7 +191,7 @@ function CanvasInner() {
   const miniMapNodeColor = useCallback((node: { type?: string }) => {
     const t = node.type as CanvasNodeType | undefined;
     if (t && INPUT_NODE_TYPES.has(t)) return 'var(--color-fg-muted)'; // inputs
-    if (t === 'inputGhost') return 'var(--color-fg-faint)';
+    if (t === 'inputGhost' || t === 'hypothesisGhost') return 'var(--color-fg-faint)';
     switch (t) {
       case 'incubator':
       case 'designSystem':
