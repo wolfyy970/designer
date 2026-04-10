@@ -17,7 +17,7 @@ vi.mock('../candidate-eval.ts', () => ({
 }));
 
 import * as session from '../session.ts';
-import { runEvaluatedCandidatePhase } from '../runner-core.ts';
+import { runEvaluatedCandidatePhase, type CandidatePhaseInfra } from '../runner-core.ts';
 import { AggregateJsonSchema } from '../schemas.ts';
 
 function stubCallbacks(partial: Partial<RunnerCallbacks> = {}): RunnerCallbacks {
@@ -110,7 +110,7 @@ describe('runEvaluatedCandidatePhase', () => {
     const candidateDir0 = path.join(historyDir, 'candidate-0');
     await mkdir(candidateDir0, { recursive: true });
 
-    await runEvaluatedCandidatePhase({
+    const infra: CandidatePhaseInfra = {
       root,
       historyDir,
       args: baseArgs,
@@ -127,14 +127,19 @@ describe('runEvaluatedCandidatePhase', () => {
       iterations,
       candidateRows,
       bestRef,
-      candidateId: 0,
-      candidateDir: candidateDir0,
-      label: 'candidate-0 (baseline)',
-      proposalMd: '',
-      promptOverrides: {},
-      iteration: 0,
-      iterationLine: 'baseline',
-      includeProposerSection: false,
+    };
+
+    await runEvaluatedCandidatePhase({
+      infra,
+      instance: {
+        candidateId: 0,
+        candidateDir: candidateDir0,
+        label: 'candidate-0 (baseline)',
+        proposalMd: '',
+        iteration: 0,
+        iterationLine: 'baseline',
+        includeProposerSection: false,
+      },
     });
 
     expect(mockRunTestCasesEvaluation).toHaveBeenCalledTimes(1);
@@ -155,30 +160,16 @@ describe('runEvaluatedCandidatePhase', () => {
     await mkdir(candidateDir1, { recursive: true });
 
     await runEvaluatedCandidatePhase({
-      root,
-      historyDir,
-      args: baseArgs,
-      cfg: baseCfg,
-      callbacks: stubCallbacks({ onIterationDone }),
-      testFiles: [testFile],
-      evalRunsBase: path.join(root, 'eval-runs'),
-      incubateProvider: 'openrouter',
-      incubateModel: 'm',
-      hypothesisEvalModel: 'm',
-      inputsRubricModel: 'm',
-      incubateHypothesisCountDefault: 5,
-      apiKey: 'k',
-      iterations,
-      candidateRows,
-      bestRef,
-      candidateId: 1,
-      candidateDir: candidateDir1,
-      label: 'candidate-1 (loop 1/2)',
-      proposalMd: 'tuned prompts',
-      promptOverrides: { 'hypotheses-generator-system': 'body' },
-      iteration: 1,
-      iterationLine: '1 / 2',
-      includeProposerSection: true,
+      infra,
+      instance: {
+        candidateId: 1,
+        candidateDir: candidateDir1,
+        label: 'candidate-1 (loop 1/2)',
+        proposalMd: 'tuned prompts',
+        iteration: 1,
+        iterationLine: '1 / 2',
+        includeProposerSection: true,
+      },
     });
 
     expect(mockRunTestCasesEvaluation).toHaveBeenCalledTimes(2);
@@ -193,7 +184,6 @@ describe('runEvaluatedCandidatePhase', () => {
     const changelog1 = await readFile(path.join(candidateDir1, ARTIFACT.changelogMd), 'utf8');
     expect(changelog1).toContain('What the proposer changed');
     expect(changelog1).toContain('tuned prompts');
-    expect(changelog1).toContain('hypotheses-generator-system');
 
     expect(candidateRows).toEqual([
       { candidateId: 0, meanScore: 6, iteration: 0 },
@@ -238,30 +228,33 @@ describe('runEvaluatedCandidatePhase', () => {
     const onIterationDone = vi.fn();
 
     await runEvaluatedCandidatePhase({
-      root,
-      historyDir,
-      args: baseArgs,
-      cfg: baseCfg,
-      callbacks: stubCallbacks({ onIterationDone }),
-      testFiles: [testFile],
-      evalRunsBase: path.join(root, 'eval-runs'),
-      incubateProvider: 'openrouter',
-      incubateModel: 'm',
-      hypothesisEvalModel: 'm',
-      inputsRubricModel: 'm',
-      incubateHypothesisCountDefault: 5,
-      apiKey: 'k',
-      iterations: 1,
-      candidateRows: [],
-      bestRef,
-      candidateId: 2,
-      candidateDir,
-      label: 'c2',
-      proposalMd: '',
-      promptOverrides: {},
-      iteration: 1,
-      iterationLine: '1 / 1',
-      includeProposerSection: false,
+      infra: {
+        root,
+        historyDir,
+        args: baseArgs,
+        cfg: baseCfg,
+        callbacks: stubCallbacks({ onIterationDone }),
+        testFiles: [testFile],
+        evalRunsBase: path.join(root, 'eval-runs'),
+        incubateProvider: 'openrouter',
+        incubateModel: 'm',
+        hypothesisEvalModel: 'm',
+        inputsRubricModel: 'm',
+        incubateHypothesisCountDefault: 5,
+        apiKey: 'k',
+        iterations: 1,
+        candidateRows: [],
+        bestRef,
+      },
+      instance: {
+        candidateId: 2,
+        candidateDir,
+        label: 'c2',
+        proposalMd: '',
+        iteration: 1,
+        iterationLine: '1 / 1',
+        includeProposerSection: false,
+      },
     });
 
     expect(bestRef).toEqual({ mean: 5, id: 0 });
@@ -302,7 +295,7 @@ describe('runEvaluatedCandidatePhase', () => {
 
     const candidateDir0 = path.join(historyDir, 'candidate-0');
     await mkdir(candidateDir0, { recursive: true });
-    await runEvaluatedCandidatePhase({
+    const tieInfra: CandidatePhaseInfra = {
       root,
       historyDir,
       args: baseArgs,
@@ -319,14 +312,18 @@ describe('runEvaluatedCandidatePhase', () => {
       iterations: 2,
       candidateRows,
       bestRef,
-      candidateId: 0,
-      candidateDir: candidateDir0,
-      label: 'baseline',
-      proposalMd: '',
-      promptOverrides: {},
-      iteration: 0,
-      iterationLine: 'baseline',
-      includeProposerSection: false,
+    };
+    await runEvaluatedCandidatePhase({
+      infra: tieInfra,
+      instance: {
+        candidateId: 0,
+        candidateDir: candidateDir0,
+        label: 'baseline',
+        proposalMd: '',
+        iteration: 0,
+        iterationLine: 'baseline',
+        includeProposerSection: false,
+      },
     });
 
     expect(bestRef).toEqual({ mean: 4.4, id: 0 });
@@ -336,30 +333,16 @@ describe('runEvaluatedCandidatePhase', () => {
     await mkdir(candidateDir1, { recursive: true });
     const onIterationDone = vi.fn();
     await runEvaluatedCandidatePhase({
-      root,
-      historyDir,
-      args: baseArgs,
-      cfg: baseCfg,
-      callbacks: stubCallbacks({ onIterationDone }),
-      testFiles: [testFile],
-      evalRunsBase: path.join(root, 'eval-runs'),
-      incubateProvider: 'openrouter',
-      incubateModel: 'm',
-      hypothesisEvalModel: 'm',
-      inputsRubricModel: 'm',
-      incubateHypothesisCountDefault: 5,
-      apiKey: 'k',
-      iterations: 2,
-      candidateRows,
-      bestRef,
-      candidateId: 1,
-      candidateDir: candidateDir1,
-      label: 'c1',
-      proposalMd: '',
-      promptOverrides: {},
-      iteration: 1,
-      iterationLine: '1 / 2',
-      includeProposerSection: false,
+      infra: { ...tieInfra, callbacks: stubCallbacks({ onIterationDone }) },
+      instance: {
+        candidateId: 1,
+        candidateDir: candidateDir1,
+        label: 'c1',
+        proposalMd: '',
+        iteration: 1,
+        iterationLine: '1 / 2',
+        includeProposerSection: false,
+      },
     });
 
     expect(bestRef).toEqual({ mean: 4.4, id: 0 });

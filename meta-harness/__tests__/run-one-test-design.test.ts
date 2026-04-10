@@ -124,6 +124,7 @@ describe('runOneMetaHarnessTest design mode (evaluator stubbed)', () => {
       inputsRubricModel: 'm',
       incubateHypothesisCountDefault: 1,
       apiKey: 'k',
+      phaseAbort: new AbortController(),
       callbacks: stubCallbacks(),
     });
 
@@ -163,6 +164,7 @@ describe('runOneMetaHarnessTest design mode (evaluator stubbed)', () => {
       inputsRubricModel: 'm',
       incubateHypothesisCountDefault: 1,
       apiKey: 'k',
+      phaseAbort: new AbortController(),
       callbacks: { ...stubCallbacks(), onTestCaseDone },
     });
 

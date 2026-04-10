@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -16,7 +16,6 @@ function fakeCtx(mode: ProposerContext['mode']): ProposerContext {
     skillsDir: '/repo/skills',
     testCasesDir: '/repo/meta-harness/test-cases',
     evalRunsBaseDir: '/repo/eval-runs',
-    promptOverrides: {},
     rubricWeightPatch: {},
     submitted: null,
     mode,
@@ -44,44 +43,76 @@ describe('proposer-tools', () => {
     expect(resolveSafeRead(ctx, '/etc/passwd')).toBeNull();
   });
 
-  it('dispatchTool rejects skill writes in incubate mode', async () => {
-    const ctx = fakeCtx('incubate');
-    const out = await dispatchTool(ctx, 'write_skill', JSON.stringify({ key: 'k', content: 'x' }));
-    expect(out).toMatch(/incubate mode/);
+  it('dispatchTool allows write_skill in incubate mode', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mh-inc-write-'));
+    const ctx: ProposerContext = {
+      root,
+      metaHarnessDir: path.join(root, 'meta-harness'),
+      skillsDir: path.join(root, 'skills'),
+      testCasesDir: path.join(root, 'meta-harness', 'test-cases'),
+      evalRunsBaseDir: path.join(root, 'eval-runs'),
+      rubricWeightPatch: {},
+      submitted: null,
+      mode: 'incubate',
+      skillsMutated: false,
+    };
+    const out = await dispatchTool(ctx, 'write_skill', JSON.stringify({ key: 'k', content: '# x\n' }));
+    expect(out).toMatch(/Wrote/);
+    expect(ctx.skillsMutated).toBe(true);
   });
 
-  it('dispatchTool rejects skill/rubric-weight tools in inputs mode', async () => {
-    const ctx = fakeCtx('inputs');
-    expect(await dispatchTool(ctx, 'write_skill', JSON.stringify({ key: 'k', content: 'x' }))).toMatch(
-      /inputs mode/,
-    );
-    expect(await dispatchTool(ctx, 'delete_skill', JSON.stringify({ key: 'k' }))).toMatch(
-      /inputs mode/,
-    );
+  it('dispatchTool allows write_skill in inputs mode but rejects set_rubric_weights', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mh-inp-write-'));
+    const ctx: ProposerContext = {
+      root,
+      metaHarnessDir: path.join(root, 'meta-harness'),
+      skillsDir: path.join(root, 'skills'),
+      testCasesDir: path.join(root, 'meta-harness', 'test-cases'),
+      evalRunsBaseDir: path.join(root, 'eval-runs'),
+      rubricWeightPatch: {},
+      submitted: null,
+      mode: 'inputs',
+      skillsMutated: false,
+    };
+    expect(
+      await dispatchTool(ctx, 'write_skill', JSON.stringify({ key: 'inputs-gen-research-context', content: '# y\n' })),
+    ).toMatch(/Wrote/);
     expect(
       await dispatchTool(ctx, 'set_rubric_weights', JSON.stringify({ design: 1 })),
-    ).toMatch(/inputs mode/);
+    ).toMatch(/rubric weight/);
   });
 
-  it('set_prompt_override rejects non-inputs keys in inputs mode', async () => {
-    const ctx = fakeCtx('inputs');
+  it('write_system_prompt preserves frontmatter and replaces body', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mh-sys-prompt-'));
+    const promptDir = path.join(root, 'prompts', 'designer-agentic-system');
+    await mkdir(promptDir, { recursive: true });
+    await writeFile(
+      path.join(promptDir, 'PROMPT.md'),
+      '---\nname: X\ntype: system-prompt\ndescription: D\n---\n\nOld body\n',
+      'utf8',
+    );
+    const ctx: ProposerContext = {
+      root,
+      metaHarnessDir: path.join(root, 'meta-harness'),
+      skillsDir: path.join(root, 'skills'),
+      testCasesDir: path.join(root, 'meta-harness', 'test-cases'),
+      evalRunsBaseDir: path.join(root, 'eval-runs'),
+      rubricWeightPatch: {},
+      submitted: null,
+      mode: 'design',
+      skillsMutated: false,
+    };
     const out = await dispatchTool(
       ctx,
-      'set_prompt_override',
-      JSON.stringify({ key: 'hypotheses-generator-system', body: 'override' }),
+      'write_system_prompt',
+      JSON.stringify({ body: 'New instructor body' }),
     );
-    expect(out).toMatch(/inputs mode only allows/);
-  });
-
-  it('set_prompt_override allows inputs-gen keys in inputs mode', async () => {
-    const ctx = fakeCtx('inputs');
-    const out = await dispatchTool(
-      ctx,
-      'set_prompt_override',
-      JSON.stringify({ key: 'inputs-gen-research-context', body: 'new prompt body' }),
-    );
-    expect(out).toMatch(/Stored override/);
-    expect(ctx.promptOverrides['inputs-gen-research-context']).toBe('new prompt body');
+    expect(out).toMatch(/Wrote body/);
+    expect(ctx.skillsMutated).toBe(true);
+    const raw = await readFile(path.join(promptDir, 'PROMPT.md'), 'utf8');
+    expect(raw).toContain('name: X');
+    expect(raw).toContain('New instructor body');
+    expect(raw).not.toContain('Old body');
   });
 
   it('dispatchTool rejects invalid tool JSON args', async () => {
@@ -114,7 +145,6 @@ describe('proposer-tools', () => {
       skillsDir: path.join(root, 'skills'),
       testCasesDir: path.join(root, 'meta-harness', 'test-cases'),
       evalRunsBaseDir: path.join(root, 'eval-runs'),
-      promptOverrides: {},
       rubricWeightPatch: {},
       submitted: null,
       mode: 'design',

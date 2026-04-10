@@ -1,5 +1,5 @@
 /**
- * OpenRouter tool-calling agent that proposes harness edits (skills, prompt overrides, test cases).
+ * OpenRouter tool-calling agent that proposes harness edits (skills, system prompt, rubric weights, test cases).
  */
 import path from 'node:path';
 import { normalizeError } from '../src/lib/error-utils.ts';
@@ -23,7 +23,6 @@ import { dispatchTool, type ProposerContext } from './proposer-tools.ts';
 
 type ProposerResult = {
   reasoning: string;
-  promptOverrides: Record<string, string>;
   /** Effective rubric blend for agentic eval (omitted when unchanged). */
   rubricWeights?: Record<EvaluatorRubricId, number>;
   /** How many OpenRouter round-trips the proposer used (out of maxToolRounds). */
@@ -60,7 +59,6 @@ export async function runMetaHarnessProposer(options: {
     skillsDir: path.join(root, 'skills'),
     testCasesDir: path.join(options.metaHarnessDir, 'test-cases'),
     evalRunsBaseDir: options.evalRunsBaseDir,
-    promptOverrides: {},
     rubricWeightPatch: {},
     submitted: null,
     mode: options.mode,
@@ -69,13 +67,13 @@ export async function runMetaHarnessProposer(options: {
 
   const [promptBodiesSection, historySection, prevSessionsSection, skillsSection, rubricWeightsSection] =
     await Promise.all([
-      loadPromptBodies(MODE_PROMPT_KEYS[options.mode], options.apiBaseUrl),
+      loadPromptBodies(MODE_PROMPT_KEYS[options.mode]),
       loadRichCandidateHistory(options.sessionHistoryDir),
       loadPreviousSessionBests(options.historyRootDir, options.currentSessionFolderName),
-      options.mode !== 'incubate'
-        ? loadCurrentSkills(path.join(repoRoot(), 'skills'))
-        : Promise.resolve(''),
-      options.mode === 'incubate' ? Promise.resolve('') : formatRubricWeightsContext(options.apiBaseUrl),
+      loadCurrentSkills(path.join(repoRoot(), 'skills')),
+      options.mode === 'incubate' || options.mode === 'inputs'
+        ? Promise.resolve('')
+        : formatRubricWeightsContext(options.apiBaseUrl),
     ]);
 
   const contextBlock = [
@@ -84,7 +82,7 @@ export async function runMetaHarnessProposer(options: {
     historySection,
     ...(prevSessionsSection ? ['', prevSessionsSection] : []),
     ...(skillsSection ? ['', skillsSection] : []),
-    ...(options.mode === 'incubate' ? [] : ['', rubricWeightsSection]),
+    ...(options.mode === 'incubate' || options.mode === 'inputs' ? [] : ['', rubricWeightsSection]),
   ].join('\n');
 
   const userBrief = [
@@ -150,7 +148,8 @@ export async function runMetaHarnessProposer(options: {
               .filter(Boolean)
               .join(' ')
               .slice(0, 80);
-          } else if (tcName === 'set_prompt_override') argSummary = String(a.key ?? '');
+          } else if (tcName === 'write_system_prompt')
+            argSummary = `PROMPT.md ${String(a.body ?? '').length} chars`;
           else if (tcName === 'search') argSummary = `"${a.pattern}" in ${a.under}`;
           else if (tcName === 'add_test_case') argSummary = String(a.name ?? '');
           else if (tcName === 'submit_candidate') argSummary = String(a.reasoning ?? '').slice(0, 60);
@@ -180,9 +179,8 @@ export async function runMetaHarnessProposer(options: {
   if (ctx.submitted) {
     reasoning = ctx.submitted.reasoning;
   } else {
-    const hasOverrides = Object.keys(ctx.promptOverrides).length > 0;
     const hasRubricTweak = Object.keys(ctx.rubricWeightPatch).length > 0;
-    const hasChanges = hasOverrides || ctx.skillsMutated || hasRubricTweak;
+    const hasChanges = ctx.skillsMutated || hasRubricTweak;
     if (hasChanges) {
       ctx.submitted = {
         reasoning:
@@ -199,7 +197,6 @@ export async function runMetaHarnessProposer(options: {
 
   return {
     reasoning,
-    promptOverrides: { ...ctx.promptOverrides },
     ...(effectiveRubricWeights ? { rubricWeights: effectiveRubricWeights } : {}),
     roundsUsed: lastRound,
     toolLog,

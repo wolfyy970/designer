@@ -35,23 +35,6 @@ export function printPlainPreflightSummary(session: UnpromotedSession): void {
     `Preflight: unpromoted winner · ${session.sessionFolder} (candidate-${session.candidateId}, mean ${meanStr})`,
   );
 
-  if (session.allFetchesFailed) {
-    console.warn('  Could not fetch live prompts from API — diffs may show winner vs empty live.');
-  }
-
-  const prompts = [...session.stalePrompts].sort((a, b) => a.key.localeCompare(b.key));
-  if (prompts.length > 0) {
-    bannerLine(`Prompts (${prompts.length} change(s))`);
-    for (const p of prompts) {
-      bannerLine(`Prompt: ${p.key}`);
-      if (p.fetchError) {
-        console.warn(`  (live fetch: ${p.fetchError})`);
-      }
-      printDiffIndented(p.liveBody, p.winnerBody);
-      console.log();
-    }
-  }
-
   const skills = [...session.staleSkills].sort((a, b) => a.relPath.localeCompare(b.relPath));
   if (skills.length > 0) {
     bannerLine(`Skills (${skills.length} change(s))`);

@@ -16,16 +16,26 @@ export function hypothesisRubricAbortSignal(cfg: MetaHarnessConfig): AbortSignal
   return AbortSignal.timeout(ms);
 }
 
+export type TestCaseHeartbeatOptions = {
+  /** When `callbacks.shouldStop()` becomes true, abort in-flight HTTP (same controller as fetch `signal`). */
+  linkUserStop?: AbortController;
+};
+
 export async function withTestCaseHeartbeat<T>(
   testName: string,
   callbacks: RunnerCallbacks,
   run: () => Promise<T>,
+  options?: TestCaseHeartbeatOptions,
 ): Promise<T> {
-  if (!callbacks.onTestCaseHeartbeat) {
+  const wantInterval = Boolean(callbacks.onTestCaseHeartbeat || options?.linkUserStop);
+  if (!wantInterval) {
     return run();
   }
   const t0 = Date.now();
   const id = setInterval(() => {
+    if (options?.linkUserStop && callbacks.shouldStop?.()) {
+      options.linkUserStop.abort();
+    }
     callbacks.onTestCaseHeartbeat?.(testName, Math.floor((Date.now() - t0) / 1000));
   }, HEARTBEAT_INTERVAL_MS);
   try {

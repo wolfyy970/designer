@@ -7,6 +7,6 @@ describe('systemPromptForMode', () => {
     const s = systemPromptForMode(mode);
     expect(s).toContain('refine-on-leader');
     expect(s).toContain('explore');
-    expect(s).toContain('set_prompt_override');
+    expect(s).toMatch(/write_skill|write_system_prompt/);
   });
 });

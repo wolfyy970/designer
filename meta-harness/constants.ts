@@ -102,12 +102,14 @@ export const ARTIFACT = {
   skillsSnapshot: 'skills-snapshot',
   /** Session copy of repo `skills/` before any candidate mutates disk — used to restore after each candidate and in `finally`. */
   skillsBaseline: 'skills-baseline',
+  /** Session copy of `prompts/designer-agentic-system/` at run start — restored with skills between candidates. */
+  promptsDesignerBaseline: 'prompts-baseline-designer-agentic-system',
 } as const;
 
 /**
- * Candidate-0 baseline passes **no** `promptOverrides` on `/api/*` requests, so prompts always come from
- * the **running server** (Langfuse + in-process defaults), not from another session’s winning
- * `prompt-overrides.json`. After you promote + sync, the next baseline matches that live layer; if you
- * skip promotion, baseline still tracks **API** text, not the stale winner file on disk.
+ * Legacy export kept empty for older tests and promotion readers. The harness no longer sends
+ * promptOverrides on API bodies; prompts come from repo skill packages and
+ * prompts/designer-agentic-system/PROMPT.md on disk (restored from session baselines between candidates).
+ * prompt-overrides.json under candidate folders is written as "{}" for history compatibility.
  */
 export const META_HARNESS_BASELINE_PROMPT_OVERRIDES: Readonly<Record<string, string>> = Object.freeze({});

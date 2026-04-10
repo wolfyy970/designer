@@ -24,13 +24,7 @@ export type RunnerCallbacks = {
   onIterationStart: (candidateId: number, iteration: number, total: number) => void;
   onProposerStart: (model: string, maxRounds: number) => void;
   onProposerToolCall: (round: number, toolName: string, summary: string) => void;
-  onProposerDone: (
-    elapsedMs: number,
-    overrides: string[],
-    reasoning: string,
-    roundsUsed: number,
-    maxRounds: number,
-  ) => void;
+  onProposerDone: (elapsedMs: number, reasoning: string, roundsUsed: number, maxRounds: number) => void;
   onTestCaseStart: (index: number, total: number, name: string) => void;
   onWireEvent: (testName: string, event: string, payload: unknown) => void;
   /** Every ~3s while incubate stream is idle or during non-streaming rubric calls. */

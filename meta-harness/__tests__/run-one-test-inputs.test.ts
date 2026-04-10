@@ -118,6 +118,7 @@ describe('runOneMetaHarnessTest inputs mode', () => {
       inputsRubricModel: 'eval/m',
       incubateHypothesisCountDefault: 5,
       apiKey: 'key',
+      phaseAbort: new AbortController(),
       callbacks: { ...stubCallbacks(), onTestCaseDone },
     });
 
@@ -159,6 +160,7 @@ describe('runOneMetaHarnessTest inputs mode', () => {
       inputsRubricModel: 'eval/m',
       incubateHypothesisCountDefault: 5,
       apiKey: 'key',
+      phaseAbort: new AbortController(),
       callbacks: { ...stubCallbacks(), onTestCaseDone },
     });
 
@@ -210,6 +212,7 @@ describe('runOneMetaHarnessTest inputs mode', () => {
       inputsRubricModel: 'eval/m',
       incubateHypothesisCountDefault: 5,
       apiKey: 'key',
+      phaseAbort: new AbortController(),
       callbacks: {
         ...stubCallbacks(),
         onInputsGenerateStart,

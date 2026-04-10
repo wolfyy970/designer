@@ -477,6 +477,8 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 **Why the server resolves prompts from the repo.** Prompt bodies live in **`skills/*/SKILL.md`** and **`prompts/designer-agentic-system/PROMPT.md`**; **`server/lib/prompt-resolution.ts`** loads them per request. The SPA sends workspace/spec payloads and model settings; prompt text is never client-editable.
 
+**Why `.prompt-versions/` exists.** Tunable copies (**`skills/`**, **`prompts/designer-agentic-system/PROMPT.md`**, **`src/lib/rubric-weights.json`**) get **shadow snapshots** before automated overwrites: **`meta-harness/version-store.ts`** implements **`snapshotBeforeWrite`**, wired from **`meta-harness/proposer-tools.ts`** and **`meta-harness/apply-promotion.ts`**. Artifacts are **`manifest.jsonl`** (append-only JSON lines: path, action, source, **`sha256:`** hash, snapshot subpath) plus **`snapshots/…`** trees. The directory is **committed** (not gitignored). Operators use **`pnpm version-snapshot`** (`scripts/version-snapshot.ts`) for manual pre-edit backups, **`--list` / `--diff` / `--restore`**. See **USER_GUIDE.md**.
+
 **Why `src/lib/prompts/defaults.ts` (no `shared-defaults.ts`).** It defines **`PromptKey`** and **`PROMPT_KEYS`** only; **`tsconfig.server.json`** includes it so server and SPA share identifiers. **Bodies** are on disk in skills and **`PROMPT.md`**, not in a shared TypeScript defaults module.
 
 **Why `pi-sdk/` exists.** `@mariozechner/pi-coding-agent` / `pi-ai` can ship breaking changes. All direct imports live in `[server/services/pi-sdk/types.ts](server/services/pi-sdk/types.ts)` (and `stream-budget.ts` for Pi context heuristics). Upgrades start there; app code imports only from `pi-sdk/` + orchestration modules.

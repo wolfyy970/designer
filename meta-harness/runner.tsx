@@ -77,7 +77,7 @@ async function runPreflightPromotionGate(p: {
   useInk: boolean;
   promoteOnly: boolean;
 }): Promise<void> {
-  const { args, cfg, root, useInk, promoteOnly } = p;
+  const { args, root, useInk, promoteOnly } = p;
   const shouldRun = !args.dryRun && (promoteOnly || !args.skipPromotionCheck);
   if (!shouldRun) return;
 
@@ -87,7 +87,6 @@ async function runPreflightPromotionGate(p: {
     const stale = await scanUnpromotedSessions({
       historyRoot,
       repoRoot: root,
-      apiBaseUrl: cfg.apiBaseUrl,
       skillsDir,
     });
 

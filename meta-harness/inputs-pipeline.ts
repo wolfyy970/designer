@@ -9,6 +9,10 @@ import type { SimplifiedMetaHarnessTestCase } from './test-case-hydrator.ts';
 import { scoreInputsWithRubric, type ScoreInputsResult } from './inputs-evaluator.ts';
 import { DEFAULT_INPUTS_GENERATE_TIMEOUT_MS } from './constants.ts';
 import { normalizeError } from '../src/lib/error-utils.ts';
+import { readSseEventStream } from '../src/lib/sse-reader.ts';
+import { SSE_EVENT_NAMES } from '../src/constants/sse-events.ts';
+import { parseSseJsonObject } from './sse-utils.ts';
+import { normalizeFlexContent } from './utils.ts';
 
 const INPUT_FACET_TARGETS = [
   'research-context',
@@ -35,7 +39,6 @@ export type InputsPipelineResult = {
 export type InputsPipelineParams = {
   testCase: SimplifiedMetaHarnessTestCase;
   apiBaseUrl: string;
-  promptOverrides?: Record<string, string>;
   /** Model for the inputs-generate LLM call (reuses test case model). */
   inputsGenerateProviderId: string;
   inputsGenerateModelId: string;
@@ -50,26 +53,12 @@ export type InputsPipelineParams = {
   onInputsRubricDone?: (target: InputsFacetTarget, mean: number) => void;
 };
 
-function normalizeFacetContent(val: unknown): string {
-  if (typeof val === 'string') return val;
-  if (
-    val &&
-    typeof val === 'object' &&
-    'content' in val &&
-    typeof (val as { content: unknown }).content === 'string'
-  ) {
-    return (val as { content: string }).content;
-  }
-  return '';
-}
-
 export async function runInputsGeneratePipeline(
   params: InputsPipelineParams,
 ): Promise<InputsPipelineResult> {
   const {
     testCase,
     apiBaseUrl,
-    promptOverrides,
     inputsGenerateProviderId,
     inputsGenerateModelId,
     inputsRubricApiKey,
@@ -79,12 +68,12 @@ export async function runInputsGeneratePipeline(
   const timeoutMs = params.timeoutMs ?? DEFAULT_INPUTS_GENERATE_TIMEOUT_MS;
   const openRouterChatTimeoutMs = params.openRouterChatTimeoutMs;
 
-  const brief = normalizeFacetContent(testCase.spec.sections['design-brief'] ?? '');
+  const brief = normalizeFlexContent(testCase.spec.sections['design-brief'] ?? '');
   if (!brief.trim()) {
     throw new Error('Inputs pipeline requires a non-empty design-brief in the test case');
   }
 
-  const existingDesign = normalizeFacetContent(testCase.spec.sections['existing-design'] ?? '');
+  const existingDesign = normalizeFlexContent(testCase.spec.sections['existing-design'] ?? '');
 
   const generated: Partial<Record<InputsFacetTarget, string>> = {};
   const perFacet: InputsPipelinePerFacet[] = [];
@@ -107,9 +96,6 @@ export async function runInputsGeneratePipeline(
       if (generated['research-context']) body.researchContext = generated['research-context'];
       if (generated['objectives-metrics']) body.objectivesMetrics = generated['objectives-metrics'];
       if (generated['design-constraints']) body.designConstraints = generated['design-constraints'];
-      if (promptOverrides && Object.keys(promptOverrides).length > 0) {
-        body.promptOverrides = promptOverrides;
-      }
 
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -125,15 +111,37 @@ export async function runInputsGeneratePipeline(
           body: JSON.stringify(body),
           signal: combinedSignal,
         });
-        clearTimeout(timer);
-
         if (!res.ok) {
           const errBody = await res.text().catch(() => '');
           throw new Error(`POST /api/inputs/generate ${res.status}: ${errBody.slice(0, 500)}`);
         }
 
-        const json = (await res.json()) as { result?: string };
-        generatedText = (json.result ?? '').trim();
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error('No response body for inputs-generate stream');
+
+        let streamText = '';
+        let streamError: string | undefined;
+
+        await readSseEventStream(reader, async (eventName, dataLine) => {
+          const ev = eventName.trim();
+          const parsed = parseSseJsonObject(dataLine);
+
+          if (ev === SSE_EVENT_NAMES.error) {
+            streamError =
+              parsed && typeof parsed.error === 'string'
+                ? parsed.error
+                : dataLine || 'inputs-generate SSE error';
+            return;
+          }
+
+          if (ev === SSE_EVENT_NAMES.task_result) {
+            streamText =
+              parsed && typeof parsed.result === 'string' ? parsed.result.trim() : '';
+          }
+        });
+
+        if (streamError) throw new Error(streamError);
+        generatedText = streamText;
       } finally {
         clearTimeout(timer);
       }

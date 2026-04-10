@@ -61,12 +61,9 @@ export function createPlainCallbacks(args: MetaHarnessCliArgs): RunnerCallbacks 
       const tag = summary ? ` ${summary}` : '';
       console.log(`  [proposer round ${round + 1}] ${toolName}${tag}`);
     },
-    onProposerDone(elapsed, overrides, reasoning, roundsUsed, maxRounds) {
+    onProposerDone(elapsed, reasoning, roundsUsed, maxRounds) {
       const sec = (elapsed / 1000).toFixed(1);
       console.log(`  proposer done (${sec}s, ${roundsUsed}/${maxRounds} rounds)`);
-      if (overrides.length) {
-        console.log(`  prompt overrides: ${overrides.join(', ')}`);
-      }
       console.log(`  reasoning: ${reasoning.slice(0, 120)}${reasoning.length > 120 ? '…' : ''}`);
     },
     onTestCaseStart(index, total, name) {
@@ -150,7 +147,7 @@ export function createPlainCallbacks(args: MetaHarnessCliArgs): RunnerCallbacks 
       console.log(`  file         ${reportRelPath}`);
       const nSkill = summary.skillsAdded.length + summary.skillsModified.length + summary.skillsDeleted.length;
       console.log(
-        `  summary      ${summary.promptOverrideKeys.length} prompt key(s), ${nSkill} skill path(s) differ, rubric ${summary.rubricWeightsChanged ? 'differs' : 'matches repo'}, ${summary.testCasesAdded.length} new test case(s)`,
+        `  summary      ${nSkill} skill path(s) differ, rubric ${summary.rubricWeightsChanged ? 'differs' : 'matches repo'}, ${summary.testCasesAdded.length} new test case(s)`,
       );
       if (summary.hasChanges) {
         console.log(`  next step    open the report for step-by-step instructions`);

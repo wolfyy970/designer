@@ -33,11 +33,7 @@ export const PromptOverridesSchema = z.record(z.string(), z.string());
 
 type PromptOverrides = z.infer<typeof PromptOverridesSchema>;
 
-/**
- * Parse JSON then coerce to string values only (same as legacy meta-harness readers).
- * Validates with `PromptOverridesSchema` so keys/values are plain strings.
- */
-/** Parse already-parsed JSON (e.g. tests). */
+/** Parse already-parsed JSON (e.g. tests); coerces to string values only. */
 export function parsePromptOverridesFromUnknown(data: unknown): PromptOverrides {
   if (data == null || typeof data !== 'object' || Array.isArray(data)) {
     return {};
@@ -50,6 +46,7 @@ export function parsePromptOverridesFromUnknown(data: unknown): PromptOverrides 
   return checked.success ? checked.data : {};
 }
 
+/** @deprecated Legacy \`prompt-overrides.json\` reader — new runs write \`{}\`; edits are on-disk skills/PROMPT.md only. */
 export function parsePromptOverridesJsonString(raw: string): PromptOverrides {
   try {
     return parsePromptOverridesFromUnknown(JSON.parse(raw));

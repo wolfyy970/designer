@@ -4,7 +4,6 @@
 import { readdir, readFile, writeFile, mkdir, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { PROMPT_KEYS, type PromptKey } from '../src/lib/prompts/defaults.ts';
 import type { EvaluatorRubricId } from '../src/types/evaluation.ts';
 import { EVALUATOR_RUBRIC_IDS } from '../src/types/evaluation.ts';
 import { resolveRubricWeights } from '../server/lib/evaluation-revision-gate.ts';
@@ -14,6 +13,7 @@ import { normalizeError } from '../src/lib/error-utils.ts';
 import { SEARCH_MAX_DEPTH, SEARCH_MAX_FILE_BYTES, SEARCH_MAX_HITS } from './constants.ts';
 import { debugMetaHarness } from './debug-log.ts';
 import { SimplifiedMetaHarnessTestCaseSchema } from './test-case-hydrator.ts';
+import { snapshotBeforeWrite } from './version-store.ts';
 
 export type ProposerContext = {
   root: string;
@@ -21,29 +21,23 @@ export type ProposerContext = {
   skillsDir: string;
   testCasesDir: string;
   evalRunsBaseDir: string;
-  promptOverrides: Record<string, string>;
   /** Partial override merged with defaults via resolveRubricWeights. */
   rubricWeightPatch: Partial<Record<EvaluatorRubricId, number>>;
   submitted: { reasoning: string } | null;
   mode: MetaHarnessMode;
-  /** True after write_skill or delete_skill succeeded (incubate mode omits those tools). */
+  /**
+   * True after write_skill, delete_skill, or write_system_prompt — disk state differs from session baseline
+   * for the next eval.
+   */
   skillsMutated: boolean;
 };
-
-const INCUBATE_PROMPT_KEYS = new Set<PromptKey>(['hypotheses-generator-system', 'incubator-user-inputs']);
-
-const INPUTS_PROMPT_KEYS = new Set<PromptKey>([
-  'inputs-gen-research-context',
-  'inputs-gen-objectives-metrics',
-  'inputs-gen-design-constraints',
-]);
 
 const ToolReadFileArgsSchema = z.object({ path: z.string() });
 const ToolListDirArgsSchema = z.object({ path: z.string() });
 const ToolSearchArgsSchema = z.object({ pattern: z.string(), under: z.string() });
 const ToolWriteSkillArgsSchema = z.object({ key: z.string(), content: z.string() });
 const ToolDeleteSkillArgsSchema = z.object({ key: z.string() });
-const ToolSetPromptOverrideArgsSchema = z.object({ key: z.string(), body: z.string() });
+const ToolWriteSystemPromptArgsSchema = z.object({ body: z.string() });
 const ToolAddTestCaseArgsSchema = z.object({ name: z.string(), json: z.string() });
 const ToolSubmitCandidateArgsSchema = z.object({ reasoning: z.string() });
 const ToolSetRubricWeightsArgsSchema = z
@@ -144,6 +138,13 @@ async function toolWriteSkill(ctx: ProposerContext, args: { key: string; content
   const dir = path.join(ctx.skillsDir, key);
   await mkdir(dir, { recursive: true });
   const skillPath = path.join(dir, 'SKILL.md');
+  const relSkill = path.posix.join('skills', key, 'SKILL.md');
+  const snap = await snapshotBeforeWrite({
+    repoRoot: ctx.root,
+    relPath: relSkill,
+    source: 'meta-harness:proposer:write_skill',
+  });
+  if (!snap.ok) return `Error: version snapshot failed: ${snap.error}`;
   await writeFile(skillPath, args.content, 'utf8');
   ctx.skillsMutated = true;
   return `Wrote ${path.relative(ctx.root, skillPath)}`;
@@ -153,6 +154,14 @@ async function toolDeleteSkill(ctx: ProposerContext, args: { key: string }): Pro
   const key = sanitizeProposerKey(args.key);
   if (!key) return 'Error: invalid skill key';
   const dir = path.join(ctx.skillsDir, key);
+  const relSkill = path.posix.join('skills', key, 'SKILL.md');
+  const snapDel = await snapshotBeforeWrite({
+    repoRoot: ctx.root,
+    relPath: relSkill,
+    source: 'meta-harness:proposer:delete_skill',
+    action: 'delete',
+  });
+  if (!snapDel.ok) return `Error: version snapshot failed: ${snapDel.error}`;
   try {
     await rm(dir, { recursive: true, force: true });
     ctx.skillsMutated = true;
@@ -162,20 +171,47 @@ async function toolDeleteSkill(ctx: ProposerContext, args: { key: string }): Pro
   }
 }
 
-function toolSetPromptOverride(ctx: ProposerContext, args: { key: string; body: string }): string {
-  const k = args.key.trim() as PromptKey;
-  if (!PROMPT_KEYS.includes(k)) {
-    return `Error: unknown prompt key. Allowed: ${PROMPT_KEYS.join(', ')}`;
+/** Split PROMPT.md into YAML frontmatter block (including closing ---) and body. */
+function splitDesignerSystemPromptFile(raw: string): { preamble: string; body: string } | null {
+  const lines = raw.replace(/^\uFEFF/, '').split(/\r?\n/);
+  if (lines[0]?.trim() !== '---') return null;
+  let end = -1;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i]!.trim() === '---') {
+      end = i;
+      break;
+    }
   }
-  if (ctx.mode === 'incubate' && !INCUBATE_PROMPT_KEYS.has(k)) {
-    return `Error: incubate mode only allows prompt keys: ${[...INCUBATE_PROMPT_KEYS].join(', ')}`;
-  }
-  if (ctx.mode === 'inputs' && !INPUTS_PROMPT_KEYS.has(k)) {
-    return `Error: inputs mode only allows prompt keys: ${[...INPUTS_PROMPT_KEYS].join(', ')}`;
-  }
+  if (end === -1) return null;
+  const preamble = lines.slice(0, end + 1).join('\n');
+  const body = lines.slice(end + 1).join('\n').replace(/^\n+/, '');
+  return { preamble, body };
+}
+
+async function toolWriteSystemPrompt(ctx: ProposerContext, args: { body: string }): Promise<string> {
   if (!args.body.trim()) return 'Error: empty body';
-  ctx.promptOverrides[k] = args.body;
-  return `Stored override for ${k} (${args.body.length} chars) — applied on next API calls only`;
+  const absFile = path.resolve(ctx.root, 'prompts', 'designer-agentic-system', 'PROMPT.md');
+  let raw: string;
+  try {
+    raw = await readFile(absFile, 'utf8');
+  } catch (e) {
+    return `Error: ${normalizeError(e)}`;
+  }
+  const split = splitDesignerSystemPromptFile(raw);
+  if (!split) {
+    return 'Error: PROMPT.md must start with YAML frontmatter (--- … ---)';
+  }
+  const newBody = args.body.replace(/\r\n/g, '\n').trimEnd();
+  const out = `${split.preamble}\n\n${newBody}\n`;
+  const snapP = await snapshotBeforeWrite({
+    repoRoot: ctx.root,
+    relPath: 'prompts/designer-agentic-system/PROMPT.md',
+    source: 'meta-harness:proposer:write_system_prompt',
+  });
+  if (!snapP.ok) return `Error: version snapshot failed: ${snapP.error}`;
+  await writeFile(absFile, out, 'utf8');
+  ctx.skillsMutated = true;
+  return `Wrote body of ${path.relative(ctx.root, absFile)} (${newBody.length} chars); frontmatter preserved`;
 }
 
 async function toolAddTestCase(ctx: ProposerContext, args: { name: string; json: string }): Promise<string> {
@@ -235,7 +271,7 @@ export const TOOLS_OPENROUTER: OpenRouterFunctionTool[] = [
     function: {
       name: 'read_file',
       description:
-        'Read a text file under meta-harness/ (history including session-*/PROMOTION_REPORT.md at session root, test-cases), skills/, or eval-runs base. DO NOT use for src/lib/prompts/ — prompt bodies are already in your context.',
+        'Read a text file under meta-harness/ (history including session-*/PROMOTION_REPORT.md at session root, test-cases), skills/, or eval-runs base. Prompt / skill bodies for edit surfaces are usually pre-loaded in the user message.',
       parameters: {
         type: 'object',
         properties: { path: { type: 'string', description: 'Path relative to repo root' } },
@@ -301,6 +337,24 @@ export const TOOLS_OPENROUTER: OpenRouterFunctionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'write_system_prompt',
+      description:
+        'Replace the **markdown body** of prompts/designer-agentic-system/PROMPT.md (Pi designer system prompt). YAML frontmatter is preserved; pass only the body text after the second ---.',
+      parameters: {
+        type: 'object',
+        properties: {
+          body: {
+            type: 'string',
+            description: 'Full markdown body for PROMPT.md (not including frontmatter)',
+          },
+        },
+        required: ['body'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'set_rubric_weights',
       description:
         'Adjust how much each evaluator rubric contributes to the agentic overall score (design, strategy, implementation, browser). Pass non-negative numbers for any subset; server merges with defaults and renormalizes to sum 1.',
@@ -313,21 +367,6 @@ export const TOOLS_OPENROUTER: OpenRouterFunctionTool[] = [
           browser: { type: 'number', description: 'Relative weight (>= 0)' },
         },
         required: [],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'set_prompt_override',
-      description: 'Queue a PromptKey override for the next evaluation API calls (not persisted to Langfuse)',
-      parameters: {
-        type: 'object',
-        properties: {
-          key: { type: 'string', description: 'Canonical prompt key' },
-          body: { type: 'string', description: 'Full prompt body' },
-        },
-        required: ['key', 'body'],
       },
     },
   },
@@ -365,11 +404,11 @@ export async function dispatchTool(
   name: string,
   rawArgs: string,
 ): Promise<string> {
-  if (ctx.mode === 'incubate' && (name === 'write_skill' || name === 'delete_skill')) {
-    return 'Error: incubate mode does not use skills — tune hypotheses-generator-system and incubator-user-inputs only.';
-  }
-  if (ctx.mode === 'inputs' && (name === 'write_skill' || name === 'delete_skill' || name === 'set_rubric_weights')) {
-    return 'Error: inputs mode does not use skills or rubric weights — tune inputs-gen-* prompts only.';
+  if (
+    (ctx.mode === 'incubate' || ctx.mode === 'inputs') &&
+    name === 'set_rubric_weights'
+  ) {
+    return 'Error: rubric weight tuning is only used in design/e2e agentic evaluation modes.';
   }
   let args: Record<string, unknown>;
   try {
@@ -408,10 +447,10 @@ export async function dispatchTool(
       if (!p.success) return `Error: invalid arguments for set_rubric_weights: ${p.error.message}`;
       return toolSetRubricWeights(ctx, p.data);
     }
-    case 'set_prompt_override': {
-      const p = ToolSetPromptOverrideArgsSchema.safeParse(args);
-      if (!p.success) return `Error: invalid arguments for set_prompt_override: ${p.error.message}`;
-      return toolSetPromptOverride(ctx, p.data);
+    case 'write_system_prompt': {
+      const p = ToolWriteSystemPromptArgsSchema.safeParse(args);
+      if (!p.success) return `Error: invalid arguments for write_system_prompt: ${p.error.message}`;
+      return toolWriteSystemPrompt(ctx, p.data);
     }
     case 'add_test_case': {
       const p = ToolAddTestCaseArgsSchema.safeParse(args);

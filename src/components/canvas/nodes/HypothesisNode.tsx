@@ -101,17 +101,16 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
 
   const hypoAutoGen = useHypothesisAutoGenerate({ nodeId, strategyId });
 
-  // Stable ref so the mount effect always calls the latest generate function
-  // without needing it in the dep array (nodeId is stable for a mounted node).
+  // Ref so pending-auto-generate runs the latest generate without depending on callback identity.
   const generateRef = useRef(hypoAutoGen.generate);
-  generateRef.current = hypoAutoGen.generate;
+  useEffect(() => {
+    generateRef.current = hypoAutoGen.generate;
+  });
 
   useEffect(() => {
     if (consumePendingAutoGenerate(nodeId)) {
       void generateRef.current();
     }
-    // nodeId is stable for the lifetime of this node instance — intentional single-run.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId]);
 
   const handleStopGeneration = useCallback(() => {

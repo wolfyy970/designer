@@ -11,6 +11,20 @@ vi.mock('../inputs-evaluator.ts', () => ({
 }));
 
 import { runInputsGeneratePipeline } from '../inputs-pipeline.ts';
+import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
+
+function sseTaskResultResponse(result: string): Response {
+  const payload = `event: ${SSE_EVENT_NAMES.task_result}\ndata: ${JSON.stringify({ result })}\n\n`;
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(payload));
+        controller.close();
+      },
+    }),
+    { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+  );
+}
 
 const testCase: SimplifiedMetaHarnessTestCase = {
   name: 'sec-test',
@@ -48,12 +62,7 @@ describe('runInputsGeneratePipeline', () => {
   });
 
   it('calls inputs-generate 3x, scores each, and returns overall mean', async () => {
-    fetchSpy.mockImplementation(async () =>
-      new Response(JSON.stringify({ result: 'Generated input content' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    );
+    fetchSpy.mockImplementation(async () => sseTaskResultResponse('Generated input content'));
     scoreInputsWithRubricMock.mockResolvedValue({ mean: 4.0, scores: rubricScores });
 
     const result = await runInputsGeneratePipeline({
@@ -81,10 +90,7 @@ describe('runInputsGeneratePipeline', () => {
     let callCount = 0;
     fetchSpy.mockImplementation(async () => {
       callCount++;
-      return new Response(JSON.stringify({ result: `Facet ${callCount}` }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return sseTaskResultResponse(`Facet ${callCount}`);
     });
     scoreInputsWithRubricMock.mockResolvedValue({ mean: 3.0, scores: rubricScores });
 
@@ -109,19 +115,13 @@ describe('runInputsGeneratePipeline', () => {
     expect(thirdCallBody.objectivesMetrics).toBe('Facet 2');
   });
 
-  it('passes promptOverrides through to the API call', async () => {
-    fetchSpy.mockImplementation(async () =>
-      new Response(JSON.stringify({ result: 'Content' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    );
+  it('POST body never includes legacy promptOverrides', async () => {
+    fetchSpy.mockImplementation(async () => sseTaskResultResponse('Content'));
     scoreInputsWithRubricMock.mockResolvedValue({ mean: 3.0, scores: rubricScores });
 
     await runInputsGeneratePipeline({
       testCase,
       apiBaseUrl: 'http://localhost:3001/api',
-      promptOverrides: { 'inputs-gen-research-context': 'custom prompt' },
       inputsGenerateProviderId: 'openrouter',
       inputsGenerateModelId: 'test/model',
       inputsRubricApiKey: 'key',
@@ -131,7 +131,7 @@ describe('runInputsGeneratePipeline', () => {
     const firstBody = JSON.parse(
       (fetchSpy.mock.calls[0]![1]! as RequestInit).body as string,
     ) as Record<string, unknown>;
-    expect(firstBody.promptOverrides).toEqual({ 'inputs-gen-research-context': 'custom prompt' });
+    expect('promptOverrides' in firstBody).toBe(false);
   });
 
   it('records error when API returns non-OK and continues', async () => {
@@ -141,10 +141,7 @@ describe('runInputsGeneratePipeline', () => {
       if (callIdx === 1) {
         return new Response('Internal Server Error', { status: 500 });
       }
-      return new Response(JSON.stringify({ result: 'Good content' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return sseTaskResultResponse('Good content');
     });
     scoreInputsWithRubricMock.mockResolvedValue({ mean: 4.0, scores: rubricScores });
 
@@ -183,12 +180,7 @@ describe('runInputsGeneratePipeline', () => {
   });
 
   it('invokes callbacks at each stage', async () => {
-    fetchSpy.mockImplementation(async () =>
-      new Response(JSON.stringify({ result: 'Content' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    );
+    fetchSpy.mockImplementation(async () => sseTaskResultResponse('Content'));
     scoreInputsWithRubricMock.mockResolvedValue({ mean: 3.5, scores: rubricScores });
 
     const onStart = vi.fn();

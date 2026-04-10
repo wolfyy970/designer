@@ -63,24 +63,15 @@ function oneLineExcerpt(text: string, maxChars: number): string {
 
 /**
  * Load prompt bodies for edit-surface keys from disk (skills, system prompt, glue templates).
- * Overrides take priority when supplied (from a previous proposer iteration).
  */
-export async function loadPromptBodies(
-  keys: PromptKey[],
-  _apiBaseUrl: string,
-  overrides?: Record<string, string>,
-): Promise<string> {
+export async function loadPromptBodies(keys: PromptKey[]): Promise<string> {
   const lines: string[] = ['## Current prompt bodies (your edit surfaces)'];
   for (const key of keys) {
     let body: string;
-    if (overrides?.[key]) {
-      body = overrides[key]!;
-    } else {
-      try {
-        body = await getPromptBody(key);
-      } catch {
-        body = '(not found)';
-      }
+    try {
+      body = await getPromptBody(key);
+    } catch {
+      body = '(not found)';
     }
     lines.push(`\n### ${key}\n\`\`\`\n${body}\n\`\`\``);
   }
@@ -126,7 +117,7 @@ async function summarizePerTestResults(candidateDir: string): Promise<string[]> 
 }
 
 /**
- * Rich context from this session only: overrides, per-test scores / rubric means, proposer reasoning.
+ * Rich context from this session only: legacy prompt-overrides artifact, per-test scores, proposer reasoning.
  * `sessionHistoryDir` is `meta-harness/history/session-…/`.
  */
 export async function loadRichCandidateHistory(sessionHistoryDir: string, max = 5): Promise<string> {
@@ -171,22 +162,24 @@ export async function loadRichCandidateHistory(sessionHistoryDir: string, max = 
       cid === 0 ? `### ${dir} (baseline, mean: ${meanLabel})` : `### ${dir} (mean: ${meanLabel})`;
     const section: string[] = [header];
 
-    let overrides: Record<string, string> = {};
+    let legacyOverrides: Record<string, string> = {};
     try {
       const raw = await readFile(path.join(cd, ARTIFACT.promptOverridesJson), 'utf8');
-      overrides = parsePromptOverridesJsonString(raw);
+      legacyOverrides = parsePromptOverridesJsonString(raw);
     } catch (e) {
       debugMetaHarness('rich history prompt-overrides skipped:', normalizeError(e));
     }
-    const ovKeys = Object.keys(overrides);
+    const ovKeys = Object.keys(legacyOverrides);
     if (ovKeys.length === 0 && cid === 0) {
-      section.push('- Prompt overrides: (none — baseline uses live Langfuse / defaults only)');
+      section.push(
+        '- Legacy `prompt-overrides.json`: (empty — prompts/skills come from disk at eval time)',
+      );
     } else if (ovKeys.length === 0) {
-      section.push('- Prompt overrides: (none this candidate)');
+      section.push('- Legacy `prompt-overrides.json`: (empty this candidate)');
     } else {
-      section.push('- Prompt overrides:');
+      section.push('- Legacy `prompt-overrides.json` (historical only; harness no longer applies these):');
       for (const k of ovKeys) {
-        const body = overrides[k] ?? '';
+        const body = legacyOverrides[k] ?? '';
         section.push(
           `  - \`${k}\`: ${body.length} chars — "${oneLineExcerpt(body, OVERRIDE_BODY_EXCERPT)}"`,
         );

@@ -19,7 +19,6 @@ import { EVALUATOR_RUBRIC_IDS } from '../src/types/evaluation.ts';
 export type PromotionSummary = {
   candidateId: number;
   meanScore: number;
-  promptOverrideKeys: string[];
   skillsAdded: string[];
   skillsModified: string[];
   skillsDeleted: string[];
@@ -74,7 +73,6 @@ async function buildPromotionSummaryWithContext(
   } catch (e) {
     debugMetaHarness('promotion prompt-overrides read skipped:', normalizeError(e));
   }
-  const promptOverrideKeys = Object.keys(promptOverrides).sort();
 
   const snapshotSkills = path.join(winningCandidateDir, ARTIFACT.skillsSnapshot);
   const liveSkills = path.join(repoRoot, 'skills');
@@ -110,7 +108,7 @@ async function buildPromotionSummaryWithContext(
   const rubricWeightsChanged = rubricTable != null;
 
   const hasChanges =
-    promptOverrideKeys.length > 0 ||
+    Object.keys(promptOverrides).length > 0 ||
     tree.added.length > 0 ||
     tree.deleted.length > 0 ||
     tree.modified.length > 0 ||
@@ -121,7 +119,6 @@ async function buildPromotionSummaryWithContext(
     summary: {
       candidateId: options.winningCandidateId,
       meanScore: options.winningMeanScore,
-      promptOverrideKeys,
       skillsAdded: tree.added,
       skillsModified: tree.modified.map((m) => m.relPath),
       skillsDeleted: tree.deleted,

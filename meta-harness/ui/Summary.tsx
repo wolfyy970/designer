@@ -24,13 +24,12 @@ export function Summary({ state }: { state: RunnerState }) {
           {state.promotionSummary ? (
             <Text color={dimText}>
               {(() => {
-                const po = state.promotionSummary.promptOverrideKeys.length;
                 const sk =
                   state.promotionSummary.skillsAdded.length +
                   state.promotionSummary.skillsModified.length +
                   state.promotionSummary.skillsDeleted.length;
                 const tc = state.promotionSummary.testCasesAdded.length;
-                return `${po} prompt${po === 1 ? '' : 's'} · ${sk} skill file${sk === 1 ? '' : 's'} differ vs repo · ${tc} new test${tc === 1 ? '' : 's'}`;
+                return `${sk} skill file${sk === 1 ? '' : 's'} differ vs repo · ${tc} new test${tc === 1 ? '' : 's'}`;
               })()}
             </Text>
           ) : null}

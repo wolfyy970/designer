@@ -63,6 +63,7 @@ The header also opens **Settings** (General preferences). In **development**, a 
 | `pnpm lint`                  | Run ESLint                                                                                                                                                                                                                                           |
 | `pnpm knip`                  | Optional unused-export report (not run in CI by default)                                                                                                                                                                                             |
 | `pnpm meta-harness`          | Optional **meta-harness** CLI: benchmark/proposer outer loop against the local API ([meta-harness/README.md](meta-harness/README.md))                                                                                                                |
+| `pnpm version-snapshot`      | Backup/list/diff/restore **skills/**, **PROMPT.md**, **rubric-weights.json** under **`.prompt-versions/`** ([USER_GUIDE.md](USER_GUIDE.md#version-history))                                                                          |
 
 
 ## Documentation

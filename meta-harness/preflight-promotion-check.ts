@@ -14,13 +14,6 @@ import { parseRubricWeightsJson, rubricWeightsDiffer, type RubricWeightsRecord }
 
 const DEFAULT_MAX_SESSIONS_TO_SCAN = 5;
 
-export type StalePrompt = {
-  key: string;
-  liveBody: string;
-  winnerBody: string;
-  fetchError?: string;
-};
-
 export type StaleSkill = {
   relPath: string;
   liveBody: string;
@@ -37,12 +30,10 @@ export type UnpromotedSession = {
   sessionFolder: string;
   candidateId: number;
   meanScore: number;
-  stalePrompts: StalePrompt[];
   staleSkills: StaleSkill[];
   staleRubricWeights: StaleRubricWeights | null;
   /** Repo-relative path for operator copy/paste */
   reportPath: string;
-  allFetchesFailed: boolean;
 };
 
 async function fileExists(p: string): Promise<boolean> {
@@ -65,7 +56,6 @@ async function readText(p: string): Promise<string | null> {
 type ScanUnpromotedSessionsOptions = {
   historyRoot: string;
   repoRoot: string;
-  apiBaseUrl: string;
   skillsDir: string;
   maxSessionsToScan?: number;
 };
@@ -123,9 +113,6 @@ export async function scanUnpromotedSessions(
     const candidateDir = path.join(sessionDir, `candidate-${candidateId}`);
     if (!(await fileExists(candidateDir))) continue;
 
-    const stalePrompts: StalePrompt[] = [];
-    const allFetchesFailed = false;
-
     const staleSkills: StaleSkill[] = [];
     const snapshotRoot = path.join(candidateDir, ARTIFACT.skillsSnapshot);
     try {
@@ -165,11 +152,7 @@ export async function scanUnpromotedSessions(
       staleRubricWeights = { liveWeights: liveParsed, winnerWeights: winnerParsed };
     }
 
-    if (
-      stalePrompts.length === 0 &&
-      staleSkills.length === 0 &&
-      staleRubricWeights == null
-    ) {
+    if (staleSkills.length === 0 && staleRubricWeights == null) {
       continue;
     }
 
@@ -178,11 +161,9 @@ export async function scanUnpromotedSessions(
       sessionFolder,
       candidateId,
       meanScore,
-      stalePrompts,
       staleSkills,
       staleRubricWeights,
       reportPath: reportRel,
-      allFetchesFailed,
     };
   }
 

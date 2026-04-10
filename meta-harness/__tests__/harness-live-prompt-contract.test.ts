@@ -1,14 +1,11 @@
 /**
  * Locks the contract between (1) promotion preflight, (2) new-session baseline eval, and (3) proposer context:
  *
- * - **Preflight** compares a *prior* session's winning skill snapshots and rubric weights
- *   against the repo. Prompt overrides are legacy (no longer compared via API).
+ * - **Preflight** compares a *prior* session's winning skill snapshots and rubric weights against the repo.
  *
- * - **Baseline (candidate-0)** always sends **no** harness `promptOverrides` on `/api/*`, so compile/generate
- *   use **only** the running server's prompts—never the old winner JSON.
+ * - **API requests** never include legacy `promptOverrides` — incubate / hypothesis bodies are schema-clean.
  *
- * - **Proposer** preloads prompt bodies from disk (skills + PROMPT.md), so its
- *   "current bodies" block stays aligned with what baseline evaluation uses.
+ * - **Proposer** preloads prompt bodies from disk (`skills` + `PROMPT.md` via `getPromptBody`), aligned with evaluation.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { META_HARNESS_BASELINE_PROMPT_OVERRIDES } from '../constants.ts';
@@ -49,41 +46,31 @@ describe('harness live prompt contract', () => {
     vi.restoreAllMocks();
   });
 
-  it('baseline uses empty harness promptOverrides (never a prior winner snapshot)', () => {
+  it('legacy baseline constant stays empty (artifact compatibility only)', () => {
     expect(Object.keys(META_HARNESS_BASELINE_PROMPT_OVERRIDES)).toHaveLength(0);
   });
 
-  it('compile POST body omits promptOverrides for baseline-shaped hydration', () => {
+  it('compile POST body omits promptOverrides', () => {
     const parsed = SimplifiedMetaHarnessTestCaseSchema.parse(minimalCase);
     const body = hydrateIncubateRequestFromParsed(parsed, {
       incubateProvider: 'openrouter',
       incubateModel: 'a/b',
-      promptOverrides: { ...META_HARNESS_BASELINE_PROMPT_OVERRIDES },
     });
     expect('promptOverrides' in body).toBe(false);
   });
 
-  it('hypothesis POST body omits promptOverrides for baseline-shaped hydration', () => {
+  it('hypothesis POST body omits promptOverrides', () => {
     const parsed = SimplifiedMetaHarnessTestCaseSchema.parse(minimalCase);
     const body = hydrateMetaHarnessTestCaseFromParsed(parsed, {
       defaultIncubatorProvider: 'openrouter',
-      promptOverrides: { ...META_HARNESS_BASELINE_PROMPT_OVERRIDES },
     });
     expect('promptOverrides' in body).toBe(false);
   });
 
-  it('proposer loadPromptBodies reads from disk skills (not API)', async () => {
+  it('proposer loadPromptBodies reads from disk skills', async () => {
     const keys = ['hypotheses-generator-system'] as PromptKey[];
-    const block = await loadPromptBodies(keys, 'http://127.0.0.1:3001/api');
+    const block = await loadPromptBodies(keys);
     expect(block).toContain('hypotheses-generator-system');
     expect(block).toContain('Current prompt bodies');
-  });
-
-  it('proposer loadPromptBodies prefers overrides over disk', async () => {
-    const keys = ['hypotheses-generator-system'] as PromptKey[];
-    const block = await loadPromptBodies(keys, 'http://unused', {
-      'hypotheses-generator-system': 'override-body',
-    });
-    expect(block).toContain('override-body');
   });
 });

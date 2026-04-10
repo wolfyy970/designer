@@ -132,7 +132,6 @@ describe('writeCandidateChangelogAndAggregate', () => {
       testFiles,
       testResultsDir: tr,
       proposalMd: 'Reasoning',
-      promptOverrides: { 'k1': 'body' },
       args: baseArgs,
       aggregateIteration: 2,
       iterationLine: '2 / 5',
@@ -142,7 +141,6 @@ describe('writeCandidateChangelogAndAggregate', () => {
     const changelog = await readFile(path.join(cand, ARTIFACT.changelogMd), 'utf8');
     expect(changelog).toContain('candidate-3');
     expect(changelog).toContain('What the proposer changed');
-    expect(changelog).toContain('`k1`');
     expect(changelog).toContain('| alpha | 4.20 | satisfied |');
     expect(changelog).toContain('| beta | err | ? |');
 
@@ -173,7 +171,6 @@ describe('writeCandidateChangelogAndAggregate', () => {
       testFiles: [],
       testResultsDir: tr,
       proposalMd: 'Note only',
-      promptOverrides: {},
       args: baseArgs,
       aggregateIteration: 0,
       iterationLine: 'baseline',

@@ -14,7 +14,6 @@ type TestCasesEvalParams = {
   args: MetaHarnessCliArgs;
   cfg: MetaHarnessConfig;
   candidateId: number;
-  promptOverrides: Record<string, string>;
   rubricWeights?: Record<string, number>;
   testFiles: string[];
   evalRunsBase: string;
@@ -37,7 +36,6 @@ export async function runTestCasesEvaluation(params: TestCasesEvalParams): Promi
     args,
     cfg,
     candidateId,
-    promptOverrides,
     rubricWeights,
     testFiles,
     evalRunsBase,
@@ -55,9 +53,9 @@ export async function runTestCasesEvaluation(params: TestCasesEvalParams): Promi
   const testResultsDir = path.join(candidateDir, 'test-results');
   await mkdir(testResultsDir, { recursive: true });
 
-  const po = Object.keys(promptOverrides).length > 0 ? promptOverrides : undefined;
   const rw =
     rubricWeights && Object.keys(rubricWeights).length > 0 ? rubricWeights : undefined;
+  const phaseAbort = new AbortController();
 
   for (let ti = 0; ti < testFiles.length; ti++) {
     if (callbacks.shouldStop?.()) break;
@@ -108,9 +106,9 @@ export async function runTestCasesEvaluation(params: TestCasesEvalParams): Promi
       inputsRubricModel,
       incubateHypothesisCountDefault,
       apiKey,
-      promptOverrides: po,
       rubricWeights: rw,
       callbacks,
+      phaseAbort,
     });
     if (scored && typeof overallScore === 'number' && Number.isFinite(overallScore)) {
       scores.push(overallScore);

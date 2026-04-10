@@ -16,26 +16,31 @@ export async function runIncubatePipeline(params: {
   incubateProvider: string;
   incubateModel: string;
   incubateHypothesisCountDefault: number;
-  promptOverrides?: Record<string, string>;
   apiBaseUrl: string;
   callbacks: RunnerCallbacks;
+  /** Per candidate-phase controller: fetch uses `signal`; heartbeat aborts on `shouldStop`. */
+  phaseAbort?: AbortController;
 }): Promise<{ plan: IncubationPlan; requestedCount: number }> {
   const incubateBody = hydrateIncubateRequestFromParsed(params.testCase, {
     incubateProvider: params.incubateProvider,
     incubateModel: params.incubateModel,
     supportsVision: params.cfg.supportsVision,
     defaultHypothesisCount: params.incubateHypothesisCountDefault,
-    promptOverrides: params.promptOverrides,
   });
   const requestedCount =
     (incubateBody.promptOptions as { count?: number })?.count ??
     params.incubateHypothesisCountDefault;
   params.callbacks.onIncubateStart?.(params.name, requestedCount);
 
-  const plan = await withTestCaseHeartbeat(params.name, params.callbacks, () =>
-    runIncubateStep(params.apiBaseUrl, incubateBody, {
-      onWireEvent: (event, payload) => params.callbacks.onWireEvent(params.name, event, payload),
-    }),
+  const plan = await withTestCaseHeartbeat(
+    params.name,
+    params.callbacks,
+    () =>
+      runIncubateStep(params.apiBaseUrl, incubateBody, {
+        signal: params.phaseAbort?.signal,
+        onWireEvent: (event, payload) => params.callbacks.onWireEvent(params.name, event, payload),
+      }),
+    params.phaseAbort ? { linkUserStop: params.phaseAbort } : undefined,
   );
   if (!plan.hypotheses?.length) {
     throw new Error('Incubate returned no hypotheses');

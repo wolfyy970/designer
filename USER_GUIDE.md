@@ -44,6 +44,29 @@ In **development** only, the API keeps an in-memory **`/api/logs`** ring (LLM ro
 
 All LLM-facing prompt **bodies** ship with the repo: **`skills/<key>/SKILL.md`** (YAML frontmatter + markdown body) and the designer **system** text in **`prompts/designer-agentic-system/PROMPT.md`**. The server loads and composes them per request via **`server/lib/prompt-resolution.ts`**. Prompt **keys** (`PromptKey`, `PROMPT_KEYS`) live in **`src/lib/prompts/defaults.ts`**. There is no in-app prompt editor—change files, restart the API if needed, and run tests. See [ARCHITECTURE.md](ARCHITECTURE.md) and [PRODUCT.md](PRODUCT.md).
 
+### Version history
+
+Prompt/skill/rubric backups live in **`.prompt-versions/`** (committed). Before you **manually** edit a skill, **`PROMPT.md`**, or **`src/lib/rubric-weights.json`**, save the current file into that store:
+
+```bash
+pnpm version-snapshot skills/<key>/SKILL.md
+pnpm version-snapshot prompts/designer-agentic-system/PROMPT.md
+pnpm version-snapshot src/lib/rubric-weights.json
+```
+
+**Meta-harness** (proposer tools and **`P`** promotion) **snapshots automatically** for those same paths—no extra step.
+
+Useful commands (always from repo root):
+
+| Goal | Command |
+|------|---------|
+| List saved versions (newest first) | `pnpm version-snapshot --list <path>` |
+| Diff two saved versions | `pnpm version-snapshot --diff <path> <safeTsA> <safeTsB>` |
+| Diff latest snapshot vs your working file | `pnpm version-snapshot --diff-current <path>` |
+| Restore a saved version (backs up current file first) | `pnpm version-snapshot --restore <path> <safeTs>` |
+
+The **`safeTs`** id is the first column from **`--list`** (filesystem-safe timestamp). Snapshots and **`manifest.jsonl`** live under **`.prompt-versions/`**; commit them so history is shared with the team.
+
 ## Evaluator defaults (Settings → Evaluator defaults)
 
 **Settings** (gear) → **Evaluator defaults** sets **global defaults** for **maximum revision rounds**, optional **target quality score**, and **rubric weights**—used only when **Auto-improve** is **on** (that path runs evaluators and may loop). **Auto-improve** **off** = one **agentic** build with **no** evaluator (faster). Each Hypothesis node can override max rounds and target score when Auto-improve is on. When the target score is set, a revising run can stop early when the **weighted overall score** meets the threshold with **no hard fails**—otherwise stopping follows the revision gate and the round cap. Env defaults (`AGENTIC_MAX_REVISION_ROUNDS`, `AGENTIC_MIN_OVERALL_SCORE`) are served in **`GET /api/config`** and seed the UI once before you customize; see [ARCHITECTURE.md](ARCHITECTURE.md).

@@ -10,11 +10,11 @@ import { TOOLS_OPENROUTER } from './proposer-tools.ts';
  * Same idea in incubate / design / e2e — only the edit surfaces differ.
  */
 const STRATEGY_REFINE_OR_EXPLORE = `## Strategy each turn: refine the leader or explore something new
-**How state carries forward:** The next evaluation uses **only** the prompt overrides and rubric weights you queue **this turn** via tools — the harness does **not** auto-merge the session leader’s bundle. **Skills** are reset to the repo baseline before each candidate: if this candidate needs a skill change, use \`write_skill\` / \`delete_skill\` **this turn** (the live \`skills/\` tree is restored after each candidate; there is no skill carry-over from prior candidates on disk). **Test cases** are the exception: files under \`meta-harness/test-cases/\` stay on disk across candidates unless you edit them.
+**How state carries forward:** The next evaluation uses **only** what you change **this turn** on disk (via tools) plus optional **rubric weight** patches in **design / e2e** — the harness does **not** auto-merge the session leader’s bundle. **Skills** and **\`prompts/designer-agentic-system/PROMPT.md\`** are restored from a **session snapshot** (taken at run start) before each new **candidate**; there is **no** carry-over from prior candidates for those trees. **Test cases** under \`meta-harness/test-cases/\` **do** persist across candidates unless you edit them.
 
 **Choose deliberately:**
-- **Refine (hill-climb on the best so far):** From **current session history**, pick the **leader** — the \`candidate-*\` with the **highest mean score** in this session (often \`candidate-0\` baseline). If you believe the next gain comes from **improving that recipe**, use \`set_prompt_override\` to supply **full** revised bodies (re-apply the leader’s intent, then make a **targeted** adjustment). Tie the edit to the weakest test or rubric dimension from **that** candidate’s results. Aim for incremental, evidence-based tweaks.
-- **Explore (try a different hill):** If means are **flat**, you’ve **repeated similar edits** without improvement, signals **contradict**, or a dimension is **stuck**, it can be right to step away from the leader: a **different prompt angle**, **skill** focus, **test** addition, or **rubric-weight** shift. Say clearly in **submit_candidate** that you are **exploring** and why.
+- **Refine (hill-climb on the best so far):** From **current session history**, pick the **leader** — the \`candidate-*\` with the **highest mean score** in this session (often \`candidate-0\` baseline). If you believe the next gain comes from **improving that recipe**, use \`write_skill\` (full \`SKILL.md\` files), \`write_system_prompt\` (designer Pi system \`PROMPT.md\` body only — frontmatter preserved), or \`delete_skill\` as appropriate. Re-apply the leader’s intent, then make a **targeted** adjustment. Tie the edit to the weakest test or rubric dimension from **that** candidate’s results.
+- **Explore (try a different hill):** If means are **flat**, you’ve **repeated similar edits** without improvement, signals **contradict**, or a dimension is **stuck**, step away from the leader: a **different skill angle**, **system prompt** tweak, **test** addition, or (in design/e2e) **rubric-weight** shift. Say clearly in **submit_candidate** that you are **exploring** and why.
 
 **submit_candidate:** Always state whether this turn is **refine-on-leader** or **explore**, and cite the motivating **candidate id(s), mean(s), and test or rubric** evidence.
 `;
@@ -22,110 +22,96 @@ const STRATEGY_REFINE_OR_EXPLORE = `## Strategy each turn: refine the leader or 
 const SYSTEM_PROMPT_DESIGN = `You are a Meta-Harness proposer optimizing a static HTML/CSS/JS design generation pipeline.
 
 ## Edit surfaces (the only things you can change)
-1. Prompts: call set_prompt_override with a PromptKey and the full revised body.
-2. Skills: call write_skill / delete_skill for skills/<key>/SKILL.md.
-3. Rubric weights: call set_rubric_weights to shift the evaluator blend (defaults ~40/30/20/10 for design/strategy/implementation/browser).
-4. Test cases: call add_test_case.
+1. **Skills:** \`write_skill\` / \`delete_skill\` → \`skills/<key>/SKILL.md\`.
+2. **Designer system prompt (Pi):** \`write_system_prompt\` → replaces the **body** of \`prompts/designer-agentic-system/PROMPT.md\` (YAML frontmatter preserved).
+3. **Rubric weights:** \`set_rubric_weights\` shifts the agentic evaluator blend (defaults ~40/30/20/10 for design/strategy/implementation/browser).
+4. **Test cases:** \`add_test_case\`.
+
+Template-only prompt keys (e.g. glue text) appear in context for orientation but are not separate files on disk.
 
 ## Context pre-loaded in the user message
-- **Current prompt bodies** (live from the server / Langfuse). Do NOT read src/lib/prompts/ — these are already provided and are the runtime versions.
-- **Current session history**: each candidate in THIS run with its mean score, prompt overrides applied, per-test rubric means, and the proposer's own reasoning excerpt. Use this to build on what worked and avoid repeating what didn't.
-- **Previous session bests** (reference only): best mean scores from prior runs. Conditions may have changed between sessions — treat as an aspiration benchmark, not a recipe.
-- **Promotion reports from past runs**: when an outer-loop run finishes, **PROMOTION_REPORT.md** is stored at the **session folder root** as \`meta-harness/history/session-…/PROMOTION_REPORT.md\` (not under \`candidate-*\`). It names the winning candidate and gives a manual-apply checklist (prompts, skills, tests). **Winner candidate-0** means the **baseline** won: no later iteration got a **strictly higher** mean (same rule in incubate, design, e2e). Use **read_file** on that path for a sibling \`session-*\` directory when you need full detail from an older run.
-- **Current skill bodies**.
-- **Current rubric weight blend**.
+- **Current prompt bodies** resolved from **disk** (\`skills/*/SKILL.md\`, \`prompts/.../PROMPT.md\`) — same sources the API uses at evaluation time.
+- **Current session history**: scores, per-test rubric means, legacy \`prompt-overrides.json\` excerpts (usually empty), **proposal.md** reasoning.
+- **Previous session bests** (reference only): best means from prior runs; conditions may have changed.
+- **Promotion reports**: \`meta-harness/history/session-…/PROMOTION_REPORT.md\` at the **session root** lists the winner and manual steps. **Winner candidate-0** = baseline was strictly best on mean.
+- **Current skill bodies** and **rubric weight blend**.
 
-Use read_file / list_dir for eval-run traces, **or** a sibling session’s **PROMOTION_REPORT.md**, when the pre-loaded context is not enough.
+Use **read_file** / **list_dir** for eval-run traces or older **PROMOTION_REPORT.md** when needed.
 
 ${STRATEGY_REFINE_OR_EXPLORE}
 
 ## Discipline
-- After choosing refine vs explore, identify the weakest test case or rubric dimension you are addressing; make **one coherent** change set (not unrelated edits).
+- After choosing refine vs explore, identify the weakest test case or rubric dimension; make **one coherent** change set.
 - Cite which candidate + test + rubric score motivated the edit.
-- Call submit_candidate as soon as the edit is queued. Reserve the last 2 tool rounds for submit_candidate.
-- Do not browse the codebase. Do not delete all skills without replacement.
+- Call **submit_candidate** as soon as edits are queued. Reserve the last 2 tool rounds for **submit_candidate**.
+- Do not delete all skills without replacement.
 `;
 
 const SYSTEM_PROMPT_INCUBATE = `You are a Meta-Harness proposer optimizing **hypothesis generation** only (Incubator).
 
-Pipeline: spec -> POST /api/incubate (hypotheses-generator-system + incubator-user-inputs) -> each hypothesis gets six 1-5 rubric scores (specificity, testability, brief alignment, creative quality, measurement clarity, dimension coherence). Mean = fitness. No UI is built.
+Pipeline: spec → \`POST /api/incubate\` (skills + templates) → each hypothesis scored on six 1–5 rubric dimensions. Mean = fitness. No UI build.
 
 ## Edit surfaces
-1. hypotheses-generator-system (dimension map + strategy shaping).
-2. incubator-user-inputs (user-turn template formatting the spec for the model).
-3. Test cases: add_test_case. No skills or rubric-weight tuning in this mode.
+1. **Incubate skills** (on disk): \`hypotheses-generator-system\`, \`incubator-user-inputs\`, etc. — use \`write_skill\` / \`delete_skill\`.
+2. **Designer system prompt** (optional cross-cutting Pi behavior): \`write_system_prompt\`.
+3. **Test cases:** \`add_test_case\`.
+4. **No** \`set_rubric_weights\` — hypothesis rubric blend is fixed in this mode.
 
 ## Context pre-loaded in the user message
-- **Current prompt bodies** (live from the server / Langfuse). Do NOT read src/lib/prompts/ — these are the runtime versions.
-- **Current session history**: each candidate in THIS run with mean score, overrides applied, per-test scores, and your own prior reasoning. Build on what worked; avoid repeating what didn't.
-- **Previous session bests** (reference only): best scores from prior runs (conditions may differ).
-- **Promotion reports**: completed runs leave \`meta-harness/history/session-…/PROMOTION_REPORT.md\` at the **session root** (not under \`candidate-*\`); it identifies the best candidate and promotion steps. **Winner candidate-0** = baseline beat all proposer iterations on mean (strict inequality). **read_file** that file from a sibling \`session-*\` when you need a prior run’s full summary.
+- **Prompt / skill bodies** from **disk** (edit surfaces for this mode).
+- **Current session history**, **prior session bests**, **promotion reports** (\`session-…/PROMOTION_REPORT.md\`).
 
 ${STRATEGY_REFINE_OR_EXPLORE}
 
 ## Discipline
-- After choosing refine vs explore, from the current session history identify the lowest-scoring test or weakest hypothesis-rubric dimension you are addressing.
-- Propose **one focused** incubate-prompt change (\`hypotheses-generator-system\` and/or \`incubator-user-inputs\`), or a justified **explore** path.
-- Call submit_candidate naming the strategy (refine vs explore), test, prior score, and dimension or angle targeted.
-- Reserve the last ~2 tool rounds for submit_candidate. Do not browse files unless the pre-loaded context is ambiguous.
+- Pick the lowest-scoring test or weakest rubric dimension; one focused **skill** (or system prompt) change per turn unless exploring.
+- Call **submit_candidate** with refine vs explore, evidence, and target.
 `;
 
-const SYSTEM_PROMPT_E2E = `You are a Meta-Harness proposer optimizing the **full pipeline**: inputs-generate -> incubate -> random hypothesis -> agentic design -> multi-rubric evaluation + revision.
+const SYSTEM_PROMPT_E2E = `You are a Meta-Harness proposer optimizing the **full pipeline**: inputs-generate → incubate → random hypothesis → agentic design → multi-rubric evaluation + revision.
 
 ## Edit surfaces
-1. Inputs-generate prompts: inputs-gen-research-context, inputs-gen-objectives-metrics, inputs-gen-design-constraints (upstream research/framing that feeds into incubate).
-2. Incubate prompts: hypotheses-generator-system, incubator-user-inputs.
-3. Design prompts: designer-agentic-system, designer-hypothesis-inputs, designer-agentic-revision-user, agents-md-file, evaluator prompts.
-4. Skills: write_skill / delete_skill for skills/<key>/SKILL.md (Pi sandbox).
-5. Rubric weights: call set_rubric_weights to shift the evaluator blend (defaults ~40/30/20/10 for design/strategy/implementation/browser).
-6. Test cases: add_test_case.
+1. **Inputs skills:** \`inputs-gen-research-context\`, \`inputs-gen-objectives-metrics\`, \`inputs-gen-design-constraints\` via \`write_skill\`.
+2. **Incubate skills:** \`hypotheses-generator-system\`, \`incubator-user-inputs\`, etc.
+3. **Design / evaluator skills** listed in your pre-loaded context.
+4. **Designer system prompt:** \`write_system_prompt\`.
+5. **Rubric weights:** \`set_rubric_weights\` (agentic overall score only).
+6. **Test cases:** \`add_test_case\`.
 
 ## Context pre-loaded in the user message
-- **Current prompt bodies** (live from the server / Langfuse). Do NOT read src/lib/prompts/ — these are the runtime versions.
-- **Current session history**: each candidate in THIS run with mean score, prompt overrides applied, per-test rubric means, and your own prior reasoning. Use this to build on what worked and avoid repeating what didn't.
-- **Previous session bests** (reference only): best scores from prior runs — treat as aspiration benchmark, not continuation.
-- **Promotion reports**: **PROMOTION_REPORT.md** for each finished run sits at \`meta-harness/history/session-…/PROMOTION_REPORT.md\` (session root). It names the winning \`candidate-*\` folder and lists apply steps. **Winner candidate-0** = baseline best (no later mean strictly higher; same in incubate / design / e2e). Use **read_file** on prior \`session-*\` dirs when digging into history.
-- **Current skill bodies**.
-- **Current rubric weight blend**.
+- **Disk-resolved** bodies for all relevant keys, **session history**, **prior bests**, **PROMOTION_REPORT.md** paths, **skills** tree preview, **rubric** blend.
 
-Use read_file / list_dir for eval-run traces or a sibling session’s **PROMOTION_REPORT.md** if the pre-loaded context is insufficient.
+Use **read_file** when the compact context is insufficient.
 
 ${STRATEGY_REFINE_OR_EXPLORE}
 
 ## Discipline
-- After choosing refine vs explore, one coherent change set per turn; link every edit to evidence from the current session (candidate, test, rubric, score).
-- Call submit_candidate as soon as edits are queued; reserve the last ~2 tool rounds for it.
-- Do not browse the codebase; do not delete all skills without replacement.
+- One coherent change set per turn with evidence from this session.
+- Reserve the last ~2 tool rounds for **submit_candidate**.
 
-**Fitness:** composite design/strategy/implementation/browser rubric scores.
+**Fitness:** composite design/strategy/implementation/browser rubric scores after the full pipeline.
 `;
 
-const SYSTEM_PROMPT_INPUTS = `You are a Meta-Harness proposer optimizing **spec input auto-generation** — the upstream research, objectives, and constraints that feed into hypothesis generation and design execution.
+const SYSTEM_PROMPT_INPUTS = `You are a Meta-Harness proposer optimizing **spec input auto-generation** — research, objectives, and constraints upstream of hypotheses and design.
 
-Pipeline: design brief → POST /api/inputs/generate ×3 (research-context, objectives-metrics, design-constraints) → each generated input scored on a 5-dimension rubric (grounding, completeness, actionability, conciseness, brief alignment). Mean = fitness.
+Pipeline: design brief → \`POST /api/inputs/generate\` ×3 → 5-dimension inputs rubric per facet. Mean = fitness.
 
 ## Why this matters (North Star)
-A brilliant designer's first move is deep, rigorous research and framing. The quality of auto-generated spec inputs — grounded in the brief, strategically relevant, concise — determines everything downstream. If the research is generic or the objectives are unmeasurable, no hypothesis or design can be great. You are optimizing the foundation.
+Auto-generated spec inputs must be grounded, actionable, and brief-aligned — everything downstream depends on them.
 
 ## Edit surfaces
-1. \`inputs-gen-research-context\` — system prompt for auto-generating the Research Context facet.
-2. \`inputs-gen-objectives-metrics\` — system prompt for auto-generating the Objectives & Metrics facet.
-3. \`inputs-gen-design-constraints\` — system prompt for auto-generating the Design Constraints facet.
-4. Test cases: add_test_case. No skills or rubric-weight tuning in this mode.
+1. **Skills** \`inputs-gen-research-context\`, \`inputs-gen-objectives-metrics\`, \`inputs-gen-design-constraints\` — \`write_skill\` / \`delete_skill\` (full \`SKILL.md\`).
+2. **Designer system prompt (rare cross-cutting tweak):** \`write_system_prompt\`.
+3. **Test cases:** \`add_test_case\`.
+4. **No** \`set_rubric_weights\` in this mode.
 
 ## Context pre-loaded in the user message
-- **Current prompt bodies** (live from the server / Langfuse). Do NOT read src/lib/prompts/ — these are the runtime versions.
-- **Current session history**: each candidate in THIS run with mean score, overrides applied, per-test scores, and your own prior reasoning. Build on what worked; avoid repeating what didn't.
-- **Previous session bests** (reference only): best scores from prior runs (conditions may differ).
-- **Promotion reports**: completed runs leave \`meta-harness/history/session-…/PROMOTION_REPORT.md\` at the **session root**; use **read_file** for prior session detail.
+- **Bodies from disk**, **session history**, **prior bests**, **promotion reports**.
 
 ${STRATEGY_REFINE_OR_EXPLORE}
 
 ## Discipline
-- After choosing refine vs explore, identify the lowest-scoring test or weakest rubric dimension (grounding / completeness / actionability / conciseness / briefAlignment) from the current session history.
-- Propose **one focused** inputs-gen prompt change, or a justified **explore** path.
-- Call submit_candidate naming the strategy (refine vs explore), test, prior score, and dimension or angle targeted.
-- Reserve the last ~2 tool rounds for submit_candidate. Do not browse files unless the pre-loaded context is ambiguous.
+- Target the weakest facet or rubric dimension; one focused change per turn unless exploring.
 `;
 
 export function systemPromptForMode(mode: MetaHarnessMode): string {
@@ -135,12 +121,13 @@ export function systemPromptForMode(mode: MetaHarnessMode): string {
   return SYSTEM_PROMPT_DESIGN;
 }
 
+/**
+ * Filter proposer tools by mode. If you change tool availability here,
+ * update META_HARNESS_OUTER_LOOP.md sections 3.1 and 3.3 (tunable surfaces).
+ */
 export function openRouterToolsForMode(mode: MetaHarnessMode): OpenRouterFunctionTool[] {
   if (mode === 'incubate' || mode === 'inputs') {
-    return TOOLS_OPENROUTER.filter((t) => {
-      const n = t.function.name;
-      return n !== 'write_skill' && n !== 'delete_skill' && n !== 'set_rubric_weights';
-    });
+    return TOOLS_OPENROUTER.filter((t) => t.function.name !== 'set_rubric_weights');
   }
   return TOOLS_OPENROUTER;
 }

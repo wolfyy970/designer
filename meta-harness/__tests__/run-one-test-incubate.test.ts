@@ -130,6 +130,7 @@ describe('runOneMetaHarnessTest incubate mode (rubric errors)', () => {
       inputsRubricModel: 'rub/m',
       incubateHypothesisCountDefault: 5,
       apiKey: 'k',
+      phaseAbort: new AbortController(),
       callbacks: { ...stubCallbacks(), onTestCaseDone },
     });
 
@@ -163,6 +164,7 @@ describe('runOneMetaHarnessTest incubate mode (rubric errors)', () => {
       inputsRubricModel: 'rub/m',
       incubateHypothesisCountDefault: 5,
       apiKey: 'k',
+      phaseAbort: new AbortController(),
       callbacks: { ...stubCallbacks(), onTestCaseDone },
     });
 
@@ -188,6 +190,7 @@ describe('runOneMetaHarnessTest incubate mode (rubric errors)', () => {
       inputsRubricModel: 'rub/m',
       incubateHypothesisCountDefault: 5,
       apiKey: 'k',
+      phaseAbort: new AbortController(),
       callbacks: stubCallbacks(),
     });
 

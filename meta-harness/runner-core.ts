@@ -1,7 +1,7 @@
 /**
  * Meta-harness outer loop engine — callbacks only, no UI.
  */
-import { cp, mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { normalizeError } from '../src/lib/error-utils.ts';
 import { repoRoot, resolveEvalRunsBaseDir } from './paths.ts';
@@ -23,30 +23,53 @@ import {
   DEFAULT_INCUBATE_MODEL,
   DEFAULT_HYPOTHESIS_COUNT,
   DEFAULT_OPENROUTER_CHAT_TIMEOUT_MS,
-  META_HARNESS_BASELINE_PROMPT_OVERRIDES,
   NO_BEST_SENTINEL,
 } from './constants.ts';
+import {
+  restorePromptsDesignerFromBaseline,
+  restoreSkillsFromBaseline,
+  savePromptsDesignerBaseline,
+  saveSkillsBaseline,
+} from './snapshot-helpers.ts';
 
-/** Snapshot repo `skills/` into the session folder before any proposer mutates disk. */
-export async function saveSkillsBaseline(skillsDir: string, baselineDir: string): Promise<void> {
-  await rm(baselineDir, { recursive: true, force: true });
-  try {
-    const st = await stat(skillsDir);
-    if (st.isDirectory()) {
-      await cp(skillsDir, baselineDir, { recursive: true });
-      return;
-    }
-  } catch {
-    /* skills missing or not a directory */
-  }
-  await mkdir(baselineDir, { recursive: true });
-}
+/** Stable session fields shared across baseline + search-loop candidate phases. */
+export type CandidatePhaseInfra = {
+  root: string;
+  historyDir: string;
+  args: MetaHarnessCliArgs;
+  cfg: MetaHarnessConfig;
+  callbacks: RunnerCallbacks;
+  testFiles: string[];
+  evalRunsBase: string;
+  incubateProvider: string;
+  incubateModel: string;
+  hypothesisEvalModel: string;
+  inputsRubricModel: string;
+  incubateHypothesisCountDefault: number;
+  apiKey: string;
+  iterations: number;
+  candidateRows: CandidateScoreRow[];
+  bestRef: { mean: number; id: number };
+};
 
-/** Replace repo `skills/` with the session baseline copy (per-candidate reset + `finally` cleanup). */
-export async function restoreSkillsFromBaseline(skillsDir: string, baselineDir: string): Promise<void> {
-  await rm(skillsDir, { recursive: true, force: true });
-  await cp(baselineDir, skillsDir, { recursive: true });
-}
+/** Per-candidate fields for one {@link runEvaluatedCandidatePhase} invocation. */
+export type CandidatePhaseInstance = {
+  candidateId: number;
+  candidateDir: string;
+  label: string;
+  proposalMd: string;
+  rubricWeights?: Record<string, number>;
+  /** Row index for candidateRows / callback (`0` baseline, else loop index). */
+  iteration: number;
+  iterationLine: string;
+  includeProposerSection: boolean;
+};
+
+/** Params for {@link runEvaluatedCandidatePhase} — exported for unit tests. */
+export type EvaluatedCandidatePhaseParams = {
+  infra: CandidatePhaseInfra;
+  instance: CandidatePhaseInstance;
+};
 
 /** Optional engine tuning; pass `config` to avoid loading disk config twice. */
 type RunMetaHarnessEngineOptions = {
@@ -134,28 +157,32 @@ export async function runMetaHarnessEngine(
   const skillsDir = path.join(root, 'skills');
   const skillsBaselineDir = path.join(historyDir, ARTIFACT.skillsBaseline);
   await saveSkillsBaseline(skillsDir, skillsBaselineDir);
+  const promptsDesignerDir = path.join(root, 'prompts', 'designer-agentic-system');
+  const promptsDesignerBaselineDir = path.join(historyDir, ARTIFACT.promptsDesignerBaseline);
+  await savePromptsDesignerBaseline(promptsDesignerDir, promptsDesignerBaselineDir);
 
   const bestRef = { mean: NO_BEST_SENTINEL, id: NO_BEST_SENTINEL };
+  const phaseInfra: CandidatePhaseInfra = {
+    root,
+    historyDir,
+    args,
+    cfg,
+    callbacks,
+    testFiles,
+    evalRunsBase,
+    incubateProvider,
+    incubateModel,
+    hypothesisEvalModel,
+    inputsRubricModel,
+    incubateHypothesisCountDefault,
+    apiKey,
+    iterations,
+    candidateRows,
+    bestRef,
+  };
   try {
     if (needsBaseline) {
-      await runBaselineCandidate({
-        root,
-        historyDir,
-        args,
-        cfg,
-        callbacks,
-        testFiles,
-        evalRunsBase,
-        incubateProvider,
-        incubateModel,
-        hypothesisEvalModel,
-        inputsRubricModel,
-        incubateHypothesisCountDefault,
-        apiKey,
-        iterations,
-        candidateRows,
-        bestRef,
-      });
+      await runBaselineCandidate(phaseInfra);
     }
 
     for (let iter = 0; iter < iterations; iter++) {
@@ -169,94 +196,74 @@ export async function runMetaHarnessEngine(
       callbacks.onIterationStart(candidateId, iter + 1, iterations);
 
       await restoreSkillsFromBaseline(skillsDir, skillsBaselineDir);
+      await restorePromptsDesignerFromBaseline(promptsDesignerDir, promptsDesignerBaselineDir);
 
       let proposalMd = '';
-      let promptOverrides: Record<string, string> = {};
       let rubricWeights: Record<string, number> | undefined;
 
       if (!args.evalOnly) {
-      if (callbacks.shouldStop?.()) break;
-      callbacks.onProposerStart(cfg.proposerModel, cfg.proposerMaxToolRounds);
-      const proposerStart = Date.now();
-      const proposal = await runMetaHarnessProposer({
-        apiKey,
-        apiBaseUrl: cfg.apiBaseUrl,
-        model: cfg.proposerModel,
-        mode: args.mode,
-        metaHarnessDir,
-        sessionHistoryDir: historyDir,
-        historyRootDir: historyRoot,
-        currentSessionFolderName: sessionFolderName,
-        evalRunsBaseDir: evalRunsBase,
-        candidateLabel: label,
-        maxToolRounds: cfg.proposerMaxToolRounds,
-        openRouterChatTimeoutMs,
-        onToolCall(round, toolName, summary) {
-          callbacks.onProposerToolCall(round, toolName, summary);
-        },
-      });
-      promptOverrides = proposal.promptOverrides;
-      rubricWeights = proposal.rubricWeights;
-      proposalMd = proposal.reasoning;
-      callbacks.onProposerDone(
-        Date.now() - proposerStart,
-        Object.keys(promptOverrides),
-        proposalMd,
-        proposal.roundsUsed,
-        cfg.proposerMaxToolRounds,
-      );
-      const toolLogMd = proposal.toolLog.length
-        ? `\n## Tool calls (${proposal.roundsUsed}/${cfg.proposerMaxToolRounds} rounds)\n\n${proposal.toolLog.map((t) => `- [round ${t.round + 1}] ${t.tool}${t.summary ? ` — ${t.summary}` : ''}`).join('\n')}\n`
-        : '';
-      await writeFile(path.join(candidateDir, ARTIFACT.proposalMd), `${proposalMd}\n${toolLogMd}`, 'utf8');
-      await writeFile(
-        path.join(candidateDir, ARTIFACT.promptOverridesJson),
-        `${JSON.stringify(promptOverrides, null, 2)}\n`,
-        'utf8',
-      );
-      if (rubricWeights) {
+        if (callbacks.shouldStop?.()) break;
+        callbacks.onProposerStart(cfg.proposerModel, cfg.proposerMaxToolRounds);
+        const proposerStart = Date.now();
+        const proposal = await runMetaHarnessProposer({
+          apiKey,
+          apiBaseUrl: cfg.apiBaseUrl,
+          model: cfg.proposerModel,
+          mode: args.mode,
+          metaHarnessDir,
+          sessionHistoryDir: historyDir,
+          historyRootDir: historyRoot,
+          currentSessionFolderName: sessionFolderName,
+          evalRunsBaseDir: evalRunsBase,
+          candidateLabel: label,
+          maxToolRounds: cfg.proposerMaxToolRounds,
+          openRouterChatTimeoutMs,
+          onToolCall(round, toolName, summary) {
+            callbacks.onProposerToolCall(round, toolName, summary);
+          },
+        });
+        rubricWeights = proposal.rubricWeights;
+        proposalMd = proposal.reasoning;
+        callbacks.onProposerDone(
+          Date.now() - proposerStart,
+          proposalMd,
+          proposal.roundsUsed,
+          cfg.proposerMaxToolRounds,
+        );
+        const toolLogMd = proposal.toolLog.length
+          ? `\n## Tool calls (${proposal.roundsUsed}/${cfg.proposerMaxToolRounds} rounds)\n\n${proposal.toolLog.map((t) => `- [round ${t.round + 1}] ${t.tool}${t.summary ? ` — ${t.summary}` : ''}`).join('\n')}\n`
+          : '';
+        await writeFile(path.join(candidateDir, ARTIFACT.proposalMd), `${proposalMd}\n${toolLogMd}`, 'utf8');
+        await writeFile(path.join(candidateDir, ARTIFACT.promptOverridesJson), '{}\n', 'utf8');
+        if (rubricWeights) {
+          await writeFile(
+            path.join(candidateDir, ARTIFACT.rubricWeightsJson),
+            `${JSON.stringify(rubricWeights, null, 2)}\n`,
+            'utf8',
+          );
+        }
+      } else {
         await writeFile(
-          path.join(candidateDir, ARTIFACT.rubricWeightsJson),
-          `${JSON.stringify(rubricWeights, null, 2)}\n`,
+          path.join(candidateDir, ARTIFACT.proposalMd),
+          '# eval-only\nNo proposer — evaluating current repo state.\n',
           'utf8',
         );
+        await writeFile(path.join(candidateDir, ARTIFACT.promptOverridesJson), '{}\n', 'utf8');
       }
-    } else {
-      await writeFile(
-        path.join(candidateDir, ARTIFACT.proposalMd),
-        '# eval-only\nNo proposer — evaluating current repo state.\n',
-        'utf8',
-      );
-      await writeFile(path.join(candidateDir, ARTIFACT.promptOverridesJson), '{}\n', 'utf8');
-    }
 
-    await runEvaluatedCandidatePhase({
-      root,
-      historyDir,
-      args,
-      cfg,
-      callbacks,
-      testFiles,
-      evalRunsBase,
-      incubateProvider,
-      incubateModel,
-      hypothesisEvalModel,
-      inputsRubricModel,
-      incubateHypothesisCountDefault,
-      apiKey,
-      iterations,
-      candidateRows,
-      bestRef,
-      candidateId,
-      candidateDir,
-      label,
-      proposalMd,
-      promptOverrides,
-      rubricWeights,
-      iteration: iter + 1,
-      iterationLine: `${iter + 1} / ${iterations}`,
-      includeProposerSection: true,
-    });
+      await runEvaluatedCandidatePhase({
+        infra: phaseInfra,
+        instance: {
+          candidateId,
+          candidateDir,
+          label,
+          proposalMd,
+          rubricWeights,
+          iteration: iter + 1,
+          iterationLine: `${iter + 1} / ${iterations}`,
+          includeProposerSection: true,
+        },
+      });
     }
 
     const { mean: bestMean, id: bestCand } = bestRef;
@@ -291,129 +298,84 @@ export async function runMetaHarnessEngine(
   } finally {
     try {
       await restoreSkillsFromBaseline(skillsDir, skillsBaselineDir);
+      await restorePromptsDesignerFromBaseline(promptsDesignerDir, promptsDesignerBaselineDir);
     } catch (e) {
       console.warn(
-        '[meta-harness] Failed to restore skills/ from session baseline:',
+        '[meta-harness] Failed to restore skills/ or prompts baseline:',
         normalizeError(e),
       );
     }
   }
 }
 
-/** Params for {@link runEvaluatedCandidatePhase} — exported for unit tests. */
-export type EvaluatedCandidatePhaseParams = {
-  root: string;
-  historyDir: string;
-  args: MetaHarnessCliArgs;
-  cfg: MetaHarnessConfig;
-  callbacks: RunnerCallbacks;
-  testFiles: string[];
-  evalRunsBase: string;
-  incubateProvider: string;
-  incubateModel: string;
-  hypothesisEvalModel: string;
-  inputsRubricModel: string;
-  incubateHypothesisCountDefault: number;
-  apiKey: string;
-  iterations: number;
-  candidateRows: CandidateScoreRow[];
-  bestRef: { mean: number; id: number };
-  candidateId: number;
-  candidateDir: string;
-  label: string;
-  proposalMd: string;
-  promptOverrides: Record<string, string>;
-  rubricWeights?: Record<string, number>;
-  /** Row index for candidateRows / callback (`0` baseline, else loop index). */
-  iteration: number;
-  iterationLine: string;
-  includeProposerSection: boolean;
-};
-
 /** Shared: snapshot skills, run all test cases, write changelog/aggregate, update best, notify UI. */
 export async function runEvaluatedCandidatePhase(p: EvaluatedCandidatePhaseParams): Promise<void> {
-  const skillsDest = path.join(p.candidateDir, ARTIFACT.skillsSnapshot);
-  await cp(path.join(p.root, 'skills'), skillsDest, { recursive: true });
+  const { infra, instance } = p;
+  const skillsDest = path.join(instance.candidateDir, ARTIFACT.skillsSnapshot);
+  await cp(path.join(infra.root, 'skills'), skillsDest, { recursive: true });
 
   const { meanScore, scores, testResultsDir } = await runTestCasesEvaluation({
-    args: p.args,
-    cfg: p.cfg,
-    candidateId: p.candidateId,
-    promptOverrides: p.promptOverrides,
-    rubricWeights: p.rubricWeights,
-    testFiles: p.testFiles,
-    evalRunsBase: p.evalRunsBase,
-    incubateProvider: p.incubateProvider,
-    incubateModel: p.incubateModel,
-    hypothesisEvalModel: p.hypothesisEvalModel,
-    inputsRubricModel: p.inputsRubricModel,
-    incubateHypothesisCountDefault: p.incubateHypothesisCountDefault,
-    apiKey: p.apiKey,
-    candidateDir: p.candidateDir,
-    callbacks: p.callbacks,
+    args: infra.args,
+    cfg: infra.cfg,
+    candidateId: instance.candidateId,
+    rubricWeights: instance.rubricWeights,
+    testFiles: infra.testFiles,
+    evalRunsBase: infra.evalRunsBase,
+    incubateProvider: infra.incubateProvider,
+    incubateModel: infra.incubateModel,
+    hypothesisEvalModel: infra.hypothesisEvalModel,
+    inputsRubricModel: infra.inputsRubricModel,
+    incubateHypothesisCountDefault: infra.incubateHypothesisCountDefault,
+    apiKey: infra.apiKey,
+    candidateDir: instance.candidateDir,
+    callbacks: infra.callbacks,
   });
 
   await writeCandidateChangelogAndAggregate({
-    candidateDir: p.candidateDir,
-    candidateId: p.candidateId,
+    candidateDir: instance.candidateDir,
+    candidateId: instance.candidateId,
     meanScore,
     scores,
-    testFiles: p.testFiles,
+    testFiles: infra.testFiles,
     testResultsDir,
-    proposalMd: p.proposalMd,
-    promptOverrides: p.promptOverrides,
-    args: p.args,
-    aggregateIteration: p.iteration,
-    iterationLine: p.iterationLine,
-    includeProposerSection: p.includeProposerSection,
+    proposalMd: instance.proposalMd,
+    args: infra.args,
+    aggregateIteration: instance.iteration,
+    iterationLine: instance.iterationLine,
+    includeProposerSection: instance.includeProposerSection,
   });
 
-  p.candidateRows.push({ candidateId: p.candidateId, meanScore, iteration: p.iteration });
+  infra.candidateRows.push({
+    candidateId: instance.candidateId,
+    meanScore,
+    iteration: instance.iteration,
+  });
 
-  const improved = meanScore != null && meanScore > p.bestRef.mean;
+  const improved = meanScore != null && meanScore > infra.bestRef.mean;
   if (improved) {
-    p.bestRef.mean = meanScore;
-    p.bestRef.id = p.candidateId;
-    await writeBestCandidate(p.historyDir, p.bestRef.id, p.bestRef.mean);
+    infra.bestRef.mean = meanScore;
+    infra.bestRef.id = instance.candidateId;
+    await writeBestCandidate(infra.historyDir, infra.bestRef.id, infra.bestRef.mean);
   }
 
-  p.callbacks.onIterationDone({
-    candidateId: p.candidateId,
+  infra.callbacks.onIterationDone({
+    candidateId: instance.candidateId,
     meanScore,
     isBest: improved,
-    bestCandidateId: p.bestRef.id,
-    bestMeanScore: p.bestRef.mean,
-    changelogRelPath: path.relative(p.root, path.join(p.candidateDir, ARTIFACT.changelogMd)),
-    label: p.label,
-    iteration: p.iteration,
-    totalIterations: p.iterations,
+    bestCandidateId: infra.bestRef.id,
+    bestMeanScore: infra.bestRef.mean,
+    changelogRelPath: path.relative(infra.root, path.join(instance.candidateDir, ARTIFACT.changelogMd)),
+    label: instance.label,
+    iteration: instance.iteration,
+    totalIterations: infra.iterations,
   });
 }
 
-async function runBaselineCandidate(params: {
-  root: string;
-  historyDir: string;
-  args: MetaHarnessCliArgs;
-  cfg: MetaHarnessConfig;
-  callbacks: RunnerCallbacks;
-  testFiles: string[];
-  evalRunsBase: string;
-  incubateProvider: string;
-  incubateModel: string;
-  hypothesisEvalModel: string;
-  inputsRubricModel: string;
-  incubateHypothesisCountDefault: number;
-  apiKey: string;
-  iterations: number;
-  candidateRows: CandidateScoreRow[];
-  bestRef: { mean: number; id: number };
-}): Promise<void> {
-  const { root, historyDir, args, cfg, callbacks, testFiles, apiKey, iterations, candidateRows, bestRef } =
-    params;
-  callbacks.onBaselineStart?.();
+async function runBaselineCandidate(infra: CandidatePhaseInfra): Promise<void> {
+  infra.callbacks.onBaselineStart?.();
 
   const candidateId = 0;
-  const candidateDir = path.join(historyDir, `candidate-${candidateId}`);
+  const candidateDir = path.join(infra.historyDir, `candidate-${candidateId}`);
   await mkdir(candidateDir, { recursive: true });
   const label = `candidate-${candidateId} (baseline)`;
 
@@ -422,32 +384,16 @@ async function runBaselineCandidate(params: {
   await writeFile(path.join(candidateDir, ARTIFACT.proposalMd), baselineProposal, 'utf8');
   await writeFile(path.join(candidateDir, ARTIFACT.promptOverridesJson), '{}\n', 'utf8');
 
-  const promptOverrides: Record<string, string> = { ...META_HARNESS_BASELINE_PROMPT_OVERRIDES };
-
   await runEvaluatedCandidatePhase({
-    root,
-    historyDir,
-    args,
-    cfg,
-    callbacks,
-    testFiles,
-    evalRunsBase: params.evalRunsBase,
-    incubateProvider: params.incubateProvider,
-    incubateModel: params.incubateModel,
-    hypothesisEvalModel: params.hypothesisEvalModel,
-    inputsRubricModel: params.inputsRubricModel,
-    incubateHypothesisCountDefault: params.incubateHypothesisCountDefault,
-    apiKey,
-    iterations,
-    candidateRows,
-    bestRef,
-    candidateId,
-    candidateDir,
-    label,
-    proposalMd: '',
-    promptOverrides,
-    iteration: 0,
-    iterationLine: 'baseline (candidate-0; not counted against configured iterations)',
-    includeProposerSection: false,
+    infra,
+    instance: {
+      candidateId,
+      candidateDir,
+      label,
+      proposalMd: '',
+      iteration: 0,
+      iterationLine: 'baseline (candidate-0; not counted against configured iterations)',
+      includeProposerSection: false,
+    },
   });
 }

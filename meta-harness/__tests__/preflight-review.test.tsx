@@ -7,11 +7,16 @@ const fixtureSession = (): UnpromotedSession => ({
   sessionFolder: 'session-design-test',
   candidateId: 1,
   meanScore: 3.5,
-  stalePrompts: [{ key: 'designer-agentic-system', liveBody: 'live\n', winnerBody: 'winner\n' }],
-  staleSkills: [],
+  staleSkills: [
+    {
+      relPath: 'design-quality/SKILL.md',
+      liveBody: 'live\n',
+      winnerBody: 'winner\n',
+      kind: 'modified',
+    },
+  ],
   staleRubricWeights: null,
   reportPath: 'meta-harness/history/session-design-test/PROMOTION_REPORT.md',
-  allFetchesFailed: false,
 });
 
 describe('PreflightReview', () => {
@@ -21,7 +26,7 @@ describe('PreflightReview', () => {
     expect(frame).toContain('Preflight promotion review');
     expect(frame).toContain('session-design-test');
     expect(frame).toContain('[1/1]');
-    expect(frame).toContain('designer-agentic-system');
+    expect(frame).toContain('design-quality/SKILL.md');
     expect(frame).toContain('Promote');
     expect(frame).toContain('Skip');
     expect(frame).toContain('Quit');
@@ -64,6 +69,6 @@ describe('PreflightReview', () => {
       <PreflightReview session={fixtureSession()} promoteOnly onDone={vi.fn()} />,
     );
     const frame = lastFrame() ?? '';
-    expect(frame).toContain('apply winner (prompts, skills, rubric weights)');
+    expect(frame).toContain('apply winner (disk prompts/skills, rubric weights)');
   });
 });

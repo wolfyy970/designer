@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { restoreSkillsFromBaseline, saveSkillsBaseline } from '../runner-core.ts';
+import { restoreSkillsFromBaseline, saveSkillsBaseline } from '../snapshot-helpers.ts';
 
 describe('saveSkillsBaseline / restoreSkillsFromBaseline', () => {
   let roots: string[] = [];

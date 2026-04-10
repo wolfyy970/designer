@@ -78,11 +78,9 @@ describe('scanUnpromotedSessions', () => {
     const stale = await scanUnpromotedSessions({
       historyRoot,
       repoRoot: root,
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
       skillsDir,
     });
     expect(stale).not.toBeNull();
-    expect(stale!.stalePrompts).toHaveLength(0);
     expect(stale!.staleSkills).toHaveLength(0);
     expect(stale!.staleRubricWeights).not.toBeNull();
     expect(stale!.staleRubricWeights!.winnerWeights.design).toBe(0.35);
@@ -100,7 +98,6 @@ describe('scanUnpromotedSessions', () => {
     const stale = await scanUnpromotedSessions({
       historyRoot,
       repoRoot: root,
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
       skillsDir,
     });
     expect(stale).toBeNull();
@@ -116,7 +113,6 @@ describe('scanUnpromotedSessions', () => {
     const stale = await scanUnpromotedSessions({
       historyRoot,
       repoRoot: root,
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
       skillsDir,
     });
     expect(stale).toBeNull();
@@ -126,7 +122,6 @@ describe('scanUnpromotedSessions', () => {
     const stale = await scanUnpromotedSessions({
       historyRoot: path.join(root, 'nope'),
       repoRoot: root,
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
       skillsDir,
     });
     expect(stale).toBeNull();
@@ -151,7 +146,6 @@ describe('scanUnpromotedSessions', () => {
     const stale = await scanUnpromotedSessions({
       historyRoot,
       repoRoot: root,
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
       skillsDir,
     });
     expect(stale).not.toBeNull();
@@ -186,7 +180,6 @@ describe('scanUnpromotedSessions', () => {
       const stale = await scanUnpromotedSessions({
         historyRoot,
         repoRoot: root,
-        apiBaseUrl: 'http://127.0.0.1:3001/api',
         skillsDir,
       });
       expect(stale).not.toBeNull();

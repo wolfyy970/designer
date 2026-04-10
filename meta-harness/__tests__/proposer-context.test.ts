@@ -31,6 +31,7 @@ describe('loadRichCandidateHistory', () => {
     expect(out).toContain('candidate-0');
     expect(out).toContain('baseline');
     expect(out).toContain('2.500');
+    expect(out).toContain('prompt-overrides.json');
   });
 
   it('ignores corrupt aggregate.json (no crash)', async () => {

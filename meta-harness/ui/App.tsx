@@ -51,8 +51,8 @@ export function App({ args, config }: { args: MetaHarnessCliArgs; config: MetaHa
             dispatchAction({ type: 'PROPOSER_START', model, maxRounds }),
           onProposerToolCall: (round, toolName, summary) =>
             dispatchAction({ type: 'PROPOSER_TOOL', round, toolName, summary }),
-          onProposerDone: (elapsedMs, overrides, reasoning, roundsUsed, maxRounds) =>
-            dispatchAction({ type: 'PROPOSER_DONE', elapsedMs, overrides, reasoning, roundsUsed, maxRounds }),
+          onProposerDone: (elapsedMs, reasoning, roundsUsed, maxRounds) =>
+            dispatchAction({ type: 'PROPOSER_DONE', elapsedMs, reasoning, roundsUsed, maxRounds }),
           onTestCaseStart: (index, total, name) =>
             dispatchAction({ type: 'TEST_START', index, total, name }),
           onWireEvent: (testName, event, payload) =>

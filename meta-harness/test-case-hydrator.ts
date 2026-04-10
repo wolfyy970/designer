@@ -6,6 +6,7 @@ import { generateId, now } from '../src/lib/utils.ts';
 import type { DesignSpec, SpecSection } from '../src/types/spec.ts';
 import { HypothesisGenerateRequestSchema, ThinkingLevelSchema } from '../server/lib/hypothesis-schemas.ts';
 import { DEFAULT_HYPOTHESIS_COUNT, SECTION_KEYS } from './constants.ts';
+import { normalizeFlexContent } from './utils.ts';
 
 /** POST /api/hypothesis/generate JSON body produced by the meta-harness hydrator. */
 export type MetaHarnessHypothesisGenerateBody = z.infer<typeof HypothesisGenerateRequestSchema>;
@@ -70,19 +71,6 @@ function sectionFromFlexible(key: string, val: unknown, ts: string): SpecSection
   };
 }
 
-function normalizeSectionContent(val: unknown): string {
-  if (typeof val === 'string') return val;
-  if (
-    val &&
-    typeof val === 'object' &&
-    'content' in val &&
-    typeof (val as { content: unknown }).content === 'string'
-  ) {
-    return (val as { content: string }).content;
-  }
-  return '';
-}
-
 export function buildDesignSpecFromSimplified(spec: SimplifiedMetaHarnessTestCase['spec']): DesignSpec {
   const id = generateId();
   const ts = now();
@@ -90,12 +78,12 @@ export function buildDesignSpecFromSimplified(spec: SimplifiedMetaHarnessTestCas
   let briefExtra = '';
   for (const [key, val] of Object.entries(spec.sections)) {
     if ((SECTION_KEYS as readonly string[]).includes(key)) continue;
-    const c = normalizeSectionContent(val).trim();
+    const c = normalizeFlexContent(val).trim();
     if (c) briefExtra += `\n## ${key}\n${c}\n`;
   }
   for (const key of SECTION_KEYS) {
     const raw = spec.sections[key];
-    let content = normalizeSectionContent(raw ?? '');
+    let content = normalizeFlexContent(raw ?? '');
     if (key === 'design-brief' && briefExtra) content = `${content}${briefExtra}`;
     sections[key] = sectionFromFlexible(key, content, ts);
   }
@@ -112,13 +100,10 @@ export function buildDesignSpecFromSimplified(spec: SimplifiedMetaHarnessTestCas
 type HydrateOptions = {
   defaultIncubatorProvider: string;
   correlationId?: string;
-  promptOverrides?: Record<string, string>;
   supportsVision?: boolean;
   agenticMaxRevisionRounds?: number;
   /** Merged with server defaults; used for agentic evaluation overall score only. */
   rubricWeights?: Record<string, number>;
-  evaluatorProviderId?: string;
-  evaluatorModelId?: string;
   /** When set (e.g. e2e random pick), overrides `strategy` from the test case JSON. */
   strategyOverride?: z.infer<typeof SimplifiedStrategySchema>;
 };
@@ -129,7 +114,6 @@ type HydrateIncubateRequestOptions = {
   supportsVision?: boolean;
   /** Default when test case omits `incubate.hypothesisCount`. */
   defaultHypothesisCount?: number;
-  promptOverrides?: Record<string, string>;
 };
 
 /** Build POST /api/incubate JSON body from an already-validated simplified test case. */
@@ -146,9 +130,6 @@ export function hydrateIncubateRequestFromParsed(
     modelId: options.incubateModel,
     ...(options.supportsVision !== undefined ? { supportsVision: options.supportsVision } : {}),
     promptOptions: { count },
-    ...(options.promptOverrides && Object.keys(options.promptOverrides).length > 0
-      ? { promptOverrides: options.promptOverrides }
-      : {}),
   };
 }
 
@@ -198,9 +179,6 @@ export function hydrateMetaHarnessTestCaseFromParsed(
     designSystems: {},
     defaultIncubatorProvider: options.defaultIncubatorProvider,
     ...(options.supportsVision !== undefined ? { supportsVision: options.supportsVision } : {}),
-    ...(options.promptOverrides && Object.keys(options.promptOverrides).length > 0
-      ? { promptOverrides: options.promptOverrides }
-      : {}),
     ...(options.correlationId ? { correlationId: options.correlationId } : {}),
     ...(options.agenticMaxRevisionRounds !== undefined
       ? { agenticMaxRevisionRounds: options.agenticMaxRevisionRounds }
@@ -208,8 +186,6 @@ export function hydrateMetaHarnessTestCaseFromParsed(
     ...(options.rubricWeights && Object.keys(options.rubricWeights).length > 0
       ? { rubricWeights: options.rubricWeights }
       : {}),
-    ...(options.evaluatorProviderId ? { evaluatorProviderId: options.evaluatorProviderId } : {}),
-    ...(options.evaluatorModelId ? { evaluatorModelId: options.evaluatorModelId } : {}),
   };
 
   return HypothesisGenerateRequestSchema.parse(body);

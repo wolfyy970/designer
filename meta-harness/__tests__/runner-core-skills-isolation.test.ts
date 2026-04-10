@@ -113,7 +113,6 @@ describe('runMetaHarnessEngine skills isolation', () => {
       await writeFile(ephemeral, `round-${round}\n`, 'utf8');
       return {
         reasoning: 'r',
-        promptOverrides: {},
         roundsUsed: 1,
         toolLog: [],
       };
@@ -148,7 +147,6 @@ describe('runMetaHarnessEngine skills isolation', () => {
         await writeFile(ephemeral, 'once\n', 'utf8');
         return {
           reasoning: 'r',
-          promptOverrides: {},
           roundsUsed: 1,
           toolLog: [],
         };
@@ -187,7 +185,6 @@ describe('runMetaHarnessEngine skills isolation', () => {
       await writeFile(path.join(skillDir, 'SKILL.md'), `content-${round}\n`, 'utf8');
       return {
         reasoning: 'r',
-        promptOverrides: {},
         roundsUsed: 1,
         toolLog: [],
       };

@@ -81,9 +81,6 @@ export function ProposerPanel({ state }: { state: RunnerState }) {
             {sec}s · {p.toolLog.length} tool calls
           </Text>
         </Box>
-        {p.overrides.length ? (
-          <Text color={dimText}>overrides: {p.overrides.join(', ')}</Text>
-        ) : null}
         {p.reasoningPreview ? <Text color={dimText}>{p.reasoningPreview}</Text> : null}
       </Box>
     </Section>

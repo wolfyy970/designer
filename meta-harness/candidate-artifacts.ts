@@ -17,7 +17,6 @@ export async function writeCandidateChangelogAndAggregate(options: {
   testFiles: string[];
   testResultsDir: string;
   proposalMd: string;
-  promptOverrides: Record<string, string>;
   args: MetaHarnessCliArgs;
   aggregateIteration: number;
   iterationLine: string;
@@ -31,7 +30,6 @@ export async function writeCandidateChangelogAndAggregate(options: {
     testFiles,
     testResultsDir,
     proposalMd,
-    promptOverrides,
     args,
     aggregateIteration,
     iterationLine,
@@ -47,12 +45,6 @@ export async function writeCandidateChangelogAndAggregate(options: {
     changelogLines.push(`\n## What the proposer changed\n\n${proposalMd}`);
   } else if (proposalMd && !includeProposerSection) {
     changelogLines.push(`\n## Notes\n\n${proposalMd}`);
-  }
-  const overrideKeys = Object.keys(promptOverrides);
-  if (overrideKeys.length) {
-    changelogLines.push(
-      `\n## Prompt overrides applied\n\n${overrideKeys.map((k) => `- \`${k}\``).join('\n')}`,
-    );
   }
   changelogLines.push(`\n## Per-test results\n`);
   changelogLines.push('| Test case | Score | Stop reason |');

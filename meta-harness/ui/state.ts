@@ -38,7 +38,6 @@ type ProposerState = {
   currentTool: string;
   toolLog: Array<{ round: number; tool: string; summary: string }>;
   doneElapsedMs: number | null;
-  overrides: string[];
   reasoningPreview: string;
 };
 
@@ -125,7 +124,6 @@ function initialProposer(): ProposerState {
     currentTool: '',
     toolLog: [],
     doneElapsedMs: null,
-    overrides: [],
     reasoningPreview: '',
   };
 }
@@ -190,7 +188,7 @@ export type RunnerAction =
   | { type: 'ITERATION_START'; candidateId: number; iteration: number; total: number }
   | { type: 'PROPOSER_START'; model: string; maxRounds: number }
   | { type: 'PROPOSER_TOOL'; round: number; toolName: string; summary: string }
-  | { type: 'PROPOSER_DONE'; elapsedMs: number; overrides: string[]; reasoning: string; roundsUsed: number; maxRounds: number }
+  | { type: 'PROPOSER_DONE'; elapsedMs: number; reasoning: string; roundsUsed: number; maxRounds: number }
   | { type: 'TEST_START'; index: number; total: number; name: string }
   | { type: 'WIRE'; testName: string; event: string; payload: unknown }
   | {
@@ -365,7 +363,6 @@ function reduceProposerDone(
       ...state.proposer,
       phase: 'done' as const,
       doneElapsedMs: ms,
-      overrides: action.overrides,
       reasoningPreview:
         action.reasoning.slice(0, REASONING_PREVIEW_MAX) +
         (action.reasoning.length > REASONING_PREVIEW_MAX ? '…' : ''),
@@ -373,7 +370,7 @@ function reduceProposerDone(
   };
   next = pushActivity(
     next,
-    `Proposer done (${prev}, ${action.roundsUsed}/${action.maxRounds} rounds)${action.overrides.length ? ` · overrides: ${action.overrides.join(', ')}` : ''}`,
+    `Proposer done (${prev}, ${action.roundsUsed}/${action.maxRounds} rounds)`,
   );
   return next;
 }
@@ -552,7 +549,7 @@ function reducePromotionReport(
   };
   next = pushActivity(
     next,
-    `Promotion report: ${action.reportPath} · prompts ${s.promptOverrideKeys.length}, skill paths ${nSkill}, rubric ${s.rubricWeightsChanged ? 'changed' : 'unchanged'}, new tests ${s.testCasesAdded.length}`,
+    `Promotion report: ${action.reportPath} · skill paths ${nSkill}, rubric ${s.rubricWeightsChanged ? 'changed' : 'unchanged'}, new tests ${s.testCasesAdded.length}`,
   );
   return next;
 }
