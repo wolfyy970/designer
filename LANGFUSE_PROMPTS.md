@@ -116,11 +116,11 @@ Three **separate rubrics** score the artifact for **design quality**, **strategy
 
 ---
 
-## Observability vs Langfuse
+## Dev `/api/logs` vs Langfuse
 
-**In-app Observability** (LLM + Run trace tabs) reads `**/api/logs`** on your API: local rings and optional NDJSON. The **Run trace** list is not the same as Langfuse’s nested trace graph.
+**`GET /api/logs`** (development API only) returns in-memory LLM + trace rows plus optional local NDJSON—see [ARCHITECTURE.md](ARCHITECTURE.md). It is not a substitute for Langfuse’s nested trace graph.
 
-**Langfuse** (cloud or self-hosted) receives **OpenTelemetry spans and generation events** from the server when tracing keys are set. Use the Observability **Langfuse** tab to jump to the project UI for deep inspection. Details: [USER_GUIDE.md](USER_GUIDE.md) (Observability), [ARCHITECTURE.md](ARCHITECTURE.md) (`/api/logs`, observability sink).
+**Langfuse** (cloud or self-hosted) receives **OpenTelemetry spans and generation events** from the server when tracing keys are set. Open the Langfuse project UI directly for deep inspection. Details: [USER_GUIDE.md](USER_GUIDE.md) (Tracing and dev logs).
 
 ---
 

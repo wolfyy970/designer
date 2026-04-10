@@ -37,7 +37,8 @@ import { reconcileLockdownCanvasState } from '../../lib/lockdown-reconcile';
 
 function CanvasInner() {
   useCanvasOrchestrator();
-  useNodeDeletion();
+  const { setCenter, getNodes, getEdges, fitView } = useReactFlow();
+  useNodeDeletion({ getNodes, getEdges });
   useSyncEvaluatorDefaultsFromConfig();
 
   const { data: appConfig } = useAppConfig();
@@ -66,8 +67,7 @@ function CanvasInner() {
     reconcileLockdownCanvasState();
   }, [lockdown, canvasHydrated]);
   const { handleConnect } = useFeedbackLoopConnection();
-  
-  const { setCenter, getNodes, fitView } = useReactFlow();
+
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
   const viewport = useCanvasStore((s) => s.viewport);
@@ -237,6 +237,7 @@ function CanvasInner() {
             minZoom={0.15}
             maxZoom={2}
             proOptions={{ hideAttribution: true }}
+            deleteKeyCode={null}
           >
             <Background
               variant={BackgroundVariant.Dots}

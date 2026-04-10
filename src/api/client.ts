@@ -6,7 +6,6 @@ import type {
   HypothesisPromptBundleResponse,
   ModelsResponse,
   ProviderInfo,
-  ObservabilityLogsResponse,
   DesignSystemExtractRequest,
   DesignSystemExtractResponse,
   InputsGenerateRequest,
@@ -43,7 +42,6 @@ import {
   DesignSystemExtractResponseSchema,
   InputsGenerateResponseSchema,
   HypothesisPromptBundleResponseSchema,
-  ObservabilityLogsResponseSchema,
   ModelsResponseSchema,
   ProvidersListResponseSchema,
   AppConfigResponseSchema,
@@ -563,44 +561,7 @@ export async function listProviders(): Promise<ProviderInfo[]> {
   return getParsedList('/models', ProvidersListResponseSchema, []);
 }
 
-// ── Logs ────────────────────────────────────────────────────────────
-
-export type GetLogsResult = {
-  data: ObservabilityLogsResponse;
-  /** `false` when the server disables the dev ring (e.g. `NODE_ENV=production`). */
-  ringAvailable: boolean;
-};
-
-export async function getLogs(): Promise<GetLogsResult> {
-  const response = await fetch(`${API_BASE}/logs`);
-  if (response.status === 404) {
-    return { data: { llm: [], trace: [] }, ringAvailable: false };
-  }
-  if (!response.ok) {
-    return { data: { llm: [], trace: [] }, ringAvailable: true };
-  }
-  let json: unknown;
-  try {
-    json = await response.json();
-  } catch {
-    return { data: { llm: [], trace: [] }, ringAvailable: true };
-  }
-  const r = ObservabilityLogsResponseSchema.safeParse(json);
-  if (!r.success) {
-    if (import.meta.env.DEV) {
-      console.warn('[api] GET /logs response shape unexpected', r.error.flatten());
-    }
-    return { data: { llm: [], trace: [] }, ringAvailable: true };
-  }
-  return { data: r.data, ringAvailable: true };
-}
-
-export async function clearLogs(): Promise<void> {
-  const response = await fetch(`${API_BASE}/logs`, { method: 'DELETE' });
-  if (response.status === 404) return;
-}
-
-/** Forward run-trace events to the server observability ring (best-effort). */
+/** Forward run-trace events to the server observability ring (best-effort, dev). */
 export async function postTraceEvents(body: {
   correlationId?: string;
   resultId?: string;

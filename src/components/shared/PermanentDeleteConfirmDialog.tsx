@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 export interface PermanentDeleteConfirmDialogProps {
@@ -10,6 +10,8 @@ export interface PermanentDeleteConfirmDialogProps {
   onCancel: () => void;
   onConfirm: () => void;
 }
+
+const DESCRIPTION_ID = 'permanent-delete-description';
 
 /**
  * Modal for irreversible canvas deletions — uses status/error tokens (not accent).
@@ -23,6 +25,8 @@ export function PermanentDeleteConfirmDialog({
   onCancel,
   onConfirm,
 }: PermanentDeleteConfirmDialogProps) {
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     if (!open) return;
     const handleEsc = (e: KeyboardEvent) => {
@@ -31,6 +35,11 @@ export function PermanentDeleteConfirmDialog({
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
   }, [open, onCancel]);
+
+  useEffect(() => {
+    if (!open) return;
+    cancelRef.current?.focus();
+  }, [open]);
 
   if (!open) return null;
 
@@ -46,6 +55,7 @@ export function PermanentDeleteConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="permanent-delete-title"
+        aria-describedby={DESCRIPTION_ID}
         className="relative z-10 w-full max-w-md rounded-xl border border-border bg-surface-raised shadow-xl"
       >
         <div className="flex gap-3 border-b border-border-subtle px-4 py-3">
@@ -61,9 +71,15 @@ export function PermanentDeleteConfirmDialog({
             </h2>
           </div>
         </div>
-        <div className="px-4 py-3 text-nano leading-relaxed text-fg-secondary">{description}</div>
+        <div
+          id={DESCRIPTION_ID}
+          className="px-4 py-3 text-nano leading-relaxed text-fg-secondary"
+        >
+          {description}
+        </div>
         <div className="flex justify-end gap-2 border-t border-border-subtle px-4 py-3">
           <button
+            ref={cancelRef}
             type="button"
             onClick={onCancel}
             className="rounded-lg border border-border bg-surface px-3 py-1.5 text-nano font-medium text-fg-secondary transition-colors hover:bg-surface-raised hover:text-fg"

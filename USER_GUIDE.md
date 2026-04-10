@@ -30,17 +30,13 @@ Both processes are needed for local development.
 
 **Saved canvases and browser storage:** The app keeps your **active spec** and **Canvas manager** library in **localStorage** for **`http://localhost:5173`** (not `127.0.0.1` — that is a separate origin to the browser). The URL includes the **port**: opening the app on a different port is a different site, so lists and the current canvas can look empty. The dev server **requires port 5173**; if Vite won’t start, run `pnpm dev:kill` and retry.
 
-## Observability (development)
+## Tracing and dev logs
 
-Open **Observability** from the canvas header. The **Run trace** tab polls **`GET /api/logs`** when the server runs in **development** (`NODE_ENV` not `production`): in-memory rings on the API (plus optional local NDJSON in dev; see [ARCHITECTURE.md](ARCHITECTURE.md)). On **production** deploys (e.g. Vercel), that route returns **404**; the modal explains that the API ring is dev-only—use **Langfuse** (or similar) for full traces.
+For **full traces and generations**, configure **Langfuse** on the server (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`). Optionally set **`VITE_LANGFUSE_BASE_URL`** to the same host if you build links to the Langfuse UI from tooling or docs (see `.env.example`).
 
-**Run trace** entries for Pi tool use can include truncated **`toolArgs`** / **`toolResult`** (and **`detail`**) on start/finish events for quick inspection.
-
-The **Langfuse** tab does not load traces into the app; it links to the **Langfuse UI** for full traces, generations, and spans. That requires `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL`, and **`VITE_LANGFUSE_BASE_URL`** set to the same host so the button opens the correct region.
+In **development** only, the API keeps an in-memory **`/api/logs`** ring (LLM rows + run-trace lines) and can append optional NDJSON—handy for **curl** or ad-hoc inspection; see [ARCHITECTURE.md](ARCHITECTURE.md). That route returns **404** in **production**. The **variant run timeline** still shows live tool activity for the current preview.
 
 **Privacy:** With Langfuse Cloud (or any hosted Langfuse) tracing enabled, **prompt and completion text** can be exported to that project along with spans. Treat Langfuse org, project, and API keys like production secrets.
-
-**Clear** empties the in-memory rings only; it does not delete Langfuse data.
 
 ## Design tokens reference (Settings)
 
@@ -118,7 +114,7 @@ Running generation again adds new versions — use the version navigation arrows
 
 **While a run is in flight:** Use **Stop** on the hypothesis or in the preview run workspace to abort the in-flight request for that strategy lane (same as ending the SSE stream).
 
-**Removing nodes from the canvas:** Use **Backspace** or **Delete** with one or more nodes selected. A confirmation explains that removal is **permanent for the canvas** (edges and attached preview nodes may be removed with a hypothesis). The shared spec document is separate; text in section cards may still exist there until you edit it elsewhere.
+**Removing nodes from the canvas:** Use **Backspace** or **Delete** with one or more nodes selected. A short confirmation appears for nodes that can be removed (input cards and structural nodes like the incubator stay protected). Removing a hypothesis also drops its preview nodes. **Selected connections** (edges) delete with the same keys and no extra dialog. The shared spec document is separate; text in section cards may still exist there until you edit it elsewhere.
 
 ### 7. Review Designs
 

@@ -80,60 +80,6 @@ export interface ProviderInfo {
   description: string;
 }
 
-// ── Logs ────────────────────────────────────────────────────────────
-
-export type LlmLogStatus = 'in_progress' | 'complete' | 'error';
-
-export interface LlmLogEntry {
-  id: string;
-  timestamp: string;
-  status?: LlmLogStatus;
-  correlationId?: string;
-  source:
-    | 'incubator'
-    | 'planner'
-    | 'builder'
-    | 'designSystem'
-    | 'evaluator'
-    | 'agentCompaction'
-    | 'other';
-  phase?: string;
-  model: string;
-  provider: string;
-  /** Display name when known (e.g. OpenRouter) */
-  providerName?: string;
-  systemPrompt: string;
-  userPrompt: string;
-  response: string;
-  durationMs: number;
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-  reasoningTokens?: number;
-  cachedPromptTokens?: number;
-  costCredits?: number;
-  truncated?: boolean;
-  toolCalls?: { name: string; path?: string }[];
-  error?: string;
-}
-
-/** One trace row from GET /api/logs (matches server NDJSON `type: "trace"`). */
-export interface ObservabilityTraceRow {
-  v: 1;
-  ts: string;
-  type: 'trace';
-  payload: {
-    event: Record<string, unknown>;
-    correlationId?: string;
-    resultId?: string;
-  };
-}
-
-export interface ObservabilityLogsResponse {
-  llm: LlmLogEntry[];
-  trace: ObservabilityTraceRow[];
-}
-
 // ── Design System ───────────────────────────────────────────────────
 
 export interface DesignSystemExtractRequest {

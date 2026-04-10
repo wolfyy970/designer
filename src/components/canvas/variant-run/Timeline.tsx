@@ -94,12 +94,10 @@ function buildTurnSegments(traces: RunTraceEvent[]): {
 
 function TraceLine({ t }: { t: RunTraceEvent }) {
   const time = traceTimeLabel(t.at);
-  const isToolLifecycle =
-    t.kind === 'tool_started' ||
-    t.kind === 'tool_finished' ||
-    t.kind === 'tool_failed';
+    /** Monitor timeline stays a simple activity log; expandable args/result only on failures. */
   const showToolBlocks =
-    isToolLifecycle && (t.toolArgs != null || t.detail != null || t.toolResult != null);
+    t.kind === 'tool_failed' &&
+    (t.toolArgs != null || t.detail != null || t.toolResult != null);
   return (
     <div className="space-y-1">
       <div

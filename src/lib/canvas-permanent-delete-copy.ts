@@ -12,9 +12,8 @@ export type PermanentDeleteCopy = {
 /** Tier S — input cards: removal clears persisted spec for that spec facet. */
 export function inputCardDeleteCopy(inputTitle: string): PermanentDeleteCopy {
   return {
-    title: `Remove “${inputTitle}” from the canvas?`,
-    description:
-      'This removes the card and clears this facet in your saved document (text and images). An empty optional slot may show a placeholder again until you dismiss it. Connections are removed.',
+    title: `Remove “${inputTitle}”?`,
+    description: 'The card and its saved spec text and images are cleared. Connections to this card are removed.',
     confirmLabel: 'Remove and clear facet',
   };
 }
@@ -22,48 +21,44 @@ export function inputCardDeleteCopy(inputTitle: string): PermanentDeleteCopy {
 /** Tier T — structural incubator. */
 function incubatorDeleteCopy(): PermanentDeleteCopy {
   return {
-    title: 'Remove Incubator from the canvas?',
+    title: 'Remove incubator?',
     description:
-      'This incubator node is removed permanently. Inputs stay on the canvas but are unwired from it. Hypotheses and strategies tied only to this incubator can be affected. This cannot be undone from the canvas.',
-    confirmLabel: 'Remove permanently',
+      'Inputs stay on the canvas; hypotheses that depend only on this incubator may be affected. This cannot be undone on the canvas.',
+    confirmLabel: 'Remove',
   };
 }
 
 /** Tier T — structural model node. */
 function modelNodeDeleteCopy(): PermanentDeleteCopy {
   return {
-    title: 'Remove Model node from the canvas?',
-    description:
-      'This removes the model node permanently and disconnects it from any incubators or hypotheses. Rewiring later takes an extra step. This cannot be undone from the canvas.',
-    confirmLabel: 'Remove permanently',
+    title: 'Remove model node?',
+    description: 'It will be disconnected from incubators and hypotheses. This cannot be undone on the canvas.',
+    confirmLabel: 'Remove',
   };
 }
 
 /** Tier G — design system processing node. */
 function designSystemNodeDeleteCopy(): PermanentDeleteCopy {
   return {
-    title: 'Remove Design System from the canvas?',
-    description:
-      'Removes this node from the canvas and unwires it from hypotheses. You can add a Design System node again from the toolbar or palette.',
-    confirmLabel: 'Remove from canvas',
+    title: 'Remove design system?',
+    description: 'Hypotheses lose this connection. You can add a design system node again from the toolbar.',
+    confirmLabel: 'Remove',
   };
 }
 
 /** Tier G — preview (output) node. */
 export function previewNodeDeleteCopy(previewLabel: string): PermanentDeleteCopy {
   return {
-    title: `Remove “${previewLabel}” from the canvas?`,
-    description:
-      'Removes this preview from the canvas. You can run the hypothesis again to add a new preview. Stored generation data may be cleaned up per retention.',
-    confirmLabel: 'Remove from canvas',
+    title: `Remove “${previewLabel}”?`,
+    description: 'Run the hypothesis again to create a new preview.',
+    confirmLabel: 'Remove',
   };
 }
 
 export function previewVersionDeleteCopy(): PermanentDeleteCopy {
   return {
-    title: 'Delete this generation version?',
-    description:
-      'This run is permanently removed from the version stack. Other versions on this preview stay. This cannot be undone.',
+    title: 'Delete this version?',
+    description: 'Other versions on this preview stay. This cannot be undone.',
     confirmLabel: 'Delete version',
   };
 }
@@ -73,16 +68,15 @@ export function hypothesisDeleteCopy(previewCount: number): PermanentDeleteCopy 
   if (previewCount > 0) {
     const p = previewCount === 1 ? 'preview' : 'previews';
     return {
-      title: 'Remove this hypothesis from the canvas?',
-      description: `Removes this hypothesis and ${previewCount} connected ${p} from the canvas. You can add a new hypothesis from the toolbar.`,
-      confirmLabel: 'Remove from canvas',
+      title: 'Remove hypothesis?',
+      description: `This removes the hypothesis and ${previewCount} linked ${p}. You cannot undo on the canvas.`,
+      confirmLabel: 'Remove',
     };
   }
   return {
-    title: 'Remove this hypothesis from the canvas?',
-    description:
-      'Removes this hypothesis from the canvas and unwires it. You can add one again from the toolbar.',
-    confirmLabel: 'Remove from canvas',
+    title: 'Remove hypothesis?',
+    description: 'You can add one again from the toolbar.',
+    confirmLabel: 'Remove',
   };
 }
 
@@ -118,9 +112,9 @@ export function keyboardMultiDeleteCopy(
 
   const n = removable.length;
   return {
-    title: `Remove ${n} selected node${n === 1 ? '' : 's'} from the canvas?`,
+    title: `Remove ${n} nodes?`,
     description:
-      'Removes the selected nodes from the canvas. Connected edges go with them; deleting a hypothesis also removes its preview nodes. You can re-add supported nodes from the toolbar. This cannot be undone from the canvas.',
-    confirmLabel: 'Remove from canvas',
+      'Selected nodes and their connections go away; removing a hypothesis also removes its previews. You cannot undo on the canvas.',
+    confirmLabel: 'Remove',
   };
 }

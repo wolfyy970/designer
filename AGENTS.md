@@ -52,7 +52,7 @@ The frontend (Vite, port **5173** only — `strictPort`) proxies `/api/*` to the
 
 ### Production / Vercel / shared deployments
 
-- **`NODE_ENV=production`:** `GET`/`POST`/`DELETE` **`/api/logs`** return **404** (no shared in-memory LLM/trace ring). **`PUT /api/prompts/:key`** and **`POST …/revert-baseline`** return **404**; use Langfuse (or run admin CLI against a **dev** API) to promote prompt versions. Observability → **Run trace** tab explains the disabled ring in the UI.
+- **`NODE_ENV=production`:** `GET`/`POST`/`DELETE` **`/api/logs`** return **404** (no shared in-memory LLM/trace ring). **`PUT /api/prompts/:key`** and **`POST …/revert-baseline`** return **404**; use Langfuse (or run admin CLI against a **dev** API) to promote prompt versions.
 - **CORS:** Optional **`ALLOWED_ORIGINS`** (comma-separated) in [server/env.ts](server/env.ts); when unset, only localhost dev origins. Set on Vercel when using a custom domain or preview URL that is not same-origin as `/api`.
 - **Limits:** Request bodies capped at **2MB** (`hono/body-limit` on the API app). Preview map: **`MAX_PREVIEW_SESSIONS`** (default 200), **`MAX_PREVIEW_PAYLOAD_BYTES`** (default 5MB). Agentic: **`MAX_CONCURRENT_AGENTIC_RUNS`** per instance (default 5) → **503**-style error event on overload. **`LLM_LOG_MAX_BODY_CHARS`** defaults to **2000** in production for the NDJSON sink when unset.
 - **Vercel Pro:** `api/[[...route]].ts` sets **`maxDuration = 800`** for long agentic streams.

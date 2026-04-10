@@ -14,11 +14,11 @@ describe('canvas-permanent-delete-copy', () => {
 
   it('hypothesisDeleteCopy pluralizes previews when count > 1', () => {
     const one = hypothesisDeleteCopy(1);
-    expect(one.description).toContain('1 connected preview');
+    expect(one.description).toContain('1 linked preview');
     const many = hypothesisDeleteCopy(2);
-    expect(many.description).toContain('2 connected previews');
+    expect(many.description).toContain('2 linked previews');
     const none = hypothesisDeleteCopy(0);
-    expect(none.description).not.toContain('connected');
+    expect(none.description).not.toContain('linked');
   });
 
   it('keyboardMultiDeleteCopy uses multi-node title for two hypotheses', () => {
@@ -27,7 +27,6 @@ describe('canvas-permanent-delete-copy', () => {
       { id: 'h2', type: 'hypothesis', position: { x: 0, y: 0 }, data: {} },
     ];
     const { title } = keyboardMultiDeleteCopy(nodes, nodes, []);
-    expect(title).toContain('2 selected nodes');
-    expect(title).toContain('Remove');
+    expect(title).toBe('Remove 2 nodes?');
   });
 });

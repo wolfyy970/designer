@@ -47,7 +47,7 @@ The primary interface is a visual node-graph canvas (`/canvas`, the default rout
 
 Nodes connect left-to-right. Auto-layout arranges everything based on connections. Previews can connect back to Existing Design for iterative feedback loops.
 
-The header also opens **Settings** (General preferences; in **local dev** only, **Prompt Studio** under **Prompts** — **Save** / ⌘S stores drafts in **this browser** and sends **per-request `promptOverrides`** on incubate / generate / extract / inputs-generate; **production builds** hide that tab and the API ignores overrides). In **development**, a **design tokens kitchen sink** modal is on the General tab. **Observability** (LLM + trace logs) is primarily for development. Details: [USER_GUIDE.md](USER_GUIDE.md) and [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
+The header also opens **Settings** (General preferences; in **local dev** only, **Prompt Studio** under **Prompts** — **Save** / ⌘S stores drafts in **this browser** and sends **per-request `promptOverrides`** on incubate / generate / extract / inputs-generate; **production builds** hide that tab and the API ignores overrides). In **development**, a **design tokens kitchen sink** modal is on the General tab. **Langfuse / dev tracing** (no in-app log viewer) is summarized in [USER_GUIDE.md](USER_GUIDE.md); token semantics live in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 
 ## Scripts
 

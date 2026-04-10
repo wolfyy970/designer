@@ -1,11 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Settings, FolderOpen, Pencil, ScrollText, RotateCcw } from 'lucide-react';
+import { Settings, FolderOpen, Pencil, RotateCcw } from 'lucide-react';
 import { useSpecStore } from '../../stores/spec-store';
 import { useCanvasStore } from '../../stores/canvas-store';
 import SpecManager from '../shared/SpecManager';
 import SettingsModal from '../shared/SettingsModal';
-import LogViewer from './LogViewer';
 import { parsePromptKey } from '../../lib/prompt-log-mapping';
 import type { PromptKey } from '../../stores/prompt-store';
 import { scheduleLibraryTitleSyncIfEntryExists } from '../../services/canvas-library-session';
@@ -21,7 +20,6 @@ export default function CanvasHeader() {
   const [editValue, setEditValue] = useState(title);
   const [showCanvases, setShowCanvases] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showLogs, setShowLogs] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<
     'general' | 'prompts' | 'evaluator' | undefined
   >();
@@ -142,14 +140,6 @@ export default function CanvasHeader() {
             Canvas Manager
           </button>
           <button
-            onClick={() => setShowLogs(true)}
-            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-fg-secondary hover:bg-surface-raised"
-            title="LLM Call Log"
-          >
-            <ScrollText size={14} />
-            Logs
-          </button>
-          <button
             onClick={() => {
               setSettingsInitialTab(undefined);
               setSettingsPromptKey(undefined);
@@ -168,20 +158,6 @@ export default function CanvasHeader() {
         onClose={() => setShowSettings(false)}
         initialTab={settingsInitialTab}
         initialPromptKey={settingsPromptKey}
-      />
-      <LogViewer
-        open={showLogs}
-        onClose={() => setShowLogs(false)}
-        onOpenPromptStudio={
-          isPromptOverrideEditingEnabled
-            ? (key) => {
-                setShowLogs(false);
-                setSettingsInitialTab('prompts');
-                setSettingsPromptKey(key);
-                setShowSettings(true);
-              }
-            : undefined
-        }
       />
     </>
   );

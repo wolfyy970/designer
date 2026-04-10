@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { parsePromptKey } from '../prompt-log-mapping';
-import type { LlmLogEntry } from '../../api/types';
 import type { PromptKey } from '../../stores/prompt-store';
 
+/** Minimal fields matching server LLM log rows for mapping tests. */
+type LlmLogSourceFields = {
+  source: string;
+  phase?: string;
+};
+
 /** Mirrors historical `prompt-log-mapping` helper — logic kept in tests only (no production call sites). */
-function promptKeyFromLlmLogEntry(entry: LlmLogEntry): PromptKey | null {
+function promptKeyFromLlmLogEntry(entry: LlmLogSourceFields): PromptKey | null {
   const { source, phase = '' } = entry;
 
   if (source === 'incubator') return 'hypotheses-generator-system';
@@ -29,17 +34,9 @@ function promptKeyFromLlmLogEntry(entry: LlmLogEntry): PromptKey | null {
   return null;
 }
 
-function baseEntry(overrides: Partial<LlmLogEntry>): LlmLogEntry {
+function baseEntry(overrides: Partial<LlmLogSourceFields>): LlmLogSourceFields {
   return {
-    id: '1',
-    timestamp: new Date().toISOString(),
-    durationMs: 100,
     source: 'other',
-    provider: 'openrouter',
-    model: 'x',
-    systemPrompt: '',
-    userPrompt: '',
-    response: '',
     ...overrides,
   };
 }

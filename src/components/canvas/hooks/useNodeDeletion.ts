@@ -1,15 +1,20 @@
 import { useEffect } from 'react';
+import type { Edge, Node } from '@xyflow/react';
 import { useCanvasStore } from '../../../stores/canvas-store';
-import { INPUT_NODE_TYPES } from '../../../constants/canvas';
-import type { WorkspaceNode } from '../../../types/workspace-graph';
 import { useRequestPermanentDelete } from '../../../hooks/useRequestPermanentDelete';
 import { keyboardMultiDeleteCopy } from '../../../lib/canvas-permanent-delete-copy';
+import { removableWorkspaceNodesFromFlowSelection } from '../../../lib/canvas-keyboard-delete';
+
+type FlowSelectionGetters = {
+  getNodes: () => Node[];
+  getEdges: () => Edge[];
+};
 
 /**
  * Delete/Backspace on selected nodes: same permanent-delete dialog as header X (see PermanentDeleteConfirmProvider).
+ * Uses React Flow selection so it matches the canvas. Selected edges delete immediately (no modal).
  */
-export function useNodeDeletion() {
-  const nodes = useCanvasStore((s) => s.nodes);
+export function useNodeDeletion({ getNodes, getEdges }: FlowSelectionGetters) {
   const { requestPermanentDelete } = useRequestPermanentDelete();
 
   useEffect(() => {
@@ -23,41 +28,42 @@ export function useNodeDeletion() {
       ) {
         return;
       }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        const selected = nodes.filter((n) => (n as WorkspaceNode & { selected?: boolean }).selected);
-        if (selected.length === 0) return;
-        e.preventDefault();
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
 
-        const PROTECTED = new Set<string>([
-          'incubator',
-          'inputGhost',
-          'hypothesisGhost',
-          ...INPUT_NODE_TYPES,
-        ]);
+      const selectedRf = getNodes().filter((n) => n.selected);
+      const selectedEdges = getEdges().filter((edge) => edge.selected);
 
-        const removable = selected.filter((n) => !PROTECTED.has(n.type));
-        if (removable.length === 0) return;
+      if (selectedRf.length === 0 && selectedEdges.length === 0) return;
+      e.preventDefault();
 
-        const { edges: storeEdges, nodes: storeNodes } = useCanvasStore.getState();
-        const { title, description, confirmLabel, cancelLabel } = keyboardMultiDeleteCopy(
-          removable,
-          storeNodes,
-          storeEdges,
-        );
-        requestPermanentDelete({
-          title,
-          description,
-          confirmLabel,
-          cancelLabel,
-          onConfirm: () => {
-            const removeNode = useCanvasStore.getState().removeNode;
-            removable.forEach((n) => removeNode(n.id));
-          },
-        });
+      const { nodes: storeNodes, edges: storeEdges, removeEdge, removeNode } = useCanvasStore.getState();
+
+      const removable = removableWorkspaceNodesFromFlowSelection(selectedRf, storeNodes);
+
+      if (removable.length === 0 && selectedEdges.length > 0) {
+        selectedEdges.forEach((edge) => removeEdge(edge.id));
+        return;
       }
+
+      if (removable.length === 0) return;
+
+      const { title, description, confirmLabel, cancelLabel } = keyboardMultiDeleteCopy(
+        removable,
+        storeNodes,
+        storeEdges,
+      );
+      requestPermanentDelete({
+        title,
+        description,
+        confirmLabel,
+        cancelLabel,
+        onConfirm: () => {
+          removable.forEach((n) => removeNode(n.id));
+        },
+      });
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [nodes, requestPermanentDelete]);
+  }, [getNodes, getEdges, requestPermanentDelete]);
 }

@@ -97,57 +97,6 @@ const ProviderInfoSchema = z.object({
 
 export const ProvidersListResponseSchema = z.array(ProviderInfoSchema);
 
-const LlmLogEntrySchema = z
-  .object({
-    id: z.string(),
-    timestamp: z.string(),
-    status: z.enum(['in_progress', 'complete', 'error']).optional(),
-    correlationId: z.string().optional(),
-    source: z.enum([
-      'incubator',
-      'planner',
-      'builder',
-      'designSystem',
-      'evaluator',
-      'agentCompaction',
-      'other',
-    ]),
-    phase: z.string().optional(),
-    model: z.string(),
-    provider: z.string(),
-    providerName: z.string().optional(),
-    systemPrompt: z.string(),
-    userPrompt: z.string(),
-    response: z.string(),
-    durationMs: z.number(),
-    promptTokens: z.number().optional(),
-    completionTokens: z.number().optional(),
-    totalTokens: z.number().optional(),
-    reasoningTokens: z.number().optional(),
-    cachedPromptTokens: z.number().optional(),
-    costCredits: z.number().optional(),
-    truncated: z.boolean().optional(),
-    toolCalls: z.array(z.object({ name: z.string(), path: z.string().optional() })).optional(),
-    error: z.string().optional(),
-  })
-  .passthrough();
-
-export const ObservabilityLineTraceSchema = z.object({
-  v: z.literal(1),
-  ts: z.string(),
-  type: z.literal('trace'),
-  payload: z.object({
-    event: z.record(z.string(), z.unknown()),
-    correlationId: z.string().optional(),
-    resultId: z.string().optional(),
-  }),
-});
-
-export const ObservabilityLogsResponseSchema = z.object({
-  llm: z.array(LlmLogEntrySchema),
-  trace: z.array(ObservabilityLineTraceSchema),
-});
-
 /** POST /api/design-system/extract */
 export const DesignSystemExtractResponseSchema = z.object({
   result: z.string(),
