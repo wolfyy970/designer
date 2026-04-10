@@ -14,8 +14,6 @@ import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePerman
 import { inputCardDeleteCopy } from '../../../lib/canvas-permanent-delete-copy';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
 import { useFirstCanvasModel } from '../../../hooks/useFirstCanvasModel';
-import { spreadPromptOverrides } from '../../../stores/prompt-overrides-store';
-import { usePromptOverrideAsyncAction } from '../../../hooks/usePromptOverrideAsyncAction';
 import { generateInputContent } from '../../../api/client';
 import type { InputsGenerateTargetApiId } from '../../../api/types';
 import ReferenceImageUpload from '../../shared/ReferenceImageUpload';
@@ -55,7 +53,6 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const elapsed = useElapsedTimer(generating);
-  const runPromptAction = usePromptOverrideAsyncAction();
   /** Research / objectives / constraints only: hide wand once this facet has text; keep during an in-flight generate. */
   const showGenerateSection =
     generateApiId != null && (generating || !content.trim());
@@ -66,30 +63,29 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
     const spec = useSpecStore.getState().spec.sections;
     const brief = spec['design-brief']?.content ?? '';
     if (!brief.trim()) return;
-    const response = await runPromptAction(
-      (promptOverrides) =>
-        generateInputContent({
-          inputId: apiId,
-          designBrief: brief,
-          existingDesign: spec['existing-design']?.content,
-          researchContext: spec['research-context']?.content,
-          objectivesMetrics: spec['objectives-metrics']?.content,
-          designConstraints: spec['design-constraints']?.content,
-          providerId,
-          modelId,
-          ...spreadPromptOverrides(promptOverrides),
-        }),
-      {
-        setLoading: setGenerating,
-        setError: setGenerateError,
-        errorMessage: 'Generation failed',
-      },
-    );
-    if (response) {
-      const sid = NODE_TYPE_TO_SECTION[type as CanvasNodeType]!;
-      useSpecStore.getState().updateSection(sid, response.result);
+    setGenerating(true);
+    setGenerateError(null);
+    try {
+      const response = await generateInputContent({
+        inputId: apiId,
+        designBrief: brief,
+        existingDesign: spec['existing-design']?.content,
+        researchContext: spec['research-context']?.content,
+        objectivesMetrics: spec['objectives-metrics']?.content,
+        designConstraints: spec['design-constraints']?.content,
+        providerId,
+        modelId,
+      });
+      if (response) {
+        const sid = NODE_TYPE_TO_SECTION[type as CanvasNodeType]!;
+        useSpecStore.getState().updateSection(sid, response.result);
+      }
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : 'Generation failed');
+    } finally {
+      setGenerating(false);
     }
-  }, [type, hasModel, providerId, modelId, runPromptAction]);
+  }, [type, hasModel, providerId, modelId]);
 
   const status = generating
     ? NODE_STATUS.PROCESSING

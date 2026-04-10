@@ -57,7 +57,6 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 - **Screenshot capture** — Connect a preview to Existing Design to automatically capture a screenshot as a reference image for the next iteration
 - **Version stacking** — Results accumulate across generation runs. Each preview shows version badges (v1, v2, ...) with ChevronLeft/Right navigation to browse previous versions.
 - **Agentic eval rounds (workspace)** — When a run has multiple evaluation rounds (build + revisions), the **preview run workspace** (side panel) can show **Eval round** on **Design** and **Evaluation** tabs; per-round file trees are stored in IndexedDB (`{resultId}:round:{n}`) so earlier revisions remain viewable without bloating localStorage metadata.
-- **Prompt Studio** — **Local dev only** (`pnpm dev`): Settings → Prompts edits against the **server baseline**; **Save** / ⌘S persists drafts **in the browser** and sends **`promptOverrides`** on incubate / generate / extract / **inputs auto-generate**. **Production** builds omit this tab; the API ignores **`promptOverrides`** when `NODE_ENV=production`.
 - **Inputs auto-generate** — On **Research Context**, **Objectives & Metrics**, and **Design Constraints**, optional **LLM-assisted drafting** from the Design Brief (and other filled **spec** facets) via **`POST /api/inputs/generate`**, using credentials from the **first Model** node when lockdown is off.
 - **Optional input slots** — Fresh canvases can show **ghost** placeholders for inputs not in the minimal default. Loading a **Canvas Manager** entry **materializes** optional **input nodes** when the persisted spec has non-empty text or images for those facets (see `src/lib/spec-materialize-sections.ts`).
 - **Design tokens kitchen sink** (development only) — Settings → General opens a modal reference for `@theme` tokens and patterns; full-page route `/dev/design-tokens`. Documented in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
@@ -105,11 +104,11 @@ Start a run with **Design** on the Hypothesis node. With **Auto-improve** **off*
 
 **Thinking** (Model node). When the connected model advertises reasoning support: **None / Light / Deep** map to API levels *off* / *minimal* / *medium*. Other levels exist in the stack but are not exposed in this UI.
 
-**Prompts.** **Production** text for incubate, hypothesis, agentic design/revision, evaluators, design-system extract, and agent compaction templates lives in **Langfuse** (or shared defaults when Langfuse is off). **Prompt Studio** (**Settings → Prompts**) edits against that baseline but **saves local browser drafts** only, applied per request via **`promptOverrides`** — see **[LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)** for keys and **[USER_GUIDE.md](USER_GUIDE.md)** for workflow. Revision loop limits default from **Settings → Evaluator defaults** and can be overridden per hypothesis (**Auto-improve**, max rounds, target score on the node) or via API/env.
+**Prompts.** Incubate, hypothesis, agentic design/revision, evaluators, design-system extract, and compaction use text loaded from repo **`skills/*/SKILL.md`** files (YAML frontmatter + body) and **`prompts/designer-agentic-system/PROMPT.md`**, composed per request by **`server/lib/prompt-resolution.ts`** (see **[ARCHITECTURE.md](ARCHITECTURE.md)**). **`src/lib/prompts/defaults.ts`** holds shared **prompt key** identifiers and labels for the app and harness, not prompt bodies. Revision loop limits default from **Settings → Evaluator defaults** and can be overridden per hypothesis (**Auto-improve**, max rounds, target score on the node) or via API/env.
 
 ## Prompt keys (catalog)
 
-Do not duplicate the prompt catalog here — use **[LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)** for the list of keys and when each runs.
+Do not duplicate the full prompt catalog here — keys and labels live in **`src/lib/prompts/defaults.ts`**; bodies live next to those keys under **`skills/`** and **`prompts/`** as described in **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 ## Providers
 

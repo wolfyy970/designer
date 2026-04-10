@@ -4,14 +4,13 @@
 import { access, readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { PromptKey } from '../src/lib/prompts/defaults.ts';
-import { PROMPT_DEFAULTS } from '../src/lib/prompts/shared-defaults.ts';
 import { resolveRubricWeights } from '../server/lib/evaluation-revision-gate.ts';
 import { DefaultRubricWeightsSchema } from '../src/api/response-schemas.ts';
 import { normalizeError } from '../src/lib/error-utils.ts';
 import { ARTIFACT } from './constants.ts';
 import type { MetaHarnessMode } from './modes.ts';
 import { debugMetaHarness } from './debug-log.ts';
-import { fetchPromptBody } from './prompt-fetch.ts';
+import { getPromptBody } from '../server/lib/prompt-resolution.ts';
 import {
   AggregateJsonSchema,
   BestCandidateJsonSchema,
@@ -63,12 +62,12 @@ function oneLineExcerpt(text: string, maxChars: number): string {
 }
 
 /**
- * Load prompt bodies for edit-surface keys: live from the API (Langfuse-backed) when reachable,
- * else fall back to repo `PROMPT_DEFAULTS`.
+ * Load prompt bodies for edit-surface keys from disk (skills, system prompt, glue templates).
+ * Overrides take priority when supplied (from a previous proposer iteration).
  */
 export async function loadPromptBodies(
   keys: PromptKey[],
-  apiBaseUrl: string,
+  _apiBaseUrl: string,
   overrides?: Record<string, string>,
 ): Promise<string> {
   const lines: string[] = ['## Current prompt bodies (your edit surfaces)'];
@@ -77,8 +76,11 @@ export async function loadPromptBodies(
     if (overrides?.[key]) {
       body = overrides[key]!;
     } else {
-      const live = (await fetchPromptBody(apiBaseUrl, key)).body;
-      body = live ?? PROMPT_DEFAULTS[key] ?? '(not found)';
+      try {
+        body = await getPromptBody(key);
+      } catch {
+        body = '(not found)';
+      }
     }
     lines.push(`\n### ${key}\n\`\`\`\n${body}\n\`\`\``);
   }

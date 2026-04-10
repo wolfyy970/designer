@@ -1,7 +1,7 @@
 import { useInput } from 'ink';
 import { Box, Text } from 'ink';
 import type { PromotionResult } from '../apply-promotion.ts';
-import { langfuseStatusLine, promotionSucceeded } from '../apply-promotion.ts';
+import { promotionSucceeded } from '../apply-promotion.ts';
 import { dimText } from './theme.ts';
 
 export function PromotionResultScreen({
@@ -33,21 +33,6 @@ export function PromotionResultScreen({
     <Box flexDirection="column" width="100%">
       <Box flexDirection="column" borderStyle="single" borderColor={borderColor} paddingX={1} marginBottom={1}>
         <Text bold color={ok ? 'green' : 'red'}>{headline}</Text>
-
-        {result.promptsPatched.length > 0 ? (
-          <Box flexDirection="column">
-            <Text bold>Prompts</Text>
-            {result.promptsPatched.map((p) => (
-              <Text key={p.key}>
-                {'  '}
-                <Text color={p.ok ? 'green' : 'red'}>{p.ok ? 'OK' : 'FAIL'}</Text>
-                {'  '}
-                {p.key}
-                {p.error ? <Text color="red"> — {p.error}</Text> : null}
-              </Text>
-            ))}
-          </Box>
-        ) : null}
 
         {result.skillsCopied.length > 0 ? (
           <Box flexDirection="column">
@@ -85,12 +70,6 @@ export function PromotionResultScreen({
             ) : null}
           </Box>
         ) : null}
-
-        <Text>
-          <Text bold>Langfuse</Text>
-          {'  '}
-          <Text color={dimText}>{langfuseStatusLine(result)}</Text>
-        </Text>
       </Box>
 
       <Box flexDirection="column" borderStyle="round" borderColor={dimText} paddingX={1}>

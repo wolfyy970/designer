@@ -49,7 +49,7 @@ import {
  * no `customPrompt` is set. We pass `designer-agentic-system` as `customPrompt`, so that branch is skipped.
  * Tool descriptions still reach the LLM via the API tool schema (JSON function definitions).
  *
- * Keep in sync with [agent-bash-sandbox.ts](../agent-bash-sandbox.ts), `<sandbox_environment>` in shared-defaults,
+ * Keep in sync with [agent-bash-sandbox.ts](../agent-bash-sandbox.ts), `<sandbox_environment>` in prompts/designer-agentic-system/PROMPT.md,
  * and [ARCHITECTURE.md § Pi design sandbox](../../../ARCHITECTURE.md#pi-design-sandbox-three-layer-contract) (tool inventory + edit wrapper behavior).
  */
 const SANDBOX_TOOL_OVERRIDES = {

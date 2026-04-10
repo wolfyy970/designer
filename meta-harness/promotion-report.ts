@@ -194,7 +194,7 @@ export async function generatePromotionReportMarkdown(
     lines.push('');
   } else {
     lines.push(
-      'Paste each body into **`src/lib/prompts/shared-defaults.ts`** inside `PROMPT_DEFAULTS` under the matching key.',
+      'Review each override below. Prompt overrides should now be integrated into the relevant skill file under `skills/` or the system prompt at `prompts/designer-agentic-system/PROMPT.md`.',
     );
     lines.push('');
     for (const key of Object.keys(promptOverrides).sort()) {
@@ -284,9 +284,7 @@ export async function generatePromotionReportMarkdown(
   lines.push('');
   let step = 1;
   if (Object.keys(promptOverrides).length > 0) {
-    lines.push(`${step}. Edit \`src/lib/prompts/shared-defaults.ts\` — update \`PROMPT_DEFAULTS\` for: ${Object.keys(promptOverrides).map((k) => `\`${k}\``).join(', ')}.`);
-    step += 1;
-    lines.push(`${step}. Run \`pnpm langfuse:sync-prompts\` so Langfuse matches the repo (if you use Langfuse).`);
+    lines.push(`${step}. Integrate prompt overrides into the relevant skill files under \`skills/\` or \`prompts/designer-agentic-system/PROMPT.md\` for: ${Object.keys(promptOverrides).map((k) => `\`${k}\``).join(', ')}.`);
     step += 1;
   }
   if (tree.modified.length > 0 || tree.deleted.length > 0) {

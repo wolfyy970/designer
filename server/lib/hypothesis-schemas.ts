@@ -49,7 +49,6 @@ const HypothesisWorkspaceCoreObjectSchema = z.object({
   modelProfiles: z.record(z.string(), DomainModelProfileSchema),
   designSystems: z.record(z.string(), DomainDesignSystemContentSchema),
   defaultIncubatorProvider: z.string().min(1),
-  promptOverrides: z.record(z.string(), z.string()).optional(),
 });
 
 type WorkspaceCoreRaw = z.infer<typeof HypothesisWorkspaceCoreObjectSchema>;

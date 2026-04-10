@@ -23,7 +23,7 @@ describe('withLlmCallLifecycle', () => {
     vi.clearAllMocks();
   });
 
-  it('finalizes log and calls upd on success', async () => {
+  it('finalizes log on success', async () => {
     const upd = vi.fn();
     const res = await withLlmCallLifecycle(
       ctx,
@@ -41,7 +41,7 @@ describe('withLlmCallLifecycle', () => {
       expect.objectContaining({ response: 'ok', promptTokens: 1 }),
     );
     expect(upd).toHaveBeenCalledWith(
-      expect.objectContaining({ output: 'ok', usageDetails: expect.any(Object) }),
+      expect.objectContaining({ model: 'm1', input: expect.any(Object) }),
     );
     expect(logStore.failLlmCall).not.toHaveBeenCalled();
   });
@@ -54,9 +54,6 @@ describe('withLlmCallLifecycle', () => {
       }),
     ).rejects.toThrow('boom');
     expect(logStore.failLlmCall).toHaveBeenCalledWith('log-1', 'boom', expect.any(Number));
-    expect(upd).toHaveBeenCalledWith(
-      expect.objectContaining({ level: 'ERROR', statusMessage: 'boom' }),
-    );
     expect(logStore.finalizeLlmCall).not.toHaveBeenCalled();
   });
 

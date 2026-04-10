@@ -2,6 +2,7 @@
 name: Accessibility basics
 description: Use when building pages for keyboard, screen readers, zoom, or assistive technology. Activate for forms, navigation, interactive controls, landmarks, headings, contrast, or focus. Covers semantic HTML, ARIA when needed, and inclusive static pages.
 tags:
+  - design
   - accessibility
   - a11y
   - wcag

@@ -12,9 +12,8 @@
  *    (go straight to dashboard / plain engine after health). No shortcut scan: the gate is not run.
  *
  * 3. **`--promote`** — **Only** `/api/health` → the **same** preflight as (1). After you press **P** in the
- *    TTY review, the CLI **applies** winner prompts into `shared-defaults.ts`, copies skill drift into
- *    `skills/`, runs `pnpm langfuse:sync-prompts` when Langfuse is configured, then exits. **S** / **Q**
- *    exits without file changes.
+ *    TTY review, the CLI **applies** winner skill files into `skills/` and patches rubric weights,
+ *    then exits. **S** / **Q** exits without file changes.
  *
  * **`--dry-run`** is separate: hydration preview only, no API health/preflight/harness in the normal sense.
  */

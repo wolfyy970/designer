@@ -125,14 +125,11 @@ export async function runDesignAgentSession(
 
   const llmTurnLogRef: { current?: string } = {};
 
+  const { getPromptBody: getPromptBodyFn } = await import('../lib/prompt-resolution.ts');
   const { resourceLoader, settingsManager } = await createSandboxResourceLoader({
     systemPrompt: params.systemPrompt.trim(),
     contextWindow,
-    ...(params.getPromptBody
-      ? {
-          getCompactionPromptBody: () => params.getPromptBody!('agent-context-compaction'),
-        }
-      : {}),
+    getCompactionPromptBody: () => getPromptBodyFn('agent-context-compaction'),
   });
 
   const { session, modelFallbackMessage } = await createAgentSession({

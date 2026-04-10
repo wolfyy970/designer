@@ -1,4 +1,3 @@
-import type { PromptKey } from '../../src/lib/prompts/defaults.ts';
 import type { RunTraceEvent, TodoItem } from '../../src/types/provider.ts';
 import type { SkillCatalogEntry } from '../lib/skill-schema.ts';
 import type { ThinkingLevel } from './pi-model.ts';
@@ -16,11 +15,6 @@ export interface AgentRunParams {
 export interface AgentSessionParams extends AgentRunParams {
   correlationId?: string;
   seedFiles?: Record<string, string>;
-  /**
-   * When set, Langfuse (or local defaults) `agent-context-compaction` is merged into Pi summarization
-   * as custom "Additional focus" on auto/manual compaction.
-   */
-  getPromptBody?: (key: PromptKey) => Promise<string>;
   /** @deprecated Pi SDK manages compaction; reserved for future custom hooks */
   compactionNote?: string;
   initialProgressMessage?: string;

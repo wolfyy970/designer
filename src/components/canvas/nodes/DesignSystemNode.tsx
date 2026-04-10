@@ -5,8 +5,6 @@ import { ImagePlus, Sparkles, Loader2, X } from 'lucide-react';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import type { DesignSystemNodeData } from '../../../types/canvas-data';
 import { extractDesignSystem } from '../../../api/client';
-import { spreadPromptOverrides } from '../../../stores/prompt-overrides-store';
-import { usePromptOverrideAsyncAction } from '../../../hooks/usePromptOverrideAsyncAction';
 import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { readFileAsReferenceImage } from '../../../lib/image-utils';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
@@ -32,7 +30,6 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
 
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
-  const runPromptAction = usePromptOverrideAsyncAction();
 
   const update = useCallback(
     (field: string, value: unknown) => updateNodeData(id, { [field]: value }),
@@ -75,28 +72,27 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
 
   const handleExtract = useCallback(async () => {
     if (images.length === 0 || !modelId) return;
-    const response = await runPromptAction(
-      (promptOverrides) =>
-        extractDesignSystem({
-          images,
-          providerId: providerId!,
-          modelId: modelId!,
-          ...spreadPromptOverrides(promptOverrides),
-        }),
-      {
-        setLoading: setExtracting,
-        setError: setExtractError,
-        errorMessage: 'Extraction failed',
-      },
-    );
-    if (!response) return;
-    const result = response.result;
-    if (content.trim()) {
-      update('content', content + '\n\n---\n\n' + result);
-    } else {
-      update('content', result);
+    setExtracting(true);
+    setExtractError(null);
+    try {
+      const response = await extractDesignSystem({
+        images,
+        providerId: providerId!,
+        modelId: modelId!,
+      });
+      if (!response) return;
+      const result = response.result;
+      if (content.trim()) {
+        update('content', content + '\n\n---\n\n' + result);
+      } else {
+        update('content', result);
+      }
+    } catch (err) {
+      setExtractError(err instanceof Error ? err.message : 'Extraction failed');
+    } finally {
+      setExtracting(false);
     }
-  }, [images, modelId, providerId, content, update, runPromptAction]);
+  }, [images, modelId, providerId, content, update]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

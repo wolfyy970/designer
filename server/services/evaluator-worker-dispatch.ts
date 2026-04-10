@@ -8,8 +8,8 @@ import {
   type EvaluatorWorkerReport,
 } from '../../src/types/evaluation.ts';
 import { evaluatorRubricIdZodSchema } from '../../src/lib/evaluator-rubric-zod.ts';
-import type { PromptKey } from '../../src/lib/prompts/defaults.ts';
 import { env } from '../env.ts';
+import { getPromptBody } from '../lib/prompt-resolution.ts';
 import { getProvider } from './providers/registry.ts';
 import { loggedGenerateChat, type LlmLogContext } from '../lib/llm-call-logger.ts';
 import { runBrowserQA } from './browser-qa-evaluator.ts';
@@ -236,7 +236,6 @@ export interface EvaluationRoundInput {
   evaluatorProviderId?: string;
   evaluatorModelId?: string;
   parallel: boolean;
-  getPromptBody: (key: PromptKey) => Promise<string>;
   /** Propagates to LLM log rows for this evaluation round */
   correlationId?: string;
   signal?: AbortSignal;
@@ -267,9 +266,9 @@ export async function runEvaluationWorkers(
     );
 
     const [sysDesign, sysStrategy, sysImpl] = await Promise.all([
-      input.getPromptBody('evaluator-design-quality'),
-      input.getPromptBody('evaluator-strategy-fidelity'),
-      input.getPromptBody('evaluator-implementation'),
+      getPromptBody('evaluator-design-quality'),
+      getPromptBody('evaluator-strategy-fidelity'),
+      getPromptBody('evaluator-implementation'),
     ]);
 
     const evalLogCtx: Pick<LlmLogContext, 'correlationId' | 'signal'> = {

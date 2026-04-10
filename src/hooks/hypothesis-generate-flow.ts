@@ -36,7 +36,6 @@ import type { CanvasStore } from '../stores/canvas/canvas-store-types';
 import type { CompiledPrompt } from '../types/incubator';
 import type { GenerationResult } from '../types/provider';
 import { resolveEvaluatorSettings } from './resolveEvaluatorSettings';
-import { getActivePromptOverrides, spreadPromptOverrides, usePromptOverridesStore } from '../stores/prompt-overrides-store';
 
 export interface GenerationProgress {
   completed: number;
@@ -110,7 +109,6 @@ export async function runHypothesisGenerateFlow({
     agenticMinOverallScore: evalSettings.minOverallScore ?? undefined,
     rubricWeights: evalSettings.rubricWeights,
     ...(supportsVision != null ? { supportsVision } : {}),
-    ...spreadPromptOverrides(getActivePromptOverrides(usePromptOverridesStore.getState().overrides)),
   };
   warnIfWorkspaceSnapshotInvalid(workspacePayload.snapshot, 'useHypothesisGeneration');
 

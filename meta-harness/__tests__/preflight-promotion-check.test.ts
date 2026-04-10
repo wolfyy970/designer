@@ -54,39 +54,6 @@ describe('scanUnpromotedSessions', () => {
     }
   }
 
-  it('returns stale prompts when live API body differs', async () => {
-    await writeSession({
-      folder: 'session-design-z',
-      candidateId: 1,
-      meanScore: 3.5,
-      overrides: { 'key-a': 'winner body' },
-    });
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation(async (url: string | URL) => {
-        const u = String(url);
-        if (u.includes('/prompts/key-a')) {
-          return new Response(JSON.stringify({ body: 'different live' }), { status: 200 });
-        }
-        return new Response(null, { status: 404 });
-      }),
-    );
-
-    const stale = await scanUnpromotedSessions({
-      historyRoot,
-      repoRoot: root,
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
-      skillsDir,
-    });
-    expect(stale).not.toBeNull();
-    expect(stale!.stalePrompts).toHaveLength(1);
-    expect(stale!.stalePrompts[0]!.key).toBe('key-a');
-    expect(stale!.stalePrompts[0]!.winnerBody).toBe('winner body');
-    expect(stale!.stalePrompts[0]!.liveBody).toBe('different live');
-    expect(stale!.staleSkills).toHaveLength(0);
-  });
-
   it('returns stale rubric weights when repo file differs from winner', async () => {
     const lib = path.join(root, 'src', 'lib');
     await mkdir(lib, { recursive: true });
@@ -108,8 +75,6 @@ describe('scanUnpromotedSessions', () => {
       winnerRubricWeights: { design: 0.35, strategy: 0.3, implementation: 0.25, browser: 0.1 },
     });
 
-    vi.stubGlobal('fetch', vi.fn());
-
     const stale = await scanUnpromotedSessions({
       historyRoot,
       repoRoot: root,
@@ -124,18 +89,13 @@ describe('scanUnpromotedSessions', () => {
     expect(stale!.staleRubricWeights!.liveWeights.design).toBe(0.4);
   });
 
-  it('returns null when live matches winner (already promoted)', async () => {
+  it('returns null when no drift (already promoted)', async () => {
     await writeSession({
       folder: 'session-design-z',
       candidateId: 1,
       meanScore: 3.5,
-      overrides: { 'key-a': 'same' },
+      overrides: {},
     });
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response(JSON.stringify({ body: 'same' }), { status: 200 })),
-    );
 
     const stale = await scanUnpromotedSessions({
       historyRoot,
@@ -152,7 +112,6 @@ describe('scanUnpromotedSessions', () => {
     await mkdir(cand, { recursive: true });
     await writeFile(path.join(sessionDir, ARTIFACT.promotionReportMd), '# r\n', 'utf8');
     await writeFile(path.join(sessionDir, ARTIFACT.bestCandidateJson), 'NOT JSON', 'utf8');
-    vi.stubGlobal('fetch', vi.fn());
 
     const stale = await scanUnpromotedSessions({
       historyRoot,
@@ -164,7 +123,6 @@ describe('scanUnpromotedSessions', () => {
   });
 
   it('returns null when history root does not exist', async () => {
-    vi.stubGlobal('fetch', vi.fn());
     const stale = await scanUnpromotedSessions({
       historyRoot: path.join(root, 'nope'),
       repoRoot: root,
@@ -174,27 +132,6 @@ describe('scanUnpromotedSessions', () => {
     expect(stale).toBeNull();
   });
 
-  it('marks fetch error when API fails', async () => {
-    await writeSession({
-      folder: 'session-design-z',
-      candidateId: 1,
-      meanScore: 3,
-      overrides: { 'key-a': 'winner only' },
-    });
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network')));
-
-    const stale = await scanUnpromotedSessions({
-      historyRoot,
-      repoRoot: root,
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
-      skillsDir,
-    });
-    expect(stale).not.toBeNull();
-    expect(stale!.stalePrompts[0]!.liveBody).toBe('');
-    expect(stale!.stalePrompts[0]!.fetchError).toBe('network error');
-    expect(stale!.allFetchesFailed).toBe(true);
-  });
-
   it('detects skill drift (modified)', async () => {
     await writeSession({
       folder: 'session-design-z',
@@ -202,10 +139,6 @@ describe('scanUnpromotedSessions', () => {
       meanScore: 2,
       overrides: {},
     });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response(JSON.stringify({ body: 'x' }), { status: 200 })),
-    );
 
     const cand = path.join(historyRoot, 'session-design-z', 'candidate-0');
     const snapSub = path.join(cand, 'skills-snapshot', 'pkg');
@@ -225,17 +158,29 @@ describe('scanUnpromotedSessions', () => {
     expect(stale!.staleSkills.some((s) => s.relPath === 'pkg/SKILL.md' && s.kind === 'modified')).toBe(true);
   });
 
-  it('returns prompt drift with empty staleSkills when skill tree diff throws', async () => {
+  it('returns empty staleSkills when skill tree diff throws', async () => {
     await writeSession({
       folder: 'session-skill-boom',
       candidateId: 1,
       meanScore: 3,
-      overrides: { 'k1': 'winner' },
+      overrides: {},
     });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response(JSON.stringify({ body: 'live-differs' }), { status: 200 })),
+
+    const lib = path.join(root, 'src', 'lib');
+    await mkdir(lib, { recursive: true });
+    await writeFile(
+      path.join(lib, 'rubric-weights.json'),
+      `${JSON.stringify({ design: 0.4, strategy: 0.3, implementation: 0.2, browser: 0.1 }, null, 2)}\n`,
+      'utf8',
     );
+    await writeSession({
+      folder: 'session-skill-boom',
+      candidateId: 1,
+      meanScore: 3,
+      overrides: {},
+      winnerRubricWeights: { design: 0.35, strategy: 0.3, implementation: 0.25, browser: 0.1 },
+    });
+
     const diffSpy = vi.spyOn(skillDiff, 'diffSkillTrees').mockRejectedValue(new Error('mock disk error'));
     try {
       const stale = await scanUnpromotedSessions({
@@ -245,8 +190,8 @@ describe('scanUnpromotedSessions', () => {
         skillsDir,
       });
       expect(stale).not.toBeNull();
-      expect(stale!.stalePrompts.length).toBeGreaterThan(0);
       expect(stale!.staleSkills).toEqual([]);
+      expect(stale!.staleRubricWeights).not.toBeNull();
     } finally {
       diffSpy.mockRestore();
     }

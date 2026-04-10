@@ -23,7 +23,6 @@ import { processingOrFilled } from '../../../lib/node-status';
 import { isPlaceholderHypothesis } from '../../../lib/hypothesis-node-utils';
 import { EDGE_STATUS, RF_INTERACTIVE } from '../../../constants/canvas';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
-import { getActivePromptOverrides, spreadPromptOverrides, usePromptOverridesStore } from '../../../stores/prompt-overrides-store';
 import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
 import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
@@ -133,9 +132,6 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
           referenceDesigns,
           supportsVision,
           promptOptions: { count: hypothesisCount, existingStrategies },
-          ...spreadPromptOverrides(
-            getActivePromptOverrides(usePromptOverridesStore.getState().overrides),
-          ),
         },
         {
           onProgress: (status) => setIncubateLiveLine(status),

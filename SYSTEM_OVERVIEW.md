@@ -18,13 +18,13 @@ Multi-model runs per hypothesis use **`/api/hypothesis/generate`**: one SSE stre
 
 ## Prompts and where they come from
 
-For a **plain-English map** of each Langfuse prompt name (`hypotheses-generator-system`, `designer-hypothesis-inputs`, …), see [LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md). **Prompt Studio** edits are **browser-local** drafts applied per request (`promptOverrides`); production text remains in **Langfuse** until you sync or use admin APIs — see [USER_GUIDE.md](USER_GUIDE.md).
+Prompt **bodies** live on disk: **`skills/<key>/SKILL.md`** plus **`prompts/designer-agentic-system/PROMPT.md`**. **`server/lib/prompt-resolution.ts`** loads and composes them per request; **`src/lib/prompts/defaults.ts`** defines **keys** and labels only. Canvas usage and editing workflow: [USER_GUIDE.md](USER_GUIDE.md).
 
 | Role | Purpose | Typical storage |
 |------|---------|-----------------|
-| **Incubator (plan)** | Turn connected inputs into dimensions + hypothesis strategies | Langfuse (`hypotheses-generator-system`, `incubator-user-inputs`); `pnpm db:seed` creates missing prompts from `shared-defaults` / legacy SQLite — not a full overwrite |
-| **Hypothesis prompt** | Per-hypothesis user-facing generation prompt template | Langfuse `designer-hypothesis-inputs` + client **`compileVariantPrompts()`** (merges strategy into the template — function name is historical); bundle API uses same template server-side |
-| **Agentic system** | Multi-file static artifact rules (entry `index.html`, local assets, tool use) | Langfuse `designer-agentic-system` (optional sandbox **`AGENTS.md`** from `agents-md-file`) |
+| **Incubator (plan)** | Turn connected inputs into dimensions + hypothesis strategies | Skills **`hypotheses-generator-system`**, **`incubator-user-inputs`** |
+| **Hypothesis prompt** | Per-hypothesis user-facing generation prompt template | Skill **`designer-hypothesis-inputs`** + client **`compileVariantPrompts()`** (merges strategy into the template — function name is historical); API uses the same template server-side |
+| **Agentic system** | Multi-file static artifact rules (entry `index.html`, local assets, tool use) | **`prompts/designer-agentic-system/PROMPT.md`** plus relevant **`skills/`**; optional sandbox **`AGENTS.md`** from **`agents-md-file`** |
 | **Skills** | Repo-backed Agent Skills packages | Files under repo-root **`skills/<key>/SKILL.md`**. Each Pi session embeds **`<available_skills>`** in the **`use_skill`** tool (non-**`manual`**) and pre-seeds packages under **`skills/<key>/…`** in **`just-bash`**; the agent calls **`use_skill`** or **`read`** when needed |
 
 Evaluators use separate LLM rubrics (browser / design / strategy / implementation) orchestrated on the server — not the same prompts as the builder model.

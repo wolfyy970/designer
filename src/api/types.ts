@@ -22,8 +22,6 @@ export interface IncubateRequest {
     count?: number;
     existingStrategies?: HypothesisStrategy[];
   };
-  /** Local Prompt Studio drafts — applied only for this request on the server. */
-  promptOverrides?: Record<string, string>;
 }
 
 export type IncubateResponse = IncubationPlan;
@@ -38,7 +36,6 @@ export interface HypothesisWorkspaceApiPayload {
   modelProfiles: Record<string, DomainModelProfile>;
   designSystems: Record<string, DomainDesignSystemContent>;
   defaultIncubatorProvider: string;
-  promptOverrides?: Record<string, string>;
 }
 
 export interface HypothesisPromptBundleResponse {
@@ -86,7 +83,6 @@ export interface DesignSystemExtractRequest {
   images: ReferenceImage[];
   providerId: string;
   modelId: string;
-  promptOverrides?: Record<string, string>;
 }
 
 export interface DesignSystemExtractResponse {
@@ -109,7 +105,6 @@ export interface InputsGenerateRequest {
   designConstraints?: string;
   providerId: string;
   modelId: string;
-  promptOverrides?: Record<string, string>;
 }
 
 export interface InputsGenerateResponse {

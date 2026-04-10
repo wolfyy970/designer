@@ -1,12 +1,12 @@
 import { Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
-import type { ReferenceImage } from '../../src/types/spec.ts';
-import { createResolvePromptBody, sanitizePromptOverrides } from '../lib/prompt-overrides.ts';
-import { apiJsonError } from '../lib/api-json-error.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
-import { loggedCallLLM } from '../lib/llm-call-logger.ts';
 import { clampProviderModel } from '../lib/lockdown-model.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
+import { createWriteGate } from '../lib/sse-write-gate.ts';
+import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
+import { executeTaskAgentStream } from '../services/task-agent-execution.ts';
 
 const designSystem = new Hono();
 
@@ -18,7 +18,6 @@ const ExtractRequestSchema = z.object({
   }).passthrough()),
   providerId: z.string().min(1),
   modelId: z.string().min(1),
-  promptOverrides: z.record(z.string(), z.string()).optional(),
 });
 
 designSystem.post('/extract', async (c) => {
@@ -27,27 +26,66 @@ designSystem.post('/extract', async (c) => {
   const pinned = clampProviderModel(parsed.data.providerId, parsed.data.modelId);
   const body = { ...parsed.data, providerId: pinned.providerId, modelId: pinned.modelId };
 
-  const resolvePrompt = createResolvePromptBody(sanitizePromptOverrides(body.promptOverrides));
-  const [systemPrompt, userPrompt] = await Promise.all([
-    resolvePrompt('design-system-extract-system'),
-    resolvePrompt('design-system-extract-user-input'),
-  ]);
+  const imageDescriptions = body.images
+    .map((img, i) => `Image ${i + 1}: ${img.name ?? `screenshot-${i + 1}`}`)
+    .join('\n');
 
-  try {
-    const response = await loggedCallLLM(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      body.modelId,
-      body.providerId,
-      { images: body.images as ReferenceImage[] },
-      { source: 'designSystem', phase: 'Extract from screenshots' },
-    );
-    return c.json({ result: response });
-  } catch (err) {
-    return apiJsonError(c, 500, normalizeError(err));
-  }
+  const agentUserPrompt = `<task>
+Extract the design system from the provided screenshots.
+
+Analyze the UI screenshots and extract every repeatable visual decision into a structured JSON design system.
+Write the complete JSON result to \`result.json\` in the workspace root.
+
+Use the \`use_skill\` tool to load relevant skills before beginning extraction.
+</task>
+
+<screenshots>
+${imageDescriptions}
+</screenshots>
+
+Extract the design system from these screenshots.`;
+
+  return streamSSE(c, async (stream) => {
+    const abortSignal = c.req.raw.signal;
+    let seq = 0;
+    const allocId = () => String(seq++);
+    const gate = createWriteGate();
+    const correlationId = crypto.randomUUID();
+
+    const write = async (event: string, data: Record<string, unknown>): Promise<void> => {
+      const payload = JSON.stringify(data);
+      await gate.enqueue(async () => {
+        await stream.writeSSE({ data: payload, event, id: allocId() });
+      });
+    };
+
+    try {
+      const taskResult = await executeTaskAgentStream(
+        stream,
+        {
+          userPrompt: agentUserPrompt,
+          providerId: body.providerId,
+          modelId: body.modelId,
+          sessionType: 'design-system',
+          signal: abortSignal,
+          correlationId,
+          resultFile: 'result.json',
+          initialProgressMessage: 'Extracting design system from screenshots…',
+        },
+        { allocId, writeGate: gate },
+      );
+
+      if (taskResult) {
+        await write(SSE_EVENT_NAMES.task_result, { result: taskResult.result });
+      }
+
+      await write(SSE_EVENT_NAMES.phase, { phase: 'complete' });
+      await write(SSE_EVENT_NAMES.done, {});
+    } catch (err) {
+      await write(SSE_EVENT_NAMES.error, { error: normalizeError(err) });
+      await write(SSE_EVENT_NAMES.done, {});
+    }
+  });
 });
 
 export default designSystem;

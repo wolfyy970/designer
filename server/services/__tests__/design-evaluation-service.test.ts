@@ -396,7 +396,6 @@ describe('runEvaluationWorkers onWorkerDone', () => {
       providerId: 'openrouter',
       modelId: 'x',
       parallel: true,
-      getPromptBody: vi.fn().mockResolvedValue('system'),
       onWorkerDone: (rubric) => {
         done.push(rubric);
       },
@@ -413,7 +412,6 @@ describe('runEvaluationWorkers onWorkerDone', () => {
       providerId: 'openrouter',
       modelId: 'x',
       parallel: false,
-      getPromptBody: vi.fn().mockResolvedValue('system'),
       onWorkerDone: (rubric) => {
         done.push(rubric);
       },

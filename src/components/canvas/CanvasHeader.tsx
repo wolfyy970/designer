@@ -1,15 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { Settings, FolderOpen, Pencil, RotateCcw } from 'lucide-react';
 import { useSpecStore } from '../../stores/spec-store';
 import { useCanvasStore } from '../../stores/canvas-store';
 import SpecManager from '../shared/SpecManager';
 import SettingsModal from '../shared/SettingsModal';
-import { parsePromptKey } from '../../lib/prompt-log-mapping';
-import type { PromptKey } from '../../stores/prompt-store';
 import { scheduleLibraryTitleSyncIfEntryExists } from '../../services/canvas-library-session';
 import { appReleaseLabel } from '../../lib/app-release';
-import { isPromptOverrideEditingEnabled } from '../../lib/prompt-override-policy';
 
 export default function CanvasHeader() {
   const title = useSpecStore((s) => s.spec.title);
@@ -20,30 +16,6 @@ export default function CanvasHeader() {
   const [editValue, setEditValue] = useState(title);
   const [showCanvases, setShowCanvases] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<
-    'general' | 'prompts' | 'evaluator' | undefined
-  >();
-  const [settingsPromptKey, setSettingsPromptKey] = useState<PromptKey | undefined>();
-
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  useEffect(() => {
-    const settings = searchParams.get('settings');
-    const promptKeyRaw = searchParams.get('promptKey');
-    if (settings !== 'prompts') return;
-
-    const next = new URLSearchParams(searchParams);
-    next.delete('settings');
-    next.delete('promptKey');
-    setSearchParams(next, { replace: true });
-
-    if (!isPromptOverrideEditingEnabled) return;
-
-    const key = promptKeyRaw ? parsePromptKey(promptKeyRaw) : null;
-    setSettingsInitialTab('prompts');
-    setSettingsPromptKey(key ?? undefined);
-    setShowSettings(true);
-  }, [searchParams, setSearchParams]);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -140,11 +112,7 @@ export default function CanvasHeader() {
             Canvas Manager
           </button>
           <button
-            onClick={() => {
-              setSettingsInitialTab(undefined);
-              setSettingsPromptKey(undefined);
-              setShowSettings(true);
-            }}
+            onClick={() => setShowSettings(true)}
             className="rounded-md p-1.5 text-fg-secondary hover:bg-surface-raised"
           >
             <Settings size={16} />
@@ -156,8 +124,6 @@ export default function CanvasHeader() {
       <SettingsModal
         open={showSettings}
         onClose={() => setShowSettings(false)}
-        initialTab={settingsInitialTab}
-        initialPromptKey={settingsPromptKey}
       />
     </>
   );

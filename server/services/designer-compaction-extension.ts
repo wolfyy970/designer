@@ -1,11 +1,11 @@
 /**
- * Pi extension: run SDK `compact()` with Langfuse "additional focus" text on auto/manual compaction.
+ * Pi extension: run SDK `compact()` with "additional focus" text on auto/manual compaction.
  * Without this, Pi's auto-compaction calls `compact(..., undefined)` and ignores `agent-context-compaction`.
  */
 import type { ExtensionAPI, ExtensionFactory } from './pi-sdk/types.ts';
 import { compact } from './pi-sdk/types.ts';
 
-/** Resolves the supplementary compaction instructions (e.g. from Langfuse `agent-context-compaction`). */
+/** Resolves the supplementary compaction instructions from the `agent-context-compaction` skill. */
 export type CompactionFocusLoader = () => Promise<string>;
 
 export function createDesignerCompactionExtensionFactory(
@@ -20,7 +20,7 @@ export function createDesignerCompactionExtensionFactory(
       try {
         focus = (await getCompactionFocus()).trim();
       } catch {
-        // Langfuse/network optional — fall through with event-only instructions
+        // Skill read optional — fall through with event-only instructions
       }
 
       const pieces = [event.customInstructions?.trim(), focus].filter((s) => s && s.length > 0);

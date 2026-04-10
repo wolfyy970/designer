@@ -28,27 +28,21 @@ pnpm dev:all      # recommended: API then Vite (avoids early proxy errors)
 
 Both processes are needed for local development.
 
+**Only Vite running:** The UI blocks on **`GET /api/config`** until the API on port **3001** answers—use **`pnpm dev:all`** or run **`pnpm dev:server`** alongside **`pnpm dev`**. The dev design-token page **`/dev/design-tokens`** is the only route that skips that check.
+
 **Saved canvases and browser storage:** The app keeps your **active spec** and **Canvas manager** library in **localStorage** for **`http://localhost:5173`** (not `127.0.0.1` — that is a separate origin to the browser). The URL includes the **port**: opening the app on a different port is a different site, so lists and the current canvas can look empty. The dev server **requires port 5173**; if Vite won’t start, run `pnpm dev:kill` and retry.
 
-## Tracing and dev logs
-
-For **full traces and generations**, configure **Langfuse** on the server (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`). Optionally set **`VITE_LANGFUSE_BASE_URL`** to the same host if you build links to the Langfuse UI from tooling or docs (see `.env.example`).
+## Dev logs
 
 In **development** only, the API keeps an in-memory **`/api/logs`** ring (LLM rows + run-trace lines) and can append optional NDJSON—handy for **curl** or ad-hoc inspection; see [ARCHITECTURE.md](ARCHITECTURE.md). That route returns **404** in **production**. The **variant run timeline** still shows live tool activity for the current preview.
-
-**Privacy:** With Langfuse Cloud (or any hosted Langfuse) tracing enabled, **prompt and completion text** can be exported to that project along with spans. Treat Langfuse org, project, and API keys like production secrets.
 
 ## Design tokens reference (Settings)
 
 **Development only:** **Settings** (gear) → **General** → **Open design tokens kitchen sink** opens a scrollable modal of live `@theme` colors, typography, and composition classes (`ds-*`, `.input-focus`). The same content is available at **`/dev/design-tokens`**. Semantics and rules: [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 
-## System prompts (Settings → Prompts — **local development builds only**)
+## Prompts and skills (editing the repo)
 
-**Production** (e.g. `pnpm build` + deploy): the **Prompts** tab is **hidden**. The API **does not apply** client-sent **`promptOverrides`** when `NODE_ENV=production` — prompts come from **Langfuse** / server defaults only.
-
-**Local `pnpm dev`:** **Settings** (gear) → **Prompts** opens **Prompt Studio**. The editor **loads** the current baseline from the server (**Langfuse** when configured, otherwise shared defaults). **Save** / ⌘S stores your draft **in this browser only** (local persistence) and attaches **`promptOverrides`** on **incubate**, hypothesis **generate**, Design System **extract**, and **inputs** auto-generate — it does **not** write a new Langfuse version. Compare/diff uses the **database baseline** from the API. Use **Clear local override** / **Reset all** to drop browser drafts. To change **shared** production text in Langfuse, use **`pnpm langfuse:sync-prompts`** (from repo bodies) or the Langfuse UI / **`PUT /api/prompts/:key`** (dev automation); see [ARCHITECTURE.md](ARCHITECTURE.md).
-
-Prompt keys are **kebab-case** (e.g. `hypotheses-generator-system`, `designer-hypothesis-inputs`); plain-English map: [LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md). **`pnpm db:seed`** creates **missing** Langfuse prompts only. Agent **skills** are **not** Langfuse prompts — they live in the repo’s **`skills/`** tree (see [ARCHITECTURE.md](ARCHITECTURE.md) / [PRODUCT.md](PRODUCT.md)).
+All LLM-facing prompt **bodies** ship with the repo: **`skills/<key>/SKILL.md`** (YAML frontmatter + markdown body) and the designer **system** text in **`prompts/designer-agentic-system/PROMPT.md`**. The server loads and composes them per request via **`server/lib/prompt-resolution.ts`**. Prompt **keys** (`PromptKey`, `PROMPT_KEYS`) live in **`src/lib/prompts/defaults.ts`**. There is no in-app prompt editor—change files, restart the API if needed, and run tests. See [ARCHITECTURE.md](ARCHITECTURE.md) and [PRODUCT.md](PRODUCT.md).
 
 ## Evaluator defaults (Settings → Evaluator defaults)
 
@@ -72,7 +66,7 @@ Write in prose, not bullets. Precision is the product.
 
 **Optional inputs:** The default template focuses on Design Brief + Model + Incubator. Other sections may show as **ghost** prompts on the canvas until you add the node from the toolbar (or load a saved canvas whose spec already fills that section—see **Managing Canvases**).
 
-**Auto-generate (Research / Objectives / Constraints):** On those three input nodes, an **auto-generate** action (when shown) drafts or refines the spec facet body from your **Design Brief** and any other spec sections you have already filled in. It uses the **first Model node** on the canvas (document order—the same fallback as auto-connect). **Lockdown** still pins provider/model server-side. In **dev**, Prompt Studio overrides apply via the Langfuse keys `inputs-gen-research-context`, `inputs-gen-objectives-metrics`, and `inputs-gen-design-constraints` (legacy `section-gen-*` names still alias in the server) ([LANGFUSE_PROMPTS.md](LANGFUSE_PROMPTS.md)).
+**Auto-generate (Research / Objectives / Constraints):** On those three input nodes, an **auto-generate** action (when shown) drafts or refines the spec facet body from your **Design Brief** and any other spec sections you have already filled in. It uses the **first Model node** on the canvas (document order—the same fallback as auto-connect). **Lockdown** still pins provider/model server-side. The server resolves copy from the **`inputs-gen-research-context`**, **`inputs-gen-objectives-metrics`**, and **`inputs-gen-design-constraints`** skill packages under **`skills/`** (see [ARCHITECTURE.md](ARCHITECTURE.md)).
 
 ### 2. Connect a Model Node
 

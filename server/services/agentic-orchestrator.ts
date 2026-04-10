@@ -2,7 +2,6 @@
  * Agentic design build + parallel evaluators + bounded multi-round revision loop.
  */
 import { randomUUID } from 'node:crypto';
-import type { PromptKey } from '../../src/lib/prompts/defaults.ts';
 import {
   EVALUATOR_RUBRIC_IDS,
   type AgenticCheckpoint,
@@ -22,9 +21,8 @@ import {
   runEvaluationWorkers,
 } from './design-evaluation-service.ts';
 import { buildAgenticSystemContext } from '../lib/build-agentic-system-context.ts';
+import { getPromptBody } from '../lib/prompt-resolution.ts';
 import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
-import { isLangfuseTracingEnabled } from '../lib/langfuse-tracing-enabled.ts';
-import { createTraceId, startActiveObservation } from '@langfuse/tracing';
 import {
   runDesignAgentSession,
   type AgentRunEvent,
@@ -40,15 +38,11 @@ import {
   type EvaluationRoundHistoryEntry,
 } from '../lib/agentic-revision-user.ts';
 import { rubricMeansFromNormalizedScores } from '../lib/evaluation-revision-gate.ts';
-import { GENERATION_MODE } from '../../src/constants/generation.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import { env } from '../env.ts';
 import { writeAgenticEvalRunLog } from '../lib/eval-run-logger.ts';
 import { acquireAgenticSlotOrReject, releaseAgenticSlot } from '../lib/agentic-concurrency.ts';
 
-const AGENTIC_ROOT_SPAN_ID = '0000000000000001';
-
-/** PI session fields supplied by the caller; system prompt comes from Langfuse per session. */
 type AgenticOrchestratorBuildInput = Omit<AgentSessionParams, 'systemPrompt'>;
 
 export type AgenticOrchestratorEvent =
@@ -79,7 +73,8 @@ interface AgenticOrchestratorOptions {
   minOverallScore?: number;
   /** Optional blend for overall score; merged with product defaults and normalized server-side. */
   rubricWeights?: Partial<Record<EvaluatorRubricId, number>>;
-  getPromptBody: (key: PromptKey) => Promise<string>;
+  /** Session type for skill filtering. Defaults to 'design'. */
+  sessionType?: import('../lib/skill-discovery.ts').SessionType;
   onStream: (e: AgenticOrchestratorEvent) => void | Promise<void>;
 }
 
@@ -173,7 +168,6 @@ async function runEvaluationRound(
     evaluatorProviderId: options.evaluatorProviderId,
     evaluatorModelId: options.evaluatorModelId,
     parallel,
-    getPromptBody: options.getPromptBody,
     correlationId: options.build.correlationId,
     signal: options.build.signal,
     onWorkerDone: async (rubric, report) => {
@@ -299,7 +293,7 @@ type PiSessionExtras = Partial<
 
 type AgenticSystemContextBundle = Awaited<ReturnType<typeof buildAgenticSystemContext>>;
 
-/** Refresh Langfuse agentic context, emit skills_loaded, run one Pi design session. */
+/** Refresh agentic context, emit skills_loaded, run one Pi design session. */
 async function runAgenticPiSessionRound(
   options: AgenticOrchestratorOptions,
   streamCtx: StreamEmissionContext,
@@ -310,9 +304,7 @@ async function runAgenticPiSessionRound(
     | PiSessionExtras
     | ((ctx: AgenticSystemContextBundle) => PiSessionExtras),
 ): Promise<DesignAgentSessionResult | null> {
-  const ctx = await buildAgenticSystemContext({
-    getPromptBody: options.getPromptBody,
-  });
+  const ctx = await buildAgenticSystemContext({ sessionType: options.sessionType });
   await emitSkillsLoaded(streamCtx, ctx.loadedSkills, tracePhase);
   setPiTracePhase(tracePhase);
   const extras = typeof sessionExtras === 'function' ? sessionExtras(ctx) : sessionExtras;
@@ -322,7 +314,6 @@ async function runAgenticPiSessionRound(
       ...extras,
       systemPrompt: ctx.systemPrompt,
       skillCatalog: ctx.skillCatalog,
-      getPromptBody: options.getPromptBody,
     },
     forward,
   );
@@ -334,39 +325,7 @@ async function runAgenticPiSessionRound(
 export async function runAgenticWithEvaluation(
   options: AgenticOrchestratorOptions,
 ): Promise<AgenticOrchestratorResult | null> {
-  if (!isLangfuseTracingEnabled()) {
-    return runAgenticWithEvaluationImpl(options);
-  }
-  const seed = options.build.correlationId ?? '';
-  const parentSpanContext = {
-    traceId: await createTraceId(seed),
-    spanId: AGENTIC_ROOT_SPAN_ID,
-    traceFlags: 1,
-  };
-  return startActiveObservation(
-    'agentic-orchestration',
-    async (span) => {
-      span.update({
-        metadata: {
-          correlationId: options.build.correlationId,
-          providerId: options.build.providerId,
-          modelId: options.build.modelId,
-        },
-        input: { mode: GENERATION_MODE.AGENTIC },
-      });
-      const result = await runAgenticWithEvaluationImpl(options);
-      if (result) {
-        span.update({
-          output: {
-            stopReason: result.checkpoint.stopReason,
-            rounds: result.rounds.length,
-          },
-        });
-      }
-      return result;
-    },
-    { parentSpanContext },
-  );
+  return runAgenticWithEvaluationImpl(options);
 }
 
 async function runAgenticWithEvaluationImpl(
@@ -459,7 +418,7 @@ async function runAgenticWithEvaluationImpl(
         runId: mergedOptions.build.correlationId ?? randomUUID(),
         compiledPrompt: mergedOptions.compiledPrompt,
         evaluationContext: mergedOptions.evaluationContext ?? undefined,
-        getPromptBody: mergedOptions.getPromptBody,
+        getPromptBody,
         rounds: result.rounds,
         revisionPromptByEvalRound,
         stopReason: result.checkpoint.stopReason ?? 'unknown',
@@ -492,7 +451,7 @@ async function runAgenticWithEvaluationImpl(
     );
   }
 
-  const revisionUserInstructions = (await options.getPromptBody('designer-agentic-revision-user')).trim();
+  const revisionUserInstructions = (await getPromptBody('designer-agentic-revision-user')).trim();
 
   while (
     !isEvalSatisfied(snapshot.aggregate, satisfactionOpts) &&

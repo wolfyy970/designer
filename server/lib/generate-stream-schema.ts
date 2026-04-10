@@ -52,7 +52,6 @@ export const GenerateStreamBodySchema = z.object({
   agenticMinOverallScore: z.number().min(0).max(5).optional(),
   /** Per-rubric weights merged with defaults and renormalized on the server. */
   rubricWeights: RubricWeightsPartialSchema.optional(),
-  promptOverrides: z.record(z.string(), z.string()).optional(),
 });
 
 export type GenerateStreamBody = z.infer<typeof GenerateStreamBodySchema>;

@@ -10,7 +10,7 @@ import {
   type HypothesisGenerationContext,
 } from '../../src/workspace/hypothesis-generation-pure.ts';
 import { incubateHypothesisPrompts } from '../services/incubator.ts';
-import { createResolvePromptBody, sanitizePromptOverrides } from './prompt-overrides.ts';
+import { getPromptBody } from './prompt-resolution.ts';
 import { generateId, now } from '../../src/lib/utils.ts';
 
 import { applyLockdownToHypothesisContext } from './lockdown-model.ts';
@@ -42,8 +42,7 @@ export async function buildHypothesisWorkspaceBundle(
   if (!ctxRaw) return null;
   const ctx = applyLockdownToHypothesisContext(ctxRaw);
 
-  const resolvePrompt = createResolvePromptBody(sanitizePromptOverrides(body.promptOverrides));
-  const hypothesisTemplate = await resolvePrompt('designer-hypothesis-inputs');
+  const hypothesisTemplate = await getPromptBody('designer-hypothesis-inputs');
   const filteredPlan = {
     id: generateId(),
     specId: ctx.spec.id,

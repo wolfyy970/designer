@@ -1,17 +1,17 @@
 /**
- * Scan recent meta-harness history for a winning session whose prompts/skills
- * differ from live API + repo (unpromoted).
+ * Scan recent meta-harness history for a winning session whose skills/rubric
+ * differ from the repo (unpromoted). Prompt overrides are a legacy concept —
+ * prompts are now managed as skills and PROMPT.md files; the API prompt
+ * endpoint no longer exists.
  */
 import { access, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { normalizeError } from '../src/lib/error-utils.ts';
 import { ARTIFACT } from './constants.ts';
-import { fetchPromptBody } from './prompt-fetch.ts';
 import { diffSkillTrees } from './skill-diff.ts';
-import { BestCandidateJsonSchema, parsePromptOverridesJsonString } from './schemas.ts';
+import { BestCandidateJsonSchema } from './schemas.ts';
 import { parseRubricWeightsJson, rubricWeightsDiffer, type RubricWeightsRecord } from './rubric-weights-compare.ts';
 
-const PREFLIGHT_PROMPT_FETCH_TIMEOUT_MS = 5_000;
 const DEFAULT_MAX_SESSIONS_TO_SCAN = 5;
 
 export type StalePrompt = {
@@ -62,20 +62,6 @@ async function readText(p: string): Promise<string | null> {
   }
 }
 
-/** GET /api/prompts/:key with timeout; returns body or error detail. */
-async function fetchLivePromptBody(
-  apiBaseUrl: string,
-  key: string,
-): Promise<{ body: string | null; fetchError?: string }> {
-  const r = await fetchPromptBody(apiBaseUrl, key, PREFLIGHT_PROMPT_FETCH_TIMEOUT_MS);
-  return { body: r.body, fetchError: r.error };
-}
-
-function loadWinnerOverrides(raw: string | null): Record<string, string> {
-  if (!raw) return {};
-  return parsePromptOverridesJsonString(raw);
-}
-
 type ScanUnpromotedSessionsOptions = {
   historyRoot: string;
   repoRoot: string;
@@ -91,7 +77,7 @@ type ScanUnpromotedSessionsOptions = {
 export async function scanUnpromotedSessions(
   options: ScanUnpromotedSessionsOptions,
 ): Promise<UnpromotedSession | null> {
-  const { historyRoot, repoRoot, apiBaseUrl, skillsDir } = options;
+  const { historyRoot, repoRoot, skillsDir } = options;
   const maxSessions = options.maxSessionsToScan ?? DEFAULT_MAX_SESSIONS_TO_SCAN;
 
   let sessionNames: string[];
@@ -137,26 +123,8 @@ export async function scanUnpromotedSessions(
     const candidateDir = path.join(sessionDir, `candidate-${candidateId}`);
     if (!(await fileExists(candidateDir))) continue;
 
-    const overridesRaw = await readText(path.join(candidateDir, ARTIFACT.promptOverridesJson));
-    const overrides = loadWinnerOverrides(overridesRaw);
-    const sortedKeys = Object.keys(overrides).sort();
-
     const stalePrompts: StalePrompt[] = [];
-    let fetchSuccesses = 0;
-    for (const key of sortedKeys) {
-      const winnerBody = overrides[key]!;
-      const { body: liveBody, fetchError } = await fetchLivePromptBody(apiBaseUrl, key);
-      if (liveBody != null) fetchSuccesses += 1;
-      if (liveBody === winnerBody) continue;
-      stalePrompts.push({
-        key,
-        liveBody: liveBody ?? '',
-        winnerBody,
-        fetchError: liveBody == null ? fetchError : undefined,
-      });
-    }
-    const allFetchesFailed =
-      sortedKeys.length > 0 && fetchSuccesses === 0 && stalePrompts.length > 0;
+    const allFetchesFailed = false;
 
     const staleSkills: StaleSkill[] = [];
     const snapshotRoot = path.join(candidateDir, ARTIFACT.skillsSnapshot);

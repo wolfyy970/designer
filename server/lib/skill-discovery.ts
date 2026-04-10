@@ -11,6 +11,16 @@ export type { SkillCatalogEntry };
 export const SKILL_FILENAME = 'SKILL.md';
 const MAX_SEED_FILE_BYTES = 256_000;
 
+export type SessionType = 'design' | 'incubation' | 'evaluation' | 'inputs-gen' | 'design-system';
+
+const SESSION_TAGS: Record<SessionType, string[]> = {
+  design: ['design'],
+  incubation: ['incubation'],
+  evaluation: ['evaluation'],
+  'inputs-gen': ['inputs-gen'],
+  'design-system': ['design-system'],
+};
+
 const TEXT_EXT = new Set([
   '.md',
   '.txt',
@@ -87,6 +97,15 @@ async function safeReadSkillDir(skillsRoot: string, name: string): Promise<Skill
 /** Skills listed in the system prompt and pre-seeded into the sandbox (excludes `when: manual`). */
 export function filterSkillsForCatalog(entries: SkillCatalogEntry[]): SkillCatalogEntry[] {
   return entries.filter((e) => e.when !== 'manual');
+}
+
+/** Filter skills for a specific Pi session type by matching tags. */
+export function filterSkillsForSession(entries: SkillCatalogEntry[], sessionType: SessionType): SkillCatalogEntry[] {
+  const allowedTags = SESSION_TAGS[sessionType];
+  return entries.filter((e) => {
+    if (e.when === 'manual') return false;
+    return e.tags.some((t) => allowedTags.includes(t));
+  });
 }
 
 export async function discoverSkills(skillsRoot: string): Promise<SkillCatalogEntry[]> {
@@ -224,4 +243,21 @@ function escapeXmlAttr(s: string): string {
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+const skillBodyCache = new Map<string, string>();
+
+/** Read a skill's markdown body by key (directory name under skills/). Cached. */
+export async function getSkillBody(key: string, skillsRoot?: string): Promise<string> {
+  const cached = skillBodyCache.get(key);
+  if (cached !== undefined) return cached;
+  const root = resolveSkillsRoot(skillsRoot);
+  const entry = await safeReadSkillDir(root, key);
+  if (!entry) throw new Error(`Skill "${key}" not found under ${root}`);
+  skillBodyCache.set(key, entry.bodyMarkdown);
+  return entry.bodyMarkdown;
+}
+
+export function clearSkillBodyCache(): void {
+  skillBodyCache.clear();
 }

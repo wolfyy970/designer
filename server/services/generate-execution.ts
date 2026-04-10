@@ -1,13 +1,9 @@
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import { env } from '../env.ts';
-import { isLangfuseTracingEnabled } from '../lib/langfuse-tracing-enabled.ts';
-import { createTraceId, startActiveObservation } from '@langfuse/tracing';
 import { runAgenticWithEvaluation } from './agentic-orchestrator.ts';
 import type { GenerateStreamBody } from '../lib/generate-stream-schema.ts';
-import { GENERATION_MODE } from '../../src/constants/generation.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { agenticOrchestratorEventToSse } from '../lib/agentic-sse-map.ts';
-import { createResolvePromptBody, sanitizePromptOverrides } from '../lib/prompt-overrides.ts';
 import { createWriteGate, type WriteGate } from '../lib/sse-write-gate.ts';
 
 export { createWriteGate };
@@ -17,8 +13,6 @@ export interface SseStreamWriter {
 }
 
 type LaneEndMode = 'done' | 'lane_done';
-
-const AGENTIC_GENERATE_SPAN_ID = '0000000000000001';
 
 /**
  * Runs agentic generation and writes SSE events.
@@ -40,7 +34,6 @@ async function executeGenerateStream(
 ): Promise<void> {
   const { allocId, laneIndex, laneEndMode = 'done', writeGate, correlationId } = options;
   const gate = writeGate ?? { enqueue: (fn) => fn() };
-  const resolvePrompt = createResolvePromptBody(sanitizePromptOverrides(body.promptOverrides));
 
   const wrap = (data: Record<string, unknown>): Record<string, unknown> =>
     laneIndex !== undefined ? { ...data, laneIndex } : data;
@@ -83,7 +76,6 @@ async function executeGenerateStream(
       maxRevisionRounds: body.agenticMaxRevisionRounds ?? env.AGENTIC_MAX_REVISION_ROUNDS,
       minOverallScore: body.agenticMinOverallScore ?? env.AGENTIC_MIN_OVERALL_SCORE,
       rubricWeights: body.rubricWeights,
-      getPromptBody: resolvePrompt,
       onStream: writeAgentic,
     });
     if (agenticResult?.checkpoint) {
@@ -103,28 +95,7 @@ async function executeGenerateStream(
     }
   };
 
-  if (!isLangfuseTracingEnabled() || !correlationId) {
-    await runAgentic();
-    return;
-  }
-
-  const parentSpanContext = {
-    traceId: await createTraceId(correlationId),
-    spanId: AGENTIC_GENERATE_SPAN_ID,
-    traceFlags: 1,
-  };
-  await startActiveObservation(
-    'generate-agentic',
-    async (span) => {
-      span.update({
-        metadata: { correlationId, providerId: body.providerId, modelId: body.modelId },
-        input: { mode: GENERATION_MODE.AGENTIC, promptPreview: body.prompt.slice(0, 400) },
-      });
-      await runAgentic();
-      span.update({ output: { done: true } });
-    },
-    { parentSpanContext },
-  );
+  await runAgentic();
 }
 
 async function tryWriteSseErrorTail(

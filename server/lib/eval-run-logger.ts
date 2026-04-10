@@ -7,6 +7,7 @@ import path from 'node:path';
 import type { PromptKey } from '../../src/lib/prompts/defaults.ts';
 import type { AggregatedEvaluationReport, EvaluationRoundSnapshot } from '../../src/types/evaluation.ts';
 import { buildAgenticSystemContext } from './build-agentic-system-context.ts';
+import { getPromptBody } from './prompt-resolution.ts';
 
 const LOG_PROMPT_KEYS: PromptKey[] = [
   'designer-agentic-system',
@@ -57,11 +58,11 @@ export async function writeAgenticEvalRunLog(input: {
   await writeFile(path.join(root, 'meta.json'), `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
 
   for (const key of LOG_PROMPT_KEYS) {
-    const body = await input.getPromptBody(key);
+    const body = await getPromptBody(key);
     await writeFile(path.join(root, 'prompts', `${key}.txt`), body, 'utf8');
   }
 
-  const ctx = await buildAgenticSystemContext({ getPromptBody: input.getPromptBody });
+  const ctx = await buildAgenticSystemContext({});
   for (const [relPath, content] of Object.entries(ctx.sandboxSeedFiles)) {
     if (!relPath.startsWith('skills/')) continue;
     const dest = path.join(root, relPath);

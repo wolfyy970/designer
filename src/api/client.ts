@@ -39,8 +39,6 @@ import { DEFAULT_RUBRIC_WEIGHTS } from '../types/evaluation';
 import type { ZodError, ZodType } from 'zod';
 import {
   IncubateResponseSchema,
-  DesignSystemExtractResponseSchema,
-  InputsGenerateResponseSchema,
   HypothesisPromptBundleResponseSchema,
   ModelsResponseSchema,
   ProvidersListResponseSchema,
@@ -579,12 +577,53 @@ export async function postTraceEvents(body: {
   }
 }
 
+// ── Task SSE helper (reads an agentic task stream, returns the result) ──
+
+async function postTaskStream(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<{ result: string }> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(parseApiErrorBody(text));
+  }
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('No response stream');
+
+  let result: string | null = null;
+  let errorMsg: string | null = null;
+
+  await readSseEventStream(reader, (eventName, dataLine) => {
+    try {
+      const data = JSON.parse(dataLine) as Record<string, unknown>;
+      if (eventName === SSE_EVENT_NAMES.task_result && typeof data.result === 'string') {
+        result = data.result;
+      } else if (eventName === SSE_EVENT_NAMES.error && typeof data.error === 'string') {
+        errorMsg = data.error;
+      }
+    } catch {
+      /* skip malformed events */
+    }
+  });
+
+  if (errorMsg && !result) throw new Error(errorMsg);
+  if (!result) throw new Error('Task completed without result');
+  return { result };
+}
+
 // ── Design System ───────────────────────────────────────────────────
 
 export async function extractDesignSystem(
   req: DesignSystemExtractRequest,
 ): Promise<DesignSystemExtractResponse> {
-  return postParsed('/design-system/extract', req, DesignSystemExtractResponseSchema);
+  return postTaskStream('/design-system/extract', req);
 }
 
 // ── Inputs auto-generate (spec facets) ────────────────────────────────
@@ -592,5 +631,5 @@ export async function extractDesignSystem(
 export async function generateInputContent(
   req: InputsGenerateRequest,
 ): Promise<InputsGenerateResponse> {
-  return postParsed('/inputs/generate', req, InputsGenerateResponseSchema);
+  return postTaskStream('/inputs/generate', req);
 }

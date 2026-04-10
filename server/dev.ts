@@ -1,5 +1,3 @@
-import { shutdownInstrumentation } from './instrumentation.js';
-
 async function main() {
   const { serve } = await import('@hono/node-server');
   const { default: app } = await import('./app.ts');
@@ -11,7 +9,7 @@ async function main() {
   });
 
   const onShutdown = () => {
-    void shutdownInstrumentation().finally(() => process.exit(0));
+    process.exit(0);
   };
   process.on('SIGINT', onShutdown);
   process.on('SIGTERM', onShutdown);

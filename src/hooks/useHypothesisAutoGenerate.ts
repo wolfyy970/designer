@@ -5,11 +5,6 @@ import { normalizeError } from '../lib/error-utils';
 import { useCanvasStore } from '../stores/canvas-store';
 import { useGenerationStore } from '../stores/generation-store';
 import { useIncubatorStore, findStrategy } from '../stores/incubator-store';
-import {
-  getActivePromptOverrides,
-  spreadPromptOverrides,
-  usePromptOverridesStore,
-} from '../stores/prompt-overrides-store';
 import { useSpecStore } from '../stores/spec-store';
 import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
 import type { HypothesisStrategy } from '../types/incubator';
@@ -77,9 +72,6 @@ export function useHypothesisAutoGenerate({
           referenceDesigns,
           supportsVision,
           promptOptions: { count: 1, existingStrategies },
-          ...spreadPromptOverrides(
-            getActivePromptOverrides(usePromptOverridesStore.getState().overrides),
-          ),
         },
         undefined,
       );

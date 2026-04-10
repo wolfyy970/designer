@@ -25,4 +25,6 @@ export const SSE_EVENT_NAMES = {
   done: 'done',
   /** POST /api/incubate final incubation plan (after streaming deltas). */
   incubate_result: 'incubate_result',
+  /** Generic agentic task result — carries the extracted output from the sandbox. */
+  task_result: 'task_result',
 } as const;

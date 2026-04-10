@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { compileVariantPrompts } from '../compiler';
-import { PROMPT_DEFAULTS } from '../../lib/prompts/shared-defaults';
+import { DESIGNER_HYPOTHESIS_INPUTS_TEMPLATE } from '../../../server/lib/prompt-templates';
 import type { DesignSpec, SpecSectionId, ReferenceImage } from '../../types/spec';
 import type { IncubationPlan, HypothesisStrategy } from '../../types/incubator';
 
-const VARIANT_TEMPLATE = PROMPT_DEFAULTS['designer-hypothesis-inputs'];
+const VARIANT_TEMPLATE = DESIGNER_HYPOTHESIS_INPUTS_TEMPLATE;
 
 function makeSection(id: SpecSectionId, content = '') {
   return {

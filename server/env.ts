@@ -36,8 +36,6 @@ export const env = {
   OPENROUTER_BASE_URL: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai',
   LMSTUDIO_URL: process.env.LMSTUDIO_URL ?? process.env.VITE_LMSTUDIO_URL ?? 'http://localhost:1234',
   NODE_ENV: process.env.NODE_ENV ?? 'development',
-  /** Optional `file:` SQLite URL for legacy prompt import during Langfuse seed (see `legacy-sqlite-prompts.ts`). */
-  DATABASE_URL: process.env.DATABASE_URL ?? '',
   get isDev() {
     return this.NODE_ENV !== 'production';
   },
@@ -128,36 +126,6 @@ export const env = {
     if (explicit) return explicit;
     const port = (process.env.PORT ?? '3001').trim();
     return `http://127.0.0.1:${port}`;
-  },
-  /** Self-hosted or cloud Langfuse origin (no trailing slash). */
-  LANGFUSE_BASE_URL: (process.env.LANGFUSE_BASE_URL ?? 'http://localhost:3100').replace(/\/$/, ''),
-  LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY ?? '',
-  LANGFUSE_SECRET_KEY: process.env.LANGFUSE_SECRET_KEY ?? '',
-  /** Label used for runtime `getPromptBody` and new Prompt Studio saves. Default `production`. */
-  LANGFUSE_PROMPT_LABEL: (process.env.LANGFUSE_PROMPT_LABEL ?? 'production').trim() || 'production',
-  /**
-   * Optional path to a SQLite file that still has the legacy `PromptVersion` table (e.g. backup before
-   * `20260402120000_drop_prisma_prompts`). Seed uses latest bodies per key when set; otherwise
-   * `shared-defaults`. **Create-only** seed never overwrites an existing labeled prompt unless
-   * `LANGFUSE_SEED_SYNC` is set — see `langfuse-seed-prompts.ts`.
-   */
-  get LANGFUSE_PROMPT_IMPORT_SQLITE(): string {
-    return (process.env.LANGFUSE_PROMPT_IMPORT_SQLITE ?? '').trim();
-  },
-  /**
-   * When true (`1`, `true`, `yes`), Langfuse seed **syncs** every key: new versions are created when the
-   * labeled body differs from repo/SQLite target text (moves `LANGFUSE_PROMPT_LABEL`). Default false:
-   * **Prompt Studio / Langfuse** is source of truth after initial bootstrap (`pnpm langfuse:sync-prompts`).
-   */
-  get langfuseSeedSync(): boolean {
-    const v = (process.env.LANGFUSE_SEED_SYNC ?? '').trim().toLowerCase();
-    return v === '1' || v === 'true' || v === 'yes';
-  },
-  get langfuseTracingEnabled() {
-    if (process.env.VITEST === 'true') return false;
-    const pk = this.LANGFUSE_PUBLIC_KEY.trim();
-    const sk = this.LANGFUSE_SECRET_KEY.trim();
-    return Boolean(pk && sk && this.LANGFUSE_BASE_URL);
   },
   /**
    * When true (default when unset), all LLM routes clamp to OpenRouter + MiniMax M2.5.

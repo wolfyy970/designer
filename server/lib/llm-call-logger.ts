@@ -3,7 +3,6 @@
  * records one row in the dev LLM log (see /api/logs).
  */
 import { performance } from 'node:perf_hooks';
-import type { LangfuseGenerationAttributes } from '@langfuse/tracing';
 import type {
   ChatMessage,
   ChatResponse,
@@ -25,12 +24,12 @@ import type { CompletionPurpose } from './completion-budget.ts';
 import { getProvider } from '../services/providers/registry.ts';
 import { mergeReferenceImagesIntoMessages } from './merge-reference-images-into-messages.ts';
 import { providerLogFields } from './llm-log-metadata.ts';
-import { runWithOptionalLlmGeneration } from './langfuse-llm-generation.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 
 const LLM_WAIT_PULSE_MS = 6000;
 
-type GenerationUpdater = (attrs: LangfuseGenerationAttributes) => void;
+type GenerationUpdater = (attrs: Record<string, unknown>) => void;
+const noopUpdater: GenerationUpdater = () => {};
 
 /** Updates in-progress log row with elapsed seconds until cancelled (blocking + pre-first-token stream). */
 function runWaitingPulse(logId: string, t0: number): () => void {
@@ -68,15 +67,6 @@ function usageLogFields(meta?: ChatResponseMetadata): Partial<LlmLogEntry> {
   return o;
 }
 
-function usageDetailsForLangfuse(meta?: ChatResponseMetadata): Record<string, number> | undefined {
-  if (!meta) return undefined;
-  const o: Record<string, number> = {};
-  if (meta.promptTokens != null) o.prompt_tokens = meta.promptTokens;
-  if (meta.completionTokens != null) o.completion_tokens = meta.completionTokens;
-  if (meta.totalTokens != null) o.total_tokens = meta.totalTokens;
-  if (meta.reasoningTokens != null) o.reasoning_tokens = meta.reasoningTokens;
-  return Object.keys(o).length ? o : undefined;
-}
 
 /**
  * Shared lifecycle: Langfuse input metadata, dev log row, abort wiring, waiting pulse,
@@ -146,10 +136,6 @@ export async function withLlmCallLifecycle(
       durationMs: Math.round(performance.now() - t0),
       ...usageLogFields(response.metadata),
     });
-    upd({
-      output: response.raw,
-      usageDetails: usageDetailsForLangfuse(response.metadata),
-    });
     return response;
   } catch (err) {
     if (signal) signal.removeEventListener('abort', onAbort);
@@ -157,7 +143,6 @@ export async function withLlmCallLifecycle(
       settled = true;
       failLlmCall(logId, normalizeError(err), Math.round(performance.now() - t0));
     }
-    upd({ level: 'ERROR', statusMessage: normalizeError(err) });
     throw err;
   } finally {
     stopPulse();
@@ -197,13 +182,8 @@ export async function loggedGenerateChat(
   const sig = ctx.signal ?? options.signal;
   const mergedOptions: ProviderOptions = { ...options, signal: sig };
 
-  return runWithOptionalLlmGeneration(
-    `llm:${ctx.source}:${ctx.phase}`,
-    ctx.correlationId,
-    async (upd) =>
-      withLlmCallLifecycle(ctx, model, providerId, systemPrompt, userPrompt, sig, upd, async () =>
-        provider.generateChat(messages, mergedOptions),
-      ),
+  return withLlmCallLifecycle(ctx, model, providerId, systemPrompt, userPrompt, sig, noopUpdater, async () =>
+    provider.generateChat(messages, mergedOptions),
   );
 }
 
@@ -224,11 +204,7 @@ export async function loggedGenerateChatStream(
   const sig = ctx.signal ?? options.signal;
   const mergedOptions: ProviderOptions = { ...options, signal: sig };
 
-  return runWithOptionalLlmGeneration(
-    `llm:${ctx.source}:${ctx.phase}`,
-    ctx.correlationId,
-    async (upd) =>
-      withLlmCallLifecycle(ctx, model, providerId, systemPrompt, userPrompt, sig, upd, async (h) => {
+  return withLlmCallLifecycle(ctx, model, providerId, systemPrompt, userPrompt, sig, noopUpdater, async (h) => {
         let accSeenLen = 0;
         let streamBodyStarted = false;
 
@@ -255,8 +231,7 @@ export async function loggedGenerateChatStream(
               await onDeltaForLog(r.raw);
               return r;
             })();
-      }),
-  );
+      });
 }
 
 type CallLLMOptions = {
@@ -278,23 +253,18 @@ export async function loggedCallLLM(
   const { systemPrompt, userPrompt } = chatMessagesToLogFields(messages);
   const sig = options.signal ?? ctx.signal;
 
-  const response = await runWithOptionalLlmGeneration(
-    `llm:${ctx.source}:${ctx.phase}`,
-    ctx.correlationId,
-    async (upd) =>
-      withLlmCallLifecycle(ctx, model, providerId, systemPrompt, userPrompt, sig, upd, async () => {
-        const provider = getProvider(providerId);
-        if (!provider) {
-          throw new Error(`Unknown provider: ${providerId}`);
-        }
-        const finalMessages = mergeReferenceImagesIntoMessages(messages, options.images);
-        return provider.generateChat(finalMessages, {
-          model,
-          signal: sig,
-          ...(options.images && options.images.length > 0 ? { supportsVision: true } : {}),
-          completionPurpose: options.completionPurpose,
-        });
-      }),
-  );
+  const response = await withLlmCallLifecycle(ctx, model, providerId, systemPrompt, userPrompt, sig, noopUpdater, async () => {
+    const provider = getProvider(providerId);
+    if (!provider) {
+      throw new Error(`Unknown provider: ${providerId}`);
+    }
+    const finalMessages = mergeReferenceImagesIntoMessages(messages, options.images);
+    return provider.generateChat(finalMessages, {
+      model,
+      signal: sig,
+      ...(options.images && options.images.length > 0 ? { supportsVision: true } : {}),
+      completionPurpose: options.completionPurpose,
+    });
+  });
   return response.raw;
 }

@@ -1,10 +1,8 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Modal from './Modal';
 import { DesignTokensModal } from './DesignTokensModal';
-import PromptEditor from './PromptEditor';
 import { PartitionSlider } from './PartitionSlider';
 import { floatWeightsToPercents, percentsToFloatWeights } from '../../lib/partition-slider-utils';
-import type { PromptKey } from '../../stores/prompt-store';
 import { useCanvasStore } from '../../stores/canvas-store';
 import { useEvaluatorDefaultsStore } from '../../stores/evaluator-defaults-store';
 import {
@@ -14,7 +12,6 @@ import {
   EVALUATOR_MIN_SCORE,
 } from '../../types/evaluator-settings';
 import { EVALUATOR_RUBRIC_IDS, type EvaluatorRubricId } from '../../types/evaluation';
-import { isPromptOverrideEditingEnabled } from '../../lib/prompt-override-policy';
 
 const RUBRIC_LABELS: Record<EvaluatorRubricId, string> = {
   design: 'Design quality',
@@ -26,13 +23,10 @@ const RUBRIC_LABELS: Record<EvaluatorRubricId, string> = {
 interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
-  /** When the modal opens, switch to this tab once per open cycle */
-  initialTab?: 'general' | 'prompts' | 'evaluator';
-  /** Prompt Studio key (used with prompts tab) */
-  initialPromptKey?: PromptKey;
+  initialTab?: 'general' | 'evaluator';
 }
 
-type Tab = 'general' | 'prompts' | 'evaluator';
+type Tab = 'general' | 'evaluator';
 
 function RubricWeightsPartitionCard({
   rubricWeights,
@@ -84,7 +78,6 @@ export default function SettingsModal({
   open,
   onClose,
   initialTab,
-  initialPromptKey,
 }: SettingsModalProps) {
   const [tab, setTab] = useState<Tab>('general');
   const [designTokensOpen, setDesignTokensOpen] = useState(false);
@@ -94,16 +87,10 @@ export default function SettingsModal({
 
   useEffect(() => {
     if (open && !wasOpenRef.current && initialTab) {
-      const safeInitial =
-        initialTab === 'prompts' && !isPromptOverrideEditingEnabled ? 'general' : initialTab;
-      setTab(safeInitial);
+      setTab(initialTab);
     }
     wasOpenRef.current = open;
   }, [open, initialTab]);
-
-  useEffect(() => {
-    if (!isPromptOverrideEditingEnabled && tab === 'prompts') setTab('general');
-  }, [tab]);
 
   return (
     <>
@@ -111,7 +98,7 @@ export default function SettingsModal({
       open={open}
       onClose={onClose}
       title="Settings"
-      size={tab === 'prompts' && isPromptOverrideEditingEnabled ? 'xl' : 'md'}
+      size="md"
     >
       <div className="-mx-5 -mt-4 mb-4 flex border-b border-border px-5">
         <button
@@ -136,19 +123,6 @@ export default function SettingsModal({
         >
           Evaluator defaults
         </button>
-        {isPromptOverrideEditingEnabled ? (
-          <button
-            type="button"
-            onClick={() => setTab('prompts')}
-            className={`border-b-2 px-3 py-2 text-xs font-medium transition-colors ${
-              tab === 'prompts'
-                ? 'border-fg text-fg'
-                : 'border-transparent text-fg-secondary hover:text-fg-secondary'
-            }`}
-          >
-            Prompts
-          </button>
-        ) : null}
       </div>
 
       {tab === 'general' && (
@@ -191,10 +165,6 @@ export default function SettingsModal({
       )}
 
       {tab === 'evaluator' && <EvaluatorSettingsTab />}
-
-      {tab === 'prompts' && isPromptOverrideEditingEnabled ? (
-        <PromptEditor initialPromptKey={initialPromptKey} />
-      ) : null}
     </Modal>
     {import.meta.env.DEV ? (
       <DesignTokensModal open={designTokensOpen} onClose={() => setDesignTokensOpen(false)} />
