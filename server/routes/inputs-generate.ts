@@ -9,6 +9,7 @@ import {
   buildInputsGenerateUserMessage,
 } from '../../src/lib/prompts/inputs-generate.ts';
 import { executeTaskAgentStream } from '../services/task-agent-execution.ts';
+import { env } from '../env.ts';
 
 const InputsGenerateTargetSchema = z.enum([
   'research-context',
@@ -65,6 +66,15 @@ ${contextMessage}`;
   return streamSSE(c, async (stream) => {
     const abortSignal = c.req.raw.signal;
     const correlationId = crypto.randomUUID();
+    if (env.isDev) {
+      console.debug('[inputs-generate] request', {
+        correlationId,
+        inputId: body.inputId,
+        providerId: body.providerId,
+        modelId: body.modelId,
+        designBriefChars: body.designBrief.length,
+      });
+    }
     await runTaskAgentSseBody(stream, async ({ write, allocId, gate }) => {
       const taskResult = await executeTaskAgentStream(
         stream,

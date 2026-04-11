@@ -28,7 +28,12 @@ import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-co
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
-import GeneratingSkeleton from './GeneratingSkeleton';
+import TaskStreamMonitor from './TaskStreamMonitor';
+import { createTaskStreamSession } from '../../../hooks/task-stream-session';
+import {
+  createInitialTaskStreamState,
+  type TaskStreamState,
+} from '../../../hooks/task-stream-state';
 import { NodeErrorBlock } from './shared/NodeErrorBlock';
 
 const COUNT_OPTIONS = [1, 2, 3, 5];
@@ -59,7 +64,9 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
   const { providerId, modelId, supportsVision } = useConnectedModel(id);
 
   const hypothesisCount = (data.hypothesisCount as number | undefined) ?? DEFAULT_COUNT;
-  const [incubateLiveLine, setIncubateLiveLine] = useState('');
+  const [taskStreamState, setTaskStreamState] = useState<TaskStreamState>(() =>
+    createInitialTaskStreamState('idle'),
+  );
 
   // Count connected input nodes (spec inputs + reference previews)
   const connectedInputCount = useMemo(() => {
@@ -102,6 +109,8 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
   );
 
   const handleIncubate = useCallback(async () => {
+    if (useIncubatorStore.getState().isCompiling) return;
+
     const results = useGenerationStore.getState().results;
     const wiring = useWorkspaceDomainStore.getState().incubatorWirings[id];
     const { partialSpec, referenceDesigns } =
@@ -117,13 +126,20 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
     }
 
     setCompiling(true);
-    setIncubateLiveLine('');
+    setTaskStreamState({ ...createInitialTaskStreamState(), status: 'streaming' });
     setError(null);
     setEdgeStatusBySource(id, EDGE_STATUS.PROCESSING);
 
     const placeholderIds = addPlaceholderHypotheses(id, hypothesisCount);
 
+    let session: ReturnType<typeof createTaskStreamSession> | undefined;
     try {
+      const taskSession = createTaskStreamSession({
+        sessionId: `incubate-${id}-${Date.now()}`,
+        correlationId: crypto.randomUUID(),
+        onPatch: (patch) => setTaskStreamState((prev) => ({ ...prev, ...patch })),
+      });
+      session = taskSession;
       const map = await incubateStream(
         {
           spec: partialSpec,
@@ -133,16 +149,7 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
           supportsVision,
           promptOptions: { count: hypothesisCount, existingStrategies },
         },
-        {
-          onProgress: (status) => setIncubateLiveLine(status),
-          onCode: (preview) => {
-            const n = preview.length;
-            const tail = preview.slice(-96);
-            setIncubateLiveLine(
-              n > 96 ? `Streaming… ${n} chars · …${tail}` : `Streaming… ${n} chars`,
-            );
-          },
-        },
+        { agentic: taskSession.callbacks },
       );
       removePlaceholders(placeholderIds);
       appendStrategiesToNode(id, map);
@@ -154,7 +161,8 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
       setError(normalizeError(err, 'Incubation failed'));
       setEdgeStatusBySource(id, EDGE_STATUS.ERROR);
     } finally {
-      setIncubateLiveLine('');
+      void session?.finalize();
+      setTaskStreamState(createInitialTaskStreamState('idle'));
       setCompiling(false);
     }
   }, [
@@ -211,10 +219,10 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
 
       {/* Skeleton overlay while incubating */}
       {isCompiling && (
-        <GeneratingSkeleton
-          variant="contentOnly"
-          detail={incubateLiveLine || undefined}
+        <TaskStreamMonitor
+          state={taskStreamState}
           elapsed={elapsed}
+          fallbackLabel="Incubating…"
         />
       )}
 

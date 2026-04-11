@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
 import { Loader2, Wand2 } from 'lucide-react';
 import { useSpecStore } from '../../../stores/spec-store';
@@ -15,9 +15,11 @@ import { inputCardDeleteCopy } from '../../../lib/canvas-permanent-delete-copy';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
 import { useFirstCanvasModel } from '../../../hooks/useFirstCanvasModel';
 import { generateInputContent } from '../../../api/client';
+import { createTaskStreamSession } from '../../../hooks/task-stream-session';
+import { createInitialTaskStreamState, type TaskStreamState } from '../../../hooks/task-stream-state';
 import type { InputsGenerateTargetApiId } from '../../../api/types';
 import ReferenceImageUpload from '../../shared/ReferenceImageUpload';
-import GeneratingSkeleton from './GeneratingSkeleton';
+import TaskStreamMonitor from './TaskStreamMonitor';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
 import { NodeErrorBlock } from './shared/NodeErrorBlock';
@@ -52,7 +54,17 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
   const { providerId, modelId, hasModel } = useFirstCanvasModel();
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [taskStreamState, setTaskStreamState] = useState<TaskStreamState>(() =>
+    createInitialTaskStreamState('idle'),
+  );
   const elapsed = useElapsedTimer(generating);
+  const abortGenRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => {
+      abortGenRef.current?.abort();
+    };
+  }, []);
+
   /** Research / objectives / constraints only: hide wand once this facet has text; keep during an in-flight generate. */
   const showGenerateSection =
     generateApiId != null && (generating || !content.trim());
@@ -63,29 +75,48 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
     const spec = useSpecStore.getState().spec.sections;
     const brief = spec['design-brief']?.content ?? '';
     if (!brief.trim()) return;
+    const ac = new AbortController();
+    abortGenRef.current?.abort();
+    abortGenRef.current = ac;
+
     setGenerating(true);
     setGenerateError(null);
+    setTaskStreamState({ ...createInitialTaskStreamState(), status: 'streaming' });
+    let session: ReturnType<typeof createTaskStreamSession> | undefined;
     try {
-      const response = await generateInputContent({
-        inputId: apiId,
-        designBrief: brief,
-        existingDesign: spec['existing-design']?.content,
-        researchContext: spec['research-context']?.content,
-        objectivesMetrics: spec['objectives-metrics']?.content,
-        designConstraints: spec['design-constraints']?.content,
-        providerId,
-        modelId,
+      const taskSession = createTaskStreamSession({
+        sessionId: `input-gen-${id}-${apiId}-${Date.now()}`,
+        correlationId: crypto.randomUUID(),
+        onPatch: (patch) => setTaskStreamState((prev) => ({ ...prev, ...patch })),
       });
-      if (response) {
+      session = taskSession;
+      const response = await generateInputContent(
+        {
+          inputId: apiId,
+          designBrief: brief,
+          existingDesign: spec['existing-design']?.content,
+          researchContext: spec['research-context']?.content,
+          objectivesMetrics: spec['objectives-metrics']?.content,
+          designConstraints: spec['design-constraints']?.content,
+          providerId,
+          modelId,
+        },
+        { agentic: taskSession.callbacks, signal: ac.signal },
+      );
+      if (response && !ac.signal.aborted) {
         const sid = NODE_TYPE_TO_SECTION[type as CanvasNodeType]!;
         useSpecStore.getState().updateSection(sid, response.result);
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (err instanceof Error && err.name === 'AbortError') return;
       setGenerateError(err instanceof Error ? err.message : 'Generation failed');
-    } finally {
+   } finally {
+      void session?.finalize();
+      setTaskStreamState(createInitialTaskStreamState('idle'));
       setGenerating(false);
     }
-  }, [type, hasModel, providerId, modelId]);
+  }, [type, hasModel, providerId, modelId, id]);
 
   const status = generating
     ? NODE_STATUS.PROCESSING
@@ -111,7 +142,11 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
       {/* Content — same textarea footprint across all spec input nodes */}
       <div className="px-3 pt-1 pb-2.5">
         {generating ? (
-          <GeneratingSkeleton variant="contentOnly" elapsed={elapsed} />
+          <TaskStreamMonitor
+            state={taskStreamState}
+            elapsed={elapsed}
+            fallbackLabel="Generating section…"
+          />
         ) : (
           <textarea
             value={content}

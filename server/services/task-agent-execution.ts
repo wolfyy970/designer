@@ -5,7 +5,7 @@
  * Unlike design generation, task sessions:
  * - Use build-only mode (no evaluation/revision loop)
  * - Extract a result from a designated output file in the sandbox
- * - Return the result so the calling route can emit domain-specific events
+ * - Return the task result so the calling route can emit domain-specific events
  */
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
@@ -18,6 +18,10 @@ import { acquireAgenticSlotOrReject, releaseAgenticSlot } from '../lib/agentic-c
 import { env } from '../env.ts';
 import type { SseStreamWriter } from './generate-execution.ts';
 import { createWriteGate, type WriteGate } from '../lib/sse-write-gate.ts';
+import { OBSERVABILITY_SCHEMA_VERSION } from '../lib/observability-line.ts';
+import { writeObservabilityLine } from '../lib/observability-sink.ts';
+import { appendTaskResultLogEntry, appendTaskRunLogEntry } from '../log-store.ts';
+import { writeTaskRunDiskLog } from '../lib/task-run-logger.ts';
 
 export interface TaskAgentInput {
   userPrompt: string;
@@ -38,6 +42,93 @@ export interface TaskAgentResult {
   files: Record<string, string>;
 }
 
+type TaskOutcome = 'success' | 'error' | 'no_result';
+
+function emitTaskResultLine(input: {
+  sessionType: SessionType;
+  correlationId: string;
+  resultFile: string;
+  resultContent: string;
+  files: Record<string, string>;
+}): void {
+  const ts = new Date().toISOString();
+  writeObservabilityLine({
+    v: OBSERVABILITY_SCHEMA_VERSION,
+    ts,
+    type: 'task_result',
+    payload: {
+      sessionType: input.sessionType,
+      correlationId: input.correlationId,
+      resultFile: input.resultFile,
+      resultContent: input.resultContent,
+      sandboxFilePaths: Object.keys(input.files),
+    },
+  });
+  appendTaskResultLogEntry({
+    correlationId: input.correlationId,
+    sessionType: input.sessionType,
+    resultFile: input.resultFile,
+    resultContent: input.resultContent,
+    sandboxFilePaths: Object.keys(input.files),
+  });
+  if (env.isDev) {
+    console.debug('[task-agent] result extracted', {
+      sessionType: input.sessionType,
+      correlationId: input.correlationId,
+      resultFile: input.resultFile,
+      resultChars: input.resultContent.length,
+      sandboxFileCount: Object.keys(input.files).length,
+    });
+  }
+}
+
+function emitTaskRunLine(input: {
+  sessionType: SessionType;
+  correlationId: string;
+  providerId: string;
+  modelId: string;
+  durationMs: number;
+  outcome: TaskOutcome;
+  resultFile?: string;
+  sandboxFileCount: number;
+  errorMessage?: string;
+}): void {
+  const ts = new Date().toISOString();
+  writeObservabilityLine({
+    v: OBSERVABILITY_SCHEMA_VERSION,
+    ts,
+    type: 'task_run',
+    payload: {
+      sessionType: input.sessionType,
+      correlationId: input.correlationId,
+      providerId: input.providerId,
+      modelId: input.modelId,
+      durationMs: input.durationMs,
+      outcome: input.outcome,
+      resultFile: input.resultFile,
+      sandboxFileCount: input.sandboxFileCount,
+      errorMessage: input.errorMessage,
+    },
+  });
+  appendTaskRunLogEntry({
+    correlationId: input.correlationId,
+    sessionType: input.sessionType,
+    providerId: input.providerId,
+    modelId: input.modelId,
+    durationMs: input.durationMs,
+    outcome: input.outcome,
+    resultFile: input.resultFile,
+    sandboxFileCount: input.sandboxFileCount,
+    errorMessage: input.errorMessage,
+  });
+  if (env.isDev) {
+    console.debug('[task-agent] task_run summary', {
+      ...input,
+      ts,
+    });
+  }
+}
+
 /**
  * Run an agentic task and stream events. Returns the task result (or null on failure).
  * The calling route is responsible for emitting the final result event and `done`.
@@ -50,6 +141,13 @@ export async function executeTaskAgentStream(
     writeGate?: WriteGate;
   },
 ): Promise<TaskAgentResult | null> {
+  const startedAt = Date.now();
+  const correlationId = input.correlationId ?? crypto.randomUUID();
+  let outcome: TaskOutcome = 'error';
+  let errorMessage: string | undefined;
+  let resultFileUsed: string | undefined;
+  let sandboxFileCount = 0;
+
   const gate = options.writeGate ?? createWriteGate();
 
   const write = async (event: string, data: Record<string, unknown>) => {
@@ -67,10 +165,19 @@ export async function executeTaskAgentStream(
 
   const acquired = await acquireAgenticSlotOrReject();
   if (!acquired) {
-    await write(SSE_EVENT_NAMES.error, {
-      error: 'Too many agentic runs are active. Please wait and try again.',
-    });
+    errorMessage = 'Too many agentic runs are active. Please wait and try again.';
+    await write(SSE_EVENT_NAMES.error, { error: errorMessage });
     await write(SSE_EVENT_NAMES.done, {});
+    emitTaskRunLine({
+      sessionType: input.sessionType,
+      correlationId,
+      providerId: input.providerId,
+      modelId: input.modelId,
+      durationMs: Date.now() - startedAt,
+      outcome: 'error',
+      sandboxFileCount: 0,
+      errorMessage,
+    });
     return null;
   }
 
@@ -91,7 +198,8 @@ export async function executeTaskAgentStream(
         modelId: input.modelId,
         thinkingLevel: input.thinkingLevel,
         signal: input.signal,
-        correlationId: input.correlationId,
+        correlationId,
+        sessionType: input.sessionType,
         systemPrompt: ctx.systemPrompt,
         skillCatalog: ctx.skillCatalog,
         seedFiles: ctx.sandboxSeedFiles,
@@ -102,14 +210,45 @@ export async function executeTaskAgentStream(
     );
 
     if (!sessionResult) {
-      await write(SSE_EVENT_NAMES.error, { error: 'Agent session completed without result.' });
+      outcome = 'no_result';
+      errorMessage = 'Agent session completed without result.';
+      await write(SSE_EVENT_NAMES.error, { error: errorMessage });
       return null;
     }
 
+    sandboxFileCount = Object.keys(sessionResult.files).length;
     const resultFile = input.resultFile ?? 'result.json';
+    resultFileUsed = resultFile;
     const resultContent = sessionResult.files[resultFile];
 
     if (resultContent != null) {
+      outcome = 'success';
+      emitTaskResultLine({
+        sessionType: input.sessionType,
+        correlationId,
+        resultFile,
+        resultContent,
+        files: sessionResult.files,
+      });
+      const baseDir = env.OBSERVABILITY_LOG_BASE_DIR;
+      if (baseDir) {
+        void writeTaskRunDiskLog({
+          baseDir,
+          correlationId,
+          sessionType: input.sessionType,
+          providerId: input.providerId,
+          modelId: input.modelId,
+          userPrompt: input.userPrompt,
+          resultFile,
+          resultContent,
+          sandboxFilePaths: Object.keys(sessionResult.files),
+          skillKeys: ctx.loadedSkills.map((s) => s.key),
+          durationMs: Date.now() - startedAt,
+          outcome: 'success',
+        }).catch((err) => {
+          if (env.isDev) console.error('[task-agent] writeTaskRunDiskLog failed', err);
+        });
+      }
       return { result: resultContent, resultFile, files: sessionResult.files };
     }
 
@@ -117,16 +256,49 @@ export async function executeTaskAgentStream(
       ([, content]) => content.trim().length > 0,
     );
     if (firstFile) {
-      return { result: firstFile[1], resultFile: firstFile[0], files: sessionResult.files };
+      outcome = 'success';
+      const [altFile, altContent] = firstFile;
+      resultFileUsed = altFile;
+      emitTaskResultLine({
+        sessionType: input.sessionType,
+        correlationId,
+        resultFile: altFile,
+        resultContent: altContent,
+        files: sessionResult.files,
+      });
+      const baseDir = env.OBSERVABILITY_LOG_BASE_DIR;
+      if (baseDir) {
+        void writeTaskRunDiskLog({
+          baseDir,
+          correlationId,
+          sessionType: input.sessionType,
+          providerId: input.providerId,
+          modelId: input.modelId,
+          userPrompt: input.userPrompt,
+          resultFile: altFile,
+          resultContent: altContent,
+          sandboxFilePaths: Object.keys(sessionResult.files),
+          skillKeys: ctx.loadedSkills.map((s) => s.key),
+          durationMs: Date.now() - startedAt,
+          outcome: 'success',
+        }).catch((err) => {
+          if (env.isDev) console.error('[task-agent] writeTaskRunDiskLog failed', err);
+        });
+      }
+      return { result: altContent, resultFile: altFile, files: sessionResult.files };
     }
 
+    outcome = 'no_result';
+    errorMessage = `Agent did not write the expected result file (${resultFile}).`;
     await write(SSE_EVENT_NAMES.error, {
-      error: `Agent did not write the expected result file (${resultFile}).`,
+      error: errorMessage,
     });
     return null;
   } catch (err) {
+    errorMessage = normalizeError(err);
+    outcome = 'error';
     try {
-      await write(SSE_EVENT_NAMES.error, { error: normalizeError(err) });
+      await write(SSE_EVENT_NAMES.error, { error: errorMessage });
     } catch (writeErr) {
       if (env.isDev) {
         console.error('[task-agent] failed to write error event', writeErr);
@@ -134,6 +306,17 @@ export async function executeTaskAgentStream(
     }
     return null;
   } finally {
+    emitTaskRunLine({
+      sessionType: input.sessionType,
+      correlationId,
+      providerId: input.providerId,
+      modelId: input.modelId,
+      durationMs: Date.now() - startedAt,
+      outcome,
+      resultFile: resultFileUsed,
+      sandboxFileCount,
+      errorMessage: outcome !== 'success' ? errorMessage : undefined,
+    });
     releaseAgenticSlot();
   }
 }

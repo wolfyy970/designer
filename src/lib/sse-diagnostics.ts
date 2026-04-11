@@ -29,7 +29,7 @@ class SseStreamDiagnosticsImpl implements SseStreamDiagnostics {
   recordDrop(reason: string, detail?: string): void {
     this.dropList.push({ reason, detail });
     if (import.meta.env.DEV) {
-      console.debug('[sse:diag] drop', reason, detail ?? '');
+      console.debug('(sse:diag) drop', reason, detail ?? '');
     }
   }
 
@@ -44,7 +44,7 @@ class SseStreamDiagnosticsImpl implements SseStreamDiagnostics {
 
   logClose(): void {
     if (!import.meta.env.DEV) return;
-    console.debug('[sse:diag] stream closed', this.summary());
+    console.debug('(sse:diag) stream closed', this.summary());
   }
 }
 

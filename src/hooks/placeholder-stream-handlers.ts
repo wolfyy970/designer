@@ -22,7 +22,7 @@ import { normalizeError } from '../lib/error-utils';
 
 function streamDevDebug(placeholderId: string, message: string, data?: Record<string, unknown>): void {
   if (!import.meta.env.DEV) return;
-  console.debug(`[stream:${placeholderId.slice(0, 8)}]`, message, data ?? '');
+  console.debug(`(stream:${placeholderId.slice(0, 8)})`, message, data ?? '');
 }
 
 export function createPlaceholderStreamCallbacks(options: {

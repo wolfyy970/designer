@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useMemo } from 'react';
+import { memo, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
 import { useDropzone } from 'react-dropzone';
 import { ImagePlus, Sparkles, Loader2, X } from 'lucide-react';
@@ -30,6 +30,12 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
 
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
+  const abortExtractRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => {
+      abortExtractRef.current?.abort();
+    };
+  }, []);
 
   const update = useCallback(
     (field: string, value: unknown) => updateNodeData(id, { [field]: value }),
@@ -72,15 +78,21 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
 
   const handleExtract = useCallback(async () => {
     if (images.length === 0 || !modelId) return;
+    const ac = new AbortController();
+    abortExtractRef.current?.abort();
+    abortExtractRef.current = ac;
     setExtracting(true);
     setExtractError(null);
     try {
-      const response = await extractDesignSystem({
-        images,
-        providerId: providerId!,
-        modelId: modelId!,
-      });
-      if (!response) return;
+      const response = await extractDesignSystem(
+        {
+          images,
+          providerId: providerId!,
+          modelId: modelId!,
+        },
+        { signal: ac.signal },
+      );
+      if (!response || ac.signal.aborted) return;
       const result = response.result;
       if (content.trim()) {
         update('content', content + '\n\n---\n\n' + result);
@@ -88,6 +100,8 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
         update('content', result);
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (err instanceof Error && err.name === 'AbortError') return;
       setExtractError(err instanceof Error ? err.message : 'Extraction failed');
     } finally {
       setExtracting(false);

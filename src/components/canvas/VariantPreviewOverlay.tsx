@@ -106,6 +106,12 @@ export default function VariantPreviewOverlay() {
       return s.nodes.find((n) => n.id === expandedPreviewId)?.data.pinnedRunId as string | undefined;
     },
   );
+  const previewRefId = useCanvasStore(
+    (s) => {
+      if (!expandedPreviewId) return undefined;
+      return s.nodes.find((n) => n.id === expandedPreviewId)?.data.refId as string | undefined;
+    },
+  );
 
   const [compareId, setCompareId] = useState<string | null>(null);
 
@@ -125,10 +131,10 @@ export default function VariantPreviewOverlay() {
 
   const legacyResult = useMemo(
     () =>
-      !activeResult && expandedPreviewId
-        ? results.find((r) => r.id === expandedPreviewId)
+      !strategyId && previewRefId
+        ? results.find((r) => r.id === previewRefId)
         : undefined,
-    [activeResult, expandedPreviewId, results],
+    [strategyId, previewRefId, results],
   );
   const result = activeResult ?? legacyResult;
 

@@ -61,6 +61,18 @@ function makeEdge(source: string, target: string): AutoEdge {
   return { id: buildEdgeId(source, target), source, target, type: EDGE_TYPES.DATA_FLOW, data: { status: EDGE_STATUS.IDLE } };
 }
 
+/** Deduplicate edges by `id` (first wins). Prevents React Flow duplicate-key warnings when state merges overlap. */
+export function dedupeEdgesById<T extends { id: string }>(edges: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const e of edges) {
+    if (seen.has(e.id)) continue;
+    seen.add(e.id);
+    out.push(e);
+  }
+  return out;
+}
+
 // ── Auto-connect (palette / manual add) ─────────────────────────────
 
 /**

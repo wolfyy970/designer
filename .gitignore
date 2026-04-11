@@ -1,8 +1,9 @@
 # Meta-harness outer-loop run artifacts
 meta-harness/history/
 
-# Logs
-logs
+# Logs (keep agent snapshot readable by AI tools in workspace)
+logs/
+!logs/agent-snapshot.json
 *.log
 npm-debug.log*
 yarn-debug.log*

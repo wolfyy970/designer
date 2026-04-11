@@ -76,6 +76,7 @@
 2. **Pi coding-agent adapter** — Imports of `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent`, virtual file tools, and stream/session wiring belong under `server/services/pi-sdk/` (`virtual-tools.ts`, `types.ts`, etc.). Orchestration and the rest of the server should not import Pi packages directly. If you change that boundary, update **ARCHITECTURE.md** and **SYSTEM_OVERVIEW.md** (not scattered mentions elsewhere).
 3. Update or remove outdated content; verify cross-references.
 4. When a **GET** response shape used by the client changes (e.g. `/api/config`), update `src/api/response-schemas.ts` and `src/api/__tests__/response-schemas.test.ts`.
+5. **Skill packages:** Each `skills/<key>/SKILL.md` must use valid `---` … `---` YAML frontmatter (see `server/lib/frontmatter-split.ts`). A missing closing fence or markdown headings inside the YAML block causes discovery to skip the package (dev warning) — evaluator and agentic prompts that call `getSkillBody` will then throw at runtime.
 5. **Header log viewer** removed — docs point to dev `**/api/logs`** instead; server routes unchanged. Canvas **keyboard delete** (no duplicate React Flow `remove` vs `removeNode`, edge delete without dialog) → **USER_GUIDE.md**; selection guard tests → `src/lib/__tests__/canvas-keyboard-delete.test.ts`.
 6. **Hypothesis — one active model edge** (graph + domain + canvas **v25** / workspace domain **v9** migrations) → **[ARCHITECTURE.md](ARCHITECTURE.md)** only; product copy in **README.md** / **USER_GUIDE.md** only if UX-facing.
 

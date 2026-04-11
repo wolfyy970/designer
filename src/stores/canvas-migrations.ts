@@ -2,6 +2,7 @@ import { isInputGhostTargetType, type InputGhostTargetType } from '../types/canv
 import { DEFAULT_COL_GAP } from '../lib/canvas-layout';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 import { EDGE_TYPES, EDGE_STATUS, NODE_TYPES } from '../constants/canvas';
+import { dedupeEdgesById } from '../lib/canvas-connections';
 
 /** Safely read and parse a localStorage JSON entry. Returns null on any failure. */
 function readLocalStorageJson(key: string): unknown {
@@ -558,6 +559,12 @@ function migrateV24ToV25(s: Record<string, unknown>): Record<string, unknown> {
   return { ...s, edges: nextEdges };
 }
 
+/** v25 → v26: dedupe edges by `id` (fixes duplicate React keys from merged/hydrated state). */
+function migrateV25ToV26(s: Record<string, unknown>): Record<string, unknown> {
+  const edges = (s.edges as Array<{ id: string }>) ?? [];
+  return { ...s, edges: dedupeEdgesById(edges) };
+}
+
 // ── Top-level migration runner ────────────────────────────────────────
 
 /**
@@ -597,6 +604,7 @@ export function migrateCanvasState(
   if (fromVersion < 23) s = migrateV22ToV23(s);
   if (fromVersion < 24) s = migrateV23ToV24(s);
   if (fromVersion < 25) s = migrateV24ToV25(s);
+  if (fromVersion < 26) s = migrateV25ToV26(s);
 
   return s;
 }

@@ -1,5 +1,5 @@
 /**
- * Single NDJSON writer for observability (LLM + trace). Session rings call this; GET reads rings, not the file.
+ * Single NDJSON writer for observability (LLM, trace, task_result, task_run). Session rings call this; GET reads rings, not the file.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,6 +10,27 @@ import { truncateUtf16WithSuffix } from './string-truncate.ts';
 
 /** Deep clone line and truncate LLM bodies / trace label for file only. */
 function observabilityLineForFile(line: ObservabilityLine): ObservabilityLine {
+  if (line.type === 'incubate_parsed') {
+    const max = env.LLM_LOG_MAX_BODY_CHARS;
+    if (max <= 0) return line;
+    const p = { ...line.payload };
+    if (typeof p.firstHypothesisText === 'string' && p.firstHypothesisText.length > max) {
+      p.firstHypothesisText = truncateUtf16WithSuffix(p.firstHypothesisText, max);
+    }
+    return { ...line, payload: p };
+  }
+  if (line.type === 'task_result' || line.type === 'task_run') {
+    const max = env.LLM_LOG_MAX_BODY_CHARS;
+    if (max <= 0) return line;
+    const p = { ...(line.payload as Record<string, unknown>) };
+    for (const key of ['resultContent', 'userPrompt', 'error'] as const) {
+      const v = p[key];
+      if (typeof v === 'string' && v.length > max) {
+        p[key] = truncateUtf16WithSuffix(v, max);
+      }
+    }
+    return { ...line, payload: p };
+  }
   if (line.type === 'trace') {
     const ev = { ...(line.payload.event as Record<string, unknown>) };
     const lab = ev.label;

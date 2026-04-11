@@ -75,8 +75,8 @@ The frontend (Vite, port **5173** only — `strictPort`) proxies `/api/*` to the
 
 In development, every agentic generation stream writes structured `console.debug` entries across the pipeline:
 
-- **Server:** `[bridge]` for event-bridge errors/unhandled types; `[write-gate]` for SSE write failures; `[generate:SSE]` write-count summary at stream close.
-- **Client:** `SseStreamDiagnostics` (`src/lib/sse-diagnostics.ts`) counts events and drops — inspect via `window.__SSE_DIAG`; `[stream:<id>]` per-callback logs in `placeholder-stream-handlers.ts`; `[raf:<id>]` batcher stats at finalize.
+- **Server:** `[bridge]` for event-bridge errors/unhandled types; `[write-gate]` for SSE write failures; `[generate:SSE]` write-count summary at stream close; `(task:SSE)` write summary for **task routes** (`incubate`, `inputs-generate`, `design-system` — see `server/lib/sse-task-route.ts`).
+- **Client:** `SseStreamDiagnostics` (`src/lib/sse-diagnostics.ts`) counts events and drops — inspect via `window.__SSE_DIAG`; `(stream:<id>)` per-callback logs in `placeholder-stream-handlers.ts`; `(raf:<id>)` batcher stats at finalize. (Prefixes use parentheses so Tailwind’s scanner does not treat them as arbitrary class names.)
 
 All diagnostics are tree-shaken in production or gated behind `import.meta.env.DEV` / `env.isDev`.
 

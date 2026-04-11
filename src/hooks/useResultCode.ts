@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { normalizeError } from '../lib/error-utils';
 import { loadCode } from '../services/idb-storage';
 
+/** Dedupe dev logs: many preview nodes + Strict Mode would spam the same missing IDs. */
+const missingCodeDevLogged = new Set<string>();
+
 /**
  * Load generated code from IndexedDB for a given result ID.
  * Returns undefined while loading — consumers should show loading state.
@@ -26,10 +29,12 @@ export function useResultCode(resultId: string | undefined, reloadTrigger?: unkn
     loadCode(resultId)
       .then((c) => {
         if (!cancelled) {
-          if (import.meta.env.DEV && !c) {
-            console.warn(`[useResultCode] No code found in IndexedDB for result ${resultId.slice(0, 8)}...`);
-          } else if (import.meta.env.DEV && c) {
-            console.log(`[useResultCode] Loaded code for ${resultId.slice(0, 8)}... (${c.length} chars)`);
+          if (import.meta.env.DEV && !c && !missingCodeDevLogged.has(resultId)) {
+            missingCodeDevLogged.add(resultId);
+            // Expected when pins reference runs cleared from IDB or from another session.
+            console.debug(
+              `[useResultCode] No code in IndexedDB for result ${resultId.slice(0, 8)}…`,
+            );
           }
           setCode(c);
           setIsLoading(false);

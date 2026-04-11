@@ -306,6 +306,7 @@ async function runAgenticPiSessionRound(
     {
       ...options.build,
       ...extras,
+      sessionType: options.sessionType ?? 'design',
       systemPrompt: ctx.systemPrompt,
       skillCatalog: ctx.skillCatalog,
     },

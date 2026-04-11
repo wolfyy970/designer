@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { getLogEntries, clearLogEntries } from '../log-store.ts';
+import { getLogEntries, getTaskLogEntries, clearLogEntries } from '../log-store.ts';
 import { appendTraceLines, getTraceLogLines } from '../trace-log-store.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
 import { env } from '../env.ts';
@@ -35,6 +35,7 @@ logs.get('/', (c) => {
   return c.json({
     llm: getLogEntries(),
     trace: getTraceLogLines(),
+    task: getTaskLogEntries(),
   });
 });
 

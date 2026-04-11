@@ -722,3 +722,17 @@ describe('v24 → v25: single model edge per hypothesis', () => {
     expect(edges[0].target).toBe('h1');
   });
 });
+
+describe('v25 → v26: dedupe edges by id', () => {
+  it('keeps the first edge when duplicate ids appear', () => {
+    const dup = makeEdge('edge-incubator-a-to-hypothesis-b', 'a', 'b');
+    const state = {
+      nodes: [],
+      edges: [dup, { ...dup }],
+    };
+    const result = migrateCanvasState(state, 25);
+    const edges = result.edges as Array<Record<string, unknown>>;
+    expect(edges).toHaveLength(1);
+    expect(edges[0].id).toBe('edge-incubator-a-to-hypothesis-b');
+  });
+});

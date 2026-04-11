@@ -30,6 +30,9 @@ export default function ArtifactPreviewFrame({ files, title, className, style }:
     return (
       <iframe
         src={previewSrc}
+        // URL previews are served same-origin (/api/preview/...). They need
+        // allow-same-origin so the bundle can use localStorage and parent postMessage;
+        // Chrome may warn that scripts+same-origin weakens the sandbox — required for previews.
         sandbox="allow-scripts allow-same-origin"
         title={title}
         className={className}

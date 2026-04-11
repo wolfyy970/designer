@@ -12,6 +12,7 @@ import {
   type NodeChange,
 } from '@xyflow/react';
 import { EDGE_STATUS, EDGE_TYPES } from '../constants/canvas';
+import { dedupeEdgesById } from '../lib/canvas-connections';
 import type { WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 
 export type { Connection, EdgeChange, NodeChange };
@@ -42,7 +43,7 @@ function toReactFlowEdge(edge: WorkspaceEdge): Edge {
 }
 
 export function toReactFlowEdges(edges: WorkspaceEdge[]): Edge[] {
-  return edges.map(toReactFlowEdge);
+  return dedupeEdgesById(edges).map(toReactFlowEdge);
 }
 
 function fromReactFlowEdge(edge: Edge): WorkspaceEdge {

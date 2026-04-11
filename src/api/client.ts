@@ -147,15 +147,34 @@ export interface IncubateStreamCallbacks {
   onDone?: () => void;
 }
 
+/** Explicit split when both legacy incubate callbacks and agentic stream callbacks are needed. */
+export interface IncubateStreamOptions {
+  incubate?: IncubateStreamCallbacks;
+  agentic?: GenerateStreamCallbacks;
+}
+
+function normalizeIncubateOptions(
+  second?: IncubateStreamCallbacks | IncubateStreamOptions,
+): IncubateStreamOptions {
+  if (!second) return {};
+  if (typeof second === 'object' && ('agentic' in second || 'incubate' in second)) {
+    return second as IncubateStreamOptions;
+  }
+  return { incubate: second as IncubateStreamCallbacks };
+}
+
 /**
- * POST /api/incubate — consumes SSE (`progress`, `code`, `incubate_result`, `done`, `error`).
+ * POST /api/incubate — consumes SSE (`progress`, `code`, `incubate_result`, `done`, `error`)
+ * plus the same agentic events as design generation when `options.agentic` is set.
  * Resolves with the incubation plan from the final `incubate_result` event.
  */
 export async function incubateStream(
   req: IncubateRequest,
-  callbacks?: IncubateStreamCallbacks,
-  signal?: AbortSignal,
+  second?: IncubateStreamCallbacks | IncubateStreamOptions,
+  third?: AbortSignal,
 ): Promise<IncubateResponse> {
+  const opts = normalizeIncubateOptions(second);
+  const signal = third;
   const response = await fetch(`${API_BASE}/incubate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -174,59 +193,86 @@ export async function incubateStream(
   let result: IncubateResponse | undefined;
   let streamError: string | undefined;
 
-  await readSseEventStream(reader, async (currentEvent, raw) => {
-    const ev = currentEvent.trim();
-    const parsed = parseHypothesisSseJson(raw);
+  const diag = createSseStreamDiagnostics();
+  attachSseDiagWindow(diag);
 
-    if (ev === SSE_EVENT_NAMES.error) {
-      const msg =
-        parsed && typeof parsed.error === 'string'
-          ? parsed.error
-          : raw.length
-            ? raw
-            : 'Compilation failed';
-      streamError = msg;
-      callbacks?.onError?.(msg);
-      return;
-    }
+  try {
+    await readSseEventStream(reader, async (currentEvent, raw) => {
+      const ev = currentEvent.trim();
+      const parsed = parseHypothesisSseJson(raw);
 
-    if (ev === SSE_EVENT_NAMES.progress) {
-      const status = parsed && typeof parsed.status === 'string' ? parsed.status : undefined;
-      if (status) callbacks?.onProgress?.(status);
-      return;
-    }
-
-    if (ev === SSE_EVENT_NAMES.code) {
-      const code = parsed && typeof parsed.code === 'string' ? parsed.code : '';
-      if (code) callbacks?.onCode?.(code);
-      return;
-    }
-
-    if (ev === SSE_EVENT_NAMES.incubate_result) {
-      if (!parsed) {
-        streamError = INVALID_SERVER_RESPONSE;
-        callbacks?.onError?.(streamError);
+      if (ev === SSE_EVENT_NAMES.error) {
+        const msg =
+          parsed && typeof parsed.error === 'string'
+            ? parsed.error
+            : raw.length
+              ? raw
+              : 'Compilation failed';
+        streamError = msg;
+        opts.incubate?.onError?.(msg);
+        opts.agentic?.onError?.(msg);
         return;
       }
-      const r = IncubateResponseSchema.safeParse(parsed);
-      if (!r.success) {
-        streamError = INVALID_SERVER_RESPONSE;
-        callbacks?.onError?.(streamError);
-        if (import.meta.env.DEV) {
-          console.warn('[api] incubate SSE incubate_result unexpected shape', r.error.flatten());
+
+      if (ev === SSE_EVENT_NAMES.incubate_result) {
+        if (!parsed) {
+          streamError = INVALID_SERVER_RESPONSE;
+          opts.incubate?.onError?.(streamError);
+          opts.agentic?.onError?.(streamError);
+          return;
+        }
+        const r = IncubateResponseSchema.safeParse(parsed);
+        if (!r.success) {
+          streamError = INVALID_SERVER_RESPONSE;
+          opts.incubate?.onError?.(streamError);
+          opts.agentic?.onError?.(streamError);
+          if (import.meta.env.DEV) {
+            console.warn('[api] incubate SSE incubate_result unexpected shape', r.error.flatten());
+          }
+          return;
+        }
+        result = r.data;
+        opts.incubate?.onIncubateResult?.(r.data);
+        return;
+      }
+
+      if (ev === SSE_EVENT_NAMES.done) {
+        opts.incubate?.onDone?.();
+        opts.agentic?.onDone?.();
+        return;
+      }
+
+      if (opts.agentic && parsed) {
+        const ok = dispatchGenerateStreamEvent(ev, parsed, opts.agentic, diag);
+        if (!ok) {
+          // Incubate (and other task routes) emit many Pi events before `incubate_result`.
+          // A single strict-parse mismatch must not cancel the reader — we still need the final plan.
+          if (import.meta.env.DEV) {
+            console.warn('[api] incubate SSE: agentic event failed strict parse; continuing', ev);
+          }
         }
         return;
       }
-      result = r.data;
-      callbacks?.onIncubateResult?.(r.data);
-      return;
-    }
 
-    if (ev === SSE_EVENT_NAMES.done) {
-      callbacks?.onDone?.();
-      return;
-    }
-  });
+      if (ev === SSE_EVENT_NAMES.progress) {
+        const status = parsed && typeof parsed.status === 'string' ? parsed.status : undefined;
+        if (status) opts.incubate?.onProgress?.(status);
+        return;
+      }
+
+      if (ev === SSE_EVENT_NAMES.code) {
+        const code = parsed && typeof parsed.code === 'string' ? parsed.code : '';
+        if (code) opts.incubate?.onCode?.(code);
+        return;
+      }
+
+      if (import.meta.env.DEV) {
+        console.debug('[api] incubate SSE event (dev: not surfaced)', ev, raw);
+      }
+    });
+  } finally {
+    diag.logClose();
+  }
 
   if (streamError) {
     throw new Error(normalizeError(streamError, 'Compilation failed'));
@@ -308,8 +354,11 @@ function stripLaneIndex(data: Record<string, unknown>): {
   };
 }
 
-/** Internal: assumes `event` already passed `safeParseGenerateSSEEvent`. */
-function dispatchParsedGenerateStreamEvent(
+/**
+ * Dispatches a Zod-validated agentic SSE payload to callbacks (same as hypothesis generate).
+ * Exported for tests and task-stream consumers that parse with `safeParseGenerateSSEEvent`.
+ */
+export function dispatchParsedAgenticSseEvent(
   event: GenerateSSEEvent,
   callbacks: GenerateStreamCallbacks,
 ): void {
@@ -407,7 +456,7 @@ function dispatchGenerateStreamEvent(
     }
     return false;
   }
-  dispatchParsedGenerateStreamEvent(result.event, callbacks);
+  dispatchParsedAgenticSseEvent(result.event, callbacks);
   diag?.recordReceived(currentEvent);
   return true;
 }
@@ -503,7 +552,7 @@ export async function generateHypothesisStream(
           currentEvent !== SSE_EVENT_NAMES.done
         ) {
           if (import.meta.env.DEV) {
-            console.debug('[sse:diag] laneIndex missing; notifying all lanes', currentEvent);
+            console.debug('(sse:diag) laneIndex missing; notifying all lanes', currentEvent);
           }
           notifyAllHypothesisLanesError(
             lanes,
@@ -572,16 +621,21 @@ export async function postTraceEvents(body: {
 
 // ── Task SSE helper (reads an agentic task stream, returns the result) ──
 
+export interface PostTaskStreamOptions {
+  signal?: AbortSignal;
+  agentic?: GenerateStreamCallbacks;
+}
+
 async function postTaskStream(
   path: string,
   body: unknown,
-  signal?: AbortSignal,
+  options?: PostTaskStreamOptions,
 ): Promise<{ result: string }> {
   const response = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal,
+    signal: options?.signal,
   });
   if (!response.ok) {
     const text = await response.text();
@@ -593,18 +647,35 @@ async function postTaskStream(
   let result: string | null = null;
   let errorMsg: string | null = null;
 
-  await readSseEventStream(reader, (eventName, dataLine) => {
-    try {
-      const data = JSON.parse(dataLine) as Record<string, unknown>;
-      if (eventName === SSE_EVENT_NAMES.task_result && typeof data.result === 'string') {
-        result = data.result;
-      } else if (eventName === SSE_EVENT_NAMES.error && typeof data.error === 'string') {
-        errorMsg = data.error;
+  const diag = createSseStreamDiagnostics();
+  attachSseDiagWindow(diag);
+
+  try {
+    await readSseEventStream(reader, async (eventName, dataLine) => {
+      try {
+        const data = JSON.parse(dataLine) as Record<string, unknown>;
+        if (eventName === SSE_EVENT_NAMES.task_result && typeof data.result === 'string') {
+          result = data.result;
+        } else if (eventName === SSE_EVENT_NAMES.error && typeof data.error === 'string') {
+          errorMsg = data.error;
+          options?.agentic?.onError?.(data.error);
+        } else if (eventName === SSE_EVENT_NAMES.done) {
+          options?.agentic?.onDone?.();
+        } else if (options?.agentic) {
+          const ok = dispatchGenerateStreamEvent(eventName, data, options.agentic, diag);
+          if (!ok) return false;
+        } else if (import.meta.env.DEV) {
+          console.debug('[api] postTaskStream SSE event (dev: not surfaced)', eventName, dataLine);
+        }
+      } catch (parseErr) {
+        if (import.meta.env.DEV) {
+          console.warn('[api] postTaskStream malformed SSE line', dataLine, parseErr);
+        }
       }
-    } catch {
-      /* skip malformed events */
-    }
-  });
+    });
+  } finally {
+    diag.logClose();
+  }
 
   if (errorMsg && !result) throw new Error(errorMsg);
   if (!result) throw new Error('Task completed without result');
@@ -615,14 +686,16 @@ async function postTaskStream(
 
 export async function extractDesignSystem(
   req: DesignSystemExtractRequest,
+  options?: PostTaskStreamOptions,
 ): Promise<DesignSystemExtractResponse> {
-  return postTaskStream('/design-system/extract', req);
+  return postTaskStream('/design-system/extract', req, options);
 }
 
 // ── Inputs auto-generate (spec facets) ────────────────────────────────
 
 export async function generateInputContent(
   req: InputsGenerateRequest,
+  options?: PostTaskStreamOptions,
 ): Promise<InputsGenerateResponse> {
-  return postTaskStream('/inputs/generate', req);
+  return postTaskStream('/inputs/generate', req, options);
 }

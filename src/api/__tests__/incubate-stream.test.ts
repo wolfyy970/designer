@@ -154,6 +154,27 @@ describe('incubateStream', () => {
     await expect(incubateStream(minimalReq)).rejects.toThrow(/Invalid server response/);
   });
 
+  it('still resolves incubate_result when an earlier agentic event fails strict parse', async () => {
+    const agenticOnError = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        sseResponse([
+          // Missing `status` — fails generateSSEEventSchema (would previously cancel the reader).
+          { name: SSE_EVENT_NAMES.progress, data: {} as Record<string, unknown> },
+          { name: SSE_EVENT_NAMES.incubate_result, data: plan },
+          { name: SSE_EVENT_NAMES.done, data: {} },
+        ]),
+      ),
+    );
+
+    const out = await incubateStream(minimalReq, {
+      agentic: { onError: agenticOnError },
+    });
+    expect(out.id).toBe('plan-1');
+    expect(agenticOnError).toHaveBeenCalled();
+  });
+
   it('incubate() delegates to incubateStream', async () => {
     vi.stubGlobal(
       'fetch',

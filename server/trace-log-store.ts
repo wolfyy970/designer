@@ -2,6 +2,7 @@ import { env } from './env.ts';
 import { OBSERVABILITY_SCHEMA_VERSION } from './lib/observability-line.ts';
 import type { ObservabilityLineTrace } from './lib/observability-line.ts';
 import { writeObservabilityLine } from './lib/observability-sink.ts';
+import { scheduleAgentLogSnapshot } from './lib/agent-log-snapshot.ts';
 
 const traceLines: ObservabilityLineTrace[] = [];
 const traceIdInRing = new Set<string>();
@@ -45,6 +46,7 @@ export function appendTraceLines(
     writeObservabilityLine(line);
   }
   trimTraceToCap();
+  scheduleAgentLogSnapshot();
 }
 
 export function getTraceLogLines(): ObservabilityLineTrace[] {

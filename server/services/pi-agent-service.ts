@@ -12,7 +12,7 @@ import type { RunTraceEvent, TodoItem } from '../../src/types/provider.ts';
 import { env } from '../env.ts';
 import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
-import { wrapPiStreamWithLogging, PI_LLM_LOG_PHASE } from './pi-llm-log.ts';
+import { wrapPiStreamWithLogging, PI_LLM_LOG_PHASE, mapSessionTypeToLlmLogSource } from './pi-llm-log.ts';
 import { getProviderModelContextWindow } from './provider-model-context.ts';
 import { buildModel } from './pi-model.ts';
 import {
@@ -177,7 +177,7 @@ export async function runDesignAgentSession(
   session.agent.streamFn = wrapPiStreamWithLogging(prevStream, {
     providerId: params.providerId,
     modelId: params.modelId,
-    source: 'builder',
+    source: mapSessionTypeToLlmLogSource(params.sessionType),
     phase: params.compactionNote?.trim() ? PI_LLM_LOG_PHASE.REVISION : PI_LLM_LOG_PHASE.AGENTIC_TURN,
     turnLogRef: llmTurnLogRef,
     correlationId: params.correlationId,

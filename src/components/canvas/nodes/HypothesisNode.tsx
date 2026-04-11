@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type NodeProps, type Node, Handle, Position } from '@xyflow/react';
-import { FileText, Loader2, Pencil, X } from 'lucide-react';
+import { FileText, Pencil, X } from 'lucide-react';
 import { useIncubatorStore, findStrategy } from '../../../stores/incubator-store';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { useGenerationStore } from '../../../stores/generation-store';
@@ -37,6 +37,8 @@ import {
 } from '../../../lib/strategy-streaming-snapshot';
 import { HypothesisAutoImproveSettings } from './HypothesisAutoImproveSettings';
 import { HypothesisGenerateButton } from './HypothesisGenerateButton';
+import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
+import TaskStreamMonitor from './TaskStreamMonitor';
 
 type HypothesisEditorTab = 'hypothesis' | 'why' | 'measurements';
 
@@ -119,6 +121,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
     useHypothesisGeneration({ nodeId, strategyId });
 
   const hypoAutoGen = useHypothesisAutoGenerate({ nodeId, strategyId });
+  const hypoAutoGenElapsed = useElapsedTimer(hypoAutoGen.isGenerating);
 
   // Ref so pending-auto-generate runs the latest generate without depending on callback identity.
   const generateRef = useRef(hypoAutoGen.generate);
@@ -314,10 +317,11 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
       {hypoAutoGen.isGenerating ? (
         <div className={`${RF_INTERACTIVE} border-b border-border-subtle px-3 py-2`}>
           {hypoAutoGen.error ? <NodeErrorBlock variant="plain" message={hypoAutoGen.error} /> : null}
-          <div className="flex items-center justify-center gap-2 rounded-md border border-border-subtle bg-surface-raised py-2 text-nano text-fg-muted">
-            <Loader2 size={14} className="shrink-0 animate-spin" aria-hidden />
-            Generating hypothesis…
-          </div>
+          <TaskStreamMonitor
+            state={hypoAutoGen.taskStreamState}
+            elapsed={hypoAutoGenElapsed}
+            fallbackLabel="Generating hypothesis…"
+          />
         </div>
       ) : null}
 

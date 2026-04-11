@@ -5,6 +5,7 @@ import { columnX, snap } from '../../lib/canvas-layout';
 import {
   buildAutoConnectEdges,
   buildModelEdgesFromParent,
+  dedupeEdgesById,
 } from '../../lib/canvas-connections';
 import {
   UNKNOWN_PINNED_RUN_ID,
@@ -54,7 +55,7 @@ export const createSyncSlice: StateCreator<
 
     const ids: string[] = [];
     const newNodes = [...state.nodes];
-    const newEdges = [...state.edges];
+    const newEdges = dedupeEdgesById([...state.edges]);
 
     for (let i = 0; i < count; i++) {
       const phId = `placeholder-${generateId()}`;
@@ -77,7 +78,7 @@ export const createSyncSlice: StateCreator<
       });
     }
 
-    set({ nodes: newNodes, edges: newEdges });
+    set({ nodes: newNodes, edges: dedupeEdgesById(newEdges) });
     if (get().autoLayout) get().applyAutoLayout();
     return ids;
   },
@@ -93,6 +94,8 @@ export const createSyncSlice: StateCreator<
   syncAfterIncubate: (newStrategies, incubatorNodeId) => {
     if (newStrategies.length === 0) return;
     const state = get();
+    /** Normalize in case persisted/corrupt graph had duplicate edge ids (React Flow keys must be unique). */
+    const addedEdges = dedupeEdgesById([...state.edges]);
     const col = columnX(state.colGap);
     const incubatorCanvasNode = state.nodes.find((n) => n.id === incubatorNodeId);
     const incubatorY = incubatorCanvasNode?.position.y ?? 300;
@@ -112,7 +115,6 @@ export const createSyncSlice: StateCreator<
     }
 
     const addedNodes = [...state.nodes];
-    const addedEdges = [...state.edges];
     let placed = 0;
 
     const strategyLinkPairs: { hypothesisNodeId: string; strategyId: string }[] = [];
@@ -137,6 +139,7 @@ export const createSyncSlice: StateCreator<
       // (duplicate ids break React Flow keys and cause flaky sync).
       const structuralEdges = buildAutoConnectEdges(nodeId, 'hypothesis', addedNodes);
       for (const se of structuralEdges) {
+        if (addedEdges.some((e) => e.id === se.id)) continue;
         const incubationComplete =
           se.source === incubatorNodeId && se.target === nodeId;
         addedEdges.push({
@@ -158,14 +161,18 @@ export const createSyncSlice: StateCreator<
       addedNodes,
       addedEdges,
     );
-    addedEdges.push(...modelEdges);
+    for (const me of modelEdges) {
+      if (addedEdges.some((e) => e.id === me.id)) continue;
+      addedEdges.push(me);
+    }
 
-    set({ nodes: addedNodes, edges: addedEdges });
+    const nextEdges = dedupeEdgesById(addedEdges);
+    set({ nodes: addedNodes, edges: nextEdges });
     linkHypothesesAfterIncubate(incubatorNodeId, strategyLinkPairs);
     const prevEdgeIds = new Set(state.edges.map((e) => e.id));
     const graphNodes = get().nodes;
     const graphEdges = get().edges;
-    for (const e of addedEdges) {
+    for (const e of nextEdges) {
       if (!prevEdgeIds.has(e.id)) {
         syncDomainForNewEdge(e, graphNodes, graphEdges);
       }
@@ -195,7 +202,7 @@ export const createSyncSlice: StateCreator<
     }
 
     const newNodes = [...state.nodes];
-    const newEdges = [...state.edges];
+    const newEdges = dedupeEdgesById([...state.edges]);
     const nodeIdMap = new Map<string, string>();
 
     results.forEach((result) => {
@@ -229,6 +236,7 @@ export const createSyncSlice: StateCreator<
         nodeIdMap.set(result.strategyId, existingNodeId);
       } else {
         const nodeId = `preview-${generateId()}`;
+        const edgeId = buildEdgeId(hypothesisNodeId, nodeId);
         newNodes.push({
           id: nodeId,
           type: 'preview',
@@ -242,18 +250,24 @@ export const createSyncSlice: StateCreator<
           },
         });
 
-        newEdges.push({
-          id: buildEdgeId(hypothesisNodeId, nodeId),
-          source: hypothesisNodeId,
-          target: nodeId,
-          type: EDGE_TYPES.DATA_FLOW,
-          data: { status: EDGE_STATUS.PROCESSING },
-        });
+        if (!newEdges.some((e) => e.id === edgeId)) {
+          newEdges.push({
+            id: edgeId,
+            source: hypothesisNodeId,
+            target: nodeId,
+            type: EDGE_TYPES.DATA_FLOW,
+            data: { status: EDGE_STATUS.PROCESSING },
+          });
+        }
         nodeIdMap.set(result.strategyId, nodeId);
       }
     });
 
-    set({ nodes: newNodes, edges: newEdges, previewNodeIdMap: nodeIdMap });
+    set({
+      nodes: newNodes,
+      edges: dedupeEdgesById(newEdges),
+      previewNodeIdMap: nodeIdMap,
+    });
 
     syncVariantSlotsAfterGenerate(hypothesisNodeId, results, nodeIdMap);
 

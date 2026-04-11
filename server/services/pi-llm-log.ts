@@ -17,6 +17,7 @@ export type PiAgentStreamFn = (
   ...args: Parameters<typeof streamSimple>
 ) => ReturnType<typeof streamSimple> | Promise<ReturnType<typeof streamSimple>>;
 import type { LlmLogEntry } from '../log-store.ts';
+import type { SessionType } from '../lib/skill-discovery.ts';
 import {
   beginLlmCall,
   failLlmCall,
@@ -34,6 +35,22 @@ export const PI_LLM_LOG_PHASE = {
   AGENTIC_TURN: 'agentic_turn',
   REVISION: 'revision',
 } as const;
+
+/** Maps Pi session boundary to `LlmLogEntry.source` for flow-aware logs. */
+export function mapSessionTypeToLlmLogSource(sessionType?: SessionType): LlmLogEntry['source'] {
+  switch (sessionType) {
+    case 'incubation':
+      return 'incubator';
+    case 'inputs-gen':
+      return 'inputsGen';
+    case 'design-system':
+      return 'designSystem';
+    case 'evaluation':
+    case 'design':
+    default:
+      return 'builder';
+  }
+}
 
 /** Never throws; logging must not break Pi streaming. Exported for tests. */
 export function safeLogLlmCall(entry: Omit<LlmLogEntry, 'id' | 'timestamp'>): void {

@@ -1,6 +1,8 @@
 import { env } from './env.ts';
+import { flushAgentLogSnapshotNow, scheduleAgentLogSnapshot } from './lib/agent-log-snapshot.ts';
 import { OBSERVABILITY_SCHEMA_VERSION } from './lib/observability-line.ts';
 import { writeObservabilityLine } from './lib/observability-sink.ts';
+import type { SessionType } from './lib/skill-discovery.ts';
 import { clearTraceLogEntries } from './trace-log-store.ts';
 
 export type LlmLogStatus = 'in_progress' | 'complete' | 'error';
@@ -17,6 +19,7 @@ export interface LlmLogEntry {
     | 'planner'
     | 'builder'
     | 'designSystem'
+    | 'inputsGen'
     | 'evaluator'
     | 'agentCompaction'
     | 'other';
@@ -45,10 +48,155 @@ export interface LlmLogEntry {
 
 const entries: LlmLogEntry[] = [];
 
+/** In-memory mirror of task_result / task_run for GET /api/logs (full resultContent, not truncated). */
+export interface TaskLogEntryTaskResult {
+  id: string;
+  timestamp: string;
+  kind: 'task_result';
+  correlationId: string;
+  sessionType: SessionType;
+  resultFile: string;
+  resultContent: string;
+  sandboxFilePaths: string[];
+}
+
+export interface TaskLogEntryTaskRun {
+  id: string;
+  timestamp: string;
+  kind: 'task_run';
+  correlationId: string;
+  sessionType: SessionType;
+  providerId: string;
+  modelId: string;
+  durationMs: number;
+  outcome: 'success' | 'error' | 'no_result';
+  resultFile?: string;
+  sandboxFileCount: number;
+  errorMessage?: string;
+}
+
+export interface TaskLogEntryIncubateParsed {
+  id: string;
+  timestamp: string;
+  kind: 'incubate_parsed';
+  correlationId: string;
+  hypothesisCount: number;
+  hypothesisNames: string[];
+  firstHypothesisText: string;
+  dimensionCount: number;
+}
+
+export type TaskLogEntry = TaskLogEntryTaskResult | TaskLogEntryTaskRun | TaskLogEntryIncubateParsed;
+
+const taskLogEntries: TaskLogEntry[] = [];
+
 /** Drop oldest rows when over cap (in-memory dev log only). */
 function trimToMaxCap(): void {
   const max = env.LLM_LOG_MAX_ENTRIES;
   while (entries.length > max) entries.shift();
+}
+
+function trimTaskLogToCap(): void {
+  const max = env.LLM_LOG_MAX_ENTRIES;
+  while (taskLogEntries.length > max) taskLogEntries.shift();
+}
+
+/** Append after NDJSON task_result (Pi sandbox extraction). */
+export function appendTaskResultLogEntry(input: {
+  correlationId: string;
+  sessionType: SessionType;
+  resultFile: string;
+  resultContent: string;
+  sandboxFilePaths: string[];
+}): void {
+  const row: TaskLogEntryTaskResult = {
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    kind: 'task_result',
+    correlationId: input.correlationId,
+    sessionType: input.sessionType,
+    resultFile: input.resultFile,
+    resultContent: input.resultContent,
+    sandboxFilePaths: input.sandboxFilePaths,
+  };
+  taskLogEntries.push(row);
+  trimTaskLogToCap();
+  scheduleAgentLogSnapshot();
+}
+
+/** Append after NDJSON task_run (end of executeTaskAgentStream). */
+export function appendTaskRunLogEntry(input: {
+  correlationId: string;
+  sessionType: SessionType;
+  providerId: string;
+  modelId: string;
+  durationMs: number;
+  outcome: 'success' | 'error' | 'no_result';
+  resultFile?: string;
+  sandboxFileCount: number;
+  errorMessage?: string;
+}): void {
+  const row: TaskLogEntryTaskRun = {
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    kind: 'task_run',
+    correlationId: input.correlationId,
+    sessionType: input.sessionType,
+    providerId: input.providerId,
+    modelId: input.modelId,
+    durationMs: input.durationMs,
+    outcome: input.outcome,
+    resultFile: input.resultFile,
+    sandboxFileCount: input.sandboxFileCount,
+    errorMessage: input.errorMessage,
+  };
+  taskLogEntries.push(row);
+  trimTaskLogToCap();
+  scheduleAgentLogSnapshot();
+}
+
+export function getTaskLogEntries(): TaskLogEntry[] {
+  return taskLogEntries.map((e) => ({ ...e }));
+}
+
+export function clearTaskLogEntries(): void {
+  taskLogEntries.length = 0;
+}
+
+/** Parsed incubation plan before SSE `incubate_result` — mirrors NDJSON `incubate_parsed`. */
+export function appendIncubateParsedLogEntry(input: {
+  correlationId: string;
+  hypothesisCount: number;
+  hypothesisNames: string[];
+  firstHypothesisText: string;
+  dimensionCount: number;
+}): void {
+  const ts = new Date().toISOString();
+  const row: TaskLogEntryIncubateParsed = {
+    id: crypto.randomUUID(),
+    timestamp: ts,
+    kind: 'incubate_parsed',
+    correlationId: input.correlationId,
+    hypothesisCount: input.hypothesisCount,
+    hypothesisNames: input.hypothesisNames,
+    firstHypothesisText: input.firstHypothesisText,
+    dimensionCount: input.dimensionCount,
+  };
+  taskLogEntries.push(row);
+  trimTaskLogToCap();
+  writeObservabilityLine({
+    v: OBSERVABILITY_SCHEMA_VERSION,
+    ts,
+    type: 'incubate_parsed',
+    payload: {
+      correlationId: input.correlationId,
+      hypothesisCount: input.hypothesisCount,
+      hypothesisNames: input.hypothesisNames,
+      firstHypothesisText: input.firstHypothesisText,
+      dimensionCount: input.dimensionCount,
+    },
+  });
+  scheduleAgentLogSnapshot();
 }
 
 export function logLlmCall(entry: Omit<LlmLogEntry, 'id' | 'timestamp'>): void {
@@ -68,6 +216,7 @@ export function logLlmCall(entry: Omit<LlmLogEntry, 'id' | 'timestamp'>): void {
     type: 'llm',
     payload: { ...row } as Record<string, unknown>,
   });
+  scheduleAgentLogSnapshot();
 }
 
 /** Create a row as soon as the outbound request is issued (prompts visible while waiting). */
@@ -84,6 +233,7 @@ export function beginLlmCall(
     status: 'in_progress',
   });
   trimToMaxCap();
+  scheduleAgentLogSnapshot();
   return id;
 }
 
@@ -130,6 +280,7 @@ export function finalizeLlmCall(
     type: 'llm',
     payload: { ...finalized } as Record<string, unknown>,
   });
+  scheduleAgentLogSnapshot();
 }
 
 export function failLlmCall(id: string, error: string, durationMs: number): void {
@@ -152,4 +303,6 @@ export function getLlmLogResponseSnapshot(id: string): string | undefined {
 export function clearLogEntries(): void {
   entries.length = 0;
   clearTraceLogEntries();
+  clearTaskLogEntries();
+  flushAgentLogSnapshotNow();
 }

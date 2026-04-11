@@ -83,7 +83,7 @@ export function createPlaceholderRafBatchers(
   const logDevSummary =
     import.meta.env.DEV
       ? () => {
-          console.debug(`[raf:${short}]`, {
+          console.debug(`(raf:${short})`, {
             activity: activityStats,
             thinking: thinkingStats,
             code: codeStats,

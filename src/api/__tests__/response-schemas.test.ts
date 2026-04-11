@@ -47,6 +47,38 @@ describe('IncubateResponseSchema', () => {
     });
     expect(r.success).toBe(true);
   });
+
+  it('accepts dimensions with range as string array (coerced to comma-separated string)', () => {
+    const r = IncubateResponseSchema.safeParse({
+      id: 'd2',
+      specId: 's2',
+      dimensions: [
+        {
+          name: 'Flow Approach',
+          range: ['automated-then-review', 'step-by-step guided flow'],
+          isConstant: false,
+        },
+      ],
+      hypotheses: [
+        {
+          id: 'v2',
+          name: 'H',
+          hypothesis: 'bet',
+          rationale: 'r',
+          measurements: 'm',
+          dimensionValues: {},
+        },
+      ],
+      generatedAt: 'now',
+      incubatorModel: 'm',
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.dimensions[0]!.range).toBe(
+        'automated-then-review, step-by-step guided flow',
+      );
+    }
+  });
 });
 
 describe('HypothesisPromptBundleResponseSchema', () => {

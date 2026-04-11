@@ -6,6 +6,7 @@ import { parseRequestJson } from '../lib/parse-request.ts';
 import { runTaskAgentSseBody } from '../lib/sse-task-route.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { executeTaskAgentStream } from '../services/task-agent-execution.ts';
+import { env } from '../env.ts';
 
 const designSystem = new Hono();
 
@@ -47,6 +48,14 @@ Extract the design system from these screenshots.`;
   return streamSSE(c, async (stream) => {
     const abortSignal = c.req.raw.signal;
     const correlationId = crypto.randomUUID();
+    if (env.isDev) {
+      console.debug('[design-system] request', {
+        correlationId,
+        providerId: body.providerId,
+        modelId: body.modelId,
+        imageCount: body.images.length,
+      });
+    }
     await runTaskAgentSseBody(stream, async ({ write, allocId, gate }) => {
       const taskResult = await executeTaskAgentStream(
         stream,

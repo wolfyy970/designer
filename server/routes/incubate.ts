@@ -13,8 +13,13 @@ import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { executeTaskAgentStream } from '../services/task-agent-execution.ts';
 import { parseJsonLenient } from '../lib/parse-json-lenient.ts';
 import { extractLlmJsonObjectSegment } from '../lib/extract-llm-json.ts';
-import { incubationLooksLikeTemplateEcho } from '../lib/incubation-template-echo.ts';
+import {
+  incubationFirstHypothesisEmpty,
+  incubationLooksLikeTemplateEcho,
+} from '../lib/incubation-template-echo.ts';
 import { generateId, now } from '../../src/lib/utils.ts';
+import { env } from '../env.ts';
+import { appendIncubateParsedLogEntry } from '../log-store.ts';
 
 const incubate = new Hono();
 
@@ -39,9 +44,15 @@ const IncubateRequestSchema = z.object({
   promptOptions: IncubatorPromptOptionsSchema.optional(),
 });
 
+/** LLMs often emit `range` as a string or as an array of discrete values — normalize to string. */
+const dimensionRangeSchema = z.union([
+  z.string(),
+  z.array(z.string()).transform((a) => a.join(', ')),
+]);
+
 const DimensionSchema = z.object({
   name: z.string().default(''),
-  range: z.string().default(''),
+  range: dimensionRangeSchema.default(''),
   isConstant: z.boolean().default(false),
 });
 
@@ -115,6 +126,15 @@ ${assembledSpec}`;
   return streamSSE(c, async (stream) => {
     const abortSignal = c.req.raw.signal;
     const correlationId = crypto.randomUUID();
+    if (env.isDev) {
+      console.debug('[incubate] request', {
+        correlationId,
+        providerId: body.providerId,
+        modelId: body.modelId,
+        specSections: Object.keys(body.spec.sections).length,
+        hypothesisCount: body.promptOptions?.count,
+      });
+    }
     await runTaskAgentSseBody(stream, async ({ write, allocId, gate }) => {
       const taskResult = await executeTaskAgentStream(
         stream,
@@ -146,9 +166,43 @@ ${assembledSpec}`;
           incubatorModel: body.modelId,
         };
         if (incubationLooksLikeTemplateEcho(plan)) {
+          if (env.isDev) {
+            console.debug('[incubate] validation failed: template echo', {
+              correlationId,
+              hypothesisCount: plan.hypotheses.length,
+            });
+          }
           throw new Error(
             'The model returned placeholder text instead of real hypotheses (often from copying a schema example). Try Generate again, or switch model.',
           );
+        }
+        if (incubationFirstHypothesisEmpty(plan)) {
+          if (env.isDev) {
+            console.debug('[incubate] validation failed: empty hypothesis text', {
+              correlationId,
+              hypothesisCount: plan.hypotheses.length,
+            });
+          }
+          throw new Error(
+            'The model returned no hypothesis text (the core bet field was empty). Try Generate again, or switch model.',
+          );
+        }
+        const firstBet = plan.hypotheses[0]?.hypothesis ?? '';
+        appendIncubateParsedLogEntry({
+          correlationId,
+          hypothesisCount: plan.hypotheses.length,
+          hypothesisNames: plan.hypotheses.map((h) => h.name),
+          firstHypothesisText: firstBet,
+          dimensionCount: plan.dimensions.length,
+        });
+        if (env.isDev) {
+          console.debug('[incubate] plan parsed (before incubate_result SSE)', {
+            correlationId,
+            hypothesisCount: plan.hypotheses.length,
+            hypothesisNames: plan.hypotheses.map((h) => h.name),
+            firstHypothesisText: firstBet.length > 400 ? `${firstBet.slice(0, 400)}…` : firstBet,
+            dimensionCount: plan.dimensions.length,
+          });
         }
         await write(SSE_EVENT_NAMES.incubate_result, JSON.parse(JSON.stringify(plan)));
       }

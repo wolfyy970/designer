@@ -1,5 +1,6 @@
 import type { RunTraceEvent, TodoItem } from '../../src/types/provider.ts';
 import type { SkillCatalogEntry } from '../lib/skill-schema.ts';
+import type { SessionType } from '../lib/skill-discovery.ts';
 import type { ThinkingLevel } from './pi-model.ts';
 
 export interface AgentRunParams {
@@ -13,6 +14,8 @@ export interface AgentRunParams {
 
 /** Extended session for revision rounds: seeded virtual FS + compaction hint */
 export interface AgentSessionParams extends AgentRunParams {
+  /** Drives LLM log `source` and task observability (Pi sessions only). */
+  sessionType?: SessionType;
   correlationId?: string;
   seedFiles?: Record<string, string>;
   /** @deprecated Pi SDK manages compaction; reserved for future custom hooks */

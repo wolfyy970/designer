@@ -1,9 +1,15 @@
 import { z } from 'zod';
 import { ReferenceImageSchema } from '../types/spec';
 
+/** Match server incubate parse: models may send `range` as a string or string[]. */
+const dimensionRangeSchema = z.union([
+  z.string(),
+  z.array(z.string()).transform((a) => a.join(', ')),
+]);
+
 const DimensionSchema = z.object({
   name: z.string(),
-  range: z.string(),
+  range: dimensionRangeSchema,
   isConstant: z.boolean(),
 });
 
