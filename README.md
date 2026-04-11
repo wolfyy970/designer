@@ -15,7 +15,7 @@ pnpm dev:all                 # recommended: API + Vite (API waits until /api/hea
 # Or two terminals: pnpm dev:server  then  pnpm dev
 ```
 
-Both processes are required for local development. The Vite dev server proxies `/api/*` to the Hono server on port **3001**. If only Vite is up, the app stays on a full-screen **API server not reachable** gate (with retry) until **`GET /api/config`** succeeds—start the API with **`pnpm dev:all`** or **`pnpm dev:server`**, or hard-refresh after the API is listening.
+Both processes are required for local development. The Vite dev server proxies `/api/*` to the Hono server on port **3001**. If only Vite is up, the app stays on a full-screen **API server not reachable** gate (with retry) until `**GET /api/config`** succeeds—start the API with `**pnpm dev:all**` or `**pnpm dev:server**`, or hard-refresh after the API is listening.
 
 **Screen width:** The canvas workspace needs a **desktop-class** layout. Browser viewports **narrower than 1024px** (typical phones and many tablets) show a full-screen message asking you to open the app on a laptop or desktop instead.
 
@@ -52,42 +52,43 @@ The header also opens **Settings** (General preferences). In **development**, a 
 ## Scripts
 
 
-| Command                      | What it does                                                                                                                                                                                                                                         |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`                   | Start Vite SPA dev server (port 5173)                                                                                                                                                                                                                |
-| `pnpm dev:server`            | Start Hono API server (port 3001)                                                                                                                                                                                                                    |
-| `pnpm dev:all`               | Start API then Vite (waits for `/api/health` — avoids proxy race)                                                                                                                                                                                    |
-| `pnpm dev:kill`              | Stop processes listening on ports 3001 (API) and 5173 (Vite)                                                                                                                                                                                         |
-| `pnpm build`                 | Type-check and production build                                                                                                                                                                                                                      |
-| `pnpm test`                  | Vitest unit tests (Playwright merge test excluded in config; see [AGENTS.md](AGENTS.md))                                                                                                                                                              |
-| `pnpm lint`                  | Run ESLint                                                                                                                                                                                                                                           |
-| `pnpm knip`                  | Optional unused **files** and **dependencies** report via Knip (`--include files,dependencies`; not run in CI by default)                                                                                                                            |
-| `pnpm meta-harness`          | Optional **meta-harness** CLI: benchmark/proposer harness against the local API ([meta-harness/README.md](meta-harness/README.md), [RUNBOOK](meta-harness/RUNBOOK.md))                                                                                |
-| `pnpm snap`                  | Checkpoint prompt/skill/rubric versions (changed files only); list/diff/restore subcommands ([USER_GUIDE.md](USER_GUIDE.md#version-history); **`pnpm version-snapshot`** = legacy alias)                                                                 |
+| Command             | What it does                                                                                                                                                                             |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`          | Start Vite SPA dev server (port 5173)                                                                                                                                                    |
+| `pnpm dev:server`   | Start Hono API server (port 3001)                                                                                                                                                        |
+| `pnpm dev:all`      | Start API then Vite (waits for `/api/health` — avoids proxy race)                                                                                                                        |
+| `pnpm dev:kill`     | Stop processes listening on ports 3001 (API) and 5173 (Vite)                                                                                                                             |
+| `pnpm build`        | Type-check and production build                                                                                                                                                          |
+| `pnpm test`         | Vitest unit tests (Playwright merge test excluded in config; `**pnpm test:playwright-eval`** runs it — see [AGENTS.md](AGENTS.md))                                                       |
+| `pnpm lint`         | Run ESLint                                                                                                                                                                               |
+| `pnpm knip`         | Optional unused **files** and **dependencies** report via Knip (`--include files,dependencies`; not run in CI by default)                                                                |
+| `pnpm meta-harness` | Optional **meta-harness** CLI: benchmark/proposer harness against the local API ([meta-harness/README.md](meta-harness/README.md), [RUNBOOK](meta-harness/RUNBOOK.md))                   |
+| `pnpm snap`         | Checkpoint prompt/skill/rubric versions (changed files only); list/diff/restore subcommands ([USER_GUIDE.md](USER_GUIDE.md#version-history); `**pnpm version-snapshot`** = legacy alias) |
 
 
 ## Documentation
 
 **AI coding agents:** Full repo conventions live in **[AGENTS.md](AGENTS.md)** (vendor-neutral name). **[CLAUDE.md](CLAUDE.md)** exists only so **Claude Code** auto-loads a pointer to **AGENTS.md**—do not maintain two copies of the same guidance.
 
-| Document                                               | Purpose                                                                                                                                                 |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [AGENTS.md](AGENTS.md)                                 | **Canonical** agent instructions: commands, architecture **pointers**, skill-based prompts, gotchas ([Pi sandbox detail](ARCHITECTURE.md#pi-design-sandbox-three-layer-contract) in **ARCHITECTURE**) |
-| [CLAUDE.md](CLAUDE.md)                                 | Stub for Claude Code → links **AGENTS.md**                                                                                                              |
-| [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)               | Narrative: canvas, prompts, agentic loop, evaluation                                                                                                    |
-| [PRODUCT.md](PRODUCT.md)                               | **North Star** + feature-level description: modes, nodes, providers                                                                                     |
-| [USER_GUIDE.md](USER_GUIDE.md)                         | Setup and day-to-day canvas workflow                                                                                                                    |
-| [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)                   | SPA design tokens: accent vs status, typography, typefaces, file-role colors (`src/index.css`)                                                          |
-| [ARCHITECTURE.md](ARCHITECTURE.md)                     | Technical reference: routes, stores, data flow, Pi adapter boundary, **Pi sandbox** (layers, tool inventory, edit cascade)                                |
-| [meta-harness/README.md](meta-harness/README.md)       | Optional **meta-harness** CLI (separate from the designer app): benchmarks, proposer ([RUNBOOK.md](meta-harness/RUNBOOK.md), [VERSIONING.md](meta-harness/VERSIONING.md)) |
-| [DOCUMENTATION.md](DOCUMENTATION.md)                   | How this doc set is organized (hub = this README)                                                                                                       |
+
+| Document                                         | Purpose                                                                                                                                                                                               |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [AGENTS.md](AGENTS.md)                           | **Canonical** agent instructions: commands, architecture **pointers**, skill-based prompts, gotchas ([Pi sandbox detail](ARCHITECTURE.md#pi-design-sandbox-three-layer-contract) in **ARCHITECTURE**) |
+| [CLAUDE.md](CLAUDE.md)                           | Stub for Claude Code → links **AGENTS.md**                                                                                                                                                            |
+| [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)         | Narrative: canvas, prompts, agentic loop, evaluation                                                                                                                                                  |
+| [PRODUCT.md](PRODUCT.md)                         | **North Star** + feature-level description: modes, nodes, providers                                                                                                                                   |
+| [USER_GUIDE.md](USER_GUIDE.md)                   | Setup and day-to-day canvas workflow                                                                                                                                                                  |
+| [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)             | SPA design tokens: accent vs status, typography, typefaces, file-role colors (`src/index.css`)                                                                                                        |
+| [ARCHITECTURE.md](ARCHITECTURE.md)               | Technical reference: routes, stores, data flow, Pi adapter boundary, **Pi sandbox** (layers, tool inventory, edit cascade)                                                                            |
+| [meta-harness/README.md](meta-harness/README.md) | Optional **meta-harness** CLI (separate from the designer app): benchmarks, proposer ([RUNBOOK.md](meta-harness/RUNBOOK.md), [VERSIONING.md](meta-harness/VERSIONING.md))                             |
+| [DOCUMENTATION.md](DOCUMENTATION.md)             | How this doc set is organized (hub = this README)                                                                                                                                                     |
 
 
 ## Deploying (Vercel)
 
-Production uses **Vercel** (`vercel.json` + `api/[[...route]].ts` → Hono). The serverless function **`maxDuration` is 800s** on Pro so long agentic SSE streams fit; Hobby max is shorter—use **Pro** for agentic runs with revision rounds. Set **`OPENROUTER_API_KEY`** in the Vercel project env. **`ALLOWED_ORIGINS`** in env may be required when the SPA is on a custom domain or preview URL that is not same-origin with `/api`—see `.env.example`. `/api/logs` is **disabled when `NODE_ENV=production`** (no shared in-memory ring).
+Production uses **Vercel** (`vercel.json` + `api/[[...route]].ts` → Hono). The serverless function `**maxDuration` is 800s** on Pro so long agentic SSE streams fit; Hobby max is shorter—use **Pro** for agentic runs with revision rounds. Set `**OPENROUTER_API_KEY`** in the Vercel project env. `**ALLOWED_ORIGINS**` in env may be required when the SPA is on a custom domain or preview URL that is not same-origin with `/api`—see `.env.example`. `/api/logs` is **disabled when `NODE_ENV=production`** (no shared in-memory ring).
 
-Ephemeral **preview sessions** may not persist across separate serverless invocations—the UI falls back to bundled **`srcDoc`** when a preview URL 404s (relative links in that mode are limited).
+Ephemeral **preview sessions** may not persist across separate serverless invocations—the UI falls back to bundled `**srcDoc`** when a preview URL 404s (relative links in that mode are limited).
 
 ## Tech Stack
 

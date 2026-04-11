@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import path from 'node:path';
 import {
   buildSandboxSeedMaps,
+  computeDesignFilesBeyondSeed,
   createAgentBashSandbox,
   extractDesignFiles,
   SANDBOX_PROJECT_ROOT,
@@ -73,6 +74,24 @@ describe('agent-bash-sandbox', () => {
     const snap = await snapshotDesignFiles(bash);
     expect(snap.get('x/y.txt')).toBe('z');
     expect([...snap.keys()].every((k) => !k.startsWith('/'))).toBe(true);
+  });
+
+  it('computeDesignFilesBeyondSeed excludes unchanged seed paths', () => {
+    const seed = { 'skills/a/SKILL.md': 'orig', 'AGENTS.md': 'agents' };
+    const extracted = { ...seed, 'new.html': '<p>x</p>' };
+    const beyond = computeDesignFilesBeyondSeed(extracted, seed);
+    expect(Object.keys(beyond)).toEqual(['new.html']);
+  });
+
+  it('computeDesignFilesBeyondSeed includes paths whose content changed vs seed', () => {
+    const seed = { 'index.html': '<old>' };
+    const extracted = { 'index.html': '<new>' };
+    expect(computeDesignFilesBeyondSeed(extracted, seed)).toEqual({ 'index.html': '<new>' });
+  });
+
+  it('computeDesignFilesBeyondSeed returns full map when no seed', () => {
+    const extracted = { 'a.txt': '1' };
+    expect(computeDesignFilesBeyondSeed(extracted, undefined)).toEqual({ 'a.txt': '1' });
   });
 
   it('extracts a large batch of seeded files', async () => {

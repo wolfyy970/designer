@@ -9,6 +9,7 @@ import {
   type ToolDefinition,
 } from './pi-sdk/index.ts';
 import type { RunTraceEvent, TodoItem } from '../../src/types/provider.ts';
+import { isAppRetryableUpstreamError, sleepMs } from '../lib/upstream-retry.ts';
 import { env } from '../env.ts';
 import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
@@ -16,6 +17,7 @@ import { wrapPiStreamWithLogging, PI_LLM_LOG_PHASE, mapSessionTypeToLlmLogSource
 import { getProviderModelContextWindow } from './provider-model-context.ts';
 import { buildModel } from './pi-model.ts';
 import {
+  computeDesignFilesBeyondSeed,
   createAgentBashSandbox,
   extractDesignFiles,
   SANDBOX_PROJECT_ROOT,
@@ -30,6 +32,7 @@ import {
 import { createVirtualPiCodingTools } from './pi-sdk/virtual-tools.ts';
 import { subscribePiSessionBridge } from './pi-session-event-bridge.ts';
 import { createSandboxResourceLoader } from './sandbox-resource-loader.ts';
+import type { AgentSession, AssistantMessage } from './pi-sdk/types.ts';
 import type {
   AgentRunParams,
   AgentSessionParams,
@@ -48,6 +51,66 @@ const IDLE_CHECK_MS = 10_000;
 
 /** Dev ingest interval for stall-debug telemetry (ms). */
 const STALL_DEBUG_MS = 60_000;
+
+/** Manual retries after upstream errors the Pi SDK regex does not classify as retryable. */
+const MAX_APP_UPSTREAM_RETRIES = 2;
+
+function findLastAssistantMessage(messages: { role?: string }[]): AssistantMessage | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m?.role === 'assistant') return m as AssistantMessage;
+  }
+  return undefined;
+}
+
+function lastAssistantHasAgentError(session: AgentSession): boolean {
+  return findLastAssistantMessage(session.agent.state.messages)?.stopReason === 'error';
+}
+
+/**
+ * Runs the initial prompt, then optional `continue()` rounds for upstream errors
+ * (Friendli/OpenRouter) that Pi auto-retry does not match.
+ */
+async function runPromptWithUpstreamRetries(
+  session: AgentSession,
+  userPrompt: string,
+  onEvent: (event: AgentRunEvent) => void | Promise<void>,
+  trace: (
+    kind: RunTraceEvent['kind'],
+    label: string,
+    extra?: Partial<RunTraceEvent>,
+  ) => AgentRunEvent,
+): Promise<void> {
+  await session.prompt(userPrompt, { expandPromptTemplates: false });
+
+  let attempts = 0;
+  while (attempts < MAX_APP_UPSTREAM_RETRIES) {
+    const lastAssistant = findLastAssistantMessage(session.agent.state.messages);
+    if (!lastAssistant || lastAssistant.stopReason !== 'error') return;
+    if (!isAppRetryableUpstreamError(lastAssistant.errorMessage)) return;
+    if (session.retryAttempt !== 0) return;
+
+    attempts += 1;
+    await onEvent({
+      type: 'progress',
+      payload: `Retrying after upstream error (attempt ${attempts}/${MAX_APP_UPSTREAM_RETRIES})…`,
+    });
+    await onEvent(
+      trace('compaction', `Retrying after upstream error (${attempts}/${MAX_APP_UPSTREAM_RETRIES})`, {
+        phase: 'building',
+        status: 'warning',
+        detail: lastAssistant.errorMessage?.slice(0, 500),
+      }),
+    );
+
+    const msgs = session.agent.state.messages;
+    if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') {
+      session.agent.replaceMessages(msgs.slice(0, -1));
+    }
+    await sleepMs(2000 * 2 ** (attempts - 1));
+    await session.agent.continue();
+  }
+}
 
 export type { ThinkingLevel } from './pi-model.ts';
 export type { AgentRunParams, AgentSessionParams, AgentRunEvent, DesignAgentSessionResult };
@@ -88,6 +151,7 @@ export async function runDesignAgentSession(
 
   const todoState: { current: TodoItem[] } = { current: [] };
   const hasSeed = !!params.seedFiles && Object.keys(params.seedFiles).length > 0;
+  const seedFilesSnapshot = params.seedFiles;
 
   const registryCw = await getProviderModelContextWindow(params.providerId, params.modelId);
   const fallbackCw =
@@ -247,9 +311,11 @@ export async function runDesignAgentSession(
   }
 
   try {
-    await session.prompt(
+    await runPromptWithUpstreamRetries(
+      session,
       `${params.userPrompt}\n\n[Workspace root: ${SANDBOX_PROJECT_ROOT} — use read, write, edit, ls, find, and grep for files; use bash for shell/commands.]`,
-      { expandPromptTemplates: false },
+      onEvent,
+      trace,
     );
   } catch (err) {
     if (env.isDev) {
@@ -265,11 +331,14 @@ export async function runDesignAgentSession(
 
   const files = await extractDesignFiles(bash);
 
+  const beyondSeed = computeDesignFilesBeyondSeed(files, seedFilesSnapshot);
+
   if (env.isDev) {
     const seedCount = params.seedFiles ? Object.keys(params.seedFiles).length : 0;
     console.debug('[pi-agent] session complete', {
       correlationId: params.correlationId,
       filesExtracted: Object.keys(files).length,
+      beyondSeedCount: Object.keys(beyondSeed).length,
       fileNames: Object.keys(files),
       fileEventsEmitted: fileEventCount,
       hasSeed,
@@ -281,15 +350,17 @@ export async function runDesignAgentSession(
     });
   }
 
-  if (!hasSeed && Object.keys(files).length === 0 && !params.signal?.aborted) {
-    if (env.isDev) {
-      console.warn('[pi-agent] agent produced zero design files (no seed, empty sandbox)');
+  if (Object.keys(beyondSeed).length === 0 && !params.signal?.aborted) {
+    if (!lastAssistantHasAgentError(session)) {
+      if (env.isDev) {
+        console.warn('[pi-agent] agent produced no new or changed design files vs seed (empty beyond-seed)');
+      }
+      await onEvent({
+        type: 'error',
+        payload:
+          'Agent completed without creating design files in the sandbox. Try a model that supports tool use, or ensure the bash tool runs successfully.',
+      });
     }
-    await onEvent({
-      type: 'error',
-      payload:
-        'Agent completed without creating design files in the sandbox. Try a model that supports tool use, or ensure the bash tool runs successfully.',
-    });
     return null;
   }
 

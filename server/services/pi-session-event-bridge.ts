@@ -31,6 +31,7 @@ import {
 } from '../lib/pi-bridge-narrowing.ts';
 import type { AgentRunEvent } from './pi-agent-run-types.ts';
 import type { RunTraceEvent } from '../../src/types/provider.ts';
+import type { AssistantMessage } from './pi-sdk/types.ts';
 
 export interface PiSessionBridgeContext {
   onEvent: (event: AgentRunEvent) => void | Promise<void>;
@@ -395,6 +396,36 @@ function handleCompactionStart(
   );
 }
 
+function findLastAssistantInMessages(messages: unknown[]): AssistantMessage | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m && typeof m === 'object' && (m as { role?: string }).role === 'assistant') {
+      return m as AssistantMessage;
+    }
+  }
+  return undefined;
+}
+
+/** Surface Pi agent termination with stopReason=error (upstream LLM failure) to SSE + Monitor trace. */
+function handleAgentEnd(ctx: PiSessionBridgeContext, event: AgentSessionEvent): void {
+  if (event.type !== 'agent_end') return;
+  const messages = (event as { type: 'agent_end'; messages: unknown[] }).messages;
+  const lastAssistant = findLastAssistantInMessages(messages);
+  if (!lastAssistant || lastAssistant.stopReason !== 'error') return;
+  const errMsg = lastAssistant.errorMessage?.trim() || 'Model stream error';
+  const traceRow: RunTraceEvent = {
+    id: crypto.randomUUID(),
+    at: new Date().toISOString(),
+    kind: 'tool_failed',
+    label: 'Agent ended with model error',
+    phase: 'building',
+    status: 'error',
+    detail: errMsg.slice(0, 512),
+  };
+  safeBridgeEmit(ctx, { type: 'trace', trace: traceRow });
+  safeBridgeEmit(ctx, { type: 'error', payload: errMsg });
+}
+
 function handleCompactionEnd(
   ctx: PiSessionBridgeContext,
   event: Extract<AgentSessionEvent, { type: 'compaction_end' }>,
@@ -457,6 +488,9 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
         return;
       case 'compaction_end':
         handleCompactionEnd(ctx, event);
+        return;
+      case 'agent_end':
+        handleAgentEnd(ctx, event);
         return;
       // Pi session framing-only events (no app SSE); no-op.
       case 'message_start':

@@ -231,3 +231,110 @@ describe('subscribePiSessionBridge streaming_tool', () => {
     expect(ctx.streamActivityAt.current).toBeGreaterThan(t0);
   });
 });
+
+describe('subscribePiSessionBridge agent_end', () => {
+  let listeners: Array<(e: unknown) => void>;
+  let session: AgentSession;
+
+  beforeEach(() => {
+    listeners = [];
+    session = {
+      subscribe(fn: (e: unknown) => void) {
+        listeners.push(fn);
+        return () => {};
+      },
+    } as unknown as AgentSession;
+  });
+
+  function emit(e: unknown) {
+    for (const l of listeners) l(e);
+  }
+
+  function makeCtx(): PiSessionBridgeContext {
+    return {
+      onEvent: () => Promise.resolve(),
+      trace: traceFactory(),
+      toolPathByCallId: new Map(),
+      toolArgsByCallId: new Map(),
+      waitingForFirstToken: { current: false },
+      turnLogRef: {},
+      streamActivityAt: { current: 0 },
+      modelTurnId: { current: 1 },
+    };
+  }
+
+  it('emits error and trace when agent_end has stopReason error', async () => {
+    const out: AgentRunEvent[] = [];
+    const ctx = makeCtx();
+    ctx.onEvent = (e) => {
+      out.push(e);
+      return Promise.resolve();
+    };
+    subscribePiSessionBridge(session, ctx);
+    emit({
+      type: 'agent_end',
+      messages: [
+        {
+          role: 'assistant',
+          stopReason: 'error',
+          errorMessage: 'Upstream error from Friendli: NaN error',
+          content: [],
+          api: 'openai-completions',
+          provider: 'openrouter',
+          model: 'm',
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+          timestamp: 0,
+        },
+      ],
+    });
+    await Promise.resolve();
+    const errEv = out.find((e) => e.type === 'error');
+    expect(errEv).toBeDefined();
+    expect(errEv && 'payload' in errEv && errEv.payload.includes('Upstream error')).toBe(true);
+    expect(
+      out.some(
+        (e) => e.type === 'trace' && e.trace.kind === 'tool_failed' && e.trace.status === 'error',
+      ),
+    ).toBe(true);
+  });
+
+  it('does not emit error when agent_end has non-error stopReason', () => {
+    const out: AgentRunEvent[] = [];
+    const ctx = makeCtx();
+    ctx.onEvent = (e) => {
+      out.push(e);
+      return Promise.resolve();
+    };
+    subscribePiSessionBridge(session, ctx);
+    emit({
+      type: 'agent_end',
+      messages: [
+        {
+          role: 'assistant',
+          stopReason: 'stop',
+          content: [],
+          api: 'openai-completions',
+          provider: 'openrouter',
+          model: 'm',
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+          timestamp: 0,
+        },
+      ],
+    });
+    expect(out.filter((e) => e.type === 'error')).toHaveLength(0);
+  });
+});

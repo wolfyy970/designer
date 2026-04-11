@@ -83,6 +83,30 @@ export async function extractDesignFiles(bash: Bash): Promise<Record<string, str
   return out;
 }
 
+/**
+ * Files the agent actually added or changed vs the initial seed map.
+ * Pre-seeded skill files that are unchanged do not count as "design output" so we can detect
+ * empty runs when the model fails before writing anything new.
+ */
+export function computeDesignFilesBeyondSeed(
+  extracted: Record<string, string>,
+  seedFiles: Record<string, string> | undefined,
+): Record<string, string> {
+  if (!seedFiles || Object.keys(seedFiles).length === 0) {
+    return { ...extracted };
+  }
+  const out: Record<string, string> = {};
+  for (const [path, content] of Object.entries(extracted)) {
+    const seedContent = seedFiles[path];
+    if (seedContent === undefined) {
+      out[path] = content;
+    } else if (seedContent !== content) {
+      out[path] = content;
+    }
+  }
+  return out;
+}
+
 /** Snapshot path -> string content for dirty detection after `bash.exec`. */
 export async function snapshotDesignFiles(bash: Bash): Promise<Map<string, string>> {
   const files = await extractDesignFiles(bash);

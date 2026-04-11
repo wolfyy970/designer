@@ -1,7 +1,7 @@
 {
   "name": "auto-designer",
   "private": true,
-  "version": "0.3.30",
+  "version": "0.3.31",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:playwright-eval": "vitest run -c vitest.playwright.config.ts server/services/__tests__/browser-playwright-evaluator.test.ts",
     "test:watch": "vitest",
     "dev:server": "tsx watch server/dev.ts",
     "dev:all": "concurrently -k -n api,vite -c blue,green \"pnpm dev:server\" \"pnpm exec wait-on http://127.0.0.1:3001/api/health && vite\"",

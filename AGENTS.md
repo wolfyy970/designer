@@ -38,7 +38,7 @@ pnpm test:watch      # vitest (watch mode)
 pnpm vitest run src/hooks/__tests__/resolve-evaluator-settings.test.ts  # single test file
 ```
 
-Vitest excludes `server/services/__tests__/browser-playwright-evaluator.test.ts` via `vite.config.ts` so the default suite stays hermetic; run that file explicitly when changing Playwright merge logic. Pi virtual FS tools are covered in `server/services/pi-sdk/__tests__/virtual-tools.test.ts`.
+Vitest excludes `server/services/__tests__/browser-playwright-evaluator.test.ts` via `vite.config.ts` so the default suite stays hermetic; run **`pnpm test:playwright-eval`** (or `vitest run -c vitest.playwright.config.ts …` on that file) when changing Playwright merge logic. Pi virtual FS tools are covered in `server/services/pi-sdk/__tests__/virtual-tools.test.ts`.
 
 ## Architecture (quick reference)
 
