@@ -94,6 +94,13 @@ describe('saveSpecToLibrary and getSavedSpec', () => {
     expect(loaded?.title).toBe('My Spec');
   });
 
+  it('getSavedSpec resolves spec when localStorage key differs from spec.id (legacy blobs)', () => {
+    const spec = makeSpec({ id: 'real-id', title: 'Legacy' });
+    storage.set(STORAGE_KEYS.CANVASES, JSON.stringify({ 'wrong-key': spec }));
+    expect(getSavedSpec('real-id')).toEqual(spec);
+    expect(getSavedSpec('wrong-key')).toEqual(spec);
+  });
+
   it('deleteSpecFromLibrary removes a spec', () => {
     const spec = makeSpec({ id: 'spec-del' });
     saveSpecToLibrary(spec);

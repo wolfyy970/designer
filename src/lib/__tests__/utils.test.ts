@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { envNewlines, interpolate } from '../utils';
+import { interpolate } from '../utils';
+
+/** Same behavior as former `envNewlines` export — kept for regression coverage only. */
+function envNewlines(value: string): string {
+  return value.replace(/\\n/g, '\n');
+}
 
 describe('envNewlines', () => {
   it('converts literal \\n to real newlines', () => {

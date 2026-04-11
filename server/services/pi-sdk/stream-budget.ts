@@ -21,7 +21,7 @@ function estimateUserMessageContent(
 }
 
 /** Pi `Context` token estimate for one streaming turn. */
-export function estimatePiContextTokens(context: Context): number {
+function estimatePiContextTokens(context: Context): number {
   let n = estimateTextTokens(context.systemPrompt ?? '');
   for (const m of context.messages) {
     if (m.role === 'user' || m.role === 'toolResult') {

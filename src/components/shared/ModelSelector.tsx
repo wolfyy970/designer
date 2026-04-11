@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Loader2, ChevronDown, AlertCircle, Eye, Brain } from 'lucide-react';
+import { RF_INTERACTIVE } from '../../constants/canvas';
 import { useProviderModels } from '../../hooks/useProviderModels';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -8,6 +9,7 @@ interface ModelSelectorProps {
   providerId: string;
   selectedModelId: string;
   onChange: (modelId: string) => void;
+  disabled?: boolean;
 }
 
 export default function ModelSelector({
@@ -15,6 +17,7 @@ export default function ModelSelector({
   providerId,
   selectedModelId,
   onChange,
+  disabled = false,
 }: ModelSelectorProps) {
   const { data: models, isLoading, isError } = useProviderModels(providerId);
   const queryClient = useQueryClient();
@@ -28,20 +31,22 @@ export default function ModelSelector({
 
   // Auto-select first model when models load and nothing selected
   useEffect(() => {
+    if (disabled) return;
     if (models && models.length > 0 && !selectedModelId) {
       onChange(models[0].id);
     }
-  }, [models, selectedModelId, onChange]);
+  }, [disabled, models, selectedModelId, onChange]);
 
   // If selected model isn't in new list (provider changed), reset
   useEffect(() => {
+    if (disabled) return;
     if (models && models.length > 0 && selectedModelId) {
       const found = models.some((m) => m.id === selectedModelId);
       if (!found) {
         onChange(models[0].id);
       }
     }
-  }, [models, selectedModelId, onChange]);
+  }, [disabled, models, selectedModelId, onChange]);
 
   const filtered = useMemo(() => {
     if (!models) return [];
@@ -58,9 +63,8 @@ export default function ModelSelector({
     setHighlightIndex(0);
   }, [filtered.length]);
 
-  // Close on outside click
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || disabled) return;
     function handleClick(e: PointerEvent) {
       if (
         containerRef.current &&
@@ -72,14 +76,13 @@ export default function ModelSelector({
     }
     document.addEventListener('pointerdown', handleClick, true);
     return () => document.removeEventListener('pointerdown', handleClick, true);
-  }, [isOpen]);
+  }, [isOpen, disabled]);
 
-  // Scroll highlighted item into view
   useEffect(() => {
-    if (!isOpen || !listRef.current) return;
+    if (!isOpen || !listRef.current || disabled) return;
     const el = listRef.current.children[highlightIndex] as HTMLElement;
     el?.scrollIntoView({ block: 'nearest' });
-  }, [highlightIndex, isOpen]);
+  }, [highlightIndex, isOpen, disabled]);
 
   const select = useCallback(
     (modelId: string) => {
@@ -92,6 +95,7 @@ export default function ModelSelector({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (disabled) return;
       if (!isOpen) {
         if (e.key === 'ArrowDown' || e.key === 'Enter') {
           e.preventDefault();
@@ -120,7 +124,7 @@ export default function ModelSelector({
           break;
       }
     },
-    [isOpen, filtered, highlightIndex, select]
+    [disabled, isOpen, filtered, highlightIndex, select]
   );
 
   const selectedModel = models?.find((m) => m.id === selectedModelId);
@@ -128,8 +132,17 @@ export default function ModelSelector({
     ? search
     : selectedModel?.name || selectedModelId || '';
 
+  const inputDisabled = disabled || isLoading;
+
+  useEffect(() => {
+    if (disabled) {
+      setIsOpen(false);
+      setSearch('');
+    }
+  }, [disabled]);
+
   return (
-    <div className="nodrag nowheel" ref={containerRef}>
+    <div className={RF_INTERACTIVE} ref={containerRef}>
       <label className="mb-1 block text-xs font-medium text-fg-secondary">
         {label}
       </label>
@@ -140,17 +153,19 @@ export default function ModelSelector({
             type="text"
             value={displayValue}
             onChange={(e) => {
+              if (disabled) return;
               setSearch(e.target.value);
               if (!isOpen) setIsOpen(true);
             }}
             onFocus={() => {
+              if (disabled) return;
               setIsOpen(true);
               setSearch('');
             }}
             onKeyDown={handleKeyDown}
             placeholder={isLoading ? 'Loading models...' : 'Search models...'}
-            disabled={isLoading}
-            className="w-full rounded-md border border-border bg-bg py-2 pl-2.5 pr-7 text-xs text-fg-secondary input-focus disabled:opacity-60"
+            disabled={inputDisabled}
+            className="w-full rounded-md border border-border bg-bg py-2 pl-2.5 pr-7 text-xs text-fg-secondary input-focus disabled:cursor-not-allowed disabled:opacity-60"
           />
           <span className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 text-fg-muted">
             {!isOpen && selectedModel?.supportsVision && (
@@ -167,7 +182,7 @@ export default function ModelSelector({
           </span>
         </div>
 
-        {isOpen && (
+        {isOpen && !disabled && (
           <ul
             ref={listRef}
             className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-border bg-bg py-1 shadow-lg"
@@ -204,7 +219,7 @@ export default function ModelSelector({
                 onMouseEnter={() => setHighlightIndex(i)}
                 className={`cursor-pointer px-2.5 py-1.5 text-xs ${
                   i === highlightIndex
-                    ? 'bg-accent/15 text-fg'
+                    ? 'bg-accent-highlight text-fg'
                     : 'text-fg-secondary'
                 } ${m.id === selectedModelId ? 'font-medium' : ''}`}
               >

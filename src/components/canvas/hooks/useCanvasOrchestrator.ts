@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useCompilerStore } from '../../../stores/compiler-store';
+import { useIncubatorStore } from '../../../stores/incubator-store';
 import { useGenerationStore } from '../../../stores/generation-store';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { GENERATION_STATUS } from '../../../constants/generation';
@@ -7,30 +7,30 @@ import { syncDomainForRemovedNode } from '../../../workspace/domain-commands';
 import {
   applyOrphanRemovalToGraph,
   collectOrphanNodeIds,
-  pruneDimensionMapsToLinkedRefIds,
+  pruneIncubationPlansToLinkedRefIds,
   staleGeneratingResultIds,
-} from '../../../workspace/canvas-orchestrator';
+} from '../../../workspace/canvas-graph-cleanup';
 
 /**
  * Lightweight orchestrator: cleans up orphaned canvas nodes
  * whose backing data was removed from the compiler or generation stores.
  *
  * Node creation/sync is now driven by the nodes themselves:
- * - CompilerNode.handleCompile → syncAfterCompile
+ * - IncubatorNode.handleIncubate → syncAfterIncubate
  * - HypothesisNode.handleGenerate → syncAfterGenerate
  *
  * Effect deps include the graph (`nodes`, `edges`) so orphan cleanup and dimension-map
  * pruning run when only the canvas graph changes, not only when compiler/generation slices change.
  */
 export function useCanvasOrchestrator() {
-  const dimensionMaps = useCompilerStore((s) => s.dimensionMaps);
+  const incubationPlans = useIncubatorStore((s) => s.incubationPlans);
   const results = useGenerationStore((s) => s.results);
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
 
   useEffect(() => {
-    const isCompiling = useCompilerStore.getState().isCompiling;
-    const orphanIds = collectOrphanNodeIds(nodes, dimensionMaps, results, isCompiling);
+    const isCompiling = useIncubatorStore.getState().isCompiling;
+    const orphanIds = collectOrphanNodeIds(nodes, incubationPlans, results, isCompiling);
 
     let graphNodes = nodes;
     let graphEdges = edges;
@@ -47,9 +47,9 @@ export function useCanvasOrchestrator() {
 
     // Drop dimension-map strategies with no hypothesis card (fixes stale counts after non–removeNode deletes)
     if (!isCompiling) {
-      const maps = useCompilerStore.getState().dimensionMaps;
-      const { nextMaps, changed } = pruneDimensionMapsToLinkedRefIds(graphNodes, maps);
-      if (changed) useCompilerStore.setState({ dimensionMaps: nextMaps });
+      const maps = useIncubatorStore.getState().incubationPlans;
+      const { nextMaps, changed } = pruneIncubationPlansToLinkedRefIds(graphNodes, maps);
+      if (changed) useIncubatorStore.setState({ incubationPlans: nextMaps });
     }
 
     // Clean stale "generating" results left over from a previous session.
@@ -63,5 +63,5 @@ export function useCanvasOrchestrator() {
         error: 'Generation interrupted by page reload',
       });
     }
-  }, [dimensionMaps, results, nodes, edges]);
+  }, [incubationPlans, results, nodes, edges]);
 }

@@ -42,6 +42,9 @@ interface VariantToolbarProps {
   showClearUserBest?: boolean;
   onMarkUserBest?: () => void;
   onClearUserBest?: () => void;
+  /** In-flight generation for this hypothesis lane — stop cancels the SSE / agent on the server. */
+  showStopGeneration?: boolean;
+  onStopGeneration?: () => void;
 }
 
 export default function VariantToolbar({
@@ -69,6 +72,8 @@ export default function VariantToolbar({
   showClearUserBest = false,
   onMarkUserBest,
   onClearUserBest,
+  showStopGeneration = false,
+  onStopGeneration,
 }: VariantToolbarProps) {
   return (
     <div className="flex items-center gap-1 border-b border-border-subtle px-2.5 py-1">
@@ -76,15 +81,29 @@ export default function VariantToolbar({
         {variantName}
       </h4>
       {isArchived && (
-        <span className="shrink-0 rounded bg-fg-faint/10 px-1.5 py-px text-badge font-medium text-fg-muted">
+        <span className="shrink-0 rounded bg-surface-meta-chip px-1.5 py-px text-badge font-medium text-fg-muted">
           Archived
         </span>
       )}
       {!isArchived && isBestCurrent && (
-        <span className="shrink-0 rounded bg-success/10 px-1.5 py-px text-badge font-medium text-success">
+        <span className="shrink-0 rounded bg-success-surface px-1.5 py-px text-badge font-medium text-success">
           Best
         </span>
       )}
+      {showStopGeneration && onStopGeneration ? (
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onStopGeneration();
+          }}
+          className="nodrag shrink-0 rounded border border-error-border bg-error-subtle px-1.5 py-px text-badge font-semibold text-error transition-colors hover:bg-error-surface-hover"
+          title="Stop generation (cancels the in-flight request)"
+        >
+          Stop
+        </button>
+      ) : null}
 
       {/* Stack navigation */}
       {stackTotal > 1 && (
@@ -158,7 +177,7 @@ export default function VariantToolbar({
             e.stopPropagation();
             onClearUserBest();
           }}
-          className="nodrag rounded p-0.5 text-amber-500 transition-colors hover:text-amber-400"
+          className="nodrag rounded p-0.5 text-warning transition-colors hover:text-warning-text-soft"
           title="Clear your best pick (use evaluator ranking)"
         >
           <Star size={10} className="fill-current" />
@@ -186,7 +205,7 @@ export default function VariantToolbar({
         }}
         className={`nodrag rounded p-0.5 transition-colors ${
           isWorkspaceOpen
-            ? 'text-accent hover:text-accent/80'
+            ? 'text-accent hover:text-accent-text-dim'
             : 'text-fg-faint hover:text-fg-muted'
         }`}
         title={isWorkspaceOpen ? 'Close run workspace' : 'Open run workspace'}
@@ -249,8 +268,8 @@ export default function VariantToolbar({
         className="nodrag shrink-0 rounded p-0.5 text-fg-faint transition-colors hover:bg-error-subtle hover:text-error"
         title={
           versionStackLength > 1
-            ? 'Remove this version (keep other versions in the stack)'
-            : 'Remove variant from canvas'
+            ? 'Delete this generation version (others stay on the card)'
+            : 'Delete preview from canvas'
         }
       >
         <X size={10} />

@@ -1,14 +1,18 @@
 import type { GenerationStatus } from '../constants/generation';
+import type { RunTraceEvent, RunTraceKind } from '../lib/run-trace-event-schema';
 import type {
   AgenticCheckpoint,
   AggregatedEvaluationReport,
   AgenticPhase,
   EvaluationRoundSnapshot,
+  EvaluatorRubricId,
+  EvaluatorWorkerReport,
 } from './evaluation';
 
 export type { EvaluationContextPayload } from './evaluation';
 
 export type { GenerationStatus };
+export type { RunTraceEvent, RunTraceKind };
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -36,7 +40,7 @@ export interface ProviderOptions {
    * Server: selects completion margin when deriving `max_tokens` from context − prompt.
    * @see server/lib/completion-budget.ts
    */
-  completionPurpose?: 'compile' | 'compaction' | 'agent_turn' | 'default';
+  completionPurpose?: 'incubate' | 'compaction' | 'agent_turn' | 'default';
 }
 
 export interface Provenance {
@@ -66,34 +70,11 @@ export interface TodoItem {
   status: 'pending' | 'in_progress' | 'completed';
 }
 
-export type RunTraceKind =
-  | 'run_started'
-  | 'phase'
-  | 'model_turn_start'
-  | 'model_first_token'
-  | 'tool_started'
-  | 'tool_finished'
-  | 'tool_failed'
-  | 'files_planned'
-  | 'file_written'
-  | 'evaluation_progress'
-  | 'evaluation_report'
-  | 'revision_round'
-  | 'checkpoint'
-  | 'compaction';
-
-export interface RunTraceEvent {
-  id: string;
-  at: string;
-  kind: RunTraceKind;
-  label: string;
-  /** PI model turn index (1-based), set on `model_turn_start` for timeline grouping */
-  turnId?: number;
-  phase?: AgenticPhase;
-  round?: number;
-  toolName?: string;
-  path?: string;
-  status?: 'info' | 'success' | 'warning' | 'error';
+/** Skill catalog entry or activation payload (SSE skills_loaded / skill_activated). */
+export interface SkillInfo {
+  key: string;
+  name: string;
+  description: string;
 }
 
 /** One PI model turn's streamed reasoning (collapsible timeline). */
@@ -104,9 +85,76 @@ export interface ThinkingTurnSlice {
   endedAt?: number;
 }
 
+/** Transient UI fields for generation liveness (footer, idle detection). In-memory only. */
+export interface LivenessSlice {
+  progressMessage?: string;
+  lastAgentFileAt?: number;
+  lastActivityAt?: number;
+  lastTraceAt?: number;
+  activeToolName?: string;
+  activeToolPath?: string;
+  streamingToolName?: string;
+  streamingToolPath?: string;
+  streamingToolChars?: number;
+  agenticPhase?: AgenticPhase;
+  evaluationStatus?: string;
+  /** startedAt of the most recent open thinking turn (endedAt == null), if any. */
+  activeThinkingStartedAt?: number;
+}
+
+/** Copied from {@link GenerationResult} into {@link LivenessSlice} (excludes computed `activeThinkingStartedAt`). */
+const LIVENESS_SLICE_KEYS = [
+  'progressMessage',
+  'lastAgentFileAt',
+  'lastActivityAt',
+  'lastTraceAt',
+  'activeToolName',
+  'activeToolPath',
+  'streamingToolName',
+  'streamingToolPath',
+  'streamingToolChars',
+  'agenticPhase',
+  'evaluationStatus',
+] as const satisfies readonly (keyof Omit<LivenessSlice, 'activeThinkingStartedAt'>)[];
+
+export function pickLivenessSlice(result: GenerationResult): LivenessSlice {
+  const turns = result.thinkingTurns;
+  let openTurn: ThinkingTurnSlice | undefined;
+  if (turns) {
+    for (let i = turns.length - 1; i >= 0; i--) {
+      if (turns[i].endedAt == null) { openTurn = turns[i]; break; }
+    }
+  }
+  const base = Object.fromEntries(LIVENESS_SLICE_KEYS.map((k) => [k, result[k]])) as Pick<
+    LivenessSlice,
+    (typeof LIVENESS_SLICE_KEYS)[number]
+  >;
+  return {
+    ...base,
+    activeThinkingStartedAt: openTurn?.startedAt,
+  };
+}
+
+export type StreamingToolLiveness = Pick<
+  LivenessSlice,
+  'streamingToolName' | 'streamingToolPath' | 'streamingToolChars'
+>;
+
+const STREAMING_TOOL_LIVENESS_KEYS = [
+  'streamingToolName',
+  'streamingToolPath',
+  'streamingToolChars',
+] as const satisfies readonly (keyof StreamingToolLiveness)[];
+
+export function pickStreamingToolLiveness(result: GenerationResult): StreamingToolLiveness {
+  return Object.fromEntries(
+    STREAMING_TOOL_LIVENESS_KEYS.map((k) => [k, result[k]]),
+  ) as StreamingToolLiveness;
+}
+
 export interface GenerationResult {
   id: string;
-  variantStrategyId: string;
+  strategyId: string;
   providerId: string;
   status: GenerationStatus;
   code?: string;
@@ -131,13 +179,19 @@ export interface GenerationResult {
   progressMessage?: string;
   /** Unix ms when `onFile` last ran — for "no new file" stall hints */
   lastAgentFileAt?: number;
-  /** Unix ms when streamed model text last arrived. */
+  /** Unix ms when model stream last advanced: answer tokens, code chunks, or thinking deltas (batched). */
   lastActivityAt?: number;
   /** Unix ms when the latest structured trace event arrived. */
   lastTraceAt?: number;
   /** Active tool name/path inferred from structured run traces. */
   activeToolName?: string;
   activeToolPath?: string;
+  /** In-memory only — Pi is streaming a tool-call before execution (toolcall_*). */
+  streamingToolName?: string;
+  /** In-memory only — virtual path from partial tool arguments when available. */
+  streamingToolPath?: string;
+  /** In-memory only — accumulated size of streamed tool-call arguments. */
+  streamingToolChars?: number;
   activityLog?: string[];
   /** Assistant text output per PI turn (for timeline). In-memory only. */
   activityByTurn?: Record<number, string>;
@@ -145,6 +199,10 @@ export interface GenerationResult {
   thinkingTurns?: ThinkingTurnSlice[];
   /** Capped structured trace for this in-flight run. Never persisted. */
   liveTrace?: RunTraceEvent[];
+  /** Agent skills pre-seeded for this Pi session (non-manual catalog). Never persisted. */
+  liveSkills?: SkillInfo[];
+  /** Skills the agent activated via use_skill this run. Never persisted. */
+  liveActivatedSkills?: SkillInfo[];
   /** Agentic harness: high-level phase for UI */
   agenticPhase?: AgenticPhase;
   /** Live evaluation progress label during SSE */
@@ -153,6 +211,8 @@ export interface GenerationResult {
   evaluationSummary?: AggregatedEvaluationReport;
   /** Full rounds (typically 1–2) after run completes */
   evaluationRounds?: EvaluationRoundSnapshot[];
+  /** In-memory only — per-rubric reports as workers finish during SSE. Never persisted. */
+  liveEvalWorkers?: Partial<Record<EvaluatorRubricId, EvaluatorWorkerReport>>;
 }
 
 /**

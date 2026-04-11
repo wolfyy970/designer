@@ -4,25 +4,29 @@
  */
 import type { ReferenceImage } from './spec';
 
-export type AgentMode = 'single' | 'agentic';
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high';
 
-/** Wired inputs for compile: section + variant + critique node ids feeding an incubator. */
+/** Wired inputs for incubate: input + preview node ids feeding an incubator. */
 export interface DomainIncubatorWiring {
-  readonly sectionNodeIds: string[];
-  readonly variantNodeIds: string[];
-  readonly critiqueNodeIds: string[];
+  readonly inputNodeIds: string[];
+  readonly previewNodeIds: string[];
 }
 
 /** Hypothesis runtime settings and bindings (not graph topology). */
 export interface DomainHypothesis {
   id: string;
   incubatorId: string;
-  variantStrategyId: string;
+  strategyId: string;
   modelNodeIds: string[];
   designSystemNodeIds: string[];
-  /** Direct vs agentic — one setting for all lanes on this hypothesis. */
-  agentMode?: AgentMode;
+  /** When true, run evaluator-driven revision after the initial build + eval. Default false = one pass (no Pi revision loop). */
+  revisionEnabled?: boolean;
+  /** Per-hypothesis max revision rounds; undefined = use Settings evaluator defaults. */
+  maxRevisionRounds?: number;
+  /**
+   * Per-hypothesis target overall score (0–5); undefined = use Settings default; null = no score target.
+   */
+  minOverallScore?: number | null;
   placeholder: boolean;
 }
 
@@ -44,19 +48,11 @@ export interface DomainDesignSystemContent {
   modelMigration?: string;
 }
 
-export interface DomainCritiqueContent {
-  readonly nodeId: string;
-  title: string;
-  strengths: string;
-  improvements: string;
-  direction: string;
-}
-
-/** Variant preview slot per hypothesis + strategy (canvas node id is projection). */
-export interface DomainVariantSlot {
+/** Preview slot per hypothesis + strategy (canvas node id is projection). */
+export interface DomainPreviewSlot {
   readonly hypothesisId: string;
-  readonly variantStrategyId: string;
-  variantNodeId: string | null;
+  readonly strategyId: string;
+  previewNodeId: string | null;
   activeResultId: string | null;
   pinnedRunId: string | null;
 }
@@ -64,20 +60,19 @@ export interface DomainVariantSlot {
 export interface WorkspaceDomainStateV1 {
   schemaVersion: 1;
   incubatorWirings: Record<string, DomainIncubatorWiring>;
-  /** Model nodes feeding the incubator (compile / connected-model for CompilerNode). */
+  /** Model nodes feeding the incubator (incubate / connected-model for IncubatorNode). */
   incubatorModelNodeIds: Record<string, string[]>;
   hypotheses: Record<string, DomainHypothesis>;
   modelProfiles: Record<string, DomainModelProfile>;
   designSystems: Record<string, DomainDesignSystemContent>;
-  critiques: Record<string, DomainCritiqueContent>;
-  variantSlots: Record<string, DomainVariantSlot>;
+  previewSlots: Record<string, DomainPreviewSlot>;
 }
 
 export function defaultIncubatorWiring(): DomainIncubatorWiring {
-  return { sectionNodeIds: [], variantNodeIds: [], critiqueNodeIds: [] };
+  return { inputNodeIds: [], previewNodeIds: [] };
 }
 
-/** Slot key used in variantSlots map */
-export function variantSlotKey(hypothesisId: string, variantStrategyId: string): string {
-  return `${hypothesisId}::${variantStrategyId}`;
+/** Slot key used in previewSlots map */
+export function previewSlotKey(hypothesisId: string, strategyId: string): string {
+  return `${hypothesisId}::${strategyId}`;
 }

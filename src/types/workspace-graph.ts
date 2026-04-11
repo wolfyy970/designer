@@ -13,17 +13,21 @@ export type CanvasNodeType =
   | 'researchContext'
   | 'objectivesMetrics'
   | 'designConstraints'
+  /** UI-only placeholder; not persisted and not wired to the spec graph */
+  | 'inputGhost'
+  /** UI-only “add hypothesis” card when an incubator exists; not persisted */
+  | 'hypothesisGhost'
   | 'designSystem'
-  | 'compiler'
+  | 'incubator'
   | 'hypothesis'
-  | 'variant'
-  | 'critique'
+  | 'preview'
   | 'model';
 
-export type CanvasNodeData = Record<string, unknown> & {
+/** React Flow / workspace node data bag — index signature allows node-type-specific fields. */
+export type CanvasNodeData = {
   refId?: string;
-  variantStrategyId?: string;
-};
+  strategyId?: string;
+} & Record<string, unknown>;
 
 /** Node in the experiment graph — no dependency on a specific renderer library. */
 export interface WorkspaceNode {

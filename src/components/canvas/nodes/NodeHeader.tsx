@@ -26,7 +26,7 @@ export default function NodeHeader({
         <button
           onClick={onRemove}
           className="nodrag ml-auto shrink-0 rounded p-0.5 text-fg-faint transition-colors hover:bg-error-subtle hover:text-error"
-          title="Remove"
+          title="Delete from canvas"
         >
           <X size={12} />
         </button>

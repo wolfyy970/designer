@@ -2,20 +2,63 @@
  * Pure graph topology queries over `WorkspaceNode` / `WorkspaceEdge`.
  * Centralizes edge-walking so alternate UIs or persistence can reuse or replace this layer.
  */
-import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
+import { DEFAULT_INCUBATOR_PROVIDER } from '../lib/constants';
 import { NODE_TYPES } from '../constants/canvas';
-import type { WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
+import type { CanvasNodeType, WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
+
+/** Coerce a persisted/snapshot node row into `WorkspaceNode` for graph helpers (dummy position). */
+export function snapshotNodeToWorkspace(n: {
+  id: string;
+  type: CanvasNodeType;
+  data: Record<string, unknown>;
+}): WorkspaceNode {
+  return {
+    id: n.id,
+    type: n.type,
+    position: { x: 0, y: 0 },
+    data: n.data as WorkspaceNode['data'],
+  };
+}
 
 export interface WorkspaceGraphSnapshot {
   readonly nodes: readonly WorkspaceNode[];
   readonly edges: readonly WorkspaceEdge[];
 }
 
+export function workspaceNodeById(
+  nodes: readonly WorkspaceNode[],
+  id: string,
+): WorkspaceNode | undefined {
+  return nodes.find((n) => n.id === id);
+}
+
 export function nodeById(
   snapshot: WorkspaceGraphSnapshot,
   id: string,
 ): WorkspaceNode | undefined {
-  return snapshot.nodes.find((n) => n.id === id);
+  return workspaceNodeById(snapshot.nodes, id);
+}
+
+/** Minimal graph snapshot for incubator lookup (avoids scattering nodes/edges arg order). */
+export type IncubatorLookupSnapshot = {
+  readonly nodes: readonly { id: string; type: string }[];
+  readonly edges: readonly Pick<WorkspaceEdge, 'source' | 'target'>[];
+};
+
+/**
+ * First compiler node with an edge to this hypothesis (`source` → `target`).
+ * Uses the same iteration order as legacy inline loops.
+ */
+export function findIncubatorForHypothesis(
+  snapshot: IncubatorLookupSnapshot,
+  hypothesisId: string,
+): string | null {
+  for (const e of snapshot.edges) {
+    if (e.target !== hypothesisId) continue;
+    const n = snapshot.nodes.find((x) => x.id === e.source);
+    if (n?.type === NODE_TYPES.INCUBATOR) return n.id;
+  }
+  return null;
 }
 
 export function listIncomingSourceNodes(
@@ -25,7 +68,7 @@ export function listIncomingSourceNodes(
   const out: WorkspaceNode[] = [];
   for (const e of snapshot.edges) {
     if (e.target !== targetNodeId) continue;
-    const n = nodeById(snapshot, e.source);
+    const n = workspaceNodeById(snapshot.nodes, e.source);
     if (n) out.push(n);
   }
   return out;
@@ -38,7 +81,7 @@ export function listOutgoingTargetNodes(
   const out: WorkspaceNode[] = [];
   for (const e of snapshot.edges) {
     if (e.source !== sourceNodeId) continue;
-    const n = nodeById(snapshot, e.target);
+    const n = workspaceNodeById(snapshot.nodes, e.target);
     if (n) out.push(n);
   }
   return out;
@@ -53,24 +96,10 @@ export function findFirstUpstreamModelNodeId(
 ): string | null {
   for (const e of snapshot.edges) {
     if (e.target !== targetNodeId) continue;
-    const source = nodeById(snapshot, e.source);
+    const source = workspaceNodeById(snapshot.nodes, e.source);
     if (source?.type === NODE_TYPES.MODEL) return source.id;
   }
   return null;
-}
-
-/** All model nodes with an edge into `targetNodeId` (order = edge iteration). */
-export function listIncomingModelNodeIds(
-  targetNodeId: string,
-  snapshot: WorkspaceGraphSnapshot,
-): string[] {
-  const ids: string[] = [];
-  for (const e of snapshot.edges) {
-    if (e.target !== targetNodeId) continue;
-    const source = nodeById(snapshot, e.source);
-    if (source?.type === NODE_TYPES.MODEL) ids.push(source.id);
-  }
-  return ids;
 }
 
 export interface ModelCredential {
@@ -90,7 +119,7 @@ export function listIncomingModelCredentials(
     if (src.type !== NODE_TYPES.MODEL) continue;
     const modelId = src.data.modelId as string | undefined;
     if (!modelId) continue;
-    const providerId = (src.data.providerId as string) || DEFAULT_COMPILER_PROVIDER;
+    const providerId = (src.data.providerId as string) || DEFAULT_INCUBATOR_PROVIDER;
     out.push({ providerId, modelId });
   }
   return out;

@@ -81,6 +81,18 @@ describe('bundleVirtualFS', () => {
     });
     expect(result).toContain('Custom');
   });
+
+  it('inlines assets using paths relative to entry HTML directory', () => {
+    const html = `<html><head><link rel="stylesheet" href="local.css"></head><body><script src="local.js"></script></body></html>`;
+    const result = bundleVirtualFS({
+      'nested/entry.html': html,
+      'nested/local.css': 'p { margin: 0; }',
+      'nested/local.js': 'window.x = 1;',
+    });
+    expect(result).toContain('p { margin: 0; }');
+    expect(result).toContain('window.x = 1;');
+    expect(result).not.toContain('href="local.css"');
+  });
 });
 
 describe('prepareIframeContent', () => {

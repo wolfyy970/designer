@@ -1,19 +1,25 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
+import { EVALUATOR_RUBRIC_IDS, EVALUATOR_WORKER_COUNT } from '../../types/evaluation';
 import { storage } from '../../storage';
 import { useCanvasStore } from '../../stores/canvas-store';
-import { useCompilerStore, findVariantStrategy } from '../../stores/compiler-store';
-import type { VariantNodeData } from '../../types/canvas-data';
+import { useIncubatorStore, findStrategy } from '../../stores/incubator-store';
+import { getPreviewNodeData } from '../../lib/canvas-node-data';
 import { useVersionStack } from '../../hooks/useVersionStack';
 import { useResultCode } from '../../hooks/useResultCode';
 import { useResultFiles } from '../../hooks/useResultFiles';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
+import { RF_INTERACTIVE } from '../../constants/canvas';
 import { GENERATION_STATUS } from '../../constants/generation';
-import { bundleVirtualFS, prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
+import { abortGenerationForStrategy } from '../../lib/generation-abort-registry';
+import { prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
+import { preferredArtifactFileOrder } from '../../lib/preview-entry';
 import { normalizeError } from '../../lib/error-utils';
+import { pickLivenessSlice, pickStreamingToolLiveness } from '../../types/provider';
 import {
   AgenticHarnessStripe,
-  EvaluationScorecard,
+  ArtifactPreviewFrame,
+  EvaluationTabPanel,
   GeneratingFooter,
   Timeline,
   TodoTracker,
@@ -39,31 +45,31 @@ function StatusDot({ status }: { status: string }) {
 }
 
 export default function VariantRunInspector() {
-  const runInspectorVariantNodeId = useCanvasStore((s) => s.runInspectorVariantNodeId);
+  const runInspectorPreviewNodeId = useCanvasStore((s) => s.runInspectorPreviewNodeId);
   const closeRunInspector = useCanvasStore((s) => s.closeRunInspector);
   const nodes = useCanvasStore((s) => s.nodes);
 
   const node = useMemo(
     () =>
-      runInspectorVariantNodeId
-        ? nodes.find((n) => n.id === runInspectorVariantNodeId)
+      runInspectorPreviewNodeId
+        ? nodes.find((n) => n.id === runInspectorPreviewNodeId)
         : undefined,
-    [nodes, runInspectorVariantNodeId],
+    [nodes, runInspectorPreviewNodeId],
   );
 
   useEffect(() => {
-    if (!runInspectorVariantNodeId) return;
-    if (!node || node.type !== 'variant') closeRunInspector();
-  }, [runInspectorVariantNodeId, node, closeRunInspector]);
+    if (!runInspectorPreviewNodeId) return;
+    if (!node || node.type !== 'preview') closeRunInspector();
+  }, [runInspectorPreviewNodeId, node, closeRunInspector]);
 
   useEffect(() => {
-    if (!runInspectorVariantNodeId) return;
+    if (!runInspectorPreviewNodeId) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeRunInspector();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [runInspectorVariantNodeId, closeRunInspector]);
+  }, [runInspectorPreviewNodeId, closeRunInspector]);
 
   const [tab, setTab] = useState<TabId>('monitor');
   const [filesTabPath, setFilesTabPath] = useState<string | undefined>(undefined);
@@ -71,26 +77,27 @@ export default function VariantRunInspector() {
   useEffect(() => {
     setTab('monitor');
     setFilesTabPath(undefined);
-  }, [runInspectorVariantNodeId]);
+  }, [runInspectorPreviewNodeId]);
 
-  const data = node?.type === 'variant' ? (node.data as VariantNodeData) : undefined;
-  const variantStrategyId = data?.variantStrategyId;
+  const data = getPreviewNodeData(node ?? undefined);
+  const strategyId = data?.strategyId;
   const pinnedRunId = data?.pinnedRunId;
 
-  const { results, activeResult, versionKey } = useVersionStack(variantStrategyId, pinnedRunId);
+  const { results, activeResult, versionKey } = useVersionStack(strategyId, pinnedRunId);
 
   const legacyResult =
-    !variantStrategyId && data?.refId
+    !strategyId && data?.refId
       ? results.find((r) => r.id === data.refId)
       : undefined;
   const result = activeResult ?? legacyResult;
+  const laneStrategyIdForAbort = strategyId ?? result?.strategyId;
 
-  const strategy = useCompilerStore((s) => {
-    const vsId = variantStrategyId ?? result?.variantStrategyId;
+  const strategy = useIncubatorStore((s) => {
+    const vsId = strategyId ?? result?.strategyId;
     if (!vsId) return undefined;
-    return findVariantStrategy(s.dimensionMaps, vsId);
+    return findStrategy(s.incubationPlans, vsId);
   });
-  const variantName = strategy?.name ?? 'Variant';
+  const variantName = strategy?.name ?? 'Preview';
 
   const { code, isLoading: codeLoading } = useResultCode(result?.id, result?.status);
   const { files, isLoading: filesLoading } = useResultFiles(result?.id, result?.status);
@@ -177,14 +184,6 @@ export default function VariantRunInspector() {
 
   const designIsMultiFile =
     !!designPreviewFiles && Object.keys(designPreviewFiles).length > 0;
-  const designBundledHtml = useMemo(() => {
-    if (!designPreviewFiles || Object.keys(designPreviewFiles).length === 0) return '';
-    try {
-      return bundleVirtualFS(designPreviewFiles);
-    } catch (err) {
-      return renderErrorHtml(normalizeError(err));
-    }
-  }, [designPreviewFiles]);
 
   const writtenForFilesTab = designPreviewFiles;
   const filesTabPlanned =
@@ -196,10 +195,8 @@ export default function VariantRunInspector() {
     const inWritten = filesTabPath != null && filesTabPath in written;
     const inPlanned = filesTabPlanned?.includes(filesTabPath ?? '') ?? false;
     if (filesTabPath && (inWritten || inPlanned)) return;
-    const preferred = ['index.html', 'styles.css', 'app.js'];
     const firstWritten =
-      preferred.find((p) => p in written) ??
-      Object.keys(written).sort()[0];
+      preferredArtifactFileOrder(written)[0] ?? Object.keys(written).sort()[0];
     const next = firstWritten ?? filesTabPlanned?.[0];
     setFilesTabPath(next);
   }, [tab, writtenForFilesTab, filesTabPlanned, filesTabPath]);
@@ -209,25 +206,18 @@ export default function VariantRunInspector() {
       ? writtenForFilesTab[filesTabPath]
       : undefined;
 
-  const tabBtn = useCallback(
-    (id: TabId, label: string) => (
-      <button
-        key={id}
-        type="button"
-        onClick={() => setTab(id)}
-        className={`shrink-0 rounded px-2 py-0.5 text-nano font-medium transition-colors ${
-          tab === id
-            ? 'bg-surface-secondary text-fg'
-            : 'text-fg-muted hover:text-fg-secondary'
-        }`}
-      >
-        {label}
-      </button>
-    ),
-    [tab],
+  const evalWorkers = result?.liveEvalWorkers;
+  const evalWorkersDoneCount = useMemo(
+    () =>
+      evalWorkers ? EVALUATOR_RUBRIC_IDS.filter((r) => evalWorkers[r] != null).length : 0,
+    [evalWorkers],
   );
+  const showEvaluationTabBadge =
+    tab !== 'evaluation' &&
+    isGenerating &&
+    (result?.agenticPhase === 'evaluating' || evalWorkersDoneCount > 0);
 
-  if (!runInspectorVariantNodeId || !node || node.type !== 'variant') return null;
+  if (!runInspectorPreviewNodeId || !node || node.type !== 'preview') return null;
 
   const statusLabel = result?.status ?? 'pending';
   const model = result?.metadata?.model;
@@ -237,8 +227,8 @@ export default function VariantRunInspector() {
 
   return (
     <aside
-      className="flex min-h-0 w-[min(100vw,480px)] shrink-0 flex-col border-l border-border-subtle bg-surface pt-[var(--height-header)]"
-      aria-label="Variant run workspace"
+      className="flex min-h-0 w-[var(--width-variant-inspector)] shrink-0 flex-col border-l border-border-subtle bg-surface pt-[var(--height-header)]"
+      aria-label="Preview run workspace"
     >
       {/* ── Identity header ──────────────────────────────────── */}
       <div className="shrink-0 border-b border-border-subtle px-3 py-1.5">
@@ -246,14 +236,26 @@ export default function VariantRunInspector() {
           <h2 className="min-w-0 truncate text-sm font-semibold leading-tight text-fg">
             {variantName}
           </h2>
-          <button
-            type="button"
-            onClick={closeRunInspector}
-            className="shrink-0 rounded p-0.5 text-fg-muted transition-colors hover:bg-surface-secondary hover:text-fg"
-            title="Close (Esc)"
-          >
-            <X size={14} />
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            {isGenerating && laneStrategyIdForAbort ? (
+              <button
+                type="button"
+                onClick={() => abortGenerationForStrategy(laneStrategyIdForAbort)}
+                className="rounded border border-error-border bg-error-subtle px-2 py-0.5 text-nano font-semibold text-error transition-colors hover:bg-error-surface-hover"
+                title="Stop generation (cancels the in-flight request)"
+              >
+                Stop
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={closeRunInspector}
+              className="shrink-0 rounded p-0.5 text-fg-muted transition-colors hover:bg-surface-nested hover:text-fg"
+              title="Close (Esc)"
+            >
+              <X size={14} />
+            </button>
+          </div>
         </div>
         <div className="mt-0.5 flex items-center gap-1.5 text-nano text-fg-muted">
           {versionKey && result?.runNumber != null && (
@@ -281,7 +283,31 @@ export default function VariantRunInspector() {
 
       {/* ── Tabs ─────────────────────────────────────────────── */}
       <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border-subtle px-2 py-1">
-        {TAB_DEFS.map(({ id, label }) => tabBtn(id, label))}
+        {TAB_DEFS.map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTab(id)}
+            className={`flex shrink-0 items-center rounded px-2 py-0.5 text-nano font-medium transition-colors ${
+              tab === id
+                ? 'bg-surface-nested text-fg'
+                : 'text-fg-muted hover:text-fg-secondary'
+            }`}
+          >
+            {label}
+            {id === 'evaluation' && showEvaluationTabBadge ? (
+              <>
+                <span
+                  className="ml-1 inline-flex h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent"
+                  aria-hidden
+                />
+                <span className="ml-0.5 shrink-0 tabular-nums text-fg-faint">
+                  ({evalWorkersDoneCount}/{EVALUATOR_WORKER_COUNT})
+                </span>
+              </>
+            ) : null}
+          </button>
+        ))}
       </div>
 
       {/* ── Tab content ──────────────────────────────────────── */}
@@ -295,27 +321,23 @@ export default function VariantRunInspector() {
                 <AgenticHarnessStripe
                   phase={result.agenticPhase}
                   evaluationStatus={result.evaluationStatus}
+                  progressMessage={result.progressMessage}
                 />
                 <GeneratingFooter
                   plan={result.liveFilesPlan}
                   written={Object.keys(result.liveFiles ?? {}).length}
-                  progressMessage={result.progressMessage}
                   elapsed={elapsed}
-                  lastAgentFileAt={result.lastAgentFileAt}
-                  lastActivityAt={result.lastActivityAt}
-                  lastTraceAt={result.lastTraceAt}
-                  activeToolName={result.activeToolName}
-                  activeToolPath={result.activeToolPath}
+                  liveness={pickLivenessSlice(result)}
                   liveTodos={result.liveTodos}
-                  agenticPhase={result.agenticPhase}
-                  evaluationStatus={result.evaluationStatus}
+                  skillCatalogEmpty={result.liveSkills != null && result.liveSkills.length === 0}
+                  liveActivatedSkills={result.liveActivatedSkills}
                 />
               </div>
             )}
 
             {/* Tasks — fixed, auto-height, fits content snugly */}
             <div className="shrink-0 border-b border-border-subtle">
-              <div className="flex items-center bg-surface-secondary/40 px-3 py-0.5">
+              <div className="flex items-center bg-surface-nested/40 px-3 py-0.5">
                 <span className="text-pico font-semibold uppercase tracking-widest text-fg-faint">Tasks</span>
               </div>
               {result?.liveTodos && result.liveTodos.length > 0 ? (
@@ -334,6 +356,7 @@ export default function VariantRunInspector() {
               activityByTurn={result?.activityByTurn}
               activityLog={result?.activityLog}
               isStreaming={isGenerating}
+              streamingLiveness={result ? pickStreamingToolLiveness(result) : undefined}
             />
           </div>
         )}
@@ -346,7 +369,7 @@ export default function VariantRunInspector() {
                   Eval round
                 </span>
                 <select
-                  className="nodrag max-w-[220px] rounded border border-border-subtle bg-surface px-2 py-0.5 text-nano text-fg"
+                  className="nodrag max-w-[var(--width-model-trigger)] rounded border border-border-subtle bg-surface px-2 py-0.5 text-nano text-fg"
                   value={safeRoundIdx}
                   onChange={(e) => setEvalRoundIdx(Number(e.target.value))}
                 >
@@ -379,7 +402,7 @@ export default function VariantRunInspector() {
               (Object.keys(writtenForFilesTab ?? {}).length > 0 ||
                 (filesTabPlanned?.length ?? 0) > 0) && (
                 <div className="flex min-h-0 flex-1 overflow-hidden">
-                  <div className="flex w-[min(40%,11rem)] shrink-0 flex-col border-r border-border-subtle bg-surface">
+                  <div className="flex w-[var(--width-inspector-tab)] shrink-0 flex-col border-r border-border-subtle bg-surface">
                     <div className="border-b border-border-subtle px-2 py-1.5">
                       <span className="text-badge font-medium uppercase tracking-wider text-fg-faint">
                         Files
@@ -396,7 +419,7 @@ export default function VariantRunInspector() {
                       className="flex-1 min-h-0"
                     />
                   </div>
-                  <div className="nodrag nowheel min-h-0 min-w-0 flex-1 overflow-y-auto">
+                  <div className={`${RF_INTERACTIVE} min-h-0 min-w-0 flex-1 overflow-y-auto`}>
                     {filesTabSnippet != null ? (
                       <pre className="min-h-full p-3 font-mono text-nano leading-relaxed text-fg-secondary whitespace-pre-wrap">
                         {filesTabSnippet}
@@ -435,7 +458,7 @@ export default function VariantRunInspector() {
                   Eval round
                 </span>
                 <select
-                  className="nodrag max-w-[220px] rounded border border-border-subtle bg-surface px-2 py-0.5 text-nano text-fg"
+                  className="nodrag max-w-[var(--width-model-trigger)] rounded border border-border-subtle bg-surface px-2 py-0.5 text-nano text-fg"
                   value={safeRoundIdx}
                   onChange={(e) => setEvalRoundIdx(Number(e.target.value))}
                 >
@@ -465,12 +488,12 @@ export default function VariantRunInspector() {
             {!codeLoading &&
               !filesLoading &&
               !(rounds.length > 1 && !isLatestEvalRound && !roundFilesFromIdb && !selectedRound?.files) &&
-              designIsMultiFile && (
-              <iframe
+              designIsMultiFile &&
+              designPreviewFiles && (
+              <ArtifactPreviewFrame
+                files={designPreviewFiles}
                 title={`Design preview: ${variantName}`}
-                sandbox="allow-scripts"
-                srcDoc={designBundledHtml || undefined}
-                className="min-h-[240px] flex-1 border-0 bg-white"
+                className="min-h-[var(--min-height-input-textarea)] flex-1 border-0 bg-preview-canvas"
               />
             )}
             {!codeLoading &&
@@ -482,7 +505,7 @@ export default function VariantRunInspector() {
                 title={`Design preview: ${variantName}`}
                 sandbox="allow-scripts"
                 srcDoc={singleFileSrc}
-                className="min-h-[240px] flex-1 border-0 bg-white"
+                className="min-h-[var(--min-height-input-textarea)] flex-1 border-0 bg-preview-canvas"
               />
             )}
             {!codeLoading &&
@@ -504,82 +527,16 @@ export default function VariantRunInspector() {
         )}
 
         {tab === 'evaluation' && (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
-              {rounds.length > 0 ? (
-                <div className="flex flex-col gap-3 p-3">
-                  {rounds.map((round) => {
-                    const isLatest = lastRoundNum != null && round.round === lastRoundNum;
-                    return (
-                      <article
-                        key={round.round}
-                        className="overflow-hidden rounded-lg border border-border-subtle bg-surface-secondary/25"
-                      >
-                        <header className="flex items-start justify-between gap-2 border-b border-border-subtle bg-surface-secondary/50 px-3 py-2">
-                          <div className="min-w-0 space-y-0.5">
-                            <div className="text-nano font-semibold uppercase tracking-wide text-fg-secondary">
-                              Round {round.round}
-                              {isLatest ? (
-                                <span className="ml-1.5 font-normal normal-case text-fg-faint">
-                                  · latest
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="text-badge text-fg-muted">
-                              {round.aggregate.shouldRevise ? 'Revise suggested' : 'Pass'}
-                            </div>
-                          </div>
-                          <span className="shrink-0 tabular-nums font-mono text-sm text-accent">
-                            {round.aggregate.overallScore.toFixed(1)}
-                          </span>
-                        </header>
-                        <div className="px-3 pb-3 pt-1">
-                          <EvaluationScorecard
-                            summary={round.aggregate}
-                            latestSnapshot={round}
-                            mode="panel"
-                            showAggregateHeader={false}
-                          />
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              ) : evalSummary ? (
-                <div className="p-3">
-                  <article className="overflow-hidden rounded-lg border border-border-subtle bg-surface-secondary/25">
-                    <header className="flex items-start justify-between gap-2 border-b border-border-subtle bg-surface-secondary/50 px-3 py-2">
-                      <div className="min-w-0 space-y-0.5">
-                        <div className="text-nano font-semibold uppercase tracking-wide text-fg-secondary">
-                          Evaluation
-                        </div>
-                        <div className="text-badge text-fg-muted">
-                          {evalSummary.shouldRevise ? 'Revise suggested' : 'Pass'}
-                        </div>
-                      </div>
-                      <span className="shrink-0 tabular-nums font-mono text-sm text-accent">
-                        {evalSummary.overallScore.toFixed(1)}
-                      </span>
-                    </header>
-                    <div className="px-3 pb-3 pt-1">
-                      <EvaluationScorecard
-                        summary={evalSummary}
-                        latestSnapshot={selectedRound}
-                        mode="panel"
-                        showAggregateHeader={false}
-                      />
-                    </div>
-                  </article>
-                </div>
-              ) : (
-                <p className="px-3 py-3 text-nano text-fg-muted">
-                  {isGenerating
-                    ? 'Evaluation runs after the build phase; completed rounds will stack here.'
-                    : 'No evaluation data for this run.'}
-                </p>
-              )}
-            </div>
-          </div>
+          <EvaluationTabPanel
+            isGenerating={isGenerating}
+            agenticPhase={result?.agenticPhase}
+            liveEvalWorkers={result?.liveEvalWorkers}
+            evalWorkersDoneCount={evalWorkersDoneCount}
+            rounds={rounds}
+            lastRoundNum={lastRoundNum}
+            evalSummary={evalSummary}
+            selectedRound={selectedRound}
+          />
         )}
       </div>
     </aside>

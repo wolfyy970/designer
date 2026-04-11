@@ -41,7 +41,7 @@ function estimatePartsTokens(parts: ContentPart[]): number {
   return n;
 }
 
-export function estimateMessageContentTokens(content: string | ContentPart[]): number {
+function estimateMessageContentTokens(content: string | ContentPart[]): number {
   if (typeof content === 'string') return estimateTextTokens(content);
   return estimatePartsTokens(content);
 }

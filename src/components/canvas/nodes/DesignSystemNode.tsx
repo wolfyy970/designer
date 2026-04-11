@@ -1,28 +1,30 @@
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useMemo } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
 import { useDropzone } from 'react-dropzone';
 import { ImagePlus, Sparkles, Loader2, X } from 'lucide-react';
-import { normalizeError } from '../../../lib/error-utils';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import type { DesignSystemNodeData } from '../../../types/canvas-data';
 import { extractDesignSystem } from '../../../api/client';
-import { generateId, now } from '../../../lib/utils';
+import { RF_INTERACTIVE } from '../../../constants/canvas';
+import { readFileAsReferenceImage } from '../../../lib/image-utils';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
-import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
+import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
+import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
 import { filledOrEmpty } from '../../../lib/node-status';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
+import { NodeErrorBlock } from './shared/NodeErrorBlock';
 import type { ReferenceImage } from '../../../types/spec';
 
 type DesignSystemNodeType = Node<DesignSystemNodeData, 'designSystem'>;
 
 function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType>) {
-  const onRemove = useNodeRemoval(id);
+  const onRemove = useCanvasNodePermanentRemove(id, STATIC_NODE_DELETE_COPY.designSystem);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
 
   const title = data.title || 'Design System';
   const content = data.content || '';
-  const images = data.images || [];
+  const images = useMemo(() => data.images ?? [], [data.images]);
 
   const { providerId, modelId, supportsVision } = useConnectedModel(id);
 
@@ -40,21 +42,12 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
   );
 
   const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
-      acceptedFiles.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const newImage: ReferenceImage = {
-            id: generateId(),
-            filename: file.name,
-            dataUrl: reader.result as string,
-            description: '',
-            createdAt: now(),
-          };
-          updateNodeData(id, { images: [...getCurrentImages(), newImage] });
-        };
-        reader.readAsDataURL(file);
-      });
+    async (acceptedFiles: File[]) => {
+      const newImages = await Promise.all(
+        acceptedFiles.map((file) => readFileAsReferenceImage(file)),
+      );
+      if (newImages.length === 0) return;
+      updateNodeData(id, { images: [...getCurrentImages(), ...newImages] });
     },
     [id, updateNodeData, getCurrentImages],
   );
@@ -87,15 +80,15 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
         providerId: providerId!,
         modelId: modelId!,
       });
+      if (!response) return;
       const result = response.result;
-
       if (content.trim()) {
         update('content', content + '\n\n---\n\n' + result);
       } else {
         update('content', result);
       }
     } catch (err) {
-      setExtractError(normalizeError(err, 'Extraction failed'));
+      setExtractError(err instanceof Error ? err.message : 'Extraction failed');
     } finally {
       setExtracting(false);
     }
@@ -125,7 +118,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
           value={title}
           onChange={(e) => update('title', e.target.value)}
           placeholder="Design System"
-          className="nodrag nowheel min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 text-xs font-semibold text-fg placeholder:text-fg-faint outline-none hover:border-border focus:border-accent"
+          className={`${RF_INTERACTIVE} min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 text-xs font-semibold text-fg placeholder:text-fg-faint outline-none hover:border-border focus:border-accent`}
         />
       </NodeHeader>
 
@@ -136,11 +129,11 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
           onChange={(e) => update('content', e.target.value)}
           placeholder="Paste design system tokens, or drop images below and click Extract..."
           rows={4}
-          className="nodrag nowheel w-full resize-none rounded border border-border px-2.5 py-2 text-xs text-fg-secondary placeholder:text-fg-faint outline-none input-focus"
+          className={`${RF_INTERACTIVE} w-full resize-none rounded border border-border px-2.5 py-2 text-xs text-fg-secondary placeholder:text-fg-faint outline-none input-focus`}
         />
 
         {/* Image upload */}
-        <div className="nodrag nowheel mt-2">
+        <div className={`${RF_INTERACTIVE} mt-2`}>
           {images.length > 0 && (
             <div className="mb-2 grid gap-2">
               {images.map((img) => (
@@ -195,14 +188,14 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
 
         {/* Extraction controls */}
         {images.length > 0 && (
-          <div className="nodrag nowheel mt-2.5 space-y-2 border-t border-border-subtle pt-2.5">
+          <div className={`${RF_INTERACTIVE} mt-2.5 space-y-2 border-t border-border-subtle pt-2.5`}>
             {!extracting && !modelId && (
               <p className="text-center text-nano text-fg-muted">Connect a Model node</p>
             )}
             <button
               onClick={handleExtract}
               disabled={extracting || !modelId}
-              className="flex w-full items-center justify-center gap-1.5 rounded-md bg-fg px-3 py-1.5 text-xs font-medium text-bg transition-colors hover:bg-fg/90 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex w-full items-center justify-center gap-1.5 rounded-md bg-fg px-3 py-1.5 text-xs font-medium text-bg transition-colors hover:bg-fg-on-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
               {extracting ? (
                 <Loader2 size={12} className="animate-spin" />
@@ -218,11 +211,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
               </p>
             )}
 
-            {extractError && (
-              <p className="rounded bg-error-subtle px-2 py-1 text-micro text-error">
-                {extractError}
-              </p>
-            )}
+            {extractError && <NodeErrorBlock message={extractError} />}
           </div>
         )}
       </div>

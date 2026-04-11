@@ -1,0 +1,32 @@
+import { describe, expect, it } from 'vitest';
+import {
+  hypothesisDeleteCopy,
+  keyboardMultiDeleteCopy,
+  inputCardDeleteCopy,
+} from '../canvas-permanent-delete-copy';
+import type { WorkspaceNode } from '../../types/workspace-graph';
+
+describe('canvas-permanent-delete-copy', () => {
+  it('inputCardDeleteCopy includes input title', () => {
+    const { title } = inputCardDeleteCopy('Brief');
+    expect(title).toContain('Brief');
+  });
+
+  it('hypothesisDeleteCopy pluralizes previews when count > 1', () => {
+    const one = hypothesisDeleteCopy(1);
+    expect(one.description).toContain('1 linked preview');
+    const many = hypothesisDeleteCopy(2);
+    expect(many.description).toContain('2 linked previews');
+    const none = hypothesisDeleteCopy(0);
+    expect(none.description).not.toContain('linked');
+  });
+
+  it('keyboardMultiDeleteCopy uses multi-node title for two hypotheses', () => {
+    const nodes: WorkspaceNode[] = [
+      { id: 'h1', type: 'hypothesis', position: { x: 0, y: 0 }, data: {} },
+      { id: 'h2', type: 'hypothesis', position: { x: 0, y: 0 }, data: {} },
+    ];
+    const { title } = keyboardMultiDeleteCopy(nodes, nodes, []);
+    expect(title).toBe('Remove 2 nodes?');
+  });
+});

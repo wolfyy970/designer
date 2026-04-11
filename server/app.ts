@@ -1,36 +1,62 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import compile from './routes/compile.ts';
+import { bodyLimit } from 'hono/body-limit';
+import incubate from './routes/incubate.ts';
 import generate from './routes/generate.ts';
 import models from './routes/models.ts';
 import logs from './routes/logs.ts';
 import designSystem from './routes/design-system.ts';
-import prompts from './routes/prompts.ts';
-import skills from './routes/skills.ts';
 import hypothesis from './routes/hypothesis.ts';
+import preview from './routes/preview.ts';
+import configRoute from './routes/config.ts';
+import inputsGenerate from './routes/inputs-generate.ts';
+import { env } from './env.ts';
+import { apiJsonError } from './lib/api-json-error.ts';
+
+const DEFAULT_DEV_CORS_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'http://localhost:4173',
+] as const;
+
+function effectiveCorsOrigins(): string[] {
+  const extra = env.ALLOWED_ORIGINS;
+  if (extra.length === 0) return [...DEFAULT_DEV_CORS_ORIGINS];
+  return extra;
+}
 
 const app = new Hono().basePath('/api');
+
+const BODY_LIMIT_BYTES = 2 * 1024 * 1024;
+
+app.use(
+  '*',
+  bodyLimit({
+    maxSize: BODY_LIMIT_BYTES,
+    onError: (c) => apiJsonError(c, 413, 'Request body too large'),
+  }),
+);
 
 app.use(
   '*',
   cors({
-    origin: [
-      'http://localhost:5173',
-      'http://localhost:5174',
-      'http://localhost:5175',
-      'http://localhost:4173',
-    ],
+    origin: (origin) => {
+      if (!origin) return origin;
+      return effectiveCorsOrigins().includes(origin) ? origin : null;
+    },
   }),
 );
 
 app.get('/health', (c) => c.json({ ok: true }));
-app.route('/compile', compile);
+app.route('/config', configRoute);
+app.route('/incubate', incubate);
 app.route('/generate', generate);
 app.route('/models', models);
 app.route('/logs', logs);
 app.route('/design-system', designSystem);
-app.route('/prompts', prompts);
-app.route('/skills', skills);
 app.route('/hypothesis', hypothesis);
+app.route('/preview', preview);
+app.route('/inputs', inputsGenerate);
 
 export default app;

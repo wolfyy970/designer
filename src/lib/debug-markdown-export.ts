@@ -2,7 +2,7 @@
  * Debug-oriented Markdown snapshots for hypotheses and design runs.
  * Structured for human reading + later diffing in Git or IDE.
  */
-import type { CompiledPrompt, DimensionMap, VariantStrategy } from '../types/compiler';
+import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../types/incubator';
 import type { DesignSpec } from '../types/spec';
 import { SPEC_SECTIONS } from './constants';
 import type {
@@ -42,12 +42,12 @@ export function downloadTextFile(filename: string, text: string, mime = 'text/ma
   URL.revokeObjectURL(url);
 }
 
-export function findDimensionMapForVariant(
-  dimensionMaps: Record<string, DimensionMap>,
-  variantStrategyId: string,
-): DimensionMap | undefined {
-  for (const map of Object.values(dimensionMaps)) {
-    if (map.variants.some((v) => v.id === variantStrategyId)) return map;
+export function findPlanForStrategy(
+  incubationPlans: Record<string, IncubationPlan>,
+  strategyId: string,
+): IncubationPlan | undefined {
+  for (const map of Object.values(incubationPlans)) {
+    if (map.hypotheses.some((v) => v.id === strategyId)) return map;
   }
   return undefined;
 }
@@ -187,10 +187,10 @@ function formatSpecContext(spec: DesignSpec | undefined): string {
   return body;
 }
 
-function formatDimensionContext(map: DimensionMap | undefined, strategy: VariantStrategy): string {
+function formatDimensionContext(map: IncubationPlan | undefined, strategy: HypothesisStrategy): string {
   if (!map) {
     return (
-      '_No dimension map found for this strategy._\n\n' +
+      '_No incubation plan found for this strategy._\n\n' +
       '### Strategy dimensions (flat)\n\n' +
       fenced(
         'json',
@@ -200,14 +200,14 @@ function formatDimensionContext(map: DimensionMap | undefined, strategy: Variant
   }
   let body = `- **map id:** \`${map.id}\`\n`;
   body += `- **specId:** \`${map.specId}\`\n`;
-  body += `- **compilerModel:** ${map.compilerModel}\n`;
+  body += `- **incubatorModel:** ${map.incubatorModel}\n`;
   body += `- **generatedAt:** ${map.generatedAt}\n\n`;
   body += '### Dimensions\n\n';
   body +=
     map.dimensions
       .map((d) => `- **${d.name}** (${d.isConstant ? 'constant' : 'variable'}): ${d.range}`)
       .join('\n') + '\n\n';
-  body += '### This variant’s dimension values\n\n';
+  body += '### This strategy’s dimension values\n\n';
   body += fenced('json', JSON.stringify(strategy.dimensionValues, null, 2));
   return body;
 }
@@ -232,8 +232,10 @@ function formatDomainHypothesisBlock(
   if (!hyp) return '_No domain hypothesis record (not linked in workspace domain)._ \n';
   let body = `- **hypothesis id:** \`${hyp.id}\`\n`;
   body += `- **incubatorId:** \`${hyp.incubatorId}\`\n`;
-  body += `- **variantStrategyId:** \`${hyp.variantStrategyId}\`\n`;
-  body += `- **agentMode:** ${hyp.agentMode ?? 'single'}\n`;
+  body += `- **strategyId:** \`${hyp.strategyId}\`\n`;
+  body += `- **revisionEnabled (auto-improve):** ${hyp.revisionEnabled ?? false}\n`;
+  body += `- **maxRevisionRounds (override):** ${hyp.maxRevisionRounds ?? '_use Settings default_'}\n`;
+  body += `- **minOverallScore (override):** ${hyp.minOverallScore === undefined ? '_use Settings default_' : hyp.minOverallScore === null ? 'off' : hyp.minOverallScore}\n`;
   body += `- **placeholder:** ${hyp.placeholder}\n\n`;
   body += '### Model nodes\n\n';
   if (!hyp.modelNodeIds.length) body += '_None._\n';
@@ -258,7 +260,7 @@ function formatDomainHypothesisBlock(
   return body;
 }
 
-function formatStrategyCore(s: VariantStrategy): string {
+function formatStrategyCore(s: HypothesisStrategy): string {
   return [
     `- **id:** \`${s.id}\``,
     `- **name:** ${s.name}`,
@@ -290,15 +292,14 @@ export interface HypothesisDebugExportInput {
   exportedAt: string;
   canvasTitle?: string;
   hypothesisNodeId: string;
-  strategy: VariantStrategy;
-  dimensionMap?: DimensionMap;
+  strategy: HypothesisStrategy;
+  incubationPlan?: IncubationPlan;
   domainHypothesis?: DomainHypothesis;
   modelProfiles: Record<string, DomainModelProfile>;
   designSystems: Record<string, DomainDesignSystemContent>;
   spec: DesignSpec | undefined;
   compiledPromptsForStrategy: CompiledPrompt[];
   resultsForStrategy: GenerationResult[];
-  agentModeOnNode: 'single' | 'agentic';
 }
 
 export function buildHypothesisDebugMarkdown(input: HypothesisDebugExportInput): string {
@@ -311,10 +312,9 @@ export function buildHypothesisDebugMarkdown(input: HypothesisDebugExportInput):
   md += `_Exported ${input.exportedAt} (ISO)._\n`;
   if (input.canvasTitle) md += `\n**Canvas / library:** ${input.canvasTitle}\n`;
   md += `\n**Hypothesis node id:** \`${input.hypothesisNodeId}\`\n`;
-  md += `**Variant strategy id:** \`${input.strategy.id}\`\n`;
-  md += `**Run mode (node):** ${input.agentModeOnNode}\n`;
-  md += '\n' + section('Variant strategy (compiler)', formatStrategyCore(input.strategy));
-  md += HR + section('Dimension map & axes', formatDimensionContext(input.dimensionMap, input.strategy));
+  md += `**Strategy id:** \`${input.strategy.id}\`\n`;
+  md += '\n' + section('Hypothesis strategy (compiler)', formatStrategyCore(input.strategy));
+  md += HR + section('Incubation plan & axes', formatDimensionContext(input.incubationPlan, input.strategy));
   md += HR + section('Workspace domain bindings', formatDomainHypothesisBlock(
     input.domainHypothesis,
     input.modelProfiles,
@@ -323,17 +323,17 @@ export function buildHypothesisDebugMarkdown(input: HypothesisDebugExportInput):
   md += HR + section('Design spec (full text)', formatSpecContext(input.spec));
   md += HR + section('Compiled prompts (current store)', formatCompiledPrompts(input.compiledPromptsForStrategy));
   md += HR + section('Generation runs (metadata only)', formatResultsIndex(input.resultsForStrategy));
-  md += '\n_For per-run traces, thinking stream, and artifacts, use **Download debug** on the variant node after a run._\n';
+  md += '\n_For per-run traces, thinking stream, and artifacts, use **Download debug** on the preview node after a run._\n';
   md += `\n<!-- export: hypothesis slug=${slug} strategy=${input.strategy.id} -->\n`;
   return md;
 }
 
 export interface DesignRunDebugExportInput {
   exportedAt: string;
-  variantNodeId?: string;
-  variantName: string;
+  previewNodeId?: string;
+  previewName: string;
   strategyName?: string;
-  strategy?: VariantStrategy;
+  strategy?: HypothesisStrategy;
   result: GenerationResult;
   /** Prefer IndexedDB snapshot when available */
   provenance?: Provenance;
@@ -365,7 +365,7 @@ function formatFileArtifactsContents(files: Record<string, string> | undefined):
   return out;
 }
 
-/** Toggle design-run Markdown export sections (used by the variant debug export dialog). */
+/** Toggle design-run Markdown export sections (used by the preview debug export dialog). */
 export interface DesignDebugExportOptions {
   /** Ids, status, provider, timings, error. */
   runSummary: boolean;
@@ -497,10 +497,10 @@ export function mergeDesignDebugExportOptions(
 function formatRunSummaryBlock(input: DesignRunDebugExportInput): string {
   const r = input.result;
   let md = '';
-  if (input.variantNodeId) md += `**Variant node id:** \`${input.variantNodeId}\`\n`;
+  if (input.previewNodeId) md += `**Preview node id:** \`${input.previewNodeId}\`\n`;
   md += `**Strategy / hypothesis name:** ${input.strategyName ?? '—'}\n`;
   md += `**Result id:** \`${r.id}\`\n`;
-  md += `**Variant strategy id:** \`${r.variantStrategyId}\`\n`;
+  md += `**Strategy id:** \`${r.strategyId}\`\n`;
   md += `**Status:** ${r.status}\n`;
   md += `**Run:** v${r.runNumber} (\`${r.runId}\`)\n`;
   md += `**Provider / model:** ${r.providerId} / ${r.metadata.model}\n`;
@@ -613,12 +613,12 @@ export function buildDesignRunDebugMarkdown(
 ): string {
   const o = mergeDesignDebugExportOptions(getDefaultDesignDebugExportOptions(input), options ?? {});
   const r = input.result;
-  const slug = input.variantName
+  const slug = input.previewName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
 
-  let md = `# Design run debug: ${input.variantName}\n\n`;
+  let md = `# Design run debug: ${input.previewName}\n\n`;
   md += `_Exported ${input.exportedAt} (ISO)._\n\n`;
 
   if (o.runSummary) {

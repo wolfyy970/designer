@@ -1,14 +1,17 @@
 /**
  * Agentic design build + parallel evaluators + bounded multi-round revision loop.
  */
-import type { PromptKey } from '../lib/prompts/defaults.ts';
-import type {
-  AgenticCheckpoint,
-  AgenticPhase,
-  AgenticStopReason,
-  AggregatedEvaluationReport,
-  EvaluationContextPayload,
-  EvaluationRoundSnapshot,
+import { randomUUID } from 'node:crypto';
+import {
+  EVALUATOR_RUBRIC_IDS,
+  type AgenticCheckpoint,
+  type AgenticPhase,
+  type AgenticStopReason,
+  type AggregatedEvaluationReport,
+  type EvaluationContextPayload,
+  type EvaluationRoundSnapshot,
+  type EvaluatorRubricId,
+  type EvaluatorWorkerReport,
 } from '../../src/types/evaluation.ts';
 import { getProvider } from './providers/registry.ts';
 import {
@@ -18,26 +21,56 @@ import {
   runEvaluationWorkers,
 } from './design-evaluation-service.ts';
 import { buildAgenticSystemContext } from '../lib/build-agentic-system-context.ts';
-import { isLangfuseTracingEnabled } from '../lib/langfuse-tracing-enabled.ts';
-import { createTraceId, startActiveObservation } from '@langfuse/tracing';
-import { runDesignAgentSession, type AgentRunEvent, type AgentSessionParams } from './pi-agent-service.ts';
+import { getPromptBody } from '../lib/prompt-resolution.ts';
+import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
+import {
+  runDesignAgentSession,
+  type AgentRunEvent,
+  type AgentSessionParams,
+  type DesignAgentSessionResult,
+} from './pi-agent-service.ts';
+import type { LoadedSkillSummary } from '../lib/skill-schema.ts';
+import { makeRunTraceEvent } from '../lib/run-trace.ts';
+import {
+  buildEvaluatorTracesSection,
+  buildRevisionUserContext,
+  buildRoundHistorySection,
+  type EvaluationRoundHistoryEntry,
+} from '../lib/agentic-revision-user.ts';
+import { rubricMeansFromNormalizedScores } from '../lib/evaluation-revision-gate.ts';
+import { normalizeError } from '../../src/lib/error-utils.ts';
+import { env } from '../env.ts';
+import { writeAgenticEvalRunLog } from '../lib/eval-run-logger.ts';
+import { acquireAgenticSlotOrReject, releaseAgenticSlot } from '../lib/agentic-concurrency.ts';
+import { emitSkillsLoadedEvents } from '../lib/agentic-skills-emission.ts';
 
-const AGENTIC_ROOT_SPAN_ID = '0000000000000001';
+type AgenticOrchestratorBuildInput = Omit<AgentSessionParams, 'systemPrompt'>;
 
-/** PI session fields supplied by the caller; system prompt and skill files come from DB per session. */
-export type AgenticOrchestratorBuildInput = Omit<AgentSessionParams, 'systemPrompt' | 'virtualSkillFiles'>;
+/** Server-side cap for revision rounds (aligned with client evaluator settings). */
+const MAX_REVISION_ROUNDS_CAP = 20;
+
+/** Max design-finding summaries folded into checkpoint todos line. */
+const CHECKPOINT_TODO_SUMMARY_MAX = 5;
 
 export type AgenticOrchestratorEvent =
   | AgentRunEvent
   | { type: 'phase'; phase: AgenticPhase }
+  | { type: 'skills_loaded'; skills: LoadedSkillSummary[] }
   | { type: 'evaluation_progress'; round: number; phase: string; message?: string }
+  | {
+      type: 'evaluation_worker_done';
+      round: number;
+      rubric: EvaluatorRubricId;
+      report: EvaluatorWorkerReport;
+    }
   | { type: 'evaluation_report'; round: number; snapshot: EvaluationRoundSnapshot }
   | { type: 'revision_round'; round: number; brief: string };
 
-export interface AgenticOrchestratorOptions {
+interface AgenticOrchestratorOptions {
   build: AgenticOrchestratorBuildInput;
   compiledPrompt: string;
-  evaluationContext?: EvaluationContextPayload;
+  /** `null` = skip evaluation and revision (single Pi build only). `undefined` = run eval (legacy /api/generate). */
+  evaluationContext?: EvaluationContextPayload | null;
   /** Override provider/model for LLM evaluators; defaults to build provider/model */
   evaluatorProviderId?: string;
   evaluatorModelId?: string;
@@ -45,54 +78,67 @@ export interface AgenticOrchestratorOptions {
   maxRevisionRounds: number;
   /** Optional early exit when overall score is high enough and there are no hard fails. */
   minOverallScore?: number;
-  getPromptBody: (key: PromptKey) => Promise<string>;
+  /** Optional blend for overall score; merged with product defaults and normalized server-side. */
+  rubricWeights?: Partial<Record<EvaluatorRubricId, number>>;
+  /** Session type for skill filtering. Defaults to 'design'. */
+  sessionType?: import('../lib/skill-discovery.ts').SessionType;
   onStream: (e: AgenticOrchestratorEvent) => void | Promise<void>;
 }
 
-export interface AgenticOrchestratorResult {
+interface AgenticOrchestratorResult {
   files: Record<string, string>;
   rounds: EvaluationRoundSnapshot[];
   finalAggregate: AggregatedEvaluationReport;
   checkpoint: AgenticCheckpoint;
+  /** Paths that already received live `file` SSE during Pi sessions (build + revisions). */
+  emittedFilePaths: string[];
 }
 
-async function emit(
-  onStream: AgenticOrchestratorOptions['onStream'],
-  e: AgenticOrchestratorEvent,
-): Promise<void> {
-  await onStream(e);
+/** Mirrors Pi bridge: SSE delivery failures abort the run instead of unhandled rejections. */
+type StreamEmissionContext = {
+  onStream: AgenticOrchestratorOptions['onStream'];
+  onDeliveryFailure?: () => void;
+};
+
+async function emit(ctx: StreamEmissionContext, e: AgenticOrchestratorEvent): Promise<void> {
+  try {
+    await ctx.onStream(e);
+  } catch (err) {
+    if (env.isDev) {
+      console.error('[agentic-orchestrator] onStream failed', normalizeError(err), err);
+    }
+    ctx.onDeliveryFailure?.();
+  }
 }
 
-const REVISION_COMPILED_PROMPT_MAX = 4000;
-
-/** Original intent for the revision agent (truncated compiled prompt + KPI/hypothesis context). */
-export function buildRevisionUserContext(
-  compiledPrompt: string,
-  evaluationContext?: EvaluationContextPayload,
-): string {
-  const truncated =
-    compiledPrompt.length > REVISION_COMPILED_PROMPT_MAX
-      ? `${compiledPrompt.slice(0, REVISION_COMPILED_PROMPT_MAX)}\n…[truncated]`
-      : compiledPrompt;
-  const parts: string[] = ['## Original design request (preserve intent)', '', truncated, ''];
-  const ctx = evaluationContext;
-  if (ctx?.strategyName) parts.push(`**Strategy:** ${ctx.strategyName}`);
-  if (ctx?.hypothesis) parts.push(`**Hypothesis:** ${ctx.hypothesis}`);
-  if (ctx?.rationale) parts.push(`**Rationale:** ${ctx.rationale}`);
-  if (ctx?.measurements) parts.push(`**KPIs / measurements:** ${ctx.measurements}`);
-  if (ctx?.objectivesMetrics) parts.push(`**Objectives & metrics:** ${ctx.objectivesMetrics}`);
-  if (ctx?.designConstraints) parts.push(`**Design constraints:** ${ctx.designConstraints}`);
-  if (parts.length > 4) parts.push('');
-  return parts.join('\n');
+/** Omit server-only diagnostics from snapshots sent to the browser (SSE). */
+function stripEvaluationSnapshotForStream(s: EvaluationRoundSnapshot): EvaluationRoundSnapshot {
+  const stripWorker = (w?: EvaluatorWorkerReport): EvaluatorWorkerReport | undefined => {
+    if (!w) return w;
+    const { rawTrace: _rt, ...rest } = w;
+    void _rt;
+    return rest as EvaluatorWorkerReport;
+  };
+  const { evaluatorTraces: _et, ...aggRest } = s.aggregate;
+  void _et;
+  return {
+    ...s,
+    design: stripWorker(s.design),
+    strategy: stripWorker(s.strategy),
+    implementation: stripWorker(s.implementation),
+    browser: stripWorker(s.browser),
+    aggregate: aggRest,
+  };
 }
 
 async function runEvaluationRound(
   options: AgenticOrchestratorOptions,
+  streamCtx: StreamEmissionContext,
   round: number,
   files: Record<string, string>,
   parallel: boolean,
 ): Promise<EvaluationRoundSnapshot> {
-  await emit(options.onStream, {
+  await emit(streamCtx, {
     type: 'evaluation_progress',
     round,
     phase: 'parallel_start',
@@ -104,18 +150,20 @@ async function runEvaluationRound(
   const workers = await runEvaluationWorkers({
     files,
     compiledPrompt: options.compiledPrompt,
-    context: options.evaluationContext,
+    context: options.evaluationContext ?? undefined,
     providerId: options.build.providerId,
     modelId: options.build.modelId,
     evaluatorProviderId: options.evaluatorProviderId,
     evaluatorModelId: options.evaluatorModelId,
     parallel,
-    getPromptBody: options.getPromptBody,
     correlationId: options.build.correlationId,
     signal: options.build.signal,
+    onWorkerDone: async (rubric, report) => {
+      await emit(streamCtx, { type: 'evaluation_worker_done', round, rubric, report });
+    },
   });
 
-  const rawAgg = aggregateEvaluationReports(workers);
+  const rawAgg = aggregateEvaluationReports(workers, options.rubricWeights);
   const aggregate = enforceRevisionGate(rawAgg);
 
   const snapshot: EvaluationRoundSnapshot = {
@@ -128,8 +176,25 @@ async function runEvaluationRound(
     aggregate,
   };
 
-  await emit(options.onStream, { type: 'evaluation_report', round, snapshot });
+  await emit(streamCtx, {
+    type: 'evaluation_report',
+    round,
+    snapshot: stripEvaluationSnapshotForStream(snapshot),
+  });
   return snapshot;
+}
+
+function appendEvaluationRoundHistory(
+  snapshot: EvaluationRoundSnapshot,
+  history: EvaluationRoundHistoryEntry[],
+): void {
+  history.push({
+    round: snapshot.round,
+    rubricMeans: rubricMeansFromNormalizedScores(snapshot.aggregate.normalizedScores),
+    overallScore: snapshot.aggregate.overallScore,
+    hardFailCount: snapshot.aggregate.hardFails.length,
+    normalizedScores: { ...snapshot.aggregate.normalizedScores },
+  });
 }
 
 function buildCheckpoint(
@@ -143,7 +208,7 @@ function buildCheckpoint(
 ): AgenticCheckpoint {
   const finalRound = rounds[rounds.length - 1];
   const completedTodos = finalRound
-    ? [...(finalRound.design?.findings.map((f) => f.summary) ?? [])].slice(0, 5)
+    ? [...(finalRound.design?.findings.map((f) => f.summary) ?? [])].slice(0, CHECKPOINT_TODO_SUMMARY_MAX)
     : [];
   return {
     totalRounds: rounds.length,
@@ -158,12 +223,94 @@ function buildCheckpoint(
 
 function mergeSeedWithDesign(
   designFiles: Record<string, string>,
-  skillFiles?: Record<string, string>,
   sandboxSeedFiles?: Record<string, string>,
 ): Record<string, string> {
-  const skills = skillFiles && Object.keys(skillFiles).length > 0 ? skillFiles : {};
   const sand = sandboxSeedFiles && Object.keys(sandboxSeedFiles).length > 0 ? sandboxSeedFiles : {};
-  return { ...skills, ...sand, ...designFiles };
+  return { ...sand, ...designFiles };
+}
+
+function agenticResult(
+  files: Record<string, string>,
+  rounds: EvaluationRoundSnapshot[],
+  snapshot: EvaluationRoundSnapshot,
+  checkpointOpts: {
+    stopReason: AgenticStopReason;
+    revisionAttempts: number;
+    revisionBriefApplied?: string;
+  },
+  emittedFilePaths: string[],
+): AgenticOrchestratorResult {
+  return {
+    files,
+    rounds,
+    finalAggregate: snapshot.aggregate,
+    checkpoint: buildCheckpoint(files, rounds, checkpointOpts),
+    emittedFilePaths,
+  };
+}
+
+function buildSkippedEvalAggregate(): AggregatedEvaluationReport {
+  const normalizedScores = Object.fromEntries(
+    EVALUATOR_RUBRIC_IDS.map((id) => [id, 0]),
+  ) as Record<string, number>;
+  return {
+    overallScore: 0,
+    normalizedScores,
+    hardFails: [],
+    prioritizedFixes: [],
+    shouldRevise: false,
+    revisionBrief: '',
+  };
+}
+
+/** Pi build finished without running evaluator workers (single pass). */
+function agenticBuildOnlyResult(
+  files: Record<string, string>,
+  emittedFilePaths: string[],
+): AgenticOrchestratorResult {
+  const aggregate = buildSkippedEvalAggregate();
+  return {
+    files,
+    rounds: [],
+    finalAggregate: aggregate,
+    checkpoint: buildCheckpoint(files, [], {
+      stopReason: 'build_only',
+      revisionAttempts: 0,
+    }),
+    emittedFilePaths,
+  };
+}
+
+type PiSessionExtras = Partial<
+  Pick<AgentSessionParams, 'userPrompt' | 'seedFiles' | 'compactionNote' | 'initialProgressMessage'>
+>;
+
+type AgenticSystemContextBundle = Awaited<ReturnType<typeof buildAgenticSystemContext>>;
+
+/** Refresh agentic context, emit skills_loaded, run one Pi design session. */
+async function runAgenticPiSessionRound(
+  options: AgenticOrchestratorOptions,
+  streamCtx: StreamEmissionContext,
+  forward: (e: AgentRunEvent) => Promise<void>,
+  tracePhase: AgenticPhase,
+  setPiTracePhase: (p: AgenticPhase) => void,
+  sessionExtras:
+    | PiSessionExtras
+    | ((ctx: AgenticSystemContextBundle) => PiSessionExtras),
+): Promise<DesignAgentSessionResult | null> {
+  const ctx = await buildAgenticSystemContext({ sessionType: options.sessionType });
+  await emitSkillsLoadedEvents((e) => emit(streamCtx, e), ctx.loadedSkills, tracePhase);
+  setPiTracePhase(tracePhase);
+  const extras = typeof sessionExtras === 'function' ? sessionExtras(ctx) : sessionExtras;
+  return runDesignAgentSession(
+    {
+      ...options.build,
+      ...extras,
+      systemPrompt: ctx.systemPrompt,
+      skillCatalog: ctx.skillCatalog,
+    },
+    forward,
+  );
 }
 
 /**
@@ -172,39 +319,7 @@ function mergeSeedWithDesign(
 export async function runAgenticWithEvaluation(
   options: AgenticOrchestratorOptions,
 ): Promise<AgenticOrchestratorResult | null> {
-  if (!isLangfuseTracingEnabled()) {
-    return runAgenticWithEvaluationImpl(options);
-  }
-  const seed = options.build.correlationId ?? '';
-  const parentSpanContext = {
-    traceId: await createTraceId(seed),
-    spanId: AGENTIC_ROOT_SPAN_ID,
-    traceFlags: 1,
-  };
-  return startActiveObservation(
-    'agentic-orchestration',
-    async (span) => {
-      span.update({
-        metadata: {
-          correlationId: options.build.correlationId,
-          providerId: options.build.providerId,
-          modelId: options.build.modelId,
-        },
-        input: { mode: 'agentic' },
-      });
-      const result = await runAgenticWithEvaluationImpl(options);
-      if (result) {
-        span.update({
-          output: {
-            stopReason: result.checkpoint.stopReason,
-            rounds: result.rounds.length,
-          },
-        });
-      }
-      return result;
-    },
-    { parentSpanContext },
-  );
+  return runAgenticWithEvaluationImpl(options);
 }
 
 async function runAgenticWithEvaluationImpl(
@@ -212,100 +327,175 @@ async function runAgenticWithEvaluationImpl(
 ): Promise<AgenticOrchestratorResult | null> {
   const provider = getProvider(options.build.providerId);
   const parallel = provider?.supportsParallel ?? false;
-  const signal = options.build.signal;
-  const maxRevisions = Math.max(0, Math.min(20, options.maxRevisionRounds));
+  const streamFailureCtrl = new AbortController();
+  const upstreamSignal = options.build.signal;
+  const effectiveSignal =
+    upstreamSignal != null
+      ? AbortSignal.any([upstreamSignal, streamFailureCtrl.signal])
+      : streamFailureCtrl.signal;
+  const mergedOptions: AgenticOrchestratorOptions = {
+    ...options,
+    build: { ...options.build, signal: effectiveSignal },
+  };
+  const streamCtx: StreamEmissionContext = {
+    onStream: options.onStream,
+    onDeliveryFailure: () => streamFailureCtrl.abort(),
+  };
+  const maxRevisions = Math.max(0, Math.min(MAX_REVISION_ROUNDS_CAP, options.maxRevisionRounds));
   const satisfactionOpts =
     options.minOverallScore != null && Number.isFinite(options.minOverallScore)
       ? { minOverallScore: options.minOverallScore }
       : undefined;
 
-  const forward = async (e: AgentRunEvent) => {
-    await options.onStream(e);
-  };
-
-  await emit(options.onStream, { type: 'phase', phase: 'building' });
-
-  const initialCtx = await buildAgenticSystemContext({
-    getPromptBody: options.getPromptBody,
-    evaluationContext: options.evaluationContext,
-  });
-  const initialSkillSeed =
-    Object.keys(initialCtx.virtualSkillFiles).length > 0 ? initialCtx.virtualSkillFiles : undefined;
-  const initialSeedFiles = {
-    ...initialCtx.sandboxSeedFiles,
-    ...(options.build.seedFiles ?? {}),
-  };
-  const seedFilesForBuild =
-    Object.keys(initialSeedFiles).length > 0 ? initialSeedFiles : undefined;
-
-  const buildResult = await runDesignAgentSession(
-    {
-      ...options.build,
-      systemPrompt: initialCtx.systemPrompt,
-      virtualSkillFiles: initialSkillSeed,
-      seedFiles: seedFilesForBuild,
-    },
-    forward,
-  );
-  if (!buildResult || signal?.aborted) return null;
-
-  let files = buildResult.files;
-  const rounds: EvaluationRoundSnapshot[] = [];
-  let revisionAttempts = 0;
-  let lastRevisionBrief: string | undefined;
-
-  await emit(options.onStream, { type: 'phase', phase: 'evaluating' });
-  let evalRound = 1;
-  let snapshot = await runEvaluationRound(options, evalRound, files, parallel);
-  rounds.push(snapshot);
-
-  if (signal?.aborted) {
-    return {
-      files,
-      rounds,
-      finalAggregate: snapshot.aggregate,
-      checkpoint: buildCheckpoint(files, rounds, {
-        stopReason: 'aborted',
-        revisionAttempts,
-        revisionBriefApplied: lastRevisionBrief,
-      }),
-    };
+  const acquired = await acquireAgenticSlotOrReject();
+  if (!acquired) {
+    await emit(streamCtx, {
+      type: 'error',
+      payload:
+        'Too many agentic design runs are active on this server. Please wait a moment and try again.',
+    });
+    return null;
   }
 
-  while (
-    !isEvalSatisfied(snapshot.aggregate, satisfactionOpts) &&
-    revisionAttempts < maxRevisions &&
-    !signal?.aborted
-  ) {
-    await emit(options.onStream, { type: 'phase', phase: 'revising' });
-    const brief = snapshot.aggregate.revisionBrief;
-    lastRevisionBrief = brief;
+  try {
+    const tracePhaseRef = { current: 'building' as AgenticPhase };
+    const forward = async (e: AgentRunEvent) => {
+      if (e.type === 'skill_activated') {
+        await emit(streamCtx, {
+          type: 'trace',
+          trace: makeRunTraceEvent({
+            kind: 'skill_activated',
+            label: `Skill activated: ${e.name} (${e.key})`,
+            phase: tracePhaseRef.current,
+            status: 'success',
+          }),
+        });
+      }
+      await emit(streamCtx, e);
+    };
 
-    await emit(options.onStream, {
-      type: 'revision_round',
-      round: revisionAttempts + 1,
-      brief,
-    });
+    await emit(streamCtx, { type: 'phase', phase: 'building' });
 
-    const revisionUser = [
-      buildRevisionUserContext(options.compiledPrompt, options.evaluationContext),
-      'You are revising an existing multi-file design based on external evaluation feedback.',
-      'Apply the changes below using edit_file when possible; use write_file only for full rewrites.',
-      'Do not remove the design hypothesis — strengthen how it shows up in the UI and copy.',
-      '',
-      '## Revision brief',
-      brief,
-      '',
-      '## Prioritized fixes',
-      ...snapshot.aggregate.prioritizedFixes.map((f, i) => `${i + 1}. ${f}`),
-    ].join('\n');
+    const setPiTrace = (p: AgenticPhase) => {
+      tracePhaseRef.current = p;
+    };
+    const buildResult = await runAgenticPiSessionRound(
+      mergedOptions,
+      streamCtx,
+      forward,
+      'building',
+      setPiTrace,
+      (ctx) => {
+        const initialSeedFiles = {
+          ...ctx.sandboxSeedFiles,
+          ...(mergedOptions.build.seedFiles ?? {}),
+        };
+        const seedFilesForBuild =
+          Object.keys(initialSeedFiles).length > 0 ? initialSeedFiles : undefined;
+        return { seedFiles: seedFilesForBuild };
+      },
+    );
+    if (!buildResult || effectiveSignal.aborted) return null;
 
-    // #region agent log
-    fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
-      body: JSON.stringify({
-        sessionId: '5b9be9',
+    let files = buildResult.files;
+    const emittedDuringRun = new Set<string>(buildResult.emittedFilePaths ?? []);
+    const rounds: EvaluationRoundSnapshot[] = [];
+    const roundHistory: EvaluationRoundHistoryEntry[] = [];
+    const revisionPromptByEvalRound = new Map<number, string>();
+    let revisionAttempts = 0;
+    let lastRevisionBrief: string | undefined;
+
+    const finishWithLog = (result: AgenticOrchestratorResult): AgenticOrchestratorResult => {
+      const baseDir = env.OBSERVABILITY_LOG_BASE_DIR;
+      if (baseDir) {
+        void writeAgenticEvalRunLog({
+          baseDir,
+          runId: mergedOptions.build.correlationId ?? randomUUID(),
+          compiledPrompt: mergedOptions.compiledPrompt,
+          evaluationContext: mergedOptions.evaluationContext ?? undefined,
+          getPromptBody,
+          rounds: result.rounds,
+          revisionPromptByEvalRound,
+          stopReason: result.checkpoint.stopReason ?? 'unknown',
+          finalAggregate: result.finalAggregate,
+        }).catch((err) => {
+          if (env.isDev) console.warn('[eval-run-log]', normalizeError(err), err);
+        });
+      }
+      return result;
+    };
+
+    const returnWithCheckpoint = (
+      snapshotArg: EvaluationRoundSnapshot,
+      stopReason: AgenticStopReason,
+    ): AgenticOrchestratorResult =>
+      finishWithLog(
+        agenticResult(
+          files,
+          rounds,
+          snapshotArg,
+          {
+            stopReason,
+            revisionAttempts,
+            revisionBriefApplied: lastRevisionBrief,
+          },
+          [...emittedDuringRun],
+        ),
+      );
+
+    if (mergedOptions.evaluationContext === null) {
+      await emit(streamCtx, { type: 'phase', phase: 'complete' });
+      return finishWithLog(agenticBuildOnlyResult(files, [...emittedDuringRun]));
+    }
+
+    await emit(streamCtx, { type: 'phase', phase: 'evaluating' });
+    let evalRound = 1;
+    let snapshot = await runEvaluationRound(mergedOptions, streamCtx, evalRound, files, parallel);
+    rounds.push(snapshot);
+    appendEvaluationRoundHistory(snapshot, roundHistory);
+
+    if (effectiveSignal.aborted) {
+      return returnWithCheckpoint(snapshot, 'aborted');
+    }
+
+    const revisionUserInstructions = (await getPromptBody('designer-agentic-revision-user')).trim();
+
+    while (
+      !isEvalSatisfied(snapshot.aggregate, satisfactionOpts) &&
+      revisionAttempts < maxRevisions &&
+      !effectiveSignal.aborted
+    ) {
+      await emit(streamCtx, { type: 'phase', phase: 'revising' });
+      const brief = snapshot.aggregate.revisionBrief;
+      lastRevisionBrief = brief;
+
+      await emit(streamCtx, {
+        type: 'revision_round',
+        round: revisionAttempts + 1,
+        brief,
+      });
+
+      const tracesSection = buildEvaluatorTracesSection(snapshot.aggregate.evaluatorTraces);
+      const revisionParts = [
+        buildRevisionUserContext(options.compiledPrompt, options.evaluationContext ?? undefined),
+        revisionUserInstructions,
+        '',
+        buildRoundHistorySection(roundHistory),
+        '## Revision brief',
+        brief,
+      ];
+      if (tracesSection.length > 0) {
+        revisionParts.push('', tracesSection);
+      }
+      revisionParts.push(
+        '',
+        '## Prioritized fixes',
+        ...snapshot.aggregate.prioritizedFixes.map((f, i) => `${i + 1}. ${f}`),
+      );
+      const revisionUser = revisionParts.join('\n');
+      revisionPromptByEvalRound.set(snapshot.round, revisionUser);
+
+      debugAgentIngest({
         hypothesisId: 'H7',
         location: 'agentic-orchestrator.ts:revision_start',
         message: 'runDesignAgentSession (revision) starting',
@@ -315,65 +505,27 @@ async function runAgenticWithEvaluationImpl(
           prioritizedFixesCount: snapshot.aggregate.prioritizedFixes.length,
           designFileCount: Object.keys(files).length,
         },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
+      });
 
-    const revisionCtx = await buildAgenticSystemContext({
-      getPromptBody: options.getPromptBody,
-      evaluationContext: options.evaluationContext,
-    });
-    const revisionSkillSeed =
-      Object.keys(revisionCtx.virtualSkillFiles).length > 0 ? revisionCtx.virtualSkillFiles : undefined;
-
-    const revised = await runDesignAgentSession(
-      {
-        ...options.build,
-        systemPrompt: revisionCtx.systemPrompt,
-        virtualSkillFiles: revisionSkillSeed,
+      const revised = await runAgenticPiSessionRound(mergedOptions, streamCtx, forward, 'revising', setPiTrace, (ctx) => ({
         userPrompt: revisionUser,
-        seedFiles: mergeSeedWithDesign(files, revisionSkillSeed, revisionCtx.sandboxSeedFiles),
+        seedFiles: mergeSeedWithDesign(files, ctx.sandboxSeedFiles),
         compactionNote: `Post-evaluation revision requested. Overall ${snapshot.aggregate.overallScore.toFixed(2)}. Hard fails: ${snapshot.aggregate.hardFails.length}.`,
         initialProgressMessage: 'Revising design from evaluation feedback…',
-      },
-      forward,
-    );
+      }));
 
-    if (!revised || signal?.aborted) {
-      const stopReason: AgenticStopReason = signal?.aborted ? 'aborted' : 'revision_failed';
-      // #region agent log
-      fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
-        body: JSON.stringify({
-          sessionId: '5b9be9',
+      if (!revised || effectiveSignal.aborted) {
+        const stopReason: AgenticStopReason = effectiveSignal.aborted ? 'aborted' : 'revision_failed';
+        debugAgentIngest({
           hypothesisId: 'H7',
           location: 'agentic-orchestrator.ts:revision_end',
           message: 'runDesignAgentSession (revision) aborted or null',
-          data: { revisionAttempt: revisionAttempts + 1, aborted: !!signal?.aborted },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-      return {
-        files,
-        rounds,
-        finalAggregate: snapshot.aggregate,
-        checkpoint: buildCheckpoint(files, rounds, {
-          stopReason,
-          revisionAttempts,
-          revisionBriefApplied: lastRevisionBrief,
-        }),
-      };
-    }
+          data: { revisionAttempt: revisionAttempts + 1, aborted: !!effectiveSignal.aborted },
+        });
+        return returnWithCheckpoint(snapshot, stopReason);
+      }
 
-    // #region agent log
-    fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
-      body: JSON.stringify({
-        sessionId: '5b9be9',
+      debugAgentIngest({
         hypothesisId: 'H7',
         location: 'agentic-orchestrator.ts:revision_end',
         message: 'runDesignAgentSession (revision) finished',
@@ -381,49 +533,35 @@ async function runAgenticWithEvaluationImpl(
           revisionAttempt: revisionAttempts + 1,
           outFileCount: Object.keys(revised.files).length,
         },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
+      });
 
-    files = revised.files;
-    revisionAttempts += 1;
-    evalRound += 1;
+      files = revised.files;
+      for (const p of revised.emittedFilePaths ?? []) {
+        emittedDuringRun.add(p);
+      }
+      revisionAttempts += 1;
+      evalRound += 1;
 
-    await emit(options.onStream, { type: 'phase', phase: 'evaluating' });
-    snapshot = await runEvaluationRound(options, evalRound, files, parallel);
-    rounds.push(snapshot);
+      await emit(streamCtx, { type: 'phase', phase: 'evaluating' });
+      snapshot = await runEvaluationRound(mergedOptions, streamCtx, evalRound, files, parallel);
+      rounds.push(snapshot);
+      appendEvaluationRoundHistory(snapshot, roundHistory);
 
-    if (signal?.aborted) {
-      return {
-        files,
-        rounds,
-        finalAggregate: snapshot.aggregate,
-        checkpoint: buildCheckpoint(files, rounds, {
-          stopReason: 'aborted',
-          revisionAttempts,
-          revisionBriefApplied: lastRevisionBrief,
-        }),
-      };
+      if (effectiveSignal.aborted) {
+        return returnWithCheckpoint(snapshot, 'aborted');
+      }
     }
+
+    const satisfied = isEvalSatisfied(snapshot.aggregate, satisfactionOpts);
+    const stopReason: AgenticStopReason = effectiveSignal.aborted
+      ? 'aborted'
+      : satisfied
+        ? 'satisfied'
+        : 'max_revisions';
+
+    await emit(streamCtx, { type: 'phase', phase: 'complete' });
+    return returnWithCheckpoint(snapshot, stopReason);
+  } finally {
+    releaseAgenticSlot();
   }
-
-  const satisfied = isEvalSatisfied(snapshot.aggregate, satisfactionOpts);
-  const stopReason: AgenticStopReason = signal?.aborted
-    ? 'aborted'
-    : satisfied
-      ? 'satisfied'
-      : 'max_revisions';
-
-  await emit(options.onStream, { type: 'phase', phase: 'complete' });
-  return {
-    files,
-    rounds,
-    finalAggregate: snapshot.aggregate,
-    checkpoint: buildCheckpoint(files, rounds, {
-      stopReason,
-      revisionAttempts,
-      revisionBriefApplied: lastRevisionBrief,
-    }),
-  };
 }

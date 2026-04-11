@@ -5,19 +5,38 @@
 import { chromium, type Page } from 'playwright';
 import { bundleVirtualFS } from '../../src/lib/bundle-virtual-fs.ts';
 import type { EvaluatorWorkerReport } from '../../src/types/evaluation.ts';
+import { normalizeError } from '../../src/lib/error-utils.ts';
+import {
+  PLAYWRIGHT_CONSOLE_ERROR_BULK_PENALTY,
+  PLAYWRIGHT_CONSOLE_ERRORS_SCORE_2,
+  PLAYWRIGHT_CONSOLE_ERRORS_SCORE_3,
+  PLAYWRIGHT_CONSOLE_ERRORS_SCORE_5,
+  PLAYWRIGHT_PAGE_ERROR_SCORE_MULTIPLIER,
+  PLAYWRIGHT_SCREENSHOT_JPEG_QUALITY,
+} from './browser-eval-scoring-config.ts';
+import {
+  PLAYWRIGHT_EVAL_SCRIPT,
+  parsePlaywrightDomMetrics,
+  scoreBodyLayout,
+  scoreVisibleTextLength,
+} from './browser-playwright-eval-metrics.ts';
 
 export interface BrowserPlaywrightInput {
   files: Record<string, string>;
+  /** When set, load this URL (virtual FS preview) instead of inlined bundled HTML. */
+  previewPageUrl?: string;
 }
 
-function scoreFromCount(errors: number, maxPenalty = 4): number {
-  if (errors === 0) return 5;
-  if (errors === 1) return 3;
-  if (errors === 2) return 2;
-  return Math.max(1, 5 - maxPenalty);
+function scorePlaywrightConsoleErrors(errorCount: number): number {
+  if (errorCount === PLAYWRIGHT_CONSOLE_ERRORS_SCORE_5) return 5;
+  if (errorCount === PLAYWRIGHT_CONSOLE_ERRORS_SCORE_3) return 3;
+  if (errorCount === PLAYWRIGHT_CONSOLE_ERRORS_SCORE_2) return 2;
+  return Math.max(1, 5 - PLAYWRIGHT_CONSOLE_ERROR_BULK_PENALTY);
 }
 
 const SCREENSHOT_MAX_BASE64 = 600_000;
+const FONTS_READY_TIMEOUT_MS = 8_000;
+const NETWORK_IDLE_AFTER_SET_CONTENT_MS = 10_000;
 
 function skipReport(
   reason: 'browser_unavailable' | 'eval_error',
@@ -33,13 +52,37 @@ function skipReport(
 }
 
 async function settlePageForEval(page: Page): Promise<void> {
-  await page.waitForFunction(
-    `() => (document.body?.innerText ?? '').trim().length >= 10`,
-    { timeout: 4500 },
-  ).catch(() => {});
+  // String evaluate: runs in the page (has `document`); keeps Node `tsc` happy without DOM lib.
+  await page
+    .evaluate(
+      `(() => Promise.race([
+        document.fonts.ready,
+        new Promise((resolve) => setTimeout(resolve, ${FONTS_READY_TIMEOUT_MS})),
+      ]))()`,
+    )
+    .catch((err) => {
+      console.warn('[playwright-eval] document.fonts.ready', normalizeError(err));
+    });
+
+  await page
+    .waitForFunction(`() => (document.body?.innerText ?? '').trim().length >= 10`, {
+      timeout: 4500,
+    })
+    .catch((err) => {
+      console.warn('[playwright-eval] settlePageForEval: minimal text timeout', normalizeError(err));
+    });
   await page.evaluate(`(() => new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(resolve));
   }))()`);
+}
+
+async function loadPageForScreenshot(page: Page, bundled: string, previewPageUrl?: string): Promise<void> {
+  if (previewPageUrl) {
+    await page.goto(previewPageUrl, { waitUntil: 'networkidle', timeout: 25_000 });
+  } else {
+    await page.setContent(bundled, { waitUntil: 'load', timeout: 20_000 });
+    await page.waitForLoadState('networkidle', { timeout: NETWORK_IDLE_AFTER_SET_CONTENT_MS }).catch(() => {});
+  }
 }
 
 /**
@@ -50,10 +93,19 @@ export async function runBrowserPlaywrightEval(
   input: BrowserPlaywrightInput,
 ): Promise<EvaluatorWorkerReport> {
   let bundled: string;
-  try {
-    bundled = bundleVirtualFS(input.files);
-  } catch {
-    bundled = Object.values(input.files).find((v) => /<html/i.test(v)) ?? '<html><body></body></html>';
+  if (input.previewPageUrl) {
+    bundled = '<html><body></body></html>';
+  } else {
+    try {
+      bundled = bundleVirtualFS(input.files);
+    } catch (err) {
+      console.warn(
+        '[playwright-eval] bundleVirtualFS failed; using fallback HTML slice',
+        normalizeError(err),
+      );
+      bundled =
+        Object.values(input.files).find((v) => /<html/i.test(v)) ?? '<html><body></body></html>';
+    }
   }
 
   const pageErrors: string[] = [];
@@ -63,8 +115,7 @@ export async function runBrowserPlaywrightEval(
   try {
     browser = await chromium.launch({ headless: true });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return skipReport('browser_unavailable', `Chromium launch failed: ${msg}`);
+    return skipReport('browser_unavailable', `Chromium launch failed: ${normalizeError(err)}`);
   }
 
   try {
@@ -74,31 +125,18 @@ export async function runBrowserPlaywrightEval(
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
 
-    await page.setContent(bundled, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+    await loadPageForScreenshot(page, bundled, input.previewPageUrl);
     await settlePageForEval(page);
 
-    const metrics = (await page.evaluate(`(() => {
-      const body = document.body;
-      const text = (body?.innerText ?? '').trim();
-      const rect = body?.getBoundingClientRect();
-      const imgs = Array.from(document.images);
-      const broken = imgs.filter((i) => i.naturalWidth === 0 && i.naturalHeight === 0).length;
-      return {
-        textLen: text.length,
-        bodyW: rect ? rect.width : 0,
-        bodyH: rect ? rect.height : 0,
-        brokenImages: broken,
-      };
-    })()`)) as {
-      textLen: number;
-      bodyW: number;
-      bodyH: number;
-      brokenImages: number;
-    };
+    const metrics = parsePlaywrightDomMetrics(await page.evaluate(PLAYWRIGHT_EVAL_SCRIPT));
 
     let artifacts: EvaluatorWorkerReport['artifacts'];
     try {
-      const buf = await page.screenshot({ type: 'jpeg', quality: 72, fullPage: false });
+      const buf = await page.screenshot({
+        type: 'jpeg',
+        quality: PLAYWRIGHT_SCREENSHOT_JPEG_QUALITY,
+        fullPage: false,
+      });
       const base64 = buf.toString('base64');
       if (base64.length <= SCREENSHOT_MAX_BASE64) {
         artifacts = {
@@ -111,41 +149,35 @@ export async function runBrowserPlaywrightEval(
 
     const scores: EvaluatorWorkerReport['scores'] = {
       playwright_render: {
-        score: pageErrors.length === 0 ? 5 : Math.max(1, 5 - pageErrors.length * 2),
+        score:
+          pageErrors.length === 0
+            ? 5
+            : Math.max(1, 5 - pageErrors.length * PLAYWRIGHT_PAGE_ERROR_SCORE_MULTIPLIER),
         notes:
           pageErrors.length === 0
             ? 'Page loaded without uncaught exceptions'
             : pageErrors.slice(0, 2).join('; '),
       },
       playwright_console: {
-        score: scoreFromCount(consoleErrors.length),
+        score: scorePlaywrightConsoleErrors(consoleErrors.length),
         notes:
           consoleErrors.length === 0
             ? 'No console errors'
             : consoleErrors.slice(0, 3).join('; '),
       },
       playwright_visible_text: {
-        score:
-          metrics.textLen >= 80
-            ? 5
-            : metrics.textLen >= 30
-              ? 3
-              : metrics.textLen >= 10
-                ? 2
-                : 1,
+        score: scoreVisibleTextLength(metrics.textLen),
         notes: `Visible text length ≈ ${metrics.textLen} chars`,
       },
       playwright_layout: {
-        score:
-          metrics.bodyW > 100 && metrics.bodyH > 40
-            ? 5
-            : metrics.bodyW > 0 && metrics.bodyH > 0
-              ? 3
-              : 1,
+        score: scoreBodyLayout(metrics.bodyW, metrics.bodyH),
         notes: `Body box ${Math.round(metrics.bodyW)}×${Math.round(metrics.bodyH)}`,
       },
       playwright_images: {
-        score: metrics.brokenImages === 0 ? 5 : Math.max(1, 5 - metrics.brokenImages * 2),
+        score:
+          metrics.brokenImages === 0
+            ? 5
+            : Math.max(1, 5 - metrics.brokenImages * PLAYWRIGHT_PAGE_ERROR_SCORE_MULTIPLIER),
         notes:
           metrics.brokenImages === 0
             ? 'No broken images detected'
@@ -168,17 +200,25 @@ export async function runBrowserPlaywrightEval(
       });
     }
 
-    if (metrics.textLen < 10) {
+    // Hard-fail only when the viewport is effectively blank. Marginal text (slow hydration,
+    // loading spinners) is surfaced via playwright_visible_text score + findings instead of
+    // forcing an unrecoverable revision loop.
+    if (metrics.textLen < 1) {
       hardFails.push({
         code: 'playwright_empty_visible',
-        message: 'Rendered page has almost no visible text',
+        message: 'Rendered page has no visible text',
+      });
+    } else if (metrics.textLen < 10) {
+      findings.push({
+        severity: 'medium',
+        summary: 'Very little visible text after load',
+        detail: `innerText length ≈ ${metrics.textLen} (may be slow hydration or sparse UI)`,
       });
     }
 
     return { rubric: 'browser', scores, findings, hardFails, artifacts };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return skipReport('eval_error', msg);
+    return skipReport('eval_error', normalizeError(err));
   } finally {
     await browser.close().catch(() => {});
   }

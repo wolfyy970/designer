@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { apiJsonError } from '../lib/api-json-error.ts';
 import { getProvider, getAvailableProviders } from '../services/providers/registry.ts';
 
 const models = new Hono();
@@ -7,7 +8,7 @@ models.get('/:provider', async (c) => {
   const providerId = c.req.param('provider');
   const provider = getProvider(providerId);
   if (!provider) {
-    return c.json({ error: `Unknown provider: ${providerId}` }, 404);
+    return apiJsonError(c, 404, `Unknown provider: ${providerId}`);
   }
 
   const modelList = await provider.listModels();

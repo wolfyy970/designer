@@ -3,6 +3,9 @@
  * Split from iframe-utils so Node/server code can import without DOM types.
  */
 
+import { resolvePreviewEntryPath } from './preview-entry.ts';
+import { resolveVirtualAssetPath } from './resolve-virtual-asset-path.ts';
+
 function generateMissingEntryShell(files: Record<string, string>): string {
   const fileList = Object.entries(files)
     .map(
@@ -26,7 +29,7 @@ function generateMissingEntryShell(files: Record<string, string>): string {
  * Inlines <link rel="stylesheet"> and <script src="..."> references.
  */
 export function bundleVirtualFS(files: Record<string, string>): string {
-  const htmlKey = Object.keys(files).find((p) => p.endsWith('.html')) ?? 'index.html';
+  const htmlKey = resolvePreviewEntryPath(files);
   let html = files[htmlKey];
   if (!html) return generateMissingEntryShell(files);
 
@@ -38,8 +41,9 @@ export function bundleVirtualFS(files: Record<string, string>): string {
   html = html.replace(
     /<link\s+[^>]*rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*\/?>/gi,
     (match, href) => {
-      if (href.startsWith('http')) return match;
-      const key = href.replace(/^\.\//, '');
+      if (/^(https?:)?\/\//i.test(href)) return match;
+      const key = resolveVirtualAssetPath(href, htmlKey);
+      if (!key) return match;
       const css = files[key];
       return css ? `<style>\n${css}\n</style>` : match;
     },
@@ -47,8 +51,9 @@ export function bundleVirtualFS(files: Record<string, string>): string {
 
   html = html.replace(scriptSrcClose, (match, before, _quote, src, after) => {
     void _quote;
-    if (src.startsWith('http')) return match;
-    const key = String(src).replace(/^\.\//, '');
+    if (/^(https?:)?\/\//i.test(String(src))) return match;
+    const key = resolveVirtualAssetPath(String(src), htmlKey);
+    if (!key) return match;
     const js = files[key];
     return js ? `<script ${before}${after}>\n${js}\n</script>` : match;
   });

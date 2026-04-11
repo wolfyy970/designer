@@ -2,25 +2,15 @@
  * Keep `useWorkspaceDomainStore` in sync with canvas graph edits so compile/generate
  * can read domain relations instead of relying on edge walks alone.
  */
-import { NODE_TYPES } from '../constants/canvas';
+import { NODE_TYPES, INPUT_NODE_TYPES } from '../constants/canvas';
 import type { CanvasNodeType } from '../types/workspace-graph';
 import type { WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
-import { SECTION_NODE_TYPES } from '../lib/canvas-layout';
-import { getHypothesisRefId, isPlaceholderHypothesis } from '../lib/hypothesis-node-utils';
-
-function nodeById(nodes: WorkspaceNode[], id: string): WorkspaceNode | undefined {
-  return nodes.find((n) => n.id === id);
-}
-
-function findIncubatorForHypothesis(edges: WorkspaceEdge[], nodes: WorkspaceNode[], hypothesisId: string): string | null {
-  for (const e of edges) {
-    if (e.target !== hypothesisId) continue;
-    const n = nodeById(nodes, e.source);
-    if (n?.type === NODE_TYPES.COMPILER) return n.id;
-  }
-  return null;
-}
+import { workspaceNodeById } from './graph-queries';
+import {
+  applyIncrementalNewEdgeRules,
+  applyIncrementalRemovedEdgeRules,
+} from './edge-domain-rules';
 
 /** After the canvas adds an edge, update domain bindings. */
 export function syncDomainForNewEdge(
@@ -28,96 +18,27 @@ export function syncDomainForNewEdge(
   nodes: WorkspaceNode[],
   allEdges: WorkspaceEdge[],
 ): void {
-  const src = nodeById(nodes, edge.source);
-  const tgt = nodeById(nodes, edge.target);
+  const src = workspaceNodeById(nodes, edge.source);
+  const tgt = workspaceNodeById(nodes, edge.target);
   if (!src || !tgt) return;
 
   const d = useWorkspaceDomainStore.getState();
-
-  if (src.type === NODE_TYPES.MODEL && tgt.type === NODE_TYPES.HYPOTHESIS) {
-    const refId = getHypothesisRefId(tgt);
-    const inc = findIncubatorForHypothesis(allEdges, nodes, tgt.id);
-    if (refId && inc) d.linkHypothesisToIncubator(tgt.id, inc, refId);
-    d.setHypothesisPlaceholder(tgt.id, isPlaceholderHypothesis(tgt.data));
-    d.attachModelToTarget(src.id, tgt.id, NODE_TYPES.HYPOTHESIS);
-    return;
-  }
-
-  if (src.type === NODE_TYPES.MODEL && tgt.type === NODE_TYPES.COMPILER) {
-    d.ensureIncubatorWiring(tgt.id);
-    d.attachModelToTarget(src.id, tgt.id, NODE_TYPES.COMPILER);
-    return;
-  }
-
-  if (src.type === NODE_TYPES.COMPILER && tgt.type === NODE_TYPES.HYPOTHESIS) {
-    const refId = getHypothesisRefId(tgt);
-    if (refId) d.linkHypothesisToIncubator(tgt.id, src.id, refId);
-    d.setHypothesisPlaceholder(tgt.id, isPlaceholderHypothesis(tgt.data));
-    return;
-  }
-
-  if (SECTION_NODE_TYPES.has(src.type as CanvasNodeType) && tgt.type === NODE_TYPES.COMPILER) {
-    d.ensureIncubatorWiring(tgt.id);
-    d.attachIncubatorInput(tgt.id, src.id, src.type as CanvasNodeType);
-    return;
-  }
-
-  if (src.type === NODE_TYPES.VARIANT && tgt.type === NODE_TYPES.COMPILER) {
-    d.ensureIncubatorWiring(tgt.id);
-    d.attachIncubatorInput(tgt.id, src.id, NODE_TYPES.VARIANT);
-    return;
-  }
-
-  if (src.type === NODE_TYPES.CRITIQUE && tgt.type === NODE_TYPES.COMPILER) {
-    d.ensureIncubatorWiring(tgt.id);
-    d.attachIncubatorInput(tgt.id, src.id, NODE_TYPES.CRITIQUE);
-    return;
-  }
-
-  if (src.type === NODE_TYPES.DESIGN_SYSTEM && tgt.type === NODE_TYPES.HYPOTHESIS) {
-    d.attachDesignSystemToHypothesis(src.id, tgt.id);
-    const refId = getHypothesisRefId(tgt);
-    const inc = findIncubatorForHypothesis(allEdges, nodes, tgt.id);
-    if (refId && inc) d.linkHypothesisToIncubator(tgt.id, inc, refId);
-  }
+  applyIncrementalNewEdgeRules({ d, src, tgt, nodes, allEdges });
 }
 
 export function syncDomainForRemovedEdge(edge: Pick<WorkspaceEdge, 'source' | 'target'>, nodes: WorkspaceNode[]): void {
-  const src = nodeById(nodes, edge.source);
-  const tgt = nodeById(nodes, edge.target);
+  const src = workspaceNodeById(nodes, edge.source);
+  const tgt = workspaceNodeById(nodes, edge.target);
   if (!src || !tgt) return;
 
   const d = useWorkspaceDomainStore.getState();
-
-  if (src.type === NODE_TYPES.MODEL && tgt.type === NODE_TYPES.HYPOTHESIS) {
-    d.detachModelFromTarget(src.id, tgt.id, NODE_TYPES.HYPOTHESIS);
-    return;
-  }
-  if (src.type === NODE_TYPES.MODEL && tgt.type === NODE_TYPES.COMPILER) {
-    d.detachModelFromTarget(src.id, tgt.id, NODE_TYPES.COMPILER);
-    return;
-  }
-  if (SECTION_NODE_TYPES.has(src.type as CanvasNodeType) && tgt.type === NODE_TYPES.COMPILER) {
-    d.detachIncubatorInput(tgt.id, src.id, src.type as CanvasNodeType);
-    return;
-  }
-  if (src.type === NODE_TYPES.VARIANT && tgt.type === NODE_TYPES.COMPILER) {
-    d.detachIncubatorInput(tgt.id, src.id, NODE_TYPES.VARIANT);
-    return;
-  }
-  if (src.type === NODE_TYPES.CRITIQUE && tgt.type === NODE_TYPES.COMPILER) {
-    d.detachIncubatorInput(tgt.id, src.id, NODE_TYPES.CRITIQUE);
-    return;
-  }
-  if (src.type === NODE_TYPES.DESIGN_SYSTEM && tgt.type === NODE_TYPES.HYPOTHESIS) {
-    d.detachDesignSystemFromHypothesis(src.id, tgt.id);
-  }
+  applyIncrementalRemovedEdgeRules({ d, src, tgt });
 }
 
 export function syncDomainForRemovedNode(node: WorkspaceNode): void {
   const d = useWorkspaceDomainStore.getState();
 
-  if (node.type === NODE_TYPES.COMPILER) {
+  if (node.type === NODE_TYPES.INCUBATOR) {
     d.removeIncubator(node.id);
     return;
   }
@@ -138,36 +59,46 @@ export function syncDomainForRemovedNode(node: WorkspaceNode): void {
     }
     return;
   }
-  if (node.type === NODE_TYPES.CRITIQUE) {
-    d.removeCritique(node.id);
+
+  if (node.type === NODE_TYPES.PREVIEW) {
+    // Clear any slot that still points at this canvas node (active or pinned); otherwise
+    // generation / overlay logic keeps stale bindings and the next sync can resurrect a variant.
+    const slotClears: { hypothesisId: string; strategyId: string }[] = [];
+    for (const slot of Object.values(d.previewSlots)) {
+      if (slot.previewNodeId === node.id) {
+        slotClears.push({
+          hypothesisId: slot.hypothesisId,
+          strategyId: slot.strategyId,
+        });
+      }
+    }
+    for (const { hypothesisId, strategyId } of slotClears) {
+      d.setPreviewSlot(hypothesisId, strategyId, {
+        previewNodeId: null,
+        activeResultId: null,
+      });
+    }
     for (const incId of Object.keys(d.incubatorWirings)) {
-      d.detachIncubatorInput(incId, node.id, NODE_TYPES.CRITIQUE);
+      d.detachIncubatorInput(incId, node.id, NODE_TYPES.PREVIEW);
     }
     return;
   }
 
-  if (node.type === NODE_TYPES.VARIANT) {
-    for (const incId of Object.keys(d.incubatorWirings)) {
-      d.detachIncubatorInput(incId, node.id, NODE_TYPES.VARIANT);
-    }
-    return;
-  }
-
-  if (SECTION_NODE_TYPES.has(node.type as CanvasNodeType)) {
+  if (INPUT_NODE_TYPES.has(node.type as CanvasNodeType)) {
     for (const incId of Object.keys(d.incubatorWirings)) {
       d.detachIncubatorInput(incId, node.id, node.type as CanvasNodeType);
     }
   }
 }
 
-/** Link each new hypothesis to the incubator in domain after compile. */
-export function linkHypothesesAfterCompile(
+/** Link each new hypothesis to the incubator in domain after incubate sync. */
+export function linkHypothesesAfterIncubate(
   compilerNodeId: string,
-  pairs: readonly { hypothesisNodeId: string; variantStrategyId: string }[],
+  pairs: readonly { hypothesisNodeId: string; strategyId: string }[],
 ): void {
   const d = useWorkspaceDomainStore.getState();
-  for (const { hypothesisNodeId, variantStrategyId } of pairs) {
-    d.linkHypothesisToIncubator(hypothesisNodeId, compilerNodeId, variantStrategyId);
+  for (const { hypothesisNodeId, strategyId } of pairs) {
+    d.linkHypothesisToIncubator(hypothesisNodeId, compilerNodeId, strategyId);
     d.setHypothesisPlaceholder(hypothesisNodeId, false);
   }
 }

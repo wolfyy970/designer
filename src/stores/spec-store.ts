@@ -13,6 +13,8 @@ interface SpecStore {
   createNewCanvas: (title?: string) => void;
   setTitle: (title: string) => void;
   updateSection: (sectionId: SpecSectionId, content: string) => void;
+  /** Clears body and images for one section; other sections unchanged. */
+  resetSectionContent: (sectionId: SpecSectionId) => void;
   addImage: (sectionId: SpecSectionId, image: ReferenceImage) => void;
   updateImageDescription: (sectionId: SpecSectionId, imageId: string, description: string) => void;
   removeImage: (sectionId: SpecSectionId, imageId: string) => void;
@@ -58,6 +60,26 @@ export const useSpecStore = create<SpecStore>()(
                   content,
                   images: existingSection?.images ?? [],
                   lastModified: now(),
+                },
+              },
+            },
+          };
+        }),
+
+      resetSectionContent: (sectionId) =>
+        set((state) => {
+          const touched = now();
+          return {
+            spec: {
+              ...state.spec,
+              lastModified: touched,
+              sections: {
+                ...state.spec.sections,
+                [sectionId]: {
+                  id: sectionId,
+                  content: '',
+                  images: [],
+                  lastModified: touched,
                 },
               },
             },

@@ -1,15 +1,21 @@
 import { useEffect } from 'react';
+import type { Edge, Node } from '@xyflow/react';
 import { useCanvasStore } from '../../../stores/canvas-store';
-import { SECTION_NODE_TYPES } from '../../../lib/canvas-layout';
-import type { Node } from '@xyflow/react';
+import { useRequestPermanentDelete } from '../../../hooks/useRequestPermanentDelete';
+import { keyboardMultiDeleteCopy } from '../../../lib/canvas-permanent-delete-copy';
+import { removableWorkspaceNodesFromFlowSelection } from '../../../lib/canvas-keyboard-delete';
+
+type FlowSelectionGetters = {
+  getNodes: () => Node[];
+  getEdges: () => Edge[];
+};
 
 /**
- * Hook to manage deletion of nodes in the Canvas.
- * Handles the Delete/Backspace key and protects system nodes.
- * Warns before cascading deletion of hypothesis variants.
+ * Delete/Backspace on selected nodes: same permanent-delete dialog as header X (see PermanentDeleteConfirmProvider).
+ * Uses React Flow selection so it matches the canvas. Selected edges delete immediately (no modal).
  */
-export function useNodeDeletion() {
-  const nodes = useCanvasStore((s) => s.nodes);
+export function useNodeDeletion({ getNodes, getEdges }: FlowSelectionGetters) {
+  const { requestPermanentDelete } = useRequestPermanentDelete();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -22,47 +28,42 @@ export function useNodeDeletion() {
       ) {
         return;
       }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        const selected = nodes.filter((n: Node) => n.selected);
-        if (selected.length === 0) return;
-        e.preventDefault();
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
 
-        const PROTECTED = new Set<string>([
-          'compiler',
-          ...SECTION_NODE_TYPES,
-        ]);
+      const selectedRf = getNodes().filter((n) => n.selected);
+      const selectedEdges = getEdges().filter((edge) => edge.selected);
 
-        const removable = selected.filter(
-          (n: Node) => !PROTECTED.has(n.type as string),
-        );
-        if (removable.length === 0) return;
+      if (selectedRf.length === 0 && selectedEdges.length === 0) return;
+      e.preventDefault();
 
-        // Warn when deleting hypotheses — variants cascade-delete
-        const hypotheses = removable.filter((n: Node) => n.type === 'hypothesis');
-        if (hypotheses.length > 0) {
-          const { edges: storeEdges, nodes: storeNodes } = useCanvasStore.getState();
-          let variantCount = 0;
-          for (const h of hypotheses) {
-            for (const edge of storeEdges) {
-              if (edge.source !== h.id) continue;
-              if (storeNodes.find((n: Node) => n.id === edge.target && n.type === 'variant')) {
-                variantCount++;
-              }
-            }
-          }
-          const hLabel = hypotheses.length === 1 ? 'hypothesis' : 'hypotheses';
-          const msg = variantCount > 0
-            ? `Delete ${hypotheses.length} ${hLabel} and ${variantCount} connected ${variantCount === 1 ? 'variant' : 'variants'}?`
-            : `Delete ${hypotheses.length} ${hLabel}?`;
-          if (!window.confirm(msg)) return;
-        }
+      const { nodes: storeNodes, edges: storeEdges, removeEdge, removeNode } = useCanvasStore.getState();
 
-        const removeNode = useCanvasStore.getState().removeNode;
-        removable.forEach((n: Node) => removeNode(n.id));
+      const removable = removableWorkspaceNodesFromFlowSelection(selectedRf, storeNodes);
+
+      if (removable.length === 0 && selectedEdges.length > 0) {
+        selectedEdges.forEach((edge) => removeEdge(edge.id));
+        return;
       }
+
+      if (removable.length === 0) return;
+
+      const { title, description, confirmLabel, cancelLabel } = keyboardMultiDeleteCopy(
+        removable,
+        storeNodes,
+        storeEdges,
+      );
+      requestPermanentDelete({
+        title,
+        description,
+        confirmLabel,
+        cancelLabel,
+        onConfirm: () => {
+          removable.forEach((n) => removeNode(n.id));
+        },
+      });
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [nodes]);
+  }, [getNodes, getEdges, requestPermanentDelete]);
 }

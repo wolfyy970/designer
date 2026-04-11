@@ -24,11 +24,17 @@ flowchart TB
   apiClient -->|/api/*| fn
 ```
 
-**Client** — React SPA with Zustand stores, `@xyflow/react` canvas, IndexedDB for generated code. Makes REST and SSE calls to `/api/*`.
 
-**Server** — Hono app deployed as a Vercel serverless function. Handles all LLM orchestration: compilation, generation (single-shot and agentic), model listing, design system extraction. Holds API keys server-side.
 
-**Local dev** — Two processes: Vite (SPA + HMR on 5173) and Hono (API on 3001 via `tsx watch`). Vite proxy forwards `/api/*` to Hono.
+**Client** — React SPA with Zustand stores, `@xyflow/react` canvas, IndexedDB for generated code. Makes REST and SSE calls to `/api/`*.
+
+**Server** — Hono app deployed as a Vercel serverless function. Handles all LLM orchestration: compilation, generation (agentic Pi pipeline + evaluation), model listing, design system extraction. Holds API keys server-side.
+
+**Local dev** — Two processes: Vite (SPA + HMR on 5173) and Hono (API on 3001 via `tsx watch`). Vite proxy forwards `/api/`* to Hono.
+
+## Design system (frontend)
+
+UI color and typography tokens: **[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)** (Zinc neutrals, accent vs status, complementary info vs orange, file-role aliases). Implemented in `src/index.css` (`@theme`).
 
 ## Design system (frontend)
 
@@ -36,7 +42,7 @@ UI color and typography tokens: **[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)**. Implem
 
 ## Layered architecture (diagram)
 
-The SPA is not classic MVC, but it helps to map roles: **View** (React / `@xyflow`), **Model** (Zustand stores, workspace DTOs, IndexedDB via `StoragePort`), **Controller** (hooks, `domain-commands`, `src/api/client.ts`). The server keeps routes thin and pushes orchestration into `generate-execution`, providers, and the agentic pipeline.
+The SPA is not classic MVC, but it helps to map roles: **View** (React / `@xyflow`), **Model** (Zustand stores, workspace DTOs, IndexedDB via `StoragePort`), **Controller** (hooks, `domain-commands`, `src/api/client.ts`). The server keeps routes thin and pushes orchestration into `generate-execution`, providers, and the agentic pipeline. `**[ApiServerGate](src/components/shared/ApiServerGate.tsx)`** wraps routed content (inside `**BrowserRouter**`) and blocks the canvas until `**GET /api/config**` succeeds—so running **Vite alone** without the API shows a single “API server not reachable” screen instead of partial failures and proxy spam. **Dev-only bypass:** `**/dev/design-tokens`** (kitchen sink) still mounts without the API (`**shouldBypassApiServerGate**` in `**src/lib/api-server-gate-utils.ts**`).
 
 ```mermaid
 flowchart TB
@@ -53,7 +59,7 @@ flowchart TB
   end
 
   subgraph server [Hono API]
-    routes[Routes generate hypothesis compile]
+    routes[Hono routes — incubate, hypothesis, generate, models, …]
     genExec[executeGenerateStream]
     singleShot[Single-shot LLM generateChat]
     providers[Provider registry]
@@ -100,10 +106,58 @@ flowchart TB
   apiClient -->|HTTP and SSE| routes
 ```
 
-- **`agentic-orchestrator`** calls **`runDesignAgentSession`** only — it does not import `@mariozechner/*` directly. To replace Pi, rework **`server/services/pi-sdk/`**, **`pi-agent-service.ts`**, and the event bridge; keep the orchestrator’s build/eval/revision contract stable.
-- **`createAgentSession`** uses **`tools: []`** so default Pi tools never touch the host filesystem; **`virtual-tools`** maps native Pi file tool schemas to **`just-bash`**, and **`pi-bash-tool`** runs shell commands in the same instance. **`cwd`** is the sandbox project root; **`createSandboxResourceLoader()`** is a no-op loader so Pi does not merge host-repo AGENTS/system prompts — sandbox **`AGENTS.md`** (if any) comes only from Langfuse **`sandboxAgentsContext`** via **`buildAgenticSystemContext`** → orchestrator seed merge.
-- **`pi-session-event-bridge`** turns Pi session callbacks into **`AgentRunEvent`**, which **`executeGenerateStream`** serializes to SSE for the client.
-- **`agent-bash-sandbox`** seeds skills and design files, then **`extractDesignFiles`** collects artifacts after the run; evaluation runs in **`design-evaluation-service`** (parallel workers), not inside Pi tool definitions.
+
+
+### Pi design sandbox (three-layer contract)
+
+Confusing these layers causes bad prompts and false “tool not working” reports.
+
+1. **Layer 1 — VFS + just-bash** (`[agent-bash-sandbox.ts](server/services/agent-bash-sandbox.ts)`, `just-bash`): In-memory tree at `**/home/user/project`**; `bash.fs.*` and `bash.exec`. Optional runtimes (**network**, **python**, **javascript**) are **not** enabled in our constructor—do not document `npm`, `curl`, etc. as available unless you change that code.
+2. **Layer 2 — Pi `ToolDefinition`s** (`[virtual-tools.ts](server/services/pi-sdk/virtual-tools.ts)`, `[pi-bash-tool.ts](server/services/pi-bash-tool.ts)`, `[pi-app-tools.ts](server/services/pi-app-tools.ts)`): Same tool **names** and **parameter schemas** as Pi’s native tools; `**execute**` delegates to Layer 1. Model-facing `**description**` strings are merged from `**SANDBOX_TOOL_OVERRIDES**` (file tools + accurate sandbox copy). `**promptSnippet**` / `**promptGuidelines**` on tools are **not** injected into the system message when Pi uses a `**customPrompt**` (we pass the resolved designer system prompt from `**prompts/designer-agentic-system/PROMPT.md**` via `**server/lib/prompt-resolution.ts**` into `createSandboxResourceLoader.getSystemPrompt()`). Only `**description**` is reliably seen by the model **via the API tool schema** (JSON function definitions). See the comment above `**SANDBOX_TOOL_OVERRIDES**` in `virtual-tools.ts`.
+3. **Layer 3 — What the design LLM sees:** **System message** = body from `**prompts/designer-agentic-system/PROMPT.md**` (loaded via `**server/lib/prompt-resolution.ts**`) + `**Current date**` and `**Current working directory**` appended by Pi’s `buildSystemPrompt`—those two lines are **not** in the repo prompt file. **User message** = hypothesis/spec + hardcoded workspace root reminder in `[pi-agent-service.ts](server/services/pi-agent-service.ts)`. The `**agents-md-file**` skill (`skills/agents-md-file/SKILL.md`) becomes a **virtual file** `AGENTS.md` in the sandbox (project/output rules); Pi’s `getAgentsFiles()` is empty, so that text is **not** auto-injected into the system prompt—the agent must `**read**` it if you want it in context.
+
+- `**agentic-orchestrator**` calls `**runDesignAgentSession**` only — it does not import `@mariozechner/*` directly. To replace Pi, rework `**server/services/pi-sdk/**`, `**pi-agent-service.ts**`, and the event bridge; keep the orchestrator’s build/eval/revision contract stable.
+- `**createAgentSession**` uses `**tools: []**` so default Pi tools never touch the host filesystem; `**virtual-tools**` maps native Pi file tool schemas to `**just-bash**`, and `**pi-bash-tool**` runs shell commands in the same instance. `**cwd**` is the sandbox project root; `**createSandboxResourceLoader({ systemPrompt, contextWindow, getCompactionPromptBody? })**` (async: calls `**reload()**`) uses Pi `**DefaultResourceLoader**` + shared in-memory `**SettingsManager**` for compaction thresholds + optional `**getCompactionPromptBody**` (body from the `**agent-context-compaction**` skill on disk via `**prompt-resolution.ts**`); it injects the agentic system prompt via `**getSystemPrompt()**` — sandbox `**AGENTS.md**` (if any) comes from the `**agents-md-file**` skill via `**buildAgenticSystemContext**` → orchestrator seed merge.
+- `**pi-session-event-bridge**` turns Pi session callbacks into `**AgentRunEvent**`, which `**executeGenerateStream**` serializes to SSE for the client.
+- `**agent-bash-sandbox**` seeds design files (and optional `**AGENTS.md**` from the `**agents-md-file**` skill), then `**extractDesignFiles**` collects artifacts after the run; evaluation runs in `**design-evaluation-service**` (parallel workers), not inside Pi tool definitions. Repo-root `**skills/**` packages (see `**server/lib/skill-discovery.ts**`) are walked at each Pi session boundary; every non-`**manual**` skill is **pre-seeded** under `**skills/<key>/…**` and listed in `**<available_skills>**` inside the Pi `**use_skill**` tool description (progressive disclosure). Successful `**use_skill**` calls emit `**skill_activated**` (SSE + trace). `**skills_loaded**` (+ trace) advertises the catalog summary for the UI.
+
+### Tool inventory
+
+Every tool the design LLM can call during an agentic Pi session. Tools marked **VFS** operate on the just-bash in-memory tree at `/home/user/project`. Tools marked **App** run outside the virtual filesystem.
+
+
+| Tool            | VFS? | Source                                                      | Parameters                                                                                                                                                             | How it works                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------- | ---- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`          | VFS  | `virtual-tools.ts` → `createReadToolDefinition`             | `path` (string, **required**); `offset` (number, optional) — 1-indexed start line; `limit` (number, optional) — max lines                                              | Reads UTF-8 text from the VFS. Output truncated to 2 000 lines or 50 KB. Model uses `offset`/`limit` to page large files.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `write`         | VFS  | `virtual-tools.ts` → `createWriteToolDefinition`            | `path` (string, **required**); `content` (string, **required**)                                                                                                        | Creates or overwrites a file. Parent directories created automatically. Intended for **new files** or **complete rewrites**; prompt steers model toward `edit` for partial changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `edit`          | VFS  | `virtual-tools.ts` → `createEditToolDefinition` (+ wrapper) | `path` (string, **required**); `edits` (array, **required**) — each `{ oldText: string, newText: string }`; legacy top-level `oldText`/`newText` folded into `edits[]` | Search-and-replace: each `oldText` must match **exactly once** in the **original** file (Pi applies the batch in one shot). Tool **description** (`SANDBOX_TOOL_OVERRIDES`) asks for ≥3 lines of surrounding context when feasible. **Read-before-edit (enforced):** for paths that already exist, the model must `read` or `write` that path before `edit`; after a successful `edit`, it must `read` again before another `edit` on that path. Duplicate substring matches → error (“provide more context”). **Not-found retry:** on Pi errors whose message matches “could not find” (case-insensitive), the wrapper reads the file, runs `[edit-match-cascade.ts](server/services/pi-sdk/edit-match-cascade.ts)` to correct `oldText` when a **unique** match is found, and retries **once**; duplicate-match errors are **not** retried; second failure returns the **original** Pi error. |
+| `ls`            | VFS  | `virtual-tools.ts` → `createLsToolDefinition`               | `path` (optional, default cwd); `limit` (optional, default 500)                                                                                                        | Lists directory contents alphabetically; directories suffixed with `/`; includes dotfiles. Truncated to 500 entries or 50 KB.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `find`          | VFS  | `virtual-tools.ts` → `createFindToolDefinition`             | `pattern` (string, **required**) — glob; `path` (optional); `limit` (optional, default 1 000)                                                                          | Glob search. No `.gitignore` in the sandbox. Truncated to 1 000 results or 50 KB.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `grep`          | VFS  | `virtual-tools.ts` → `grepToolDefinition`                   | `pattern` (**required**); `path`, `glob`, `ignoreCase`, `literal`, `context`, `limit`                                                                                  | Ripgrep-style search via `bash.exec('rg …')`. Long lines truncated to 500 chars; cap 100 matches or 50 KB.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `bash`          | VFS  | `pi-bash-tool.ts`                                           | `command` (string, **required**)                                                                                                                                       | Runs in just-bash at project root; same tree as file tools. **No** `npm`, `node`, `python`, `curl`, or network.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `todo_write`    | App  | `pi-app-tools.ts`                                           | `todos` (array, **required**) — full replacement list; each `{ id, task, status: 'pending' | 'in_progress' | 'completed' }`                                            | Replaces the session todo list; summaries returned to the model.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `use_skill`     | App  | `pi-app-tools.ts` + `skill-discovery.ts`                    | `name` (string, **required**) — skill key under `skills/`                                                                                                              | Loads `SKILL.md` from the host catalog into the conversation. Catalog listed in the tool description (XML); not read from VFS.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `validate_js`   | VFS  | `pi-app-tools.ts`                                           | `path` (string, **required**)                                                                                                                                          | Reads VFS file; `vm.compileFunction`. Syntax errors or “OK”.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `validate_html` | VFS  | `pi-app-tools.ts`                                           | `path` (string, **required**)                                                                                                                                          | DOCTYPE, structural checks, balanced tags, local asset refs exist in VFS.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+
+
+### Edit tool resilience (`[edit-match-cascade.ts](server/services/pi-sdk/edit-match-cascade.ts)`)
+
+Used **only** when the wrapped `edit` tool catches a Pi **“Could not find…”**-style error (`isEditNotFoundError`). The wrapper reads the current file from the VFS, normalizes CR/LF, then `**attemptMatchCascade**` tries to rewrite each `oldText` in the `edits` array using strategies **in order**; every strategy requires a **unique** match (zero or multiple matches → try next strategy / fail).
+
+1. **Leading whitespace only:** Compare each line after stripping **leading** whitespace on both file lines and needle lines; if exactly one start index matches, use the file’s **original** (un-normalized) slice as the corrected `oldText`.
+2. **Collapsed whitespace:** Collapse runs of whitespace to a single space in the model’s `oldText` and in candidate windows of the file; window line-count is bounded to roughly the `oldText` line count ±3 lines.
+3. **Line trim anchors:** For a fixed window width equal to the number of lines in `oldText`, require **per-line** `.trim()` equality between file and `oldText`.
+
+If all edits get a corrected `oldText` that differs from the model’s version, the wrapper retries `**editInner.execute**` **once**. If the cascade cannot produce a unique correction, or the retry still fails, the **original** Pi error is thrown (never a synthetic “cascade” error).
+
+**Pi SDK fuzzy-match footgun:** If **any** replacement in an `edit` call triggers Pi’s fuzzy matching (e.g. `oldText` has trailing whitespace or smart quotes that do not exactly match the file), Pi applies `normalizeForFuzzyMatch` to the **entire file** before write—not only the edited region. That can strip trailing whitespace project-wide and normalize Unicode quotes/dashes. We do not fork Pi’s `edit-diff`; watch for “unrelated” diffs after a fuzzy edit.
+
+**How descriptions reach the model:** For `read` / `write` / `edit` / `ls` / `find` / `grep`, `SANDBOX_TOOL_OVERRIDES` replaces the Pi SDK default `description` with sandbox-accurate text. `promptSnippet` / `promptGuidelines` are **not** injected when a `customPrompt` is set (`designer-agentic-system`). Only the `description` field is reliably visible via the OpenAI-format tool JSON.
+
+**Scope:** Virtual file tools and just-bash apply during **design** **agentic Pi sessions** (initial build + each revision round in `agentic-orchestrator.ts`). Incubation, inputs-gen, design-system extraction, and evaluator steps also run through the Pi agentic pipeline with **session-scoped** skill catalogs; **meta-harness** hits the same API routes—not every flow seeds the full design artifact tree. Keep `**prompts/designer-agentic-system/PROMPT.md**`, `**server/lib/prompt-templates.ts**` placeholders, and tool *`*description`**s aligned with this doc.
+
+**Multi-file persistence:** Agentic file maps go to IndexedDB via client `saveFiles()`; provenance can include evaluation rounds + checkpoint.
 
 ## Four Abstraction Layers
 
@@ -111,22 +165,28 @@ flowchart TB
 flowchart TB
   ui["UI Layer — React components, Canvas"]
   spec["1. Spec Model — DesignSpec, 5 SpecSections, images, types/spec.ts"]
-  api["2. API Client + Prompt Compiler — compileVariantPrompts locally, compileSpec and generate on server"]
+  api["2. API client — per-hypothesis prompt assembly via compileVariantPrompts() (code name); incubate + hypothesis generate on server"]
   storage["3. Storage Abstraction — StoragePort interface, BrowserStorage, IndexedDB"]
-  output["4. Output Rendering — HTML iframe or bundleVirtualFS, VariantNode"]
+  output["4. Output Rendering — iframe preview (URL-backed VFS or bundled fallback); preview node (React: VariantNode.tsx)"]
 
   ui --> spec --> api --> storage --> output
 ```
 
+
+
 ## Domain model, canvas projection, and session DTOs
 
-**Canonical client model** — `src/stores/workspace-domain-store.ts` (persisted) holds workflow semantics without requiring a graph: incubator input wiring (section / variant / critique node ids), model assignments per incubator and per hypothesis, design-system attachments, hypothesis ↔ incubator ↔ variant-strategy links, variant slots (active result / pins), and mirrors for model/design-system/critique payloads synced from the canvas. `src/types/workspace-domain.ts` defines the shapes.
+**Canonical client model** — `src/stores/workspace-domain-store.ts` (persisted) holds workflow semantics without requiring a graph: incubator input wiring (input / preview node ids), model assignments per incubator and per hypothesis, design-system attachments, hypothesis ↔ incubator ↔ hypothesis-strategy links, preview slots (active result / pins), and mirrors for model/design-system payloads synced from the canvas. `src/types/workspace-domain.ts` defines the shapes.
 
-**Canvas as projection** — `src/stores/canvas-store.ts` still persists React Flow–backed **nodes and edges** for layout and interaction. Graph edits call `src/workspace/domain-commands.ts` so domain relations stay the source of truth for compile/generate. `src/workspace/domain-to-graph.ts` holds small view helpers derived from domain state.
+**Hypothesis ↔ model (single active wiring)** — A hypothesis may have **only one** Model node connected at a time: connecting a new model replaces the previous edge, and domain `modelNodeIds` holds at most one id. Persisted state migrates with canvas **v25** (dedupe model→hypothesis edges, first edge wins) and workspace domain **v9** (truncate legacy multi-id lists). When an incubator has several models, auto-wiring new hypotheses inherits only the **first** model edge from the incubator.
 
-**Node removal** — Prefer `canvas-store.removeNode` for deletes so domain cleanup (`syncDomainForRemovedNode`), compiler variant pruning, and cascade removal of attached variant nodes stay consistent. Orchestrator paths that filter nodes out of Zustand directly must still call `syncDomainForRemovedNode` for each removed id (see `useCanvasOrchestrator`).
+**Canvas as projection** — `src/stores/canvas-store.ts` still persists React Flow–backed **nodes and edges** for layout and interaction. Graph edits call `src/workspace/domain-commands.ts` so domain relations stay the source of truth for incubate/generate. Pure graph helpers live in `src/workspace/graph-queries.ts`.
 
-**Compile inputs** — `buildCompileInputs()` in `src/lib/canvas-graph.ts` accepts optional `DomainIncubatorWiring`; when present, structural inputs come from the domain list instead of only incoming edges to the compiler node.
+**Incubate → graph** — When incubation returns new **strategies**, the incubator UI calls `syncAfterIncubate` on the canvas store to add **hypothesis** nodes and edges (and `linkHypothesesAfterIncubate` for domain rows). Existing strategies already represented by a hypothesis `refId` are not duplicated.
+
+**Node removal** — Prefer `canvas-store.removeNode` for deletes so domain cleanup (`syncDomainForRemovedNode`), incubator strategy pruning, and cascade removal of attached preview nodes stay consistent. Orchestrator paths that filter nodes out of Zustand directly must still call `syncDomainForRemovedNode` for each removed id (see `useCanvasOrchestrator`).
+
+**Incubate inputs** — `buildIncubateInputs()` in `src/lib/canvas-graph.ts` accepts optional `DomainIncubatorWiring`; when present, structural inputs come from the domain list instead of only incoming edges to the incubator node.
 
 **Graph queries** (`src/workspace/graph-queries.ts`) remain pure helpers over `WorkspaceNode[]` + `WorkspaceEdge[]` for legacy paths and visualization (e.g. lineage).
 
@@ -141,13 +201,13 @@ The **server** LLM engine stays UI-agnostic; client-only modules under `src/work
 ```mermaid
 flowchart TB
   designSpec[DesignSpec text and images]
-  dimensionMap[DimensionMap dimensions and variant strategies]
-  compiledPrompt["CompiledPrompt[] one per variant"]
+  incubationPlan[IncubationPlan dimensions and hypothesis strategies]
+  compiledPrompt["CompiledPrompt[] — one stored user prompt per hypothesis (browser)"]
   generate[POST /api/generate SSE stream]
 
-  designSpec -->|POST /api/compile| dimensionMap
-  dimensionMap -->|user edits on canvas| compiledPrompt
-  compiledPrompt -->|compileVariantPrompts client-side| generate
+  designSpec -->|POST /api/incubate| incubationPlan
+  incubationPlan -->|user edits on canvas| compiledPrompt
+  compiledPrompt -->|merge strategy + template: compileVariantPrompts()| generate
 
   generate --> singleMode
   generate --> agenticMode
@@ -169,108 +229,128 @@ flowchart TB
   iframe -->|optional screenshot| nextIteration[Next iteration cycle]
 ```
 
+
+
 ## API Surface
 
-| Endpoint | Method | Purpose | Response |
-|---|---|---|---|
-| `/api/compile` | POST | Compile spec into dimension map | JSON: `DimensionMap` |
-| `/api/generate` | POST | Generate one variant (single-shot or agentic) | SSE stream |
-| `/api/hypothesis/prompt-bundle` | POST | Build compiled prompts + eval/provenance from workspace slice (authoritative variant template) | JSON |
-| `/api/hypothesis/generate` | POST | Run all models for one hypothesis; multiplexed SSE (`laneIndex` on events, `lane_done` per lane) | SSE stream |
-| `/api/models/:provider` | GET | List available models | JSON: `ProviderModel[]` |
-| `/api/models` | GET | List available providers | JSON: `ProviderInfo[]` |
-| `/api/logs` | GET | Fetch LLM call log entries (dev-only) | JSON: `LlmLogEntry[]` |
-| `/api/logs` | DELETE | Clear log entries (dev-only) | 204 |
-| `/api/design-system/extract` | POST | Extract design tokens from screenshots | JSON: extracted tokens |
-| `/api/prompts/*` | GET | Versioned prompt bodies (e.g. variant template) from DB | JSON |
-| `/api/skills/*` | GET | Versioned skill definitions from DB | JSON |
-| `/api/health` | GET | Health check | JSON: `{ ok: true }` |
 
-**`/api/generate` request fields:** `prompt`, `providerId`, `modelId`, `promptOverrides` (`genSystemHtml`, `genSystemHtmlAgentic`, `variant`), `supportsVision`, `mode` (`single` | `agentic`), `thinkingLevel` (`off` | `minimal` | `low` | `medium` | `high`).
+| Endpoint                        | Method | Purpose                                                                                                                                                                                         | Response                   |
+| ------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `/api/config`                   | GET    | App flags (`lockdown` + pinned models when locked) and **agentic evaluator defaults** (`agenticMaxRevisionRounds`, `agenticMinOverallScore` from env) for Settings → Evaluator defaults seeding | JSON                       |
+| `/api/incubate`                 | POST   | Incubate spec into incubation plan (SSE: `incubate_result`)                                                                                                                                     | SSE → `IncubationPlan`     |
+| `/api/generate`                 | POST   | Generate one design (agentic path; legacy `mode: "single"` accepted as alias)                                                                                                                   | SSE stream                 |
+| `/api/hypothesis/prompt-bundle` | POST   | Build **per-hypothesis prompt bundles** (`CompiledPrompt[]`) + eval/provenance from workspace slice                                                                                             | JSON                       |
+| `/api/hypothesis/generate`      | POST   | Run all models for one hypothesis; multiplexed SSE (`laneIndex` on events, `lane_done` per lane) with agentic eval                                                                              | SSE stream                 |
+| `/api/models/:provider`         | GET    | List available models                                                                                                                                                                           | JSON: `ProviderModel[]`    |
+| `/api/models`                   | GET    | List available providers                                                                                                                                                                        | JSON: `ProviderInfo[]`     |
+| `/api/logs`                     | GET    | Dev-only: snapshot `{ llm, trace }` (in-memory rings + optional NDJSON); **not consumed by the SPA** — use local dev tooling                                                                    | JSON                       |
+| `/api/logs`                     | DELETE | Clear log rings (dev-only)                                                                                                                                                                      | 204                        |
+| `/api/design-system/extract`    | POST   | Extract design tokens from screenshots                                                                                                                                                          | JSON: extracted tokens     |
+| `/api/inputs/generate`          | POST   | Auto-fill Research / Objectives / Constraints from Design Brief                                                                                                                                 | JSON: `{ result: string }` |
+| `/api/health`                   | GET    | Health check                                                                                                                                                                                    | JSON: `{ ok: true }`       |
+| `/api/preview/sessions`         | POST   | Register ephemeral virtual file tree for iframe preview; returns `{ id, entry }`                                                                                                                | JSON                       |
+| `/api/preview/sessions/:id`     | GET    | Redirect to default HTML entry for that session                                                                                                                                                 | 302                        |
+| `/api/preview/sessions/:id/*`   | GET    | Serve one file from the session (nested paths supported)                                                                                                                                        | raw bytes + `Content-Type` |
+| `/api/preview/sessions/:id`     | PUT    | Replace session file map (optional; client re-POST is primary)                                                                                                                                  | JSON                       |
+| `/api/preview/sessions/:id`     | DELETE | Drop session from memory                                                                                                                                                                        | JSON                       |
 
-**SSE events:** `progress` (status label), `activity` (streaming agent text), `code` (final HTML in single-shot), `file` (path + content in agentic), `plan` (declared file list in agentic), `error`, `done`.
 
-**Hypothesis flow:** The canvas still owns graph/domain state (Zustand + React Flow), but **prompt assembly and multi-model orchestration** for a hypothesis go through `/api/hypothesis/*`. Pure workspace helpers live in `src/workspace/hypothesis-generation-pure.ts` (importable by the server). `/api/hypothesis/generate` adds `laneIndex` to each event payload and emits `lane_done` per model lane before a final `done`; the client demuxes into one `GenerationResult` per lane.
+`**/api/generate` request fields:** `prompt`, `providerId`, `modelId`, `supportsVision`, `mode` (optional; defaults to agentic; `single` is a deprecated alias), `thinkingLevel` (`off` | `minimal` | `low` | `medium` | `high`), `evaluationContext` (object, `**null`**, or omit — `**null**` skips all evaluation; omit runs eval workers as before).
 
-All POST endpoints validate request bodies with Zod `safeParse` — malformed requests return a structured `400` before any LLM call is made.
+**SSE events:** `progress` (status label), `activity` (streaming agent text), `file` (path + content), `plan` (declared file list), `skills_loaded` (pre-seeded non-manual skills for this Pi session; may repeat on revision rounds), `skill_activated` (successful `**use_skill`** call), `evaluation_worker_done` (one per rubric worker in an eval round; payload includes `round`, `rubric`, `report` snapshot for live UI), `error`, `done`.
+
+**Hypothesis flow:** The canvas still owns graph/domain state (Zustand + React Flow), but **prompt assembly and multi-model orchestration** for a hypothesis go through `/api/hypothesis/*`. Pure workspace helpers live in `src/workspace/hypothesis-generation-pure.ts` (importable by the server). `/api/hypothesis/generate` adds `laneIndex` to each event payload and emits `lane_done` per model lane before a final `done`; the client demuxes into one `GenerationResult` per lane. **Prompt bodies** load on the server from `**skills/*/SKILL.md`** and `**prompts/designer-agentic-system/PROMPT.md**` via `**server/lib/prompt-resolution.ts**`; structural composition uses `**server/lib/prompt-templates.ts**`. The SPA does not send prompt overrides; all prompt text is server-resolved from disk.
+
+POST endpoints validate bodies with Zod (typically via `**parse-request**` / `safeParse`). Validation and opaque failures use `**apiJsonError**` so JSON error responses stay shape-consistent (`{ error: string }` with selective `details`) across **400** / **404** / **413** / **422** / **500** / **503** before any LLM call where applicable.
 
 ### Validation stacks (Zod vs TypeBox)
 
-- **Zod** — HTTP request and response shapes, shared client/server DTOs, and guarded deserialization from persistence (for example skill `filesJson` in `server/db/skills.ts`).
-- **TypeBox** — Pi SDK `ToolDefinition` parameters in [`server/services/pi-sdk/virtual-tools.ts`](server/services/pi-sdk/virtual-tools.ts) (mapped native tools), [`server/services/pi-bash-tool.ts`](server/services/pi-bash-tool.ts), and [`server/services/pi-app-tools.ts`](server/services/pi-app-tools.ts). Keep these aligned with the Pi coding-agent tool surface; do not migrate to Zod unless the Pi stack documents equivalent support.
+- **Zod** — HTTP request and response shapes and shared client/server DTOs.
+- **TypeBox** — Pi SDK `ToolDefinition` parameters in `[server/services/pi-sdk/virtual-tools.ts](server/services/pi-sdk/virtual-tools.ts)` (mapped native tools), `[server/services/pi-bash-tool.ts](server/services/pi-bash-tool.ts)`, and `[server/services/pi-app-tools.ts](server/services/pi-app-tools.ts)`. Keep these aligned with the Pi coding-agent tool surface; do not migrate to Zod unless the Pi stack documents equivalent support.
 
 ## Server Architecture (`server/`)
 
-| File | Responsibility |
-|------|---------------|
-| `app.ts` | Hono app: mounts routes, CORS |
-| `env.ts` | `process.env` config (replaces `import.meta.env`) |
-| `dev.ts` | Local dev entry (Hono + `@hono/node-server` on 3001) |
-| `log-store.ts` | In-memory LLM call ring (dev); finalized rows + one-shots → single `writeObservabilityLine` NDJSON via `server/lib/observability-sink.ts` |
-| `trace-log-store.ts` | Run-trace ring (dedupe by `event.id`); client POST `/api/logs/trace`; same NDJSON sink |
-| `routes/compile.ts` | POST /api/compile |
-| `routes/generate.ts` | POST /api/generate — delegates to `services/generate-execution.ts` |
-| `routes/hypothesis.ts` | POST `/api/hypothesis/prompt-bundle`, `/api/hypothesis/generate` |
-| `services/generate-execution.ts` | Shared single-lane generate stream (optional `laneIndex` + `lane_done` for multiplex) |
-| `lib/generate-stream-schema.ts` | Zod schema shared by generate + hypothesis routes |
-| `routes/models.ts` | GET /api/models/:provider |
-| `routes/logs.ts` | GET `/api/logs` → `{ llm, trace }`; POST `/api/logs/trace` (Zod); DELETE clears both rings (file append-only) |
-| `routes/design-system.ts` | POST /api/design-system/extract |
-| `routes/prompts.ts` | GET `/api/prompts/:key` — latest prompt body from Langfuse (label from `LANGFUSE_PROMPT_LABEL`) |
-| `routes/skills.ts` | GET `/api/skills`, `/api/skills/:key` — latest skill versions (metadata + body + optional `filesJson`) |
-| `db/` | Prisma client singleton (`DATABASE_URL`, SQLite in dev) |
-| `services/pi-sdk/` | **Only** place that imports `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent`; types, `createAgentSession`, `streamSimple`, stream budget, **`virtual-tools.ts`** (Pi tool definitions → `just-bash` FS / `grep` via `bash.exec`). |
-| `services/pi-agent-service.ts` | Pi session adapter — `tools: []`, `customTools` = virtual file tools + bash + app tools; `session.prompt`; LLM log wrapping; merges app + SDK system prompts; SSE via `pi-session-event-bridge.ts`. |
-| `services/agent-bash-sandbox.ts` | `just-bash` instance: seed design files + skills, extract artifacts after the run. |
-| `services/pi-bash-tool.ts` | Pi `bash` tool → `bash.exec`, snapshot diff → SSE file events for design paths. |
-| `services/pi-app-tools.ts` | Pi tools: `todo_write`, `validate_js`, `validate_html`. |
-| `services/pi-session-event-bridge.ts` | Maps `AgentSession` subscribe events → app `AgentRunEvent` stream. |
-| `services/agentic-orchestrator.ts` | Agentic evaluation / tool orchestration helpers |
-| `services/design-evaluation-service.ts` | Design evaluation payload handling |
-| `services/browser-qa-evaluator.ts` | Deterministic browser QA preflight (HTML + VM) |
-| `services/browser-playwright-evaluator.ts` | Playwright headless render + DOM/console checks |
-| `db/skills.ts` | List skill versions, build virtual skill file maps (`filesJson` or `body`) |
-| `lib/skills/*` | Skill catalog XML (`format-for-prompt`), selection (`select-skills`) |
-| `services/compiler.ts` | LLM compilation — Zod-validates request/response boundaries |
-| `services/providers/openrouter.ts` | OpenRouter provider (direct API, auth header) |
-| `services/providers/lmstudio.ts` | LM Studio provider (direct URL) |
-| `services/providers/registry.ts` | Provider registration and lookup |
-| `lib/provider-helpers.ts` | Re-exports from `src/lib/provider-fetch.ts` + server-specific `buildChatRequestFromMessages` |
-| `lib/prompts/*` | Re-exports from `src/lib/prompts/` — no server-side duplication |
-| `lib/extract-code.ts` | Re-exports `src/lib/extract-code.ts` |
-| `lib/error-utils.ts` | Error normalization (`normalizeError`) |
-| `lib/utils.ts` | ID generation, interpolation |
+### Import convention (server ↔ `src/`)
+
+- **Direct `../../src/...` imports are OK** for pure types, Zod schemas, and shared **constants** with no Node/browser coupling (e.g. `src/types/*`, `src/lib/workspace-snapshot-schema.ts`, `src/constants/*`).
+- Prefer `**server/lib/`** for small shared helpers (`api-json-error`, `parse-request`, `provider-helpers`, `lockdown-model`, skill/prompt discovery, `build-agentic-system-context`, etc.) so routes stay shallow. Orchestration and modules that need route-adjacent logging or workspace bundling live under `**server/services/`** (e.g. `llm-call-logger`, `pi-llm-log`, `hypothesis-workspace`, `provider-model-context`) — `server/lib/` must not import upward into `server/services/`.
+- **Pure shared helpers** that live only under `**src/lib/`** (`error-utils`, `utils`, Zod schemas, constants) are imported from `**../../src/...`** directly — do not add one-line re-export barrels in `server/lib/`.
+- Do **not** import React, Vite-only code, or browser APIs from `server/`.
+
+
+| File                                       | Responsibility                                                                                                                                                                                                                                          |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app.ts`                                   | Hono app: mounts routes, CORS                                                                                                                                                                                                                           |
+| `env.ts`                                   | `process.env` config (replaces `import.meta.env`)                                                                                                                                                                                                       |
+| `dev.ts`                                   | Local dev entry (Hono + `@hono/node-server` on 3001)                                                                                                                                                                                                    |
+| `log-store.ts`                             | In-memory LLM call ring (dev); finalized rows + one-shots → single `writeObservabilityLine` NDJSON via `server/lib/observability-sink.ts`                                                                                                               |
+| `trace-log-store.ts`                       | Run-trace ring (dedupe by `event.id`); client POST `/api/logs/trace`; same NDJSON sink                                                                                                                                                                  |
+| `routes/config.ts`                         | GET /api/config — `env.LOCKDOWN`, lockdown model ids, `AGENTIC_MAX_REVISION_ROUNDS` / `AGENTIC_MIN_OVERALL_SCORE`                                                                                                                                       |
+| `routes/incubate.ts`                       | POST /api/incubate                                                                                                                                                                                                                                      |
+| `routes/generate.ts`                       | POST /api/generate — delegates to `services/generate-execution.ts`                                                                                                                                                                                      |
+| `routes/hypothesis.ts`                     | POST `/api/hypothesis/prompt-bundle`, `/api/hypothesis/generate`                                                                                                                                                                                        |
+| `services/generate-execution.ts`           | SSE multiplex: agentic path; optional `laneIndex` / `lane_done`                                                                                                                                                                                         |
+| `lib/generate-stream-schema.ts`            | Zod schema shared by generate + hypothesis routes                                                                                                                                                                                                       |
+| `routes/models.ts`                         | GET /api/models/:provider                                                                                                                                                                                                                               |
+| `routes/logs.ts`                           | GET `/api/logs` → `{ llm, trace }`; POST `/api/logs/trace` (Zod); DELETE clears both rings (file append-only)                                                                                                                                           |
+| `routes/design-system.ts`                  | POST /api/design-system/extract                                                                                                                                                                                                                         |
+| `routes/inputs-generate.ts`                | POST /api/inputs/generate                                                                                                                                                                                                                               |
+| `routes/preview.ts`                        | POST/GET `/api/preview/sessions*` — ephemeral virtual FS for iframe + eval                                                                                                                                                                              |
+| `lib/prompt-resolution.ts`                 | Resolve prompt bodies from disk (`skills/*/SKILL.md`, `prompts/designer-agentic-system/PROMPT.md`) for incubation, inputs-gen, design-system extract, evaluators, and agentic paths                                                                     |
+| `lib/prompt-templates.ts`                  | Structural placeholder / template-variable glue on top of resolved bodies                                                                                                                                                                               |
+| `services/pi-sdk/`                         | **Only** place that imports `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent`; types, `createAgentSession`, `streamSimple`, stream budget, `**virtual-tools.ts`** (Pi tool definitions → `just-bash` FS / `grep` via `bash.exec`).                |
+| `services/pi-agent-service.ts`             | Pi session adapter — `tools: []`, `customTools` = virtual file tools + bash + **use_skill** (skill catalog in tool description) + app tools; `session.prompt`; LLM log wrapping; merges app + SDK system prompts; SSE via `pi-session-event-bridge.ts`. |
+| `services/agent-bash-sandbox.ts`           | `just-bash` instance: seed design files, extract artifacts after the run.                                                                                                                                                                               |
+| `services/pi-bash-tool.ts`                 | Pi `bash` tool → `bash.exec`, snapshot diff → SSE file events for design paths.                                                                                                                                                                         |
+| `services/pi-app-tools.ts`                 | Pi tools: `todo_write`, `use_skill` (loads `SkillCatalogEntry` body + `skill_activated` event), `validate_js`, `validate_html`.                                                                                                                         |
+| `services/pi-session-event-bridge.ts`      | Maps `AgentSession` subscribe events → app `AgentRunEvent` stream; uses `**pi-bridge-narrowing**` instead of unchecked casts on SDK shapes.                                                                                                            |
+| `services/agentic-orchestrator.ts`         | Agentic evaluation / tool orchestration helpers                                                                                                                                                                                                         |
+| `services/design-evaluation-service.ts`    | Design evaluation payload handling                                                                                                                                                                                                                      |
+| `services/browser-qa-evaluator.ts`         | Deterministic browser QA preflight (HTML + VM)                                                                                                                                                                                                          |
+| `services/browser-playwright-evaluator.ts` | Playwright headless render + DOM/console checks                                                                                                                                                                                                         |
+| `services/incubator.ts`                    | LLM incubation — Zod-validates request/response boundaries                                                                                                                                                                                              |
+| `services/providers/openrouter.ts`         | OpenRouter provider (direct API, auth header)                                                                                                                                                                                                           |
+| `services/providers/lmstudio.ts`           | LM Studio provider (direct URL)                                                                                                                                                                                                                         |
+| `services/providers/registry.ts`           | Provider registration and lookup                                                                                                                                                                                                                        |
+| `lib/provider-helpers.ts`                  | Re-exports from `src/lib/provider-fetch.ts` + server-specific `buildChatRequestFromMessages`                                                                                                                                                            |
+| `lib/prompts/*`                            | Re-exports from `src/lib/prompts/` — no server-side duplication                                                                                                                                                                                         |
+| `lib/api-json-error.ts`                    | `apiJsonError` — consistent JSON error bodies + Hono-typed status literals                                                                                                                                                                              |
+| `lib/parse-request.ts`                     | Shared JSON parse + Zod validation helpers for routes                                                                                                                                                                                                   |
+| `lib/sse-write-gate.ts`                    | `createWriteGate` — serializes SSE writes (also exported from `generate-execution` for tests)                                                                                                                                                           |
+| `lib/agentic-sse-map.ts`                   | Maps agentic/orchestrator events to SSE `event` + payload                                                                                                                                                                                               |
+| `lib/build-agentic-system-context.ts`      | Composes agentic system context: resolved `**prompts/designer-agentic-system/PROMPT.md`** body + optional `**AGENTS.md`** seed + `**skillCatalog`** entries + skill file seeds (no catalog on system string)                                            |
+| `lib/skill-discovery.ts`                   | Walk `**skills/*/SKILL.md**`, filter by `when` mode, `**formatSkillsCatalogXml**` / `**buildUseSkillToolDescription**` + sandbox seed map; invalid packages omitted (dev `console.warn` on bad YAML / schema)                                            |
+| `lib/skill-schema.ts`                      | Zod: skill YAML frontmatter                                                                                                                                                                                                                             |
+| `lib/frontmatter.ts` / `lib/frontmatter-split.ts` | Shared `---` YAML frontmatter split for `**prompt-discovery**` / `**skill-discovery**` (split implementation + re-export)                                                                                                                            |
+| `lib/sse-task-route.ts`                    | Shared SSE wrapper for task-agent routes (`incubate`, `inputs-generate`, `design-system`) — write gate, `error`+`done` on throw                                                                                                                          |
+| `lib/pi-bridge-narrowing.ts`               | Runtime guards for Pi SDK message slices at the NPM boundary (`pi-session-event-bridge`)                                                                                                                                                                |
+| `lib/agentic-skills-emission.ts`           | Shared `skills_loaded` trace + SSE for orchestrator and task-agent execution                                                                                                                                                                            |
+
 
 ## Generation Engine
 
-### Single-Shot
+Hypothesis and `/api/generate` traffic use the **agentic** orchestrator. `mode` in the request body is optional and defaults to agentic; `**single`** is still accepted as a **deprecated alias** (normalized server-side) for backward compatibility.
 
-`server/routes/generate.ts` (when `mode === 'single'`):
-1. Validates the request with Zod
-2. Resolves the `genSystemHtml` system prompt (default or client-provided override)
-3. Calls `provider.generateChat([system, user], options)`
-4. Extracts the HTML code block via `extractCode()`
-5. Streams three SSE events: `progress` (start), `code` (HTML), `done`
-
-### Agentic
-
-`server/routes/generate.ts` (when `mode === 'agentic'`) loads **versioned skills** from Prisma (`listLatestSkillVersions`), selects them with `selectSkillsForContext` using `evaluationContext.outputFormat` and `Skill.nodeTypes`, hydrates virtual paths under `skills/{key}/…` (`buildVirtualSkillFiles`), appends an Agent Skills–style `<available_skills>` catalog via `formatSkillsForPrompt`, then calls `server/services/agentic-orchestrator.ts` → `runAgenticWithEvaluation`.
+`server/routes/generate.ts` delegates to `server/services/agentic-orchestrator.ts` → `runAgenticWithEvaluation`. Agentic system text comes from `**prompts/designer-agentic-system/PROMPT.md`** (via `**prompt-resolution.ts**` / `buildAgenticSystemContext`) and optional sandbox `**AGENTS.md**` from the `**agents-md-file**` skill; the skill catalog XML is attached to the `**use_skill**` Pi tool, not appended to the system prompt. All non-`**manual**` skill bodies (+ small extras) are pre-seeded under `**skills/<key>/…**` in `**just-bash**` before the run.
 
 **Orchestrator (`runAgenticWithEvaluation`):**
-1. **Build:** `runDesignAgentSession` in `pi-agent-service.ts` — virtual FS is seeded with `virtualSkillFiles` (read-only; stripped from returned design `files`), then the agent writes design artifacts.
-2. **Evaluate:** `runEvaluationWorkers` in `design-evaluation-service.ts` runs design / strategy / implementation LLM rubrics plus **browser** checks:
-   - **Preflight:** `browser-qa-evaluator.ts` — HTML/VM heuristics (fast).
-   - **Grounded:** `browser-playwright-evaluator.ts` — headless Chromium via Playwright (`setContent` on bundled HTML), console/page errors, visible text, layout box, broken images. Disabled when `VITEST=true` or `BROWSER_PLAYWRIGHT_EVAL=0`.
-3. **Revision loop:** Until `isEvalSatisfied` (primary: `!shouldRevise` after `enforceRevisionGate`; optional: `agenticMinOverallScore` + zero hard fails) or **`maxRevisionRounds`** is reached, or abort. Each revision re-seeds prior design files merged with skill files.
-4. **Checkpoint:** `AgenticCheckpoint` includes `stopReason` (`satisfied` | `max_revisions` | `aborted` | `revision_failed`) and `revisionAttempts`.
+
+1. **Build:** `runDesignAgentSession` in `pi-agent-service.ts` — virtual FS is seeded with optional `**AGENTS.md`**, all catalog skills (`skills/<key>/…`), and any caller `seedFiles`, then the agent writes design artifacts. Each Pi session boundary re-runs `**discoverSkills`** (revision rounds use a fresh Pi session and re-seed skills).
+2. **Evaluate + revise** *(skipped when `**evaluationContext`** is `**null**`, e.g. hypothesis **Auto-improve** off):* `runEvaluationWorkers` in `design-evaluation-service.ts` runs design / strategy / implementation LLM rubrics plus **browser** checks:
+  - **Preflight:** `browser-qa-evaluator.ts` — HTML/VM heuristics (fast).
+  - **Grounded:** `browser-playwright-evaluator.ts` — headless Chromium via Playwright (`setContent` on bundled HTML), console/page errors, visible text, layout box, broken images. Disabled when `VITEST=true` or `BROWSER_PLAYWRIGHT_EVAL=0`.
+   Then the **revision loop** runs until `isEvalSatisfied` — with **no** target score, stop when `!shouldRevise` after `enforceRevisionGate`; with **Settings / per-hypothesis target score** (`agenticMinOverallScore`), stop only when **no hard fails** and **overall score ≥ target** (even if the rubric model sets `shouldRevise: false`). Otherwise continue until `**maxRevisionRounds`** or abort. Each revision re-seeds prior design files merged with fresh `**AGENTS.md`** (when configured) and the full non-`**manual**` skill packages again.
+3. **Checkpoint:** `AgenticCheckpoint` includes `stopReason` (`satisfied` | `max_revisions` | `aborted` | `revision_failed` | `**build_only`**) and `revisionAttempts`. `**build_only**` means the Pi build finished and evaluation was not requested.
 
 **Env defaults** (`server/env.ts`): `AGENTIC_MAX_REVISION_ROUNDS` (default `5`, clamped 0–20), optional `AGENTIC_MIN_OVERALL_SCORE`. Request body may pass `agenticMaxRevisionRounds` / `agenticMinOverallScore`. For Playwright in production: install browsers once (`pnpm exec playwright install chromium`).
 
-`server/services/pi-sdk/` is the **NPM import boundary** for Pi packages (and the right place to replace Pi with another agent later). Other server code uses `./pi-sdk` or `../services/pi-sdk` for types/session helpers only — not deep Pi imports. Session orchestration stays in `pi-agent-service.ts`; app-specific Pi tools in `pi-*-tool(s).ts`; virtual FS mapping in `pi-sdk/virtual-tools.ts`; sandbox in `agent-bash-sandbox.ts`; **`sandbox-resource-loader.ts`** supplies the sealed-session resource loader. Agentic system context (including optional **`AGENTS.md`** seed) is built in `server/lib/build-agentic-system-context.ts`.
+`server/services/pi-sdk/` is the **NPM import boundary** for Pi packages (and the right place to replace Pi with another agent later). Other server code uses `./pi-sdk` or `../services/pi-sdk` for types/session helpers only — not deep Pi imports. Session orchestration stays in `pi-agent-service.ts`; app-specific Pi tools in `pi-*-tool(s).ts`; virtual FS mapping in `pi-sdk/virtual-tools.ts`; sandbox in `agent-bash-sandbox.ts`; `**sandbox-resource-loader.ts`** supplies the sealed-session resource loader (`getSystemPrompt()` carries the embedded agentic system prompt; no host-repo merge). Agentic system context (optional `**AGENTS.md`** seed + repo **skills**) is built in `server/lib/build-agentic-system-context.ts`.
+
+**Google Fonts (agentic HTML):** Agent output may reference **only** `https://fonts.googleapis.com/...` (stylesheet API) and `**https://fonts.gstatic.com/...`** (font files referenced from that CSS). Allowlist logic lives in `[src/lib/google-fonts-allowlist.ts](src/lib/google-fonts-allowlist.ts)`; Pi `**validate_html`** permits those URLs in `<link rel="stylesheet">`, and allowed `@import` inside `<style>` blocks; other external stylesheets and any external `<script src>` remain invalid. The preview iframe can load allowlisted URLs when the **user’s browser** has network access; the `**browser-qa-evaluator`** VM does not fetch the network, so typography there is not ground-truth for CDN fonts.
 
 ### Generation Cancellation
 
-SSE is unidirectional. The client holds an `AbortController` and calls `abort()` on unmount or user cancellation. Single-shot: the server checks `c.req.raw.signal.aborted`. Agentic: the abort signal is forwarded to `agent.abort()` via the `params.signal` event listener.
+SSE is unidirectional. The client holds an `AbortController` and calls `abort()` on unmount or user cancellation. The abort signal is forwarded into the agent run (`c.req.raw.signal` / `agent.abort()` via the orchestrator).
 
 ## Canvas Architecture
 
@@ -278,38 +358,39 @@ The primary interface is a node-graph canvas built on `@xyflow/react` v12.
 
 ### Node Types
 
-11 node types in 3 categories: 5 input nodes rendered by shared `SectionNode.tsx`, plus `ModelNode`, `DesignSystemNode`, `CompilerNode`, `HypothesisNode`, `VariantNode`, and `CritiqueNode`. `ModelNode` centralizes provider/model selection. Design System is self-contained (data in `node.data`, not spec store). Each node uses a typed data interface from `types/canvas-data.ts`.
+10 node types in 3 categories: 5 input nodes rendered by shared `InputNode.tsx`, plus `ModelNode`, `DesignSystemNode`, `IncubatorNode`, `HypothesisNode`, and **preview** nodes (canvas type `preview`; React component still named `VariantNode.tsx` for history). `ModelNode` centralizes provider/model selection. Design System is self-contained (data in `node.data`, not spec store). Each node uses a typed data interface from `types/canvas-data.ts`.
 
 ### HypothesisNode — Generation Controls
 
-`HypothesisNode` stores `agentMode` (`single` | `agentic`) and `thinkingLevel` in canvas node data. The **Direct** / **Agentic** mode control and **Thinking** segmented control are inline on the node. At generation time, `useHypothesisGeneration` reads these from canvas state and passes them to `useGenerate()`.
+**Auto-improve**, **max revision rounds**, and **target score** for a hypothesis live in `**workspace-domain-store`** (`DomainHypothesis`), with defaults from **Settings → Evaluator defaults**; `[resolveEvaluatorSettings](src/hooks/resolveEvaluatorSettings.ts)` merges them per run. **Thinking** is configured on **Model** nodes. At generation time, `[useHypothesisGeneration](src/hooks/useHypothesisGeneration.ts)` reads the workspace snapshot and drives the multiplexed hypothesis SSE stream (`/api/hypothesis/prompt-bundle` + `/api/hypothesis/generate` via `[src/api/client.ts](src/api/client.ts)`). Lane orchestration lives in `[hypothesis-generation-run.ts](src/hooks/hypothesis-generation-run.ts)`; per-lane SSE callbacks and post-stream persistence are in `[placeholder-generation-session.ts](src/hooks/placeholder-generation-session.ts)` and `[placeholder-*](src/hooks/placeholder-stream-handlers.ts)` helpers.
 
-### Variant Node — Multi-File Display
+### Preview Node — Multi-File Display
 
-When a result has files (agentic output), `VariantNode` shows:
-- **Generating state:** file explorer sidebar (planned + written files with status dots) + activity log + progress bar
-- **Complete state:** Preview/Code tab bar. Preview bundles all files via `bundleVirtualFS()`. Code tab shows the file explorer + raw file content.
+When a result has files (agentic output), the preview UI (`VariantNode` / canvas type `preview`) shows:
+
+- **Generating state:** file explorer sidebar (planned + written files with status dots) + activity log (**Streamdown** markdown in `variant-run/StreamdownTimeline.tsx`; table copy/download/fullscreen controls off by default) + progress bar
+- **Complete state:** Preview/Code tab bar. **Preview** registers the file map with `**/api/preview/sessions`** and loads the default entry in a sandboxed iframe via `**src`** (real relative URLs between HTML/CSS/JS). If the API is unreachable, `**bundleVirtualFS()**` inlines linked assets into `**srcDoc**` as a fallback. Code tab shows the file explorer + raw file content.
 - **Download:** produces a `.zip` via `fflate`.
 
 ### Auto-Connection Logic (`canvas-connections.ts`)
 
 Centralized rules for what connects to what when nodes are added or generated:
 
-- **`buildAutoConnectEdges`** — Structural connections only: section→compiler, design system→hypothesis.
-- **`buildModelEdgeForNode`** — When a node is added from the palette, connects it to the first available Model node on the canvas.
-- **`buildModelEdgesFromParent`** — When hypotheses are generated from an Incubator, they inherit that Incubator's connected Model — not every Model on the canvas.
+- `**buildAutoConnectEdges`** — Structural connections only: input nodes→incubator, design system→hypothesis.
+- `**buildModelEdgeForNode`** — When a node is added from the palette, connects it to the first available Model node on the canvas.
+- `**buildModelEdgesFromParent**` — When hypotheses are generated from an Incubator, they inherit that Incubator's connected Model — not every Model on the canvas.
 
 Model connections are column-scoped: a Model node connects only to adjacent-column nodes.
 
-### Lineage & compile topology (`canvas-graph.ts`)
+### Lineage & incubate topology (`canvas-graph.ts`)
 
 `computeLineage` performs a full connected-component walk (bidirectional BFS). Selecting a node highlights every node reachable through any chain of edges — including sibling inputs to shared targets. Unconnected nodes dim to 40%.
 
-`buildCompileInputs` builds the partial spec, reference designs, and critiques for `/api/compile`; it can use **domain incubator wiring** when provided so compile does not depend solely on edge topology.
+`buildIncubateInputs` builds the partial spec and reference designs for `/api/incubate`; it can use **domain incubator wiring** when provided so incubation does not depend solely on edge topology.
 
 ### Version Stacking
 
-Results accumulate across generation runs. Each result has a `runId` (UUID) and `runNumber` (sequential per hypothesis). Variant nodes reuse the same canvas node across runs, with version navigation. **`userBestOverrides`** in `generation-store` pins which complete `GenerationResult` is treated as “best” for a `variantStrategyId` ahead of evaluator scores; see `getBestCompleteResult` / `setUserBest`. **`domain-variant-selectors.ts`** maps a variant node id → hypothesis and lists sibling variant node ids for **hypothesis-scoped** full-screen stepping.
+Results accumulate across generation runs. Each result has a `runId` (UUID) and `runNumber` (sequential per hypothesis). Preview nodes reuse the same canvas node across runs, with version navigation. `**userBestOverrides`** in `generation-store` pins which complete `GenerationResult` is treated as “best” for a `strategyId` ahead of evaluator scores; see `getBestCompleteResult` / `setUserBest`. `**domain-preview-selectors.ts`** maps a preview node id → hypothesis and lists sibling preview node ids for **hypothesis-scoped** full-screen stepping.
 
 **Agentic eval-round files:** Each `EvaluationRoundSnapshot` may carry a `files` map; the orchestrator attaches the tree that was scored that round. The client persists those blobs under IndexedDB keys `{resultId}:round:{round}` and strips `files` from persisted `evaluationRounds` / provenance to save space (`StoragePort.saveRoundFiles` / `loadRoundFiles`).
 
@@ -321,95 +402,113 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 
 ### Types (`src/types/`)
 
-| File | Key types |
-|------|-----------|
-| `spec.ts` | `DesignSpec`, `SpecSection`, `ReferenceImage` (Zod schemas) |
-| `compiler.ts` | `DimensionMap`, `VariantStrategy`, `CompiledPrompt` |
-| `provider.ts` | `GenerationProvider`, `GenerationResult`, `ChatMessage`, `ProviderOptions`, `ChatResponse`, `ContentPart`, `ProviderModel` |
-| `canvas-data.ts` | Per-node typed data interfaces |
+
+| File             | Key types                                                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `spec.ts`        | `DesignSpec`, `SpecSection`, `ReferenceImage` (Zod schemas)                                                                |
+| `incubator.ts`   | `IncubationPlan`, `HypothesisStrategy`, `CompiledPrompt`                                                                   |
+| `provider.ts`    | `GenerationProvider`, `GenerationResult`, `ChatMessage`, `ProviderOptions`, `ChatResponse`, `ContentPart`, `ProviderModel` |
+| `canvas-data.ts` | Per-node typed data interfaces                                                                                             |
+
 
 ### API Client (`src/api/`)
 
-| File | Purpose |
-|------|---------|
-| `client.ts` | REST + SSE fetch wrappers. `GenerateStreamCallbacks` includes `onFile(path, content)` and `onPlan(files)` for agentic events. |
-| `types.ts` | Request/response interfaces. `GenerateRequest` includes `mode` and `thinkingLevel`. `GenerateSSEEvent` includes `file` and `plan` variants. |
+
+| File        | Purpose                                                                                                                                                                                                      |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `client.ts` | REST + SSE fetch wrappers. `GenerateStreamCallbacks` includes `onFile(path, content)` and `onPlan(files)` for agentic events. SSE frames parsed with Zod in `**src/lib/generate-sse-event-schema.ts**` (nested payloads, not only top-level `event`). |
+| `types.ts`  | Request/response interfaces for incubate, hypothesis, and observability. `GenerateSSEEvent` includes alternate **event shapes** (e.g. `file`, `plan`). Legacy `/api/generate` wire types live on the server. |
+
 
 ### Storage (`src/storage/`)
 
-| File | Purpose |
-|------|---------|
-| `types.ts` | `StoragePort` interface — `saveFiles`, `loadFiles`, `deleteFiles`, `clearAllFiles`, GC returns `filesRemoved` |
-| `browser-storage.ts` | `BrowserStorage` — wraps `idb-storage.ts` for IndexedDB (code, provenance, and files stores) |
-| `index.ts` | Default storage export |
+
+| File                 | Purpose                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `types.ts`           | `StoragePort` interface — `saveFiles`, `loadFiles`, `deleteFiles`, `clearAllFiles`, GC returns `filesRemoved` |
+| `browser-storage.ts` | `BrowserStorage` — wraps `idb-storage.ts` for IndexedDB (code, provenance, and files stores)                  |
+| `index.ts`           | Default storage export                                                                                        |
+
 
 ### Stores (`src/stores/`)
 
-| Store | Persistence | What it owns |
-|-------|-------------|--------------|
-| `spec-store` | localStorage | Active `DesignSpec`, section/image CRUD |
-| `compiler-store` | localStorage | `DimensionMap` per **incubator id** (same id as the Incubator canvas node today), `CompiledPrompt[]`, variant editing |
-| `generation-store` | localStorage + StoragePort | `GenerationResult[]` metadata in localStorage (persist v4 adds `userBestOverrides`; `evaluationRounds[].files` stripped in `partialize`), code in IndexedDB (`code` store), multi-file in IndexedDB (`files` store), optional per-eval-round file snapshots (`{resultId}:round:{n}` in the same files DB). `liveCode`, `liveFiles`, `liveFilesPlan` are in-memory only, stripped by `partialize`. |
-| `workspace-domain-store` | localStorage | Domain-first relations and payloads (hypotheses, incubator wiring, model assignments, variant slots, mirrored node content). Prefer this for workflow semantics. |
-| `canvas-store` | localStorage | React Flow nodes/edges, viewport, auto-layout, transient UI (lineage, edge status, `variantNodeIdMap`). Kept in sync with domain on connect/disconnect and compile/generate lifecycle. |
-| `prompt-store` | localStorage | Prompt template overrides (sent as per-request overrides to server). Includes `genSystemHtmlAgentic`. |
-| `theme-store` | — | Theme mode (always `dark`; static store) |
+
+| Store                    | Persistence                | What it owns                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------ | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `spec-store`             | localStorage               | Active `DesignSpec`, section/image CRUD                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `incubator-store`        | localStorage               | `IncubationPlan` per **incubator id** (same id as the Incubator canvas node today), `CompiledPrompt[]`, hypothesis editing                                                                                                                                                                                                                                                                                                                           |
+| `generation-store`       | localStorage + StoragePort | `GenerationResult[]` metadata in localStorage (persist v5; v4 adds `userBestOverrides`, v5 renames `variantStrategyId` → `strategyId`; `evaluationRounds[].files` stripped in `partialize`), code in IndexedDB (`code` store), multi-file in IndexedDB (`files` store), optional per-eval-round file snapshots (`{resultId}:round:{n}` in the same files DB). `liveCode`, `liveFiles`, `liveFilesPlan` are in-memory only, stripped by `partialize`. |
+| `workspace-domain-store` | localStorage               | Domain-first relations and payloads (hypotheses, incubator wiring, model assignments, preview slots, mirrored node content). Prefer this for workflow semantics.                                                                                                                                                                                                                                                                                     |
+| `canvas-store`           | localStorage               | React Flow nodes/edges, viewport, auto-layout, transient UI (lineage, edge status, `previewNodeIdMap`). Kept in sync with domain on connect/disconnect and incubate/generate lifecycle.                                                                                                                                                                                                                                                              |
+
 
 ### Hooks (`src/hooks/`)
 
-| File | Purpose |
-|------|---------|
-| `useGenerate.ts` | Generation orchestration — calls `apiClient.generate()` SSE stream, saves code or files to StoragePort. Forwards `mode`, `thinkingLevel`, and `genSystemHtmlAgentic` override. RAF-batches activity log updates to avoid >50 renders/sec. |
-| `useHypothesisGeneration.ts` | Reads `agentMode` and `thinkingLevel` from canvas node data at generation time; passes to `useGenerate()` |
-| `useResultCode.ts` | Loads generated code from StoragePort (single-file results) |
-| `useResultFiles.ts` | Loads multi-file result from StoragePort (agentic results) |
-| `useProviderModels.ts` | React Query hook — calls `apiClient.listModels()` |
-| `useConnectedModel.ts` | Resolves provider/model: prefers domain (`incubatorModelNodeIds` / hypothesis `modelNodeIds`), then first upstream model edge |
-| `useNodeRemoval.ts` | Shared node + associated-edges removal logic |
+
+| File                         | Purpose                                                                                                                                                                                                                                                                                  |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useHypothesisGeneration.ts` | Canvas **Design**: reads `thinkingLevel` from model wiring + evaluator resolution from domain; calls hypothesis prompt bundle + multiplexed SSE generate; uses `createPlaceholderGenerationSession` for callbacks, RAF-batched activity/thinking, trace forward, and IndexedDB finalize. |
+| `use-generation-stall-hints.ts` | Footer stall / stream-quiet hints during agentic generation (`computeGenerationStallHints` + tick); pure copy helpers in `**src/lib/generating-footer-primary.ts**`.                                                                                                                      |
+| `useResultCode.ts`           | Loads generated code from StoragePort (single-file results)                                                                                                                                                                                                                              |
+| `useResultFiles.ts`          | Loads multi-file result from StoragePort (agentic results)                                                                                                                                                                                                                               |
+| `useProviderModels.ts`       | React Query hook — calls `apiClient.listModels()`                                                                                                                                                                                                                                        |
+| `useConnectedModel.ts`       | Resolves provider/model: prefers domain (`incubatorModelNodeIds` / hypothesis `modelNodeIds`), then first upstream model edge                                                                                                                                                            |
+| `useNodeRemoval.ts`          | Shared node + associated-edges removal logic                                                                                                                                                                                                                                             |
+
 
 ### Constants (`src/constants/`)
 
 Single source of truth for string literals shared across the codebase. Eliminates magic strings and enables type-safe comparisons.
 
-| File | What it exports |
-|------|----------------|
-| `canvas.ts` | `NODE_TYPES`, `EDGE_TYPES`, `EDGE_STATUS`, `NODE_STATUS`, `buildEdgeId` |
-| `generation.ts` | `GENERATION_STATUS` |
+
+| File            | What it exports                                                         |
+| --------------- | ----------------------------------------------------------------------- |
+| `canvas.ts`     | `NODE_TYPES`, `EDGE_TYPES`, `EDGE_STATUS`, `NODE_STATUS`, `buildEdgeId` |
+| `generation.ts` | `GENERATION_STATUS`                                                     |
+
 
 ### Shared Lib Utilities (`src/lib/`)
 
-| File | Purpose |
-|------|---------|
-| `iframe-utils.ts` | `bundleVirtualFS(files)` — inlines `<link>` and `<script>` references for multi-file preview; `prepareIframeContent(code)` — single-file pass-through; `renderErrorHtml(msg)` |
-| `zip-utils.ts` | `downloadFilesAsZip(files, filename)` — bundles virtual FS into a `.zip` via `fflate` and triggers browser download |
-| `node-status.ts` | `filledOrEmpty`, `processingOrFilled`, `variantStatus` — pure helpers for node visual state |
-| `provider-fetch.ts` | Environment-agnostic fetch utilities shared by client and server (`fetchChatCompletion`, `fetchModelList`, `parseChatResponse`, `extractMessageText`) |
-| `canvas-connections.ts` | Connection validation rules and auto-connect edge builders |
-| `canvas-graph.ts` | Lineage BFS (`computeLineage`); `buildCompileInputs` for compile (optional domain wiring) |
-| `canvas-layout.ts` | Sugiyama-style layout (`computeLayout`) |
-| `extract-code.ts` | LLM response code-block extraction |
-| `error-utils.ts` | `normalizeError` — consistent error normalization |
-| `constants.ts` | UI timing constants (`FIT_VIEW_DURATION_MS`, `AUTO_LAYOUT_DEBOUNCE_MS`, etc.) |
+
+| File                    | Purpose                                                                                                                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `iframe-utils.ts`       | Re-exports `bundleVirtualFS` — optional **fallback** for multi-file `srcDoc` when preview API registration fails; `prepareIframeContent(code)` — single-file pass-through; `renderErrorHtml(msg)` |
+| `preview-entry.ts`      | `resolvePreviewEntryPath`, `encodeVirtualPathForUrl`, `preferredArtifactFileOrder` — shared by bundler, preview URLs, and eval                                                                    |
+| `zip-utils.ts`          | `downloadFilesAsZip(files, filename)` — bundles virtual FS into a `.zip` via `fflate` and triggers browser download                                                                               |
+| `node-status.ts`        | `filledOrEmpty`, `processingOrFilled`, `previewNodeStatus` (preview card ring/border state) — pure helpers                                                                                        |
+| `provider-fetch.ts`     | Environment-agnostic fetch utilities shared by client and server (`fetchChatCompletion`, `fetchModelList`, `parseChatResponse`, `extractMessageText`)                                             |
+| `canvas-connections.ts` | Connection validation rules and auto-connect edge builders                                                                                                                                        |
+| `canvas-graph.ts`       | Lineage BFS (`computeLineage`); `buildIncubateInputs` for `/api/incubate` (optional domain wiring)                                                                                                |
+| `canvas-layout.ts`      | Sugiyama-style layout (`computeLayout`)                                                                                                                                                           |
+| `error-utils.ts`        | `normalizeError` — consistent error normalization                                                                                                                                                 |
+| `sse-diagnostics.ts`    | Dev-only `SseStreamDiagnostics` — event counters, drop tracker, `window.__SSE_DIAG`                                                                                                               |
+| `sse-reader.ts`         | Shared SSE framing: `readSseEventStream` — pairs `event:`/`data:` lines across TCP chunks                                                                                                         |
+| `constants.ts`          | UI timing constants (`FIT_VIEW_DURATION_MS`, `AUTO_LAYOUT_DEBOUNCE_MS`, etc.)                                                                                                                     |
+
 
 ## Key Design Decisions
 
-**Why a Hono server on Vercel.** All LLM orchestration runs server-side. API keys never reach the browser. LLM calls and SSE streaming run in a serverless function. Vercel supports 300s timeout (Hobby) or 800s (Pro) for streaming functions — sufficient for both single-shot and agentic generation.
+**Why a Hono server on Vercel.** All LLM orchestration runs server-side. API keys never reach the browser. LLM calls and SSE streaming run in a serverless function. Vercel supports 300s timeout (Hobby) or 800s (Pro) for streaming functions — sufficient for long agentic generation and evaluation.
 
-**Why prompts are sent per-request.** The prompt store lives in the browser (localStorage). The server is stateless — it carries defaults and applies client-provided overrides. No shared state between server and client beyond the request payload.
+**Why the server resolves prompts from the repo.** Prompt bodies live in `**skills/*/SKILL.md`** and `**prompts/designer-agentic-system/PROMPT.md**`; `**server/lib/prompt-resolution.ts**` loads them per request. The SPA sends workspace/spec payloads and model settings; prompt text is never client-editable.
 
-**Why `src/lib/prompts/shared-defaults.ts`.** Prompt text is the same on client and server. A single shared module is the one source of truth. Both `src/lib/prompts/defaults.ts` (client) and `server/lib/prompts/defaults.ts` (server) import from it. `tsconfig.server.json` explicitly includes the file.
+**Why `.prompt-versions/` and `_versions/` exist.** Tunable copies (`**skills/`**, `**prompts/designer-agentic-system/PROMPT.md**`, `**src/lib/rubric-weights.json**`) get **shadow snapshots** before automated overwrites: **[meta-harness/version-store.ts](meta-harness/version-store.ts)** implements **`snapshotBeforeWrite`** and **`snapAll`**, wired from meta-harness and **`scripts/snap.ts`**. Skill/PROMPT snapshots live under **`skills/<key>/_versions/`** and **`prompts/designer-agentic-system/_versions/`**; rubric JSON stays under **`.prompt-versions/snapshots/`**; **`manifest.jsonl`** is the append-only log. **`_versions/`** is **not** included in Pi sandbox seeding (see **`loadSkillPackageSeedFiles`** in `**skill-discovery.ts**` — history stays out of the agent context). Operators run **`pnpm snap`** (changed files only) or rely on the pre-commit hook — see **[USER_GUIDE.md § Version history](USER_GUIDE.md#version-history)**. Meta-harness write paths: **[meta-harness/VERSIONING.md](meta-harness/VERSIONING.md)**.
 
-**Why `pi-sdk/` exists.** `@mariozechner/pi-coding-agent` / `pi-ai` can ship breaking changes. All direct imports live in [`server/services/pi-sdk/types.ts`](server/services/pi-sdk/types.ts) (and `stream-budget.ts` for Pi context heuristics). Upgrades start there; app code imports only from `pi-sdk/` + orchestration modules.
+**Why `src/lib/prompts/defaults.ts` (no `shared-defaults.ts`).** It defines `**PromptKey`** and `**PROMPT_KEYS**` only; `**tsconfig.server.json**` includes it so server and SPA share identifiers. **Bodies** are on disk in skills and `**PROMPT.md`**, not in a shared TypeScript defaults module.
 
-**Why SDK-managed compaction.** The Pi session uses **token-aware compaction** built into the coding-agent stack instead of a bespoke message-window strategy. App prompts still carry full hypothesis/spec context on each orchestrator call.
+**Why `pi-sdk/` exists.** `@mariozechner/pi-coding-agent` / `pi-ai` can ship breaking changes. All direct imports live in `[server/services/pi-sdk/types.ts](server/services/pi-sdk/types.ts)` (and `stream-budget.ts` for Pi context heuristics). Upgrades start there; app code imports only from `pi-sdk/` + orchestration modules.
+
+**Why SDK-managed compaction.** The Pi session uses **token-aware compaction** from `@mariozechner/pi-coding-agent` (summarize-and-keep-recent). The app does **not** rely on Pi loading `agent-context-compaction` from a prompt catalog (`sandbox-resource-loader` keeps `getPrompts` empty). Instead, `server/services/designer-compaction-extension.ts` handles `session_before_compact` and calls Pi `compact(...)` with the `**agent-context-compaction`** skill body from disk (via `**prompt-resolution.ts**`) merged as the summarizer’s **“Additional focus”** (Pi’s auto path otherwise passes `undefined`). **Earlier threshold:** `createSandboxResourceLoader` uses an in-memory `SettingsManager` shared with `createAgentSession`, with `reserveTokens ≈ max(24k, 28% × contextWindow)` so auto-compaction tends to run around **~72%** of the window (vs. Pi defaults that wait longer on large windows). **Micro-prune:** Pi’s summarization serializer already caps each tool-result chunk (~2000 chars) when building the summarizer prompt (`serializeConversation` in the SDK). **Observability:** `pi-session-event-bridge` maps `compaction_start` / `compaction_end` to progress + `trace` rows (tokens before, summary size, file-list counts, rehydration hint). **Rehydration:** checkpoint copy + system prompt tell the agent to re-read `AGENTS.md`, todos, and touched files after compaction — durable sandbox state is the source of truth, not the chat alone.
 
 **Why `src/lib/provider-fetch.ts`.** LLM fetch logic is identical on client and server, but `import.meta.env` (client) and `process.env` (server) are incompatible. The shared module contains only environment-agnostic functions. Client and server each have their own `buildChatRequestFromMessages` that reads the correct env API, then re-export everything else from the shared module.
 
 **Why `src/constants/`.** String literals for node types, edge types, and generation statuses appear across stores, hooks, components, and edge/node definitions. A dedicated constants layer eliminates magic strings and ensures TypeScript narrows to exact union types at every call site.
 
-**Why SSE for generation.** Each variant is a separate SSE stream. Single-shot events: `progress`, `code`, `done`. Agentic events additionally include `activity`, `plan`, and `file`. The client manages sequencing across variants.
+**Why SSE for generation.** Each hypothesis lane is a separate SSE stream. Events include `progress`, `activity`, `plan`, `file`, evaluator progress, and `done`. The client manages sequencing across lanes. **Dev diagnostics:** `SseStreamDiagnostics` (client, `src/lib/sse-diagnostics.ts`) tracks event counts, drops, and timing per stream — inspect via `window.__SSE_DIAG` in the browser console. Server-side `generate-execution` logs a write-count summary at stream close. `pi-session-event-bridge` uses `safeBridgeEmit` so async failures are logged instead of silently swallowed, and unknown Pi event types print in dev.
 
-**Why `bundleVirtualFS` on the client.** The agentic agent produces separate files (index.html, styles.css, app.js). The sandboxed iframe environment has no file system — it renders a single HTML string. `bundleVirtualFS` inlines CSS and JS at display time, keeping the stored files pristine and separately downloadable.
+**Why URL-backed preview.** Agentic runs produce a **virtual file tree**. The API serves it at `**/api/preview/sessions/:id/...`** so iframe `**src`** uses real relative URLs (multi-page `a href` works). Sessions are ephemeral (TTL), not durable storage.
+
+**Why `bundleVirtualFS` still exists.** Fallback when preview registration fails, and for **evaluator** `bundled_preview_html` context. It inlines `<link>` / `<script src>` from the entry HTML determined by `**resolvePreviewEntryPath`**.
 
 **Why StoragePort.** Generated code currently lives in IndexedDB (browser-local). The `StoragePort` abstraction allows swapping to a server-backed database later without changing any consuming code. The files store (agentic output) is added alongside the existing code and provenance stores.
 
@@ -417,23 +516,42 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 **Why two TypeScript configs.** `tsconfig.app.json` targets the browser (DOM lib, JSX, Vite types). `tsconfig.server.json` targets Node.js (no DOM). Prevents browser globals from leaking into server code.
 
-**Why sandboxed iframes with srcdoc.** Generated code is untrusted. `sandbox="allow-scripts"` enables JS but blocks navigation, forms, and parent DOM access.
+**Why sandboxed iframes.** Generated code is untrusted. Previews use `**allow-scripts`**; URL-backed previews also use `**allow-same-origin`** so the document can load sibling paths from the same preview origin. Tighten if the threat model changes.
+
+## Meta-harness (optional CLI)
+
+The `**meta-harness/**` package is a repo-local **Node CLI** (`pnpm meta-harness`, see root `package.json`) that exercises the same `**/api/*`** flows as the canvas (incubate, hypothesis generate + eval, **inputs-generate**) using JSON fixtures, an OpenRouter-based **proposer**, and gitignored `**meta-harness/history/session-<mode>-*/`** artifacts (folder name includes `**incubate` | `e2e` | `design` | `inputs`** before the timestamp; per-session `**PROMOTION_REPORT.md**` at the session root). **Four modes:** `--mode=incubate` (hypothesis rubric), `--mode=inputs` (inputs auto-fill quality rubric), `--mode=design` (agentic build + eval), `--mode=e2e` (inputs-gen → incubate → build → eval). Before the run loop it can **preflight** the most recent completed session: compare `**skills-snapshot/`** to `**skills/**` and `**candidate-*/rubric-weights.json**` to `**src/lib/rubric-weights.json**`, showing unified diffs in Ink (or stdout in `**--plain**`) unless `**--skip-promotion-check**` or `**--improve**`. In a TTY, `**P**` applies drift to `**skills/**` and `**src/lib/rubric-weights.json**` only. Designer system copy lives in `**prompts/designer-agentic-system/PROMPT.md**` — promote it via normal git, not harness `**P**`. `**--promote**` is preflight-only (plus health); `**--plain --promote**` prints diffs without auto-apply. It is not bundled in the SPA build. Operator runbook: [meta-harness/README.md](meta-harness/README.md) and [meta-harness/META_HARNESS_OUTER_LOOP.md](meta-harness/META_HARNESS_OUTER_LOOP.md).
+
+**Two promotion surfaces** (repo source → what preflight compares → `**P`** promotion target):
+
+
+| Surface            | Repo source of truth               | Compared in preflight                         | After `**P`**                                                                                      |
+| ------------------ | ---------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| **Skills**         | `skills/` (per-package `SKILL.md`) | `**skills-snapshot/`** vs `**skills/`**       | Copy / delete files under `**skills/**`                                                            |
+| **Rubric weights** | `src/lib/rubric-weights.json`      | Winner `**rubric-weights.json`** vs repo file | Overwrite `**rubric-weights.json`**; **restart API** so `**GET /api/config`** exposes new defaults |
+
+
+During a meta-harness **run**, repo `**skills/`** is **restored** from per-session `**skills-baseline/`** between candidates and in `**finally`**, so only promotion (`**P**`) or manual steps persist skill edits to the app tree.
 
 ## Adding a New Provider
 
 1. Create `server/services/providers/yourprovider.ts`
 2. Implement the `GenerationProvider` interface from `src/types/provider.ts`
 3. Register it in `server/services/providers/registry.ts`
-4. Add the provider config to `getProviderConfig()` in `server/services/compiler.ts`
+4. Add any server env defaults or lockdown mappings needed for the new provider id (see `server/lib/lockdown-model.ts` and provider `listModels` registration)
 
 ## Deployment
 
 **Vercel:**
+
 - `vercel.json` configures static output from `dist/` and API routes via `api/[[...route]].ts`
 - Set `OPENROUTER_API_KEY` as a Vercel environment variable
 - `pnpm build` produces the SPA; Vercel bundles the serverless function automatically
+- **Preview sessions** are in-memory on one Node instance. On multi-instance / cold-start serverless, `POST /api/preview/sessions` and follow-up `GET` may hit different workers — the UI falls back to `bundleVirtualFS` `srcDoc` when requests fail; for sticky preview in production, persist maps (e.g. Redis) or route preview entirely client-side.
 
 **Local dev:**
+
 - `pnpm dev` — Vite dev server (port 5173)
 - `pnpm dev:server` — Hono API server (port 3001)
-- Vite proxy forwards `/api/*` to Hono
+- Vite proxy forwards `/api/`* to Hono
+

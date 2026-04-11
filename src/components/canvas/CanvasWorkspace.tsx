@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -11,11 +11,13 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 
-import { useCanvasStore, SECTION_NODE_TYPES, GRID_SIZE, type CanvasNodeType } from '../../stores/canvas-store';
+import { useCanvasStore, INPUT_NODE_TYPES, GRID_SIZE, type CanvasNodeType } from '../../stores/canvas-store';
 import { useGenerationStore } from '../../stores/generation-store';
 import { GENERATION_STATUS } from '../../constants/generation';
-import { VARIANT_NODE_GENERATING_Z_INDEX } from '../../constants/canvas';
-import { FIT_VIEW_DELAY_MS, FIT_VIEW_DURATION_MS } from '../../lib/constants';
+import { PREVIEW_NODE_GENERATING_Z_INDEX } from '../../constants/canvas';
+import { getPreviewNodeData } from '../../lib/canvas-node-data';
+import { scheduleCanvasFitView } from '../../lib/canvas-fit-view';
+import type { WorkspaceNode } from '../../types/workspace-graph';
 import { toReactFlowEdges, toReactFlowNodes } from '../../workspace/reactflow-adapter';
 import { nodeTypes } from './nodes/node-types';
 import { edgeTypes } from './edges/edge-types';
@@ -24,15 +26,48 @@ import CanvasToolbar from './CanvasToolbar';
 import CanvasContextMenu from './CanvasContextMenu';
 import VariantPreviewOverlay from './VariantPreviewOverlay';
 import VariantRunInspector from './VariantRunInspector';
+import OptionalInputsTip from './OptionalInputsTip';
 import { useCanvasOrchestrator } from './hooks/useCanvasOrchestrator';
 import { useNodeDeletion } from './hooks/useNodeDeletion';
 import { useFeedbackLoopConnection } from './hooks/useFeedbackLoopConnection';
+import { PermanentDeleteConfirmProvider } from '../../contexts/PermanentDeleteConfirmProvider';
+import { useAppConfig } from '../../hooks/useAppConfig';
+import { useSyncEvaluatorDefaultsFromConfig } from '../../hooks/useSyncEvaluatorDefaultsFromConfig';
+import { reconcileLockdownCanvasState } from '../../lib/lockdown-reconcile';
+
 function CanvasInner() {
   useCanvasOrchestrator();
-  useNodeDeletion();
+  const { setCenter, getNodes, getEdges, fitView } = useReactFlow();
+  useNodeDeletion({ getNodes, getEdges });
+  useSyncEvaluatorDefaultsFromConfig();
+
+  const { data: appConfig } = useAppConfig();
+  const lockdown = appConfig?.lockdown === true;
+
+  const [canvasHydrated, setCanvasHydrated] = useState(() =>
+    useCanvasStore.persist.hasHydrated(),
+  );
+
+  useEffect(() => {
+    const unsub = useCanvasStore.persist.onFinishHydration(() => {
+      setCanvasHydrated(true);
+    });
+    return unsub;
+  }, []);
+
+  const lockdownReconciledRef = useRef(false);
+  useEffect(() => {
+    if (!lockdown) {
+      lockdownReconciledRef.current = false;
+      return;
+    }
+    if (!canvasHydrated) return;
+    if (lockdownReconciledRef.current) return;
+    lockdownReconciledRef.current = true;
+    reconcileLockdownCanvasState();
+  }, [lockdown, canvasHydrated]);
   const { handleConnect } = useFeedbackLoopConnection();
-  
-  const { setCenter, getNodes, fitView } = useReactFlow();
+
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
   const viewport = useCanvasStore((s) => s.viewport);
@@ -42,7 +77,7 @@ function CanvasInner() {
     const generatingByStrategy = new Set(
       genResults
         .filter((r) => r.status === GENERATION_STATUS.GENERATING)
-        .map((r) => r.variantStrategyId),
+        .map((r) => r.strategyId),
     );
     const generatingIds = new Set(
       genResults
@@ -50,14 +85,15 @@ function CanvasInner() {
         .map((r) => r.id),
     );
     return toReactFlowNodes(nodes).map((n) => {
-      if (n.type !== 'variant') return n;
-      const data = n.data as { refId?: string; variantStrategyId?: string };
-      const vsId = data.variantStrategyId;
+      if (n.type !== 'preview') return n;
+      const data = getPreviewNodeData(n as unknown as WorkspaceNode);
+      const vsId = data?.strategyId;
+      const refId = data?.refId;
       const bumpZ =
         (vsId != null && generatingByStrategy.has(vsId)) ||
-        (!!data.refId && generatingIds.has(data.refId));
+        (!!refId && generatingIds.has(refId));
       if (bumpZ) {
-        return { ...n, zIndex: VARIANT_NODE_GENERATING_Z_INDEX };
+        return { ...n, zIndex: PREVIEW_NODE_GENERATING_Z_INDEX };
       }
       return n;
     });
@@ -86,10 +122,7 @@ function CanvasInner() {
 
   useEffect(() => {
     if (!pendingFitViewAfterTemplate) return;
-    const id = window.setTimeout(() => {
-      fitView({ duration: FIT_VIEW_DURATION_MS, padding: 0.15 });
-      consumePendingFitView();
-    }, FIT_VIEW_DELAY_MS);
+    const id = scheduleCanvasFitView(fitView, consumePendingFitView);
     return () => window.clearTimeout(id);
   }, [pendingFitViewAfterTemplate, fitView, consumePendingFitView]);
 
@@ -157,15 +190,15 @@ function CanvasInner() {
 
   const miniMapNodeColor = useCallback((node: { type?: string }) => {
     const t = node.type as CanvasNodeType | undefined;
-    if (t && SECTION_NODE_TYPES.has(t)) return 'var(--color-fg-muted)'; // inputs
+    if (t && INPUT_NODE_TYPES.has(t)) return 'var(--color-fg-muted)'; // inputs
+    if (t === 'inputGhost' || t === 'hypothesisGhost') return 'var(--color-fg-faint)';
     switch (t) {
-      case 'compiler':
+      case 'incubator':
       case 'designSystem':
       case 'model':
         return 'var(--color-accent)'; // processing
       case 'hypothesis':
-      case 'variant':
-      case 'critique':
+      case 'preview':
         return 'var(--color-info)'; // output
       default:
         return 'var(--color-border)';
@@ -204,6 +237,7 @@ function CanvasInner() {
             minZoom={0.15}
             maxZoom={2}
             proOptions={{ hideAttribution: true }}
+            deleteKeyCode={null}
           >
             <Background
               variant={BackgroundVariant.Dots}
@@ -222,6 +256,7 @@ function CanvasInner() {
               />
             )}
             <CanvasToolbar />
+            <OptionalInputsTip />
           </ReactFlow>
           {contextMenu && (
             <CanvasContextMenu
@@ -241,7 +276,9 @@ function CanvasInner() {
 export default function CanvasWorkspace() {
   return (
     <ReactFlowProvider>
-      <CanvasInner />
+      <PermanentDeleteConfirmProvider>
+        <CanvasInner />
+      </PermanentDeleteConfirmProvider>
     </ReactFlowProvider>
   );
 }

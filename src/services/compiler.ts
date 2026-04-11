@@ -1,12 +1,12 @@
 import type { DesignSpec, ReferenceImage } from '../types/spec';
-import type { CompiledPrompt, DimensionMap, VariantStrategy } from '../types/compiler';
-import { buildVariantPrompt } from '../lib/prompts/variant-prompt';
+import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../types/incubator';
+import { buildHypothesisPrompt } from '../lib/prompts/hypothesis-prompt';
 import { generateId, now } from '../lib/utils';
 
-/** Assemble compiled prompts for each variant strategy in the dimension map. */
+/** Assemble compiled prompts for each hypothesis strategy in the incubation plan. */
 export function compileVariantPrompts(
   spec: DesignSpec,
-  dimensionMap: DimensionMap,
+  incubationPlan: IncubationPlan,
   variantTemplate: string,
   designSystemOverride?: string,
   extraImages?: ReferenceImage[],
@@ -16,11 +16,11 @@ export function compileVariantPrompts(
     ...(extraImages ?? []),
   ];
 
-  return dimensionMap.variants.map((strategy: VariantStrategy) => ({
+  return incubationPlan.hypotheses.map((strategy: HypothesisStrategy) => ({
     id: generateId(),
-    variantStrategyId: strategy.id,
+    strategyId: strategy.id,
     specId: spec.id,
-    prompt: buildVariantPrompt(spec, strategy, variantTemplate, designSystemOverride),
+    prompt: buildHypothesisPrompt(spec, strategy, variantTemplate, designSystemOverride),
     images: allImages,
     compiledAt: now(),
   }));

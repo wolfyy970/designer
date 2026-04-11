@@ -11,10 +11,10 @@ export function processingOrFilled(isProcessing: boolean): NodeStatus {
 }
 
 /**
- * Full variant status: handles archival, error, generating, filled, and empty states.
- * Mirrors the progression shown in VariantNode.
+ * Preview node visual status: archival, error, generating, filled, and empty.
+ * Matches the ring/border progression in the preview card (`VariantNode.tsx`).
  */
-export function variantStatus(opts: {
+export function previewNodeStatus(opts: {
   isArchived: boolean;
   isError: boolean;
   isGenerating: boolean;

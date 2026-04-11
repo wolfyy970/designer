@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { EDGE_STATUS, EDGE_TYPES, NODE_TYPES } from '../../constants/canvas';
 import type { DesignSpec, ReferenceImage, SpecSectionId } from '../../types/spec';
 import type { WorkspaceEdge, WorkspaceNode } from '../../types/workspace-graph';
-import { buildCompileInputs } from '../canvas-graph';
+import { buildIncubateInputs } from '../canvas-graph';
 
 vi.mock('../../services/idb-storage', () => ({
   loadCode: vi.fn().mockResolvedValue(undefined),
@@ -39,7 +39,7 @@ function node(id: string, type: WorkspaceNode['type']): WorkspaceNode {
   return { id, type, position: { x: 0, y: 0 }, data: {} };
 }
 
-describe('buildCompileInputs', () => {
+describe('buildIncubateInputs', () => {
   it('uses domain incubator wiring when non-empty (ignores missing edges to compiler)', async () => {
     const spec = makeSpec();
     const nodes: WorkspaceNode[] = [
@@ -48,12 +48,11 @@ describe('buildCompileInputs', () => {
     ];
     const edges: WorkspaceEdge[] = [];
     const wiring = {
-      sectionNodeIds: ['brief1'],
-      variantNodeIds: [] as string[],
-      critiqueNodeIds: [] as string[],
+      inputNodeIds: ['brief1'],
+      previewNodeIds: [] as string[],
     };
 
-    const out = await buildCompileInputs(nodes, edges, spec, 'compiler-orphan', [], wiring);
+    const out = await buildIncubateInputs(nodes, edges, spec, 'compiler-orphan', [], wiring);
 
     expect(out.partialSpec.sections['design-brief'].content).toBe('CONNECTED_BRIEF');
     // Objectives has text in the shared spec even though this wiring lists only the brief node;
@@ -64,7 +63,7 @@ describe('buildCompileInputs', () => {
   it('falls back to incoming edges when wiring is empty or omitted', async () => {
     const spec = makeSpec();
     // Unwired sections with no text stay excluded; if the brief had text here it would still
-    // appear because the spec store is shared across section nodes.
+    // appear because the spec store is shared across input nodes.
     spec.sections['design-brief'].content = '';
     const nodes: WorkspaceNode[] = [
       node('brief1', NODE_TYPES.DESIGN_BRIEF),
@@ -81,16 +80,15 @@ describe('buildCompileInputs', () => {
     ];
 
     const emptyWiring = {
-      sectionNodeIds: [] as string[],
-      variantNodeIds: [] as string[],
-      critiqueNodeIds: [] as string[],
+      inputNodeIds: [] as string[],
+      previewNodeIds: [] as string[],
     };
 
-    const withEdge = await buildCompileInputs(nodes, edges, spec, 'comp1', [], emptyWiring);
+    const withEdge = await buildIncubateInputs(nodes, edges, spec, 'comp1', [], emptyWiring);
     expect(withEdge.partialSpec.sections['objectives-metrics'].content).toBe('OBJ');
     expect(withEdge.partialSpec.sections['design-brief'].content).toBe('');
 
-    const noWiringArg = await buildCompileInputs(nodes, edges, spec, 'comp1', []);
+    const noWiringArg = await buildIncubateInputs(nodes, edges, spec, 'comp1', []);
     expect(noWiringArg.partialSpec.sections['objectives-metrics'].content).toBe('OBJ');
     expect(noWiringArg.partialSpec.sections['design-brief'].content).toBe('');
   });

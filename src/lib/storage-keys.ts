@@ -7,13 +7,15 @@ export const STORAGE_KEYS = {
   ACTIVE_CANVAS: 'auto-designer-active-canvas',
   CANVAS: 'auto-designer-canvas',
   WORKSPACE_DOMAIN: 'auto-designer-workspace-domain',
-  COMPILER: 'auto-designer-compiler',
+  INCUBATOR: 'auto-designer-incubator',
   GENERATION: 'auto-designer-generation',
   PROMPTS: 'auto-designer-prompts',
+  EVALUATOR_DEFAULTS: 'auto-designer-evaluator-defaults',
 
   // localStorage (manual)
+  /** User dismissed the optional-input tip on the canvas (string value is legacy; stable across renames). */
+  CANVAS_OPTIONAL_INPUTS_TIP_DISMISSED: 'auto-designer-canvas-optional-sections-tip-dismissed',
   CANVASES: 'auto-designer-canvases',
-  API_KEYS: 'auto-designer-api-keys',
   MIGRATION_FLAG: 'auto-designer-migrated-idb',
 
   // IndexedDB database names (idb-keyval)
@@ -22,16 +24,19 @@ export const STORAGE_KEYS = {
   IDB_FILES: 'auto-designer-files',
 } as const;
 
+/** Value stored under `STORAGE_KEYS.CANVAS_OPTIONAL_INPUTS_TIP_DISMISSED` when the tip is dismissed. */
+export const CANVAS_OPTIONAL_INPUTS_TIP_DISMISSED_VALUE = '1';
+
 /** Keys backed by localStorage (not IndexedDB DB names). Used by branding migration. */
 export const PERSISTED_LOCAL_STORAGE_KEY_NAMES = [
   'ACTIVE_CANVAS',
   'CANVAS',
   'WORKSPACE_DOMAIN',
-  'COMPILER',
+  'INCUBATOR',
   'GENERATION',
   'PROMPTS',
+  'EVALUATOR_DEFAULTS',
   'CANVASES',
-  'API_KEYS',
   'MIGRATION_FLAG',
 ] as const satisfies ReadonlyArray<keyof typeof STORAGE_KEYS>;
 

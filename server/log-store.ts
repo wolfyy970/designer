@@ -13,7 +13,7 @@ export interface LlmLogEntry {
   /** Optional client- or server-issued id to tie rows to one generate / hypothesis run. */
   correlationId?: string;
   source:
-    | 'compiler'
+    | 'incubator'
     | 'planner'
     | 'builder'
     | 'designSystem'

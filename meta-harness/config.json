@@ -1,0 +1,20 @@
+{
+  "mode": "incubate",
+
+  "apiBaseUrl": "http://127.0.0.1:3001/api",
+  "evalRunsBaseDir": "",
+  "iterations": 2,
+
+  "proposerModel": "anthropic/claude-sonnet-4",
+  "proposerMaxToolRounds": 50,
+
+  "defaultIncubatorProvider": "openrouter",
+  "incubateProvider": "openrouter",
+  "incubateModel": "minimax/minimax-m2.5",
+  "hypothesisEvalModel": "",
+  "incubateHypothesisCount": 5,
+  "hypothesisRubricTimeoutMs": 300000,
+
+  "supportsVision": false,
+  "agenticMaxRevisionRounds": 2
+}

@@ -1,21 +1,23 @@
-import SectionNode from './SectionNode';
-import CompilerNode from './CompilerNode';
+import InputNode from './InputNode';
+import InputGhostNode from './InputGhostNode';
+import IncubatorNode from './IncubatorNode';
 import DesignSystemNode from './DesignSystemNode';
 import HypothesisNode from './HypothesisNode';
+import HypothesisGhostNode from './HypothesisGhostNode';
 import VariantNode from './VariantNode';
-import CritiqueNode from './CritiqueNode';
 import ModelNode from './ModelNode';
 
 export const nodeTypes = {
-  designBrief: SectionNode,
-  existingDesign: SectionNode,
-  researchContext: SectionNode,
-  objectivesMetrics: SectionNode,
-  designConstraints: SectionNode,
+  inputGhost: InputGhostNode,
+  designBrief: InputNode,
+  existingDesign: InputNode,
+  researchContext: InputNode,
+  objectivesMetrics: InputNode,
+  designConstraints: InputNode,
   designSystem: DesignSystemNode,
-  compiler: CompilerNode,
+  incubator: IncubatorNode,
   hypothesis: HypothesisNode,
-  variant: VariantNode,
-  critique: CritiqueNode,
+  hypothesisGhost: HypothesisGhostNode,
+  preview: VariantNode,
   model: ModelNode,
 };

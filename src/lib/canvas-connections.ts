@@ -1,27 +1,32 @@
-import { NODE_TYPES, EDGE_TYPES, EDGE_STATUS, buildEdgeId } from '../constants/canvas';
+import {
+  NODE_TYPES,
+  EDGE_TYPES,
+  EDGE_STATUS,
+  INPUT_NODE_TYPES,
+  buildEdgeId,
+} from '../constants/canvas';
 
 // Local mirror of CanvasNodeType (avoids circular import with canvas-store)
 type NodeType =
   | 'designBrief' | 'existingDesign' | 'researchContext'
   | 'objectivesMetrics' | 'designConstraints' | 'designSystem'
-  | 'compiler' | 'hypothesis' | 'variant' | 'critique'
+  | 'incubator' | 'hypothesis' | 'preview'
   | 'model';
 
 // ── Topology ────────────────────────────────────────────────────────
 
 /** Valid source→target type pairs for manual edge creation */
 export const VALID_CONNECTIONS: Record<NodeType, Set<NodeType>> = {
-  designBrief: new Set(['compiler']),
-  existingDesign: new Set(['compiler']),
-  researchContext: new Set(['compiler']),
-  objectivesMetrics: new Set(['compiler']),
-  designConstraints: new Set(['compiler']),
+  designBrief: new Set(['incubator']),
+  existingDesign: new Set(['incubator']),
+  researchContext: new Set(['incubator']),
+  objectivesMetrics: new Set(['incubator']),
+  designConstraints: new Set(['incubator']),
   designSystem: new Set(['hypothesis']),
-  compiler: new Set(['hypothesis']),
-  hypothesis: new Set(['variant']),
-  variant: new Set(['compiler', 'existingDesign', 'critique']),
-  critique: new Set(['compiler']),
-  model: new Set(['compiler', 'hypothesis', 'designSystem']),
+  incubator: new Set(['hypothesis']),
+  hypothesis: new Set(['preview']),
+  preview: new Set(['incubator', 'existingDesign']),
+  model: new Set(['incubator', 'hypothesis', 'designSystem']),
 };
 
 export function isValidConnection(sourceType: string, targetType: string): boolean {
@@ -30,8 +35,8 @@ export function isValidConnection(sourceType: string, targetType: string): boole
 
 // ── Prerequisite rules ──────────────────────────────────────────────
 
-export const PREREQUISITE_RULES: Partial<Record<string, string>> = {
-  compiler: 'model',
+const PREREQUISITE_RULES: Partial<Record<string, string>> = {
+  incubator: 'model',
   hypothesis: 'model',
   designSystem: 'model',
 };
@@ -52,11 +57,6 @@ interface MinimalNode { id: string; type?: string }
 interface MinimalEdge { source: string; target: string }
 export interface AutoEdge { id: string; source: string; target: string; type: typeof EDGE_TYPES.DATA_FLOW; data: { status: typeof EDGE_STATUS.IDLE } }
 
-const SECTION_TYPES: Set<string> = new Set([
-  NODE_TYPES.DESIGN_BRIEF, NODE_TYPES.EXISTING_DESIGN, NODE_TYPES.RESEARCH_CONTEXT,
-  NODE_TYPES.OBJECTIVES_METRICS, NODE_TYPES.DESIGN_CONSTRAINTS,
-]);
-
 function makeEdge(source: string, target: string): AutoEdge {
   return { id: buildEdgeId(source, target), source, target, type: EDGE_TYPES.DATA_FLOW, data: { status: EDGE_STATUS.IDLE } };
 }
@@ -66,7 +66,7 @@ function makeEdge(source: string, target: string): AutoEdge {
 /**
  * Compute structural edges when a node is added from the palette.
  * Model connections are handled separately via buildModelEdgeForNode
- * or buildModelEdgesFromParent — this only wires sections↔compiler
+ * or buildModelEdgesFromParent — this only wires inputs↔incubator
  * and designSystem↔hypothesis.
  */
 export function buildAutoConnectEdges(
@@ -76,17 +76,17 @@ export function buildAutoConnectEdges(
 ): AutoEdge[] {
   const edges: AutoEdge[] = [];
 
-  if (SECTION_TYPES.has(type)) {
-    const compilers = existingNodes.filter((n) => n.type === NODE_TYPES.COMPILER);
-    if (compilers.length === 1) {
-      edges.push(makeEdge(newNodeId, compilers[0].id));
+  if (INPUT_NODE_TYPES.has(type)) {
+    const incubators = existingNodes.filter((n) => n.type === NODE_TYPES.INCUBATOR);
+    if (incubators.length === 1) {
+      edges.push(makeEdge(newNodeId, incubators[0].id));
     }
   }
 
-  if (type === NODE_TYPES.COMPILER) {
-    const existingCompilers = existingNodes.filter((n) => n.type === NODE_TYPES.COMPILER);
+  if (type === NODE_TYPES.INCUBATOR) {
+    const existingCompilers = existingNodes.filter((n) => n.type === NODE_TYPES.INCUBATOR);
     if (existingCompilers.length === 0) {
-      for (const sn of existingNodes.filter((n) => SECTION_TYPES.has(n.type ?? ''))) {
+      for (const sn of existingNodes.filter((n) => INPUT_NODE_TYPES.has(n.type ?? ''))) {
         edges.push(makeEdge(sn.id, newNodeId));
       }
     }
@@ -102,6 +102,11 @@ export function buildAutoConnectEdges(
     for (const ds of existingNodes.filter((n) => n.type === NODE_TYPES.DESIGN_SYSTEM)) {
       edges.push(makeEdge(ds.id, newNodeId));
     }
+    /** When only one incubator exists, wire it to the new hypothesis (multi-incubator canvases stay manual). */
+    const incubators = existingNodes.filter((n) => n.type === NODE_TYPES.INCUBATOR);
+    if (incubators.length === 1) {
+      edges.push(makeEdge(incubators[0].id, newNodeId));
+    }
   }
 
   return edges;
@@ -112,7 +117,7 @@ export function buildAutoConnectEdges(
 /**
  * Find model node(s) connected as inputs to a specific node.
  */
-export function findModelsConnectedTo(
+function findModelsConnectedTo(
   parentId: string,
   nodes: MinimalNode[],
   edges: MinimalEdge[],
@@ -129,7 +134,8 @@ export function findModelsConnectedTo(
 
 /**
  * Build model→child edges scoped to a specific parent.
- * Propagates the parent's model connections to the child nodes.
+ * Uses the **first** model wired to the parent only — a hypothesis (or design system)
+ * may only have one model edge; incubators may still have multiple models upstream.
  * Falls back to the first model on the canvas if the parent has none.
  */
 export function buildModelEdgesFromParent(
@@ -143,6 +149,8 @@ export function buildModelEdgesFromParent(
   if (models.length === 0) {
     const firstModel = nodes.find((n) => n.type === NODE_TYPES.MODEL);
     if (firstModel) models = [firstModel];
+  } else {
+    models = [models[0]!];
   }
 
   const result: AutoEdge[] = [];
@@ -163,7 +171,7 @@ export function buildModelEdgeForNode(
   nodeType: string,
   existingNodes: MinimalNode[],
 ): AutoEdge[] {
-  const needsModel: Set<string> = new Set([NODE_TYPES.COMPILER, NODE_TYPES.HYPOTHESIS, NODE_TYPES.DESIGN_SYSTEM]);
+  const needsModel: Set<string> = new Set([NODE_TYPES.INCUBATOR, NODE_TYPES.HYPOTHESIS, NODE_TYPES.DESIGN_SYSTEM]);
   if (!needsModel.has(nodeType)) return [];
 
   const models = existingNodes.filter((n) => n.type === NODE_TYPES.MODEL);

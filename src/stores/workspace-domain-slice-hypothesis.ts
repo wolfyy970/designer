@@ -1,7 +1,7 @@
 import {
-  variantSlotKey,
+  previewSlotKey,
   type DomainHypothesis,
-  type DomainVariantSlot,
+  type DomainPreviewSlot,
 } from '../types/workspace-domain';
 import { uniqPush, removeId } from './workspace-domain-helpers';
 import type { WorkspaceDomainStore } from './workspace-domain-store-types';
@@ -21,8 +21,8 @@ export function createWorkspaceDomainHypothesisSlice(set: DomainSet): Pick<
   | 'setHypothesisPlaceholder'
   | 'removeHypothesis'
   | 'removeIncubator'
-  | 'setVariantSlot'
-  | 'removeVariantSlot'
+  | 'setPreviewSlot'
+  | 'removePreviewSlot'
 > {
   return {
     attachDesignSystemToHypothesis: (dsNodeId, hypothesisId) =>
@@ -55,29 +55,31 @@ export function createWorkspaceDomainHypothesisSlice(set: DomainSet): Pick<
         };
       }),
 
-    linkHypothesisToIncubator: (hypothesisId, incubatorId, variantStrategyId) =>
+    linkHypothesisToIncubator: (hypothesisId, incubatorId, strategyId) =>
       set((s) => {
         const prev = s.hypotheses[hypothesisId];
         const next: DomainHypothesis = {
           id: hypothesisId,
           incubatorId,
-          variantStrategyId,
+          strategyId,
           modelNodeIds: prev?.modelNodeIds ?? [],
           designSystemNodeIds: prev?.designSystemNodeIds ?? [],
-          agentMode: prev?.agentMode ?? 'single',
+          revisionEnabled: prev?.revisionEnabled ?? false,
+          maxRevisionRounds: prev?.maxRevisionRounds,
+          minOverallScore: prev?.minOverallScore,
           placeholder: prev?.placeholder ?? false,
         };
-        const k = variantSlotKey(hypothesisId, variantStrategyId);
-        const slot: DomainVariantSlot = s.variantSlots[k] ?? {
+        const k = previewSlotKey(hypothesisId, strategyId);
+        const slot: DomainPreviewSlot = s.previewSlots[k] ?? {
           hypothesisId,
-          variantStrategyId,
-          variantNodeId: null,
+          strategyId,
+          previewNodeId: null,
           activeResultId: null,
           pinnedRunId: null,
         };
         return {
           hypotheses: { ...s.hypotheses, [hypothesisId]: next },
-          variantSlots: { ...s.variantSlots, [k]: slot },
+          previewSlots: { ...s.previewSlots, [k]: slot },
         };
       }),
 
@@ -85,13 +87,25 @@ export function createWorkspaceDomainHypothesisSlice(set: DomainSet): Pick<
       set((s) => {
         const h = s.hypotheses[hypothesisId];
         if (!h) return s;
-        if (!('agentMode' in partial)) return s;
+        const hasAny =
+          'revisionEnabled' in partial ||
+          'maxRevisionRounds' in partial ||
+          'minOverallScore' in partial;
+        if (!hasAny) return s;
         return {
           hypotheses: {
             ...s.hypotheses,
             [hypothesisId]: {
               ...h,
-              agentMode: partial.agentMode,
+              ...(partial.revisionEnabled !== undefined
+                ? { revisionEnabled: partial.revisionEnabled }
+                : {}),
+              ...(partial.maxRevisionRounds !== undefined
+                ? { maxRevisionRounds: partial.maxRevisionRounds }
+                : {}),
+              ...(partial.minOverallScore !== undefined
+                ? { minOverallScore: partial.minOverallScore }
+                : {}),
             },
           },
         };
@@ -113,11 +127,11 @@ export function createWorkspaceDomainHypothesisSlice(set: DomainSet): Pick<
       set((s) => {
         const restH = { ...s.hypotheses };
         delete restH[hypothesisId];
-        const vs = { ...s.variantSlots };
+        const vs = { ...s.previewSlots };
         for (const k of Object.keys(vs)) {
           if (k.startsWith(`${hypothesisId}::`)) delete vs[k];
         }
-        return { hypotheses: restH, variantSlots: vs };
+        return { hypotheses: restH, previewSlots: vs };
       }),
 
     removeIncubator: (incubatorId) =>
@@ -137,25 +151,25 @@ export function createWorkspaceDomainHypothesisSlice(set: DomainSet): Pick<
         };
       }),
 
-    setVariantSlot: (hypothesisId, variantStrategyId, partial) =>
+    setPreviewSlot: (hypothesisId, strategyId, partial) =>
       set((s) => {
-        const k = variantSlotKey(hypothesisId, variantStrategyId);
-        const cur = s.variantSlots[k] ?? {
+        const k = previewSlotKey(hypothesisId, strategyId);
+        const cur = s.previewSlots[k] ?? {
           hypothesisId,
-          variantStrategyId,
-          variantNodeId: null,
+          strategyId,
+          previewNodeId: null,
           activeResultId: null,
           pinnedRunId: null,
         };
-        return { variantSlots: { ...s.variantSlots, [k]: { ...cur, ...partial } } };
+        return { previewSlots: { ...s.previewSlots, [k]: { ...cur, ...partial } } };
       }),
 
-    removeVariantSlot: (hypothesisId, variantStrategyId) =>
+    removePreviewSlot: (hypothesisId, strategyId) =>
       set((s) => {
-        const k = variantSlotKey(hypothesisId, variantStrategyId);
-        const rest = { ...s.variantSlots };
+        const k = previewSlotKey(hypothesisId, strategyId);
+        const rest = { ...s.previewSlots };
         delete rest[k];
-        return { variantSlots: rest };
+        return { previewSlots: rest };
       }),
   };
 }

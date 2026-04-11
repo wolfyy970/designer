@@ -1,10 +1,15 @@
-import { memo, useCallback, useEffect } from 'react';
+import { memo, useCallback, useEffect, useMemo } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
-import { DEFAULT_COMPILER_PROVIDER } from '../../../lib/constants';
+import { DEFAULT_INCUBATOR_PROVIDER } from '../../../lib/constants';
+import { LOCKDOWN_MODEL_LABEL } from '../../../lib/lockdown-model';
+import { useAppConfig } from '../../../hooks/useAppConfig';
 import { filledOrEmpty } from '../../../lib/node-status';
 import { useNodeProviderModel } from '../../../hooks/useNodeProviderModel';
-import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
+import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
+import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
+import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { useCanvasStore } from '../../../stores/canvas-store';
+import { getModelNodeData } from '../../../lib/canvas-node-data';
 import type { ModelNodeData } from '../../../types/canvas-data';
 import ProviderSelector from '../../shared/ProviderSelector';
 import ModelSelector from '../../shared/ModelSelector';
@@ -14,11 +19,13 @@ import NodeHeader from './NodeHeader';
 type ModelNodeType = Node<ModelNodeData, 'model'>;
 
 function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
-  const onRemove = useNodeRemoval(id);
+  const { data: appConfig } = useAppConfig();
+  const lockdown = appConfig?.lockdown === true;
+  const onRemove = useCanvasNodePermanentRemove(id, STATIC_NODE_DELETE_COPY.model);
 
   const thinkingLevel = useCanvasStore(
     (s) =>
-      ((s.nodes.find((n) => n.id === id)?.data as ModelNodeData)?.thinkingLevel as
+      (getModelNodeData(s.nodes.find((n) => n.id === id))?.thinkingLevel as
         | 'off'
         | 'minimal'
         | 'low'
@@ -39,7 +46,7 @@ function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
     supportsReasoning,
     handleProviderChange,
     handleModelChange,
-  } = useNodeProviderModel(DEFAULT_COMPILER_PROVIDER, id, { disconnectOnChange: false });
+  } = useNodeProviderModel(DEFAULT_INCUBATOR_PROVIDER, id, { disconnectOnChange: false });
 
   useEffect(() => {
     if (!supportsReasoning && thinkingLevel !== 'off') {
@@ -51,6 +58,15 @@ function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
 
   const status = filledOrEmpty(configured);
 
+  const subtitle = useMemo(() => {
+    if (!configured) return 'No model selected';
+    if (lockdown) {
+      const tail = modelId.includes('/') ? modelId.split('/').pop() ?? modelId : modelId;
+      return `Locked: ${LOCKDOWN_MODEL_LABEL} (${tail})`;
+    }
+    return `${providerId} / ${modelId.split('/').pop()}`;
+  }, [configured, lockdown, modelId, providerId]);
+
   return (
     <NodeShell
       nodeId={id}
@@ -61,27 +77,26 @@ function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
       hasTarget={false}
       handleColor={configured ? 'green' : 'amber'}
     >
-      <NodeHeader
-        onRemove={onRemove}
-        description={configured ? `${providerId} / ${modelId.split('/').pop()}` : 'No model selected'}
-      >
+      <NodeHeader onRemove={onRemove} description={subtitle}>
         <h3 className="text-xs font-semibold text-fg">Model</h3>
       </NodeHeader>
 
-      <div className="nodrag nowheel space-y-2 px-3 py-2.5">
+      <div className={`${RF_INTERACTIVE} space-y-2 px-3 py-2.5`}>
         <ProviderSelector
           label="Provider"
           selectedId={providerId}
           onChange={handleProviderChange}
+          disabled={lockdown}
         />
         <ModelSelector
           label="Model"
           providerId={providerId}
           selectedModelId={modelId}
           onChange={handleModelChange}
+          disabled={lockdown}
         />
         {supportsReasoning && (
-          <div className="nodrag nowheel space-y-1">
+          <div className={`${RF_INTERACTIVE} space-y-1`}>
             <span className="text-nano text-fg-muted">Thinking</span>
             <div className="flex gap-0.5 rounded border border-border bg-surface p-0.5">
               {(['off', 'minimal', 'medium'] as const).map((level) => {
@@ -91,7 +106,7 @@ function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
                     key={level}
                     type="button"
                     onPointerDown={() => setThinkingLevel(level)}
-                    className={`nodrag nowheel flex min-w-0 flex-1 items-center justify-center rounded px-1.5 py-0.5 text-nano transition-colors ${
+                    className={`${RF_INTERACTIVE} flex min-w-0 flex-1 items-center justify-center rounded px-1.5 py-0.5 text-nano transition-colors ${
                       thinkingLevel === level ? 'bg-fg text-bg' : 'text-fg-muted hover:text-fg-secondary'
                     }`}
                   >

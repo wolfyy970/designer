@@ -1,11 +1,9 @@
 import type {
-  AgentMode,
-  DomainCritiqueContent,
   DomainDesignSystemContent,
   DomainHypothesis,
   DomainIncubatorWiring,
   DomainModelProfile,
-  DomainVariantSlot,
+  DomainPreviewSlot,
 } from '../types/workspace-domain';
 import type { CanvasNodeType } from '../types/workspace-graph';
 
@@ -15,8 +13,7 @@ export interface WorkspaceDomainStore {
   hypotheses: Record<string, DomainHypothesis>;
   modelProfiles: Record<string, DomainModelProfile>;
   designSystems: Record<string, DomainDesignSystemContent>;
-  critiques: Record<string, DomainCritiqueContent>;
-  variantSlots: Record<string, DomainVariantSlot>;
+  previewSlots: Record<string, DomainPreviewSlot>;
 
   ensureIncubatorWiring: (incubatorId: string) => void;
   attachModelToTarget: (modelNodeId: string, targetId: string, targetType: CanvasNodeType) => void;
@@ -40,11 +37,14 @@ export interface WorkspaceDomainStore {
   linkHypothesisToIncubator: (
     hypothesisId: string,
     incubatorId: string,
-    variantStrategyId: string,
+    strategyId: string,
   ) => void;
   setHypothesisGenerationSettings: (
     hypothesisId: string,
-    partial: { agentMode?: AgentMode | undefined },
+    partial: Pick<
+      DomainHypothesis,
+      'revisionEnabled' | 'maxRevisionRounds' | 'minOverallScore'
+    >,
   ) => void;
   setHypothesisPlaceholder: (hypothesisId: string, placeholder: boolean) => void;
   removeHypothesis: (hypothesisId: string) => void;
@@ -55,15 +55,13 @@ export interface WorkspaceDomainStore {
   purgeModelNode: (modelNodeId: string) => void;
   upsertDesignSystem: (nodeId: string, partial: Partial<DomainDesignSystemContent>) => void;
   removeDesignSystem: (nodeId: string) => void;
-  upsertCritique: (nodeId: string, partial: Partial<DomainCritiqueContent>) => void;
-  removeCritique: (nodeId: string) => void;
 
-  setVariantSlot: (
+  setPreviewSlot: (
     hypothesisId: string,
-    variantStrategyId: string,
-    partial: Partial<DomainVariantSlot>,
+    strategyId: string,
+    partial: Partial<DomainPreviewSlot>,
   ) => void;
-  removeVariantSlot: (hypothesisId: string, variantStrategyId: string) => void;
+  removePreviewSlot: (hypothesisId: string, strategyId: string) => void;
 
   reset: () => void;
 }

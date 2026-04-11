@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { runAgenticWithEvaluation } from '../agentic-orchestrator.ts';
+import { buildRevisionUserContext } from '../../lib/agentic-revision-user.ts';
+import { EVALUATOR_RUBRIC_IDS, type EvaluatorWorkerReport } from '../../../src/types/evaluation.ts';
 import {
-  runAgenticWithEvaluation,
-  buildRevisionUserContext,
-} from '../agentic-orchestrator.ts';
-import type { EvaluatorWorkerReport } from '../../../src/types/evaluation.ts';
-import { buildDegradedReport } from '../design-evaluation-service.ts';
+  buildDegradedReport,
+  type EvaluationRoundInput,
+} from '../design-evaluation-service.ts';
 
 const mocks = vi.hoisted(() => ({
   runDesignAgentSession: vi.fn(),
@@ -15,13 +16,18 @@ vi.mock('../pi-agent-service.ts', () => ({
   runDesignAgentSession: mocks.runDesignAgentSession,
 }));
 
-vi.mock('../../lib/build-agentic-system-context.ts', () => ({
-  buildAgenticSystemContext: vi.fn().mockResolvedValue({
-    systemPrompt: 'sys',
-    virtualSkillFiles: {},
-    sandboxSeedFiles: {},
-  }),
-}));
+vi.mock('../../lib/build-agentic-system-context.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/build-agentic-system-context.ts')>();
+  return {
+    ...actual,
+    buildAgenticSystemContext: vi.fn().mockResolvedValue({
+      systemPrompt: 'sys',
+      sandboxSeedFiles: {},
+      loadedSkills: [],
+      skillCatalog: [],
+    }),
+  };
+});
 
 vi.mock('../design-evaluation-service.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../design-evaluation-service.ts')>();
@@ -105,6 +111,36 @@ describe('runAgenticWithEvaluation', () => {
     browser: healthyReport('browser'),
   });
 
+  it('emits evaluation_worker_done once per rubric before evaluation_report', async () => {
+    mocks.runDesignAgentSession.mockResolvedValueOnce({
+      files: { 'index.html': '<html></html>' },
+      todos: [],
+    });
+    mocks.runEvaluationWorkers.mockImplementation(async (input: EvaluationRoundInput) => {
+      const bundle = allHealthy();
+      EVALUATOR_RUBRIC_IDS.forEach((k) => {
+        input.onWorkerDone?.(k, bundle[k]);
+      });
+      return bundle;
+    });
+
+    const events: { type?: string }[] = [];
+    await runAgenticWithEvaluation({
+      ...baseOpts,
+      onStream: async (e) => {
+        events.push(e as { type?: string });
+      },
+    });
+
+    const types = events.map((e) => e.type);
+    const firstReport = types.indexOf('evaluation_report');
+    const workerDoneBeforeReport = types.filter(
+      (t, i) => t === 'evaluation_worker_done' && i < firstReport,
+    ).length;
+    expect(workerDoneBeforeReport).toBe(4);
+    expect(types.lastIndexOf('evaluation_worker_done')).toBeLessThan(firstReport);
+  });
+
   it('stops after one evaluation round when scores pass revision gate', async () => {
     mocks.runDesignAgentSession.mockResolvedValueOnce({
       files: { 'index.html': '<html></html>' },
@@ -116,9 +152,29 @@ describe('runAgenticWithEvaluation', () => {
 
     expect(result).not.toBeNull();
     expect(mocks.runDesignAgentSession).toHaveBeenCalledTimes(1);
+    expect(mocks.runDesignAgentSession.mock.calls[0][0].skillCatalog).toEqual([]);
     expect(mocks.runEvaluationWorkers).toHaveBeenCalledTimes(1);
     expect(result?.rounds).toHaveLength(1);
     expect(result?.finalAggregate.shouldRevise).toBe(false);
+  });
+
+  it('skips evaluation workers when evaluationContext is null (single Pi build)', async () => {
+    mocks.runDesignAgentSession.mockResolvedValueOnce({
+      files: { 'index.html': '<html></html>' },
+      todos: [],
+    });
+
+    const result = await runAgenticWithEvaluation({
+      ...baseOpts,
+      evaluationContext: null,
+    });
+
+    expect(result).not.toBeNull();
+    expect(mocks.runDesignAgentSession).toHaveBeenCalledTimes(1);
+    expect(mocks.runEvaluationWorkers).not.toHaveBeenCalled();
+    expect(result?.rounds).toHaveLength(0);
+    expect(result?.checkpoint.stopReason).toBe('build_only');
+    expect(result?.checkpoint.totalRounds).toBe(0);
   });
 
   it('returns a checkpoint on the first result', async () => {
@@ -341,6 +397,28 @@ describe('runAgenticWithEvaluation', () => {
     expect(result?.checkpoint.revisionAttempts).toBe(0);
   });
 
+  it('runs revision when overall is below minOverallScore even if gate clears (shouldRevise false)', async () => {
+    mocks.runDesignAgentSession
+      .mockResolvedValueOnce({ files: { 'index.html': '<html></html>' }, todos: [] })
+      .mockResolvedValueOnce({ files: { 'index.html': '<html>rev</html>' }, todos: [] });
+
+    mocks.runEvaluationWorkers
+      .mockResolvedValueOnce(allHealthy())
+      .mockResolvedValueOnce(allHealthy());
+
+    const result = await runAgenticWithEvaluation({
+      ...baseOpts,
+      maxRevisionRounds: 1,
+      minOverallScore: 4.5,
+    });
+
+    expect(result).not.toBeNull();
+    expect(mocks.runDesignAgentSession).toHaveBeenCalledTimes(2);
+    expect(mocks.runEvaluationWorkers).toHaveBeenCalledTimes(2);
+    expect(result?.checkpoint.stopReason).toBe('max_revisions');
+    expect(result?.checkpoint.revisionAttempts).toBe(1);
+  });
+
   it('passes evaluator provider/model override to runEvaluationWorkers', async () => {
     mocks.runDesignAgentSession.mockResolvedValueOnce({
       files: { 'index.html': '<html></html>' },
@@ -357,5 +435,28 @@ describe('runAgenticWithEvaluation', () => {
     const callArgs = mocks.runEvaluationWorkers.mock.calls[0][0];
     expect(callArgs.evaluatorProviderId).toBe('openrouter');
     expect(callArgs.evaluatorModelId).toBe('anthropic/claude-3-haiku');
+  });
+
+  it('aborts cleanly when onStream throws during evaluation (SSE delivery failure)', async () => {
+    mocks.runDesignAgentSession.mockResolvedValueOnce({
+      files: { 'index.html': '<html></html>' },
+      todos: [],
+    });
+    mocks.runEvaluationWorkers.mockResolvedValue(allHealthy());
+
+    const ac = new AbortController();
+    const result = await runAgenticWithEvaluation({
+      ...baseOpts,
+      build: { ...baseOpts.build, signal: ac.signal },
+      onStream: async (e) => {
+        if (typeof e === 'object' && e && 'type' in e && e.type === 'evaluation_progress') {
+          throw new Error('sse write failed');
+        }
+      },
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.checkpoint.stopReason).toBe('aborted');
+    expect(ac.signal.aborted).toBe(false);
   });
 });

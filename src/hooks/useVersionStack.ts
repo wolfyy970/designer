@@ -17,7 +17,7 @@ import type { GenerationResult } from '../types/provider';
  * and provides goNewer / goOlder navigation callbacks.
  */
 export function useVersionStack(
-  variantStrategyId: string | undefined,
+  strategyId: string | undefined,
   pinnedRunId: string | undefined,
 ) {
   const results = useGenerationStore((s) => s.results);
@@ -27,25 +27,25 @@ export function useVersionStack(
   const setUserBest = useGenerationStore((s) => s.setUserBest);
 
   const stack = useMemo(() => {
-    if (!variantStrategyId) return [] as GenerationResult[];
+    if (!strategyId) return [] as GenerationResult[];
     const state = { results, selectedVersions, userBestOverrides };
     return pinnedRunId
-      ? getScopedStack(state, variantStrategyId, pinnedRunId)
-      : getStack(state, variantStrategyId);
-  }, [results, selectedVersions, userBestOverrides, variantStrategyId, pinnedRunId]);
+      ? getScopedStack(state, strategyId, pinnedRunId)
+      : getStack(state, strategyId);
+  }, [results, selectedVersions, userBestOverrides, strategyId, pinnedRunId]);
 
   const activeResult = useMemo(() => {
-    if (!variantStrategyId) return undefined;
+    if (!strategyId) return undefined;
     const state = { results, selectedVersions, userBestOverrides };
     return pinnedRunId
-      ? getScopedActiveResult(state, variantStrategyId, pinnedRunId)
-      : getActiveResult(state, variantStrategyId);
-  }, [results, selectedVersions, userBestOverrides, variantStrategyId, pinnedRunId]);
+      ? getScopedActiveResult(state, strategyId, pinnedRunId)
+      : getActiveResult(state, strategyId);
+  }, [results, selectedVersions, userBestOverrides, strategyId, pinnedRunId]);
 
   const versionKey =
-    pinnedRunId && variantStrategyId
-      ? `${variantStrategyId}:${pinnedRunId}`
-      : variantStrategyId;
+    pinnedRunId && strategyId
+      ? `${strategyId}:${pinnedRunId}`
+      : strategyId;
 
   const completedStack = useMemo(
     () => stack.filter((r) => r.status === GENERATION_STATUS.COMPLETE),
@@ -53,10 +53,10 @@ export function useVersionStack(
   );
   const bestCompletedResult = useMemo(
     () =>
-      variantStrategyId
-        ? getBestCompleteResult(completedStack, { variantStrategyId, userBestOverrides })
+      strategyId
+        ? getBestCompleteResult(completedStack, { strategyId, userBestOverrides })
         : getBestCompleteResult(completedStack),
-    [completedStack, variantStrategyId, userBestOverrides],
+    [completedStack, strategyId, userBestOverrides],
   );
   const isActiveBest = !!activeResult && activeResult.id === bestCompletedResult?.id;
 

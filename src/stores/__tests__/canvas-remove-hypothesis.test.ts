@@ -1,19 +1,19 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { NODE_TYPES } from '../../constants/canvas';
 import { useCanvasStore } from '../canvas-store';
-import { useCompilerStore } from '../compiler-store';
+import { useIncubatorStore } from '../incubator-store';
 import { useWorkspaceDomainStore } from '../workspace-domain-store';
-import type { DimensionMap } from '../../types/compiler';
+import type { IncubationPlan } from '../../types/incubator';
 import type { WorkspaceNode } from '../../types/workspace-graph';
 
-function minimalMap(variantId: string): DimensionMap {
+function minimalPlan(strategyId: string): IncubationPlan {
   return {
     id: 'm1',
     specId: 's1',
     dimensions: [],
-    variants: [
+    hypotheses: [
       {
-        id: variantId,
+        id: strategyId,
         name: 'V',
         hypothesis: '',
         rationale: '',
@@ -22,22 +22,22 @@ function minimalMap(variantId: string): DimensionMap {
       },
     ],
     generatedAt: '2020-01-01',
-    compilerModel: 'x',
+    incubatorModel: 'x',
   };
 }
 
 describe('canvas-store removeNode (hypothesis)', () => {
   beforeEach(() => {
     useWorkspaceDomainStore.getState().reset();
-    useCompilerStore.getState().reset();
+    useIncubatorStore.getState().reset();
     useCanvasStore.getState().reset();
     useCanvasStore.setState({ autoLayout: false });
   });
 
-  it('removes variant strategy from compiler store and clears domain hypothesis', () => {
+  it('removes strategy from compiler store and clears domain hypothesis', () => {
     const compiler: WorkspaceNode = {
       id: 'c1',
-      type: NODE_TYPES.COMPILER,
+      type: NODE_TYPES.INCUBATOR,
       position: { x: 0, y: 0 },
       data: {},
     };
@@ -53,19 +53,19 @@ describe('canvas-store removeNode (hypothesis)', () => {
         h1: {
           id: 'h1',
           incubatorId: 'c1',
-          variantStrategyId: 'vs1',
+          strategyId: 'vs1',
           modelNodeIds: [],
           designSystemNodeIds: [],
           placeholder: false,
         },
       },
     });
-    useCompilerStore.setState({ dimensionMaps: { c1: minimalMap('vs1') } });
+    useIncubatorStore.setState({ incubationPlans: { c1: minimalPlan('vs1') } });
     useCanvasStore.setState({ nodes: [compiler, hypothesis], edges: [], autoLayout: false });
 
     useCanvasStore.getState().removeNode('h1');
 
-    expect(useCompilerStore.getState().dimensionMaps.c1?.variants ?? []).toEqual([]);
+    expect(useIncubatorStore.getState().incubationPlans.c1?.hypotheses ?? []).toEqual([]);
     expect(useWorkspaceDomainStore.getState().hypotheses.h1).toBeUndefined();
   });
 });

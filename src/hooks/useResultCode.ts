@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { normalizeError } from '../lib/error-utils';
 import { loadCode } from '../services/idb-storage';
 
 /**
@@ -36,7 +37,11 @@ export function useResultCode(resultId: string | undefined, reloadTrigger?: unkn
       })
       .catch((err) => {
         if (!cancelled) {
-          console.error(`[useResultCode] Error loading code for ${resultId.slice(0, 8)}...`, err);
+          console.error(
+            `[useResultCode] Error loading code for ${resultId.slice(0, 8)}...`,
+            normalizeError(err),
+            err,
+          );
           setCode(undefined);
           setIsLoading(false);
         }

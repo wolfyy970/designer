@@ -1,4 +1,5 @@
 import type { SpecSectionId, SpecSectionMeta } from '../types/spec';
+import { LOCKDOWN_MODEL_ID } from './lockdown-model';
 
 export const SPEC_SECTIONS: SpecSectionMeta[] = [
   {
@@ -20,21 +21,21 @@ export const SPEC_SECTIONS: SpecSectionMeta[] = [
     title: 'Research & Context',
     description:
       "Who you're designing for, what they need, and why today's options fall short.",
-    required: true,
+    required: false,
   },
   {
     id: 'objectives-metrics',
     title: 'Objectives & Metrics',
     description:
       "Success for the business and user: goals, KPIs, how you'll measure, and timeframe.",
-    required: true,
+    required: false,
   },
   {
     id: 'design-constraints',
     title: 'Design Constraints',
     description:
       'Non-negotiables versus what may vary—brand, accessibility, legal limits, and exploration axes.',
-    required: true,
+    required: false,
   },
   {
     id: 'design-system',
@@ -45,24 +46,24 @@ export const SPEC_SECTIONS: SpecSectionMeta[] = [
   },
 ];
 
-// Proxy base paths (must match vite.config.ts proxy entries)
-export const OPENROUTER_PROXY = '/openrouter-api';
-export const LMSTUDIO_PROXY = '/lmstudio-api';
+// Default providers (incubator / hypothesis workspace fallback)
+export const DEFAULT_INCUBATOR_PROVIDER =
+  import.meta.env.VITE_DEFAULT_INCUBATOR_PROVIDER ||
+  import.meta.env.VITE_DEFAULT_COMPILER_PROVIDER ||
+  'openrouter';
+/** @deprecated Use {@link DEFAULT_INCUBATOR_PROVIDER} */
+export const DEFAULT_COMPILER_PROVIDER = DEFAULT_INCUBATOR_PROVIDER;
 
-// Default providers
-export const DEFAULT_COMPILER_PROVIDER = import.meta.env.VITE_DEFAULT_COMPILER_PROVIDER || 'openrouter';
-export const DEFAULT_GENERATION_PROVIDER = import.meta.env.VITE_DEFAULT_GENERATION_PROVIDER || 'lmstudio';
-
-// Default model for auto-created Model nodes (OpenRouter ID)
-export const DEFAULT_MODEL_ID = import.meta.env.VITE_DEFAULT_MODEL_ID || 'z-ai/glm-5';
+// Default model for auto-created Model nodes (OpenRouter slug; matches lockdown pin)
+export const DEFAULT_MODEL_ID = import.meta.env.VITE_DEFAULT_MODEL_ID || LOCKDOWN_MODEL_ID;
 
 /**
  * Default node data for each auto-created prerequisite type.
  * Keyed by node type — extend this map when adding new prerequisite rules.
  */
 export const PREREQUISITE_DEFAULTS: Record<string, Record<string, unknown>> = {
-  model: { providerId: DEFAULT_COMPILER_PROVIDER, modelId: DEFAULT_MODEL_ID, thinkingLevel: 'minimal' },
-  hypothesis: { agentMode: 'single' },
+  model: { providerId: DEFAULT_INCUBATOR_PROVIDER, modelId: DEFAULT_MODEL_ID, thinkingLevel: 'minimal' },
+  hypothesis: {},
 };
 
 
@@ -77,6 +78,9 @@ export const AUTO_LAYOUT_DEBOUNCE_MS = 200;
 export const FEEDBACK_DISMISS_MS = 1500;
 /** Delay for iframe to fully render before screenshot capture (ms). */
 export const SCREENSHOT_LOAD_DELAY_MS = 3000;
+
+/** Vertical shift (px) when forking hypothesis previews so new stack does not overlap pins. */
+export const FORK_HYPOTHESIS_PREVIEW_STACK_OFFSET_PX = 200;
 
 function createEmptySection(id: SpecSectionId) {
   return {

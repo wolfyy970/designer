@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { File, FileCode, Paintbrush, Braces, FileJson } from 'lucide-react';
 
 interface FileExplorerProps {
@@ -51,7 +52,7 @@ export default function FileExplorer({
   return (
     <div
       ref={scrollRef}
-      className={`nodrag nowheel overflow-y-auto ${className}`}
+      className={`${RF_INTERACTIVE} overflow-y-auto ${className}`}
     >
       {Object.entries(groups).map(([dir, groupPaths]) => (
         <div key={dir}>
@@ -78,10 +79,10 @@ export default function FileExplorer({
                     ? 'cursor-default opacity-35'
                     : isPlannedOnly
                       ? isActive
-                        ? 'bg-accent/15 text-fg opacity-90'
+                        ? 'bg-accent-highlight text-fg opacity-90'
                         : 'cursor-pointer text-fg-muted opacity-80 hover:bg-surface-raised hover:opacity-100'
                       : isActive
-                        ? 'bg-accent/15 text-fg'
+                        ? 'bg-accent-highlight text-fg'
                         : 'text-fg-secondary hover:bg-surface-raised'
                 }`}
               >

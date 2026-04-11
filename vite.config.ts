@@ -1,8 +1,43 @@
-import { defineConfig } from 'vitest/config'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
+import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+
+const rootDir = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-8')) as {
+  version?: string;
+  /** Optional fallback when `.git` is missing (e.g. tarball) */
+  releasedAt?: string;
+};
+
+/**
+ * Commit timestamp of HEAD — updates automatically on every commit (no manual date).
+ * Uses committer date, strict ISO (`git log -1 --format=%cI`).
+ */
+function releasedAtIsoFromGitOrPkg(): string {
+  try {
+    const out = execSync('git log -1 --format=%cI', {
+      cwd: rootDir,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    if (out) return out;
+  } catch {
+    // Not a git repo, git missing, or empty history
+  }
+  return typeof pkg.releasedAt === 'string' ? pkg.releasedAt : '';
+}
+
+const releasedAtIso = releasedAtIsoFromGitOrPkg();
 
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(pkg.version ?? ''),
+    'import.meta.env.VITE_APP_RELEASED_AT': JSON.stringify(releasedAtIso),
+  },
   test: {
     // `.vendor` holds upstream Pi sources; their test suite expects optional packages we don't install.
     exclude: [

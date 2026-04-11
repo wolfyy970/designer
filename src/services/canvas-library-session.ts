@@ -1,43 +1,53 @@
 /**
- * Orchestration for the saved spec library vs the active session (spec + compiler + generation + canvas).
+ * Orchestration for the saved spec library vs the active session (spec + incubator + generation + canvas).
  * Keeps persistence and Zustand `getState()` calls out of React components.
  */
 import type { DesignSpec } from '../types/spec';
 import { useSpecStore } from '../stores/spec-store';
-import { useCompilerStore } from '../stores/compiler-store';
+import { useIncubatorStore } from '../stores/incubator-store';
 import { useGenerationStore } from '../stores/generation-store';
 import { useCanvasStore } from '../stores/canvas-store';
+import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
 import { saveSpecToLibrary, getSavedSpec, importCanvas } from './persistence';
 import { generateId, now } from '../lib/utils';
 
-export function checkpointCurrentSpec(): void {
+function checkpointCurrentSpec(): void {
   saveSpecToLibrary(useSpecStore.getState().spec);
 }
 
-export function resetSessionStores(): void {
-  useCompilerStore.getState().reset();
+function resetSessionStores(): void {
+  useWorkspaceDomainStore.getState().reset();
+  useIncubatorStore.getState().reset();
   useGenerationStore.getState().reset();
   useCanvasStore.getState().resetCanvas();
 }
 
+export type ActivateSavedSpecResult =
+  | { ok: true }
+  | { ok: false; reason: 'not_found' };
+
 /** Apply a DesignSpec to the active session (normalizes sections in spec-store). */
-export function applySpecToActiveSession(spec: DesignSpec): void {
+function applySpecToActiveSession(spec: DesignSpec): void {
   useSpecStore.getState().loadCanvas(spec);
+  useCanvasStore.getState().materializeOptionalInputNodesFromSpec(spec);
 }
 
-export function activateSavedSpecById(specId: string): boolean {
-  checkpointCurrentSpec();
+/**
+ * @param options.skipCheckpoint - Use when reloading the active library entry from disk without
+ *   persisting the current (possibly dirty) spec first—otherwise checkpoint would overwrite the saved copy.
+ */
+export function activateSavedSpecById(
+  specId: string,
+  options?: { skipCheckpoint?: boolean },
+): ActivateSavedSpecResult {
+  if (!options?.skipCheckpoint) {
+    checkpointCurrentSpec();
+  }
   const spec = getSavedSpec(specId);
-  if (!spec) return false;
+  if (!spec) return { ok: false, reason: 'not_found' };
   resetSessionStores();
   applySpecToActiveSession(spec);
-  return true;
-}
-
-export function activateSpecFromImport(spec: DesignSpec): void {
-  checkpointCurrentSpec();
-  resetSessionStores();
-  applySpecToActiveSession(spec);
+  return { ok: true };
 }
 
 export async function activateImportedSpecFile(file: File): Promise<void> {

@@ -1,21 +1,21 @@
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import {
+  type GenerateSSEEvent,
   generateSSEEventSchema,
-  mergeSseEventPayload,
   safeParseGenerateSSEEvent,
 } from '../generate-sse-event-schema';
 
-describe('mergeSseEventPayload', () => {
-  it('forces SSE event name over body type', () => {
-    const merged = mergeSseEventPayload('progress', {
+describe('safeParseGenerateSSEEvent', () => {
+  it('forces SSE event name over conflicting body type', () => {
+    const r = safeParseGenerateSSEEvent('progress', {
       type: 'error',
       status: 'ok',
     } as Record<string, unknown>);
-    expect(merged).toEqual({ status: 'ok', type: 'progress' });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.event.type).toBe('progress');
   });
-});
 
-describe('safeParseGenerateSSEEvent', () => {
   it('accepts minimal progress', () => {
     const r = safeParseGenerateSSEEvent('progress', { status: 'x' });
     expect(r.ok).toBe(true);
@@ -48,10 +48,19 @@ describe('safeParseGenerateSSEEvent', () => {
     if (r.ok) expect(r.event.type).toBe('done');
   });
 
-  it('accepts evaluation_report with loose snapshot', () => {
+  const minimalAggregate = {
+    overallScore: 3,
+    normalizedScores: { design: 0.5, strategy: 0.5, implementation: 0.5, browser: 0.5 },
+    hardFails: [] as { code: string; message: string; source: 'design' }[],
+    prioritizedFixes: [] as string[],
+    shouldRevise: false,
+    revisionBrief: '',
+  };
+
+  it('accepts evaluation_report with full snapshot shape', () => {
     const r = safeParseGenerateSSEEvent('evaluation_report', {
       round: 1,
-      snapshot: { round: 1, aggregate: { overallScore: 3 } },
+      snapshot: { round: 1, aggregate: minimalAggregate },
     });
     expect(r.ok).toBe(true);
   });
@@ -59,9 +68,73 @@ describe('safeParseGenerateSSEEvent', () => {
   it('rejects evaluation_report snapshot missing round', () => {
     const r = safeParseGenerateSSEEvent('evaluation_report', {
       round: 1,
-      snapshot: { aggregate: { overallScore: 3 } },
+      snapshot: { aggregate: minimalAggregate },
     });
     expect(r.ok).toBe(false);
+  });
+
+  it('accepts skills_loaded', () => {
+    const r = safeParseGenerateSSEEvent('skills_loaded', {
+      skills: [{ key: 'k', name: 'N', description: 'D' }],
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.event.type).toBe('skills_loaded');
+  });
+
+  it('accepts skill_activated', () => {
+    const r = safeParseGenerateSSEEvent('skill_activated', {
+      key: 'accessibility',
+      name: 'A11y',
+      description: 'Test',
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.event.type).toBe('skill_activated');
+  });
+
+  it('accepts evaluation_worker_done with report passthrough', () => {
+    const r = safeParseGenerateSSEEvent('evaluation_worker_done', {
+      round: 1,
+      rubric: 'design',
+      report: {
+        rubric: 'design',
+        scores: { a: { score: 4, notes: 'ok' } },
+        findings: [],
+        hardFails: [],
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.event.type === 'evaluation_worker_done') {
+      expect(r.event.round).toBe(1);
+      expect(r.event.rubric).toBe('design');
+      expect(r.event.report.scores).toEqual({ a: { score: 4, notes: 'ok' } });
+    }
+  });
+
+  it('accepts streaming_tool with optional toolPath', () => {
+    const r = safeParseGenerateSSEEvent('streaming_tool', {
+      toolName: 'write_file',
+      streamedChars: 2400,
+      done: false,
+      toolPath: 'styles.css',
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok)
+      expect(r.event).toEqual({
+        type: 'streaming_tool',
+        toolName: 'write_file',
+        streamedChars: 2400,
+        done: false,
+        toolPath: 'styles.css',
+      });
+  });
+
+  it('accepts streaming_tool without toolPath', () => {
+    const r = safeParseGenerateSSEEvent('streaming_tool', {
+      toolName: 'bash',
+      streamedChars: 0,
+      done: true,
+    });
+    expect(r.ok).toBe(true);
   });
 
   it('accepts checkpoint with required envelope', () => {
@@ -70,6 +143,7 @@ describe('safeParseGenerateSSEEvent', () => {
         totalRounds: 2,
         completedAt: '2026-01-01T00:00:00.000Z',
         filesWritten: ['index.html'],
+        finalTodosSummary: 'Done',
         stopReason: 'satisfied',
       },
     });
@@ -78,7 +152,11 @@ describe('safeParseGenerateSSEEvent', () => {
 
   it('rejects checkpoint missing completedAt', () => {
     const r = safeParseGenerateSSEEvent('checkpoint', {
-      checkpoint: { totalRounds: 1 },
+      checkpoint: {
+        totalRounds: 1,
+        filesWritten: [],
+        finalTodosSummary: 'x',
+      },
     });
     expect(r.ok).toBe(false);
   });
@@ -110,5 +188,13 @@ describe('generateSSEEventSchema', () => {
   it('parses lane_done', () => {
     const r = generateSSEEventSchema.safeParse({ type: 'lane_done', laneIndex: 0 });
     expect(r.success).toBe(true);
+  });
+
+  it('GenerateSSEEvent alias matches z.infer<typeof generateSSEEventSchema> (compile-time)', () => {
+    type Inferred = z.infer<typeof generateSSEEventSchema>;
+    const _roundTrip: GenerateSSEEvent = {} as Inferred;
+    const _back: Inferred = {} as GenerateSSEEvent;
+    expect(_roundTrip).toBeDefined();
+    expect(_back).toBeDefined();
   });
 });

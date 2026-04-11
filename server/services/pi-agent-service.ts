@@ -10,9 +10,10 @@ import {
 } from './pi-sdk/index.ts';
 import type { RunTraceEvent, TodoItem } from '../../src/types/provider.ts';
 import { env } from '../env.ts';
-import { wrapPiStreamWithLogging, PI_LLM_LOG_PHASE } from '../lib/pi-llm-log.ts';
-import { getPromptBody } from '../db/prompts.ts';
-import { getProviderModelContextWindow } from '../lib/provider-model-context.ts';
+import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
+import { normalizeError } from '../../src/lib/error-utils.ts';
+import { wrapPiStreamWithLogging, PI_LLM_LOG_PHASE } from './pi-llm-log.ts';
+import { getProviderModelContextWindow } from './provider-model-context.ts';
 import { buildModel } from './pi-model.ts';
 import {
   createAgentBashSandbox,
@@ -22,6 +23,7 @@ import {
 import { createSandboxBashTool } from './pi-bash-tool.ts';
 import {
   createTodoWriteTool,
+  createUseSkillTool,
   createValidateHtmlTool,
   createValidateJsTool,
 } from './pi-app-tools.ts';
@@ -35,13 +37,20 @@ import type {
   DesignAgentSessionResult,
 } from './pi-agent-run-types.ts';
 
+/** Default max context when registry has no entry (non-LM Studio). */
+const FALLBACK_CONTEXT_WINDOW_DEFAULT = 131_072;
+
+/** Emit “Still working…” progress if the model stream is quiet for this long (seconds). */
+const IDLE_PROGRESS_GAP_SEC = 18;
+
+/** How often to check stream idleness for progress heartbeats (ms). */
+const IDLE_CHECK_MS = 10_000;
+
+/** Dev ingest interval for stall-debug telemetry (ms). */
+const STALL_DEBUG_MS = 60_000;
+
 export type { ThinkingLevel } from './pi-model.ts';
 export type { AgentRunParams, AgentSessionParams, AgentRunEvent, DesignAgentSessionResult };
-
-/** Optional: Langfuse / prompts that still reference agent compaction copy. */
-export async function loadAgentCompactionSystemPrompt(): Promise<string> {
-  return getPromptBody('agentCompactionSystem');
-}
 
 export async function runDesignAgentSession(
   params: AgentSessionParams,
@@ -75,7 +84,6 @@ export async function runDesignAgentSession(
 
   const bash = createAgentBashSandbox({
     seedFiles: params.seedFiles,
-    virtualSkillFiles: params.virtualSkillFiles,
   });
 
   const todoState: { current: TodoItem[] } = { current: [] };
@@ -83,7 +91,7 @@ export async function runDesignAgentSession(
 
   const registryCw = await getProviderModelContextWindow(params.providerId, params.modelId);
   const fallbackCw =
-    params.providerId === 'lmstudio' ? env.LM_STUDIO_CONTEXT_WINDOW : 131_072;
+    params.providerId === 'lmstudio' ? env.LM_STUDIO_CONTEXT_WINDOW : FALLBACK_CONTEXT_WINDOW_DEFAULT;
   const contextWindow = registryCw ?? fallbackCw;
   const model = buildModel(
     params.providerId,
@@ -100,7 +108,11 @@ export async function runDesignAgentSession(
     authStorage.setRuntimeApiKey('openrouter', env.OPENROUTER_API_KEY);
   }
 
+  let fileEventCount = 0;
+  const emittedFilePaths = new Set<string>();
   const onDesignFile = (path: string, content: string) => {
+    fileEventCount += 1;
+    emittedFilePaths.add(path);
     void onEvent({ type: 'file', path, content });
     void onEvent(
       trace('file_written', `Saved ${path}`, {
@@ -117,8 +129,24 @@ export async function runDesignAgentSession(
   });
   const validateJsTool = createValidateJsTool(bash);
   const validateHtmlTool = createValidateHtmlTool(bash);
+  const skillCatalog = params.skillCatalog ?? [];
+  const useSkillTool = createUseSkillTool(skillCatalog, (payload) => {
+    void onEvent({
+      type: 'skill_activated',
+      key: payload.key,
+      name: payload.name,
+      description: payload.description,
+    });
+  });
 
   const llmTurnLogRef: { current?: string } = {};
+
+  const { getPromptBody: getPromptBodyFn } = await import('../lib/prompt-resolution.ts');
+  const { resourceLoader, settingsManager } = await createSandboxResourceLoader({
+    systemPrompt: params.systemPrompt.trim(),
+    contextWindow,
+    getCompactionPromptBody: () => getPromptBodyFn('agent-context-compaction'),
+  });
 
   const { session, modelFallbackMessage } = await createAgentSession({
     authStorage,
@@ -127,10 +155,18 @@ export async function runDesignAgentSession(
       CreateAgentSessionOptions['thinkingLevel']
     >,
     tools: [],
-    customTools: [...virtualPiTools, bashTool, todoTool, validateJsTool, validateHtmlTool] as ToolDefinition[],
+    customTools: [
+      ...virtualPiTools,
+      bashTool,
+      todoTool,
+      useSkillTool,
+      validateJsTool,
+      validateHtmlTool,
+    ] as ToolDefinition[],
     sessionManager: SessionManager.inMemory(),
     cwd: SANDBOX_PROJECT_ROOT,
-    resourceLoader: createSandboxResourceLoader(),
+    settingsManager,
+    resourceLoader,
   });
 
   if (modelFallbackMessage && process.env.NODE_ENV !== 'production') {
@@ -147,19 +183,19 @@ export async function runDesignAgentSession(
     correlationId: params.correlationId,
   });
 
-  session.agent.setSystemPrompt(params.systemPrompt.trim());
-
   const streamActivityAt = { current: Date.now() };
   const pendingToolCallsRef = { current: 0 };
   const subscribeCtx = {
     onEvent,
     trace,
     toolPathByCallId: new Map<string, string | undefined>(),
+    toolArgsByCallId: new Map<string, string | undefined>(),
     waitingForFirstToken: { current: false },
     turnLogRef: llmTurnLogRef,
     streamActivityAt,
     modelTurnId: { current: 0 },
     pendingToolCallsRef,
+    onStreamDeliveryFailure: () => session.agent.abort(),
   };
   const unsubscribe = subscribePiSessionBridge(session, subscribeCtx);
 
@@ -167,8 +203,6 @@ export async function runDesignAgentSession(
     params.signal.addEventListener('abort', () => session.agent.abort());
   }
 
-  const IDLE_PROGRESS_GAP_SEC = 18;
-  const idleCheckMs = 10_000;
   const idleTimer = setInterval(() => {
     if (params.signal?.aborted) return;
     const gapSec = Math.floor((Date.now() - streamActivityAt.current) / 1000);
@@ -177,43 +211,51 @@ export async function runDesignAgentSession(
       type: 'progress',
       payload: `Still working… ${gapSec}s since last streamed output`,
     });
-  }, idleCheckMs);
+  }, IDLE_CHECK_MS);
 
-  const STALL_DEBUG_MS = 60_000;
   const stallDebugTimer = setInterval(() => {
     if (params.signal?.aborted) return;
     const idleSec = Math.floor((Date.now() - streamActivityAt.current) / 1000);
     const isRevision = !!params.compactionNote?.trim();
-    // #region agent log
-    fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
-      body: JSON.stringify({
-        sessionId: '5b9be9',
-        hypothesisId: 'H6',
-        location: 'pi-agent-service.ts:stall_heartbeat',
-        message: 'agent session stall heartbeat',
-        data: {
-          idleSec,
-          pendingToolCalls: pendingToolCallsRef.current,
-          isRevision,
-          userPromptChars: params.userPrompt.length,
-          seedFileCount: params.seedFiles ? Object.keys(params.seedFiles).length : 0,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
+    debugAgentIngest({
+      hypothesisId: 'H6',
+      location: 'pi-agent-service.ts:stall_heartbeat',
+      message: 'agent session stall heartbeat',
+      data: {
+        idleSec,
+        pendingToolCalls: pendingToolCallsRef.current,
+        isRevision,
+        userPromptChars: params.userPrompt.length,
+        seedFileCount: params.seedFiles ? Object.keys(params.seedFiles).length : 0,
+      },
+    });
   }, STALL_DEBUG_MS);
+
+  if (env.isDev) {
+    const seedKeys = hasSeed ? Object.keys(params.seedFiles!) : [];
+    console.debug('[pi-agent] session start', {
+      correlationId: params.correlationId,
+      provider: params.providerId,
+      model: params.modelId,
+      contextWindow,
+      seedFileCount: seedKeys.length,
+      seedFilePaths: seedKeys.slice(0, 20),
+      toolCount: virtualPiTools.length + 5,
+      userPromptChars: params.userPrompt.length,
+      systemPromptChars: params.systemPrompt.length,
+    });
+  }
 
   try {
     await session.prompt(
-      `${params.userPrompt}\n\n[Workspace root: ${SANDBOX_PROJECT_ROOT} — use read, write, edit, ls, find, and grep for files; use bash for shell/commands. The skills/ tree is read-only context.]`,
+      `${params.userPrompt}\n\n[Workspace root: ${SANDBOX_PROJECT_ROOT} — use read, write, edit, ls, find, and grep for files; use bash for shell/commands.]`,
       { expandPromptTemplates: false },
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await onEvent({ type: 'error', payload: `Agent error: ${message}` });
+    if (env.isDev) {
+      console.error('[pi-agent] session.prompt failed', normalizeError(err), err);
+    }
+    await onEvent({ type: 'error', payload: `Agent error: ${normalizeError(err)}` });
     return null;
   } finally {
     clearInterval(idleTimer);
@@ -223,7 +265,26 @@ export async function runDesignAgentSession(
 
   const files = await extractDesignFiles(bash);
 
+  if (env.isDev) {
+    const seedCount = params.seedFiles ? Object.keys(params.seedFiles).length : 0;
+    console.debug('[pi-agent] session complete', {
+      correlationId: params.correlationId,
+      filesExtracted: Object.keys(files).length,
+      fileNames: Object.keys(files),
+      fileEventsEmitted: fileEventCount,
+      hasSeed,
+      seedFileCount: seedCount,
+      todoCount: todoState.current.length,
+      aborted: !!params.signal?.aborted,
+      provider: params.providerId,
+      model: params.modelId,
+    });
+  }
+
   if (!hasSeed && Object.keys(files).length === 0 && !params.signal?.aborted) {
+    if (env.isDev) {
+      console.warn('[pi-agent] agent produced zero design files (no seed, empty sandbox)');
+    }
     await onEvent({
       type: 'error',
       payload:
@@ -235,5 +296,6 @@ export async function runDesignAgentSession(
   return {
     files,
     todos: [...todoState.current],
+    emittedFilePaths: [...emittedFilePaths],
   };
 }

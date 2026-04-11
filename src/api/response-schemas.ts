@@ -7,7 +7,7 @@ const DimensionSchema = z.object({
   isConstant: z.boolean(),
 });
 
-const VariantStrategyWireSchema = z.object({
+const HypothesisStrategyWireSchema = z.object({
   id: z.string(),
   name: z.string(),
   hypothesis: z.string(),
@@ -16,20 +16,20 @@ const VariantStrategyWireSchema = z.object({
   dimensionValues: z.record(z.string(), z.string()),
 });
 
-/** POST /api/compile response (`DimensionMap`). */
-export const CompileResponseSchema = z.object({
+/** POST /api/incubate response (`IncubationPlan`). */
+export const IncubateResponseSchema = z.object({
   id: z.string(),
   specId: z.string(),
   dimensions: z.array(DimensionSchema),
-  variants: z.array(VariantStrategyWireSchema),
+  hypotheses: z.array(HypothesisStrategyWireSchema),
   generatedAt: z.string(),
   approvedAt: z.string().optional(),
-  compilerModel: z.string(),
+  incubatorModel: z.string(),
 });
 
 const CompiledPromptSchema = z.object({
   id: z.string(),
-  variantStrategyId: z.string(),
+  strategyId: z.string(),
   specId: z.string(),
   prompt: z.string(),
   images: z.array(ReferenceImageSchema),
@@ -69,7 +69,6 @@ export const HypothesisPromptBundleResponseSchema = z.object({
   evaluationContext: EvaluationContextPayloadSchema.nullable(),
   provenance: ProvenanceContextSchema,
   generationContext: z.object({
-    agentMode: z.enum(['single', 'agentic']),
     modelCredentials: z.array(
       z.object({
         providerId: z.string(),
@@ -98,77 +97,36 @@ const ProviderInfoSchema = z.object({
 
 export const ProvidersListResponseSchema = z.array(ProviderInfoSchema);
 
-const LlmLogEntrySchema = z
-  .object({
-    id: z.string(),
-    timestamp: z.string(),
-    status: z.enum(['in_progress', 'complete', 'error']).optional(),
-    correlationId: z.string().optional(),
-    source: z.enum([
-      'compiler',
-      'planner',
-      'builder',
-      'designSystem',
-      'evaluator',
-      'agentCompaction',
-      'other',
-    ]),
-    phase: z.string().optional(),
-    model: z.string(),
-    provider: z.string(),
-    providerName: z.string().optional(),
-    systemPrompt: z.string(),
-    userPrompt: z.string(),
-    response: z.string(),
-    durationMs: z.number(),
-    promptTokens: z.number().optional(),
-    completionTokens: z.number().optional(),
-    totalTokens: z.number().optional(),
-    reasoningTokens: z.number().optional(),
-    cachedPromptTokens: z.number().optional(),
-    costCredits: z.number().optional(),
-    truncated: z.boolean().optional(),
-    toolCalls: z.array(z.object({ name: z.string(), path: z.string().optional() })).optional(),
-    error: z.string().optional(),
-  })
-  .passthrough();
-
-export const ObservabilityLineTraceSchema = z.object({
-  v: z.literal(1),
-  ts: z.string(),
-  type: z.literal('trace'),
-  payload: z.object({
-    event: z.record(z.string(), z.unknown()),
-    correlationId: z.string().optional(),
-    resultId: z.string().optional(),
-  }),
-});
-
-export const ObservabilityLogsResponseSchema = z.object({
-  llm: z.array(LlmLogEntrySchema),
-  trace: z.array(ObservabilityLineTraceSchema),
-});
-
-/** @deprecated Use ObservabilityLogsResponseSchema */
-export const LlmLogListResponseSchema = z.array(LlmLogEntrySchema);
-
-/** GET /api/prompts/:key/history */
-export const PromptHistoryListSchema = z.array(
-  z.object({
-    version: z.number(),
-    createdAt: z.string(),
-  }),
-);
-
-/** GET /api/prompts/:key/versions/:v */
-export const PromptVersionBodySchema = z.object({
-  key: z.string(),
-  version: z.number(),
-  body: z.string(),
-  createdAt: z.string(),
-});
-
 /** POST /api/design-system/extract */
 export const DesignSystemExtractResponseSchema = z.object({
   result: z.string(),
 });
+
+/** POST /api/inputs/generate */
+export const InputsGenerateResponseSchema = z.object({
+  result: z.string(),
+});
+
+
+/** GET /api/config — default rubric blend (repo: src/lib/rubric-weights.json) */
+export const DefaultRubricWeightsSchema = z.object({
+  design: z.number(),
+  strategy: z.number(),
+  implementation: z.number(),
+  browser: z.number(),
+});
+
+/** GET /api/config */
+export const AppConfigResponseSchema = z.object({
+  lockdown: z.boolean(),
+  lockdownProviderId: z.string().optional(),
+  lockdownModelId: z.string().optional(),
+  lockdownModelLabel: z.string().optional(),
+  /** Server operator default; client Settings may override per session. */
+  agenticMaxRevisionRounds: z.number().int().min(0).max(20),
+  agenticMinOverallScore: z.number().min(0).max(5).nullable(),
+  /** Matches repo defaults until promotion or manual edit + server restart. */
+  defaultRubricWeights: DefaultRubricWeightsSchema,
+});
+
+export type AppConfigResponse = z.infer<typeof AppConfigResponseSchema>;

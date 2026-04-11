@@ -6,14 +6,26 @@ export const NODE_TYPES = {
   OBJECTIVES_METRICS: 'objectivesMetrics',
   DESIGN_CONSTRAINTS: 'designConstraints',
   DESIGN_SYSTEM: 'designSystem',
-  COMPILER: 'compiler',
+  INCUBATOR: 'incubator',
   HYPOTHESIS: 'hypothesis',
-  VARIANT: 'variant',
-  CRITIQUE: 'critique',
+  HYPOTHESIS_GHOST: 'hypothesisGhost',
+  PREVIEW: 'preview',
   MODEL: 'model',
 } as const;
 
 export type NodeType = (typeof NODE_TYPES)[keyof typeof NODE_TYPES];
+
+/**
+ * Input node types (spec facets → incubator).
+ * Single source of truth — use everywhere instead of duplicating the set.
+ */
+export const INPUT_NODE_TYPES = new Set<string>([
+  NODE_TYPES.DESIGN_BRIEF,
+  NODE_TYPES.EXISTING_DESIGN,
+  NODE_TYPES.RESEARCH_CONTEXT,
+  NODE_TYPES.OBJECTIVES_METRICS,
+  NODE_TYPES.DESIGN_CONSTRAINTS,
+]);
 
 /** Edge type string literals */
 export const EDGE_TYPES = {
@@ -32,6 +44,12 @@ export const EDGE_STATUS = {
 
 export type EdgeStatus = (typeof EDGE_STATUS)[keyof typeof EDGE_STATUS];
 
+/** IncubationPlan.incubatorModel when prompts are built from a hypothesis workspace slice (not POST /incubate). */
+export const HYPOTHESIS_INCUBATOR_MODEL = 'merged' as const;
+
+/** Fallback `pinnedRunId` on preview nodes when forking before any completed generation exists. */
+export const UNKNOWN_PINNED_RUN_ID = 'unknown' as const;
+
 /** Node border/fill status values (drives NodeShell visual state) */
 export const NODE_STATUS = {
   SELECTED: 'selected',
@@ -49,5 +67,12 @@ export function buildEdgeId(source: string, target: string): string {
   return `edge-${source}-to-${target}`;
 }
 
-/** React Flow layer: variant actively generating stays above overlapping nodes */
-export const VARIANT_NODE_GENERATING_Z_INDEX = 1000;
+/** React Flow layer: preview node actively generating stays above overlapping nodes */
+export const PREVIEW_NODE_GENERATING_Z_INDEX = 1000;
+
+/** React Flow: interactive controls inside nodes — avoid drag/WheelCapture hijack */
+export const RF_INTERACTIVE = 'nodrag nowheel';
+/** Like {@link RF_INTERACTIVE} plus block canvas pan on nested interactions */
+export const RF_INTERACTIVE_NOPAN = 'nodrag nowheel nopan';
+/** Edge delete / small controls: block node drag and canvas pan */
+export const RF_NODRAG_NOPAN = 'nodrag nopan';

@@ -1,3 +1,6 @@
+# Meta-harness outer-loop run artifacts
+meta-harness/history/
+
 # Logs
 logs
 *.log
@@ -15,10 +18,6 @@ node_modules
 dist
 dist-ssr
 *.local
-
-# Database (SQLite dev artifacts; never commit working DBs)
-prisma/**/*.db
-prisma/**/*.db-journal
 
 # Test files
 test*.html

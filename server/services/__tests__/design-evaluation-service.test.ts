@@ -1,12 +1,18 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
+import type { GenerationProvider } from '../../../src/types/provider.ts';
+import { EVALUATOR_RUBRIC_IDS, type EvaluatorRubricId } from '../../../src/types/evaluation.ts';
+import * as registry from '../providers/registry.ts';
 import {
   parseModelJsonObject,
+  normalizeEvaluatorWorkerPayload,
+  evaluatorWorkerReportSchema,
   enforceRevisionGate,
   buildEvaluatorUserContent,
   buildDegradedReport,
   aggregateEvaluationReports,
   isEvalSatisfied,
+  runEvaluationWorkers,
 } from '../design-evaluation-service.ts';
 import { runBrowserQA } from '../browser-qa-evaluator.ts';
 import type { AggregatedEvaluationReport } from '../../../src/types/evaluation.ts';
@@ -32,12 +38,53 @@ describe('parseModelJsonObject', () => {
       ),
     ).toEqual({ ok: true, trailing: 'x' });
   });
+
+  it('accepts evaluator JSON when findings and hardFails were wrongly nested under scores', () => {
+    const raw = JSON.stringify({
+      rubric: 'design',
+      scores: {
+        design_quality: { score: 4, notes: 'ok' },
+        originality: { score: 3, notes: 'fine' },
+        craft: { score: 4, notes: 'ok' },
+        usability: { score: 4, notes: 'ok' },
+        findings: [{ severity: 'high', summary: 'S', detail: 'D' }],
+        hardFails: [{ code: 'MISSING_X', message: 'bad' }],
+      },
+      findings: [{ severity: 'low', summary: 'Top', detail: 'T' }],
+      hardFails: [],
+    });
+    const parsed = parseModelJsonObject(raw, evaluatorWorkerReportSchema, normalizeEvaluatorWorkerPayload);
+    expect(parsed.scores).not.toHaveProperty('findings');
+    expect(parsed.scores).not.toHaveProperty('hardFails');
+    expect(parsed.findings).toHaveLength(2);
+    expect(parsed.hardFails).toHaveLength(1);
+    expect(parsed.hardFails[0].code).toBe('MISSING_X');
+  });
+
+  it('coerces a single finding object at top level into an array', () => {
+    const raw = JSON.stringify({
+      rubric: 'strategy',
+      scores: {
+        hypothesis_adherence: { score: 5, notes: 'n' },
+        kpi_alignment: { score: 5, notes: 'n' },
+        constraints_respect: { score: 5, notes: 'n' },
+        dimension_fit: { score: 5, notes: 'n' },
+        design_system_use: { score: 5, notes: 'n' },
+      },
+      findings: { severity: 'medium', summary: 'One', detail: 'Detail' },
+      hardFails: [],
+    });
+    const parsed = parseModelJsonObject(raw, evaluatorWorkerReportSchema, normalizeEvaluatorWorkerPayload);
+    expect(parsed.findings).toEqual([
+      { severity: 'medium', summary: 'One', detail: 'Detail' },
+    ]);
+  });
 });
 
 describe('enforceRevisionGate', () => {
   const base: AggregatedEvaluationReport = {
     overallScore: 4.2,
-    normalizedScores: { craft: 4, originality: 4 },
+    normalizedScores: { design_craft: 4, design_originality: 4 },
     hardFails: [],
     prioritizedFixes: [],
     shouldRevise: false,
@@ -52,18 +99,29 @@ describe('enforceRevisionGate', () => {
     expect(r.shouldRevise).toBe(true);
   });
 
-  it('forces shouldRevise when any normalized score is <= 2', () => {
+  it('forces shouldRevise when a design/strategy criterion is <= 2', () => {
     const r = enforceRevisionGate({
       ...base,
-      normalizedScores: { a: 4, b: 2 },
+      normalizedScores: { design_a: 4, design_b: 2 },
+      overallScore: 3.2,
     });
     expect(r.shouldRevise).toBe(true);
   });
 
-  it('forces shouldRevise when average score is below 3.5', () => {
+  it('does not force critical from implementation/browser when score is 2 (only <= 1)', () => {
     const r = enforceRevisionGate({
       ...base,
-      normalizedScores: { a: 3, b: 3 },
+      normalizedScores: { implementation_semantic_html: 2, browser_page_structure: 4 },
+      overallScore: 4,
+    });
+    expect(r.shouldRevise).toBe(false);
+  });
+
+  it('forces shouldRevise when weighted overall is below 3.5', () => {
+    const r = enforceRevisionGate({
+      ...base,
+      normalizedScores: { design_a: 3, design_b: 3 },
+      overallScore: 3,
     });
     expect(r.shouldRevise).toBe(true);
   });
@@ -71,7 +129,7 @@ describe('enforceRevisionGate', () => {
   it('preserves shouldRevise false when scores are healthy', () => {
     const r = enforceRevisionGate({
       ...base,
-      normalizedScores: { a: 4, b: 4 },
+      normalizedScores: { design_a: 4, design_b: 4 },
       overallScore: 4,
     });
     expect(r.shouldRevise).toBe(false);
@@ -89,8 +147,8 @@ describe('isEvalSatisfied', () => {
     ...partial,
   });
 
-  it('is satisfied when shouldRevise is false', () => {
-    expect(isEvalSatisfied(agg({ shouldRevise: false }))).toBe(true);
+  it('is satisfied when shouldRevise is false and no target score', () => {
+    expect(isEvalSatisfied(agg({ shouldRevise: false, overallScore: 4 }))).toBe(true);
   });
 
   it('is not satisfied when shouldRevise true and no min threshold', () => {
@@ -125,14 +183,39 @@ describe('isEvalSatisfied', () => {
       }),
     ).toBe(false);
   });
+
+  it('is not satisfied when shouldRevise false but score below target (evaluator target score)', () => {
+    expect(
+      isEvalSatisfied(agg({ shouldRevise: false, overallScore: 4.3, hardFails: [] }), {
+        minOverallScore: 4.5,
+      }),
+    ).toBe(false);
+  });
+
+  it('is satisfied when shouldRevise false and score meets target', () => {
+    expect(
+      isEvalSatisfied(agg({ shouldRevise: false, overallScore: 4.5, hardFails: [] }), {
+        minOverallScore: 4.5,
+      }),
+    ).toBe(true);
+  });
 });
 
 describe('buildDegradedReport', () => {
   it('marks rubric and includes worker error hardFail', () => {
-    const r = buildDegradedReport('strategy', new Error('boom'));
-    expect(r.rubric).toBe('strategy');
-    expect(r.hardFails.some((h) => h.code === 'evaluator_worker_error')).toBe(true);
-    expect(r.scores.evaluator_unavailable?.score).toBe(0);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const r = buildDegradedReport('strategy', new Error('boom'));
+      expect(r.rubric).toBe('strategy');
+      expect(r.hardFails.some((h) => h.code === 'evaluator_worker_error')).toBe(true);
+      expect(r.scores.evaluator_unavailable?.score).toBe(0);
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[eval:worker-degraded]',
+        expect.objectContaining({ rubric: 'strategy', message: expect.stringContaining('boom') }),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
 
@@ -147,7 +230,7 @@ describe('aggregateEvaluationReports', () => {
     hardFails: [] as { code: string; message: string }[],
   });
 
-  it('merges scores with rubric-prefixed keys and computes overall average', () => {
+  it('merges scores with rubric-prefixed keys and computes rubric-weighted overall', () => {
     const agg = aggregateEvaluationReports({
       design: worker('design', 4),
       strategy: worker('strategy', 2),
@@ -157,10 +240,46 @@ describe('aggregateEvaluationReports', () => {
     expect(agg.normalizedScores.design_c1).toBe(4);
     expect(agg.normalizedScores.strategy_c1).toBe(2);
     expect(agg.normalizedScores.browser_c1).toBe(4);
-    expect(agg.overallScore).toBeCloseTo(14 / 4, 5);
+    // 0.4*4 + 0.3*2 + 0.2*4 + 0.1*4 = 3.4
+    expect(agg.overallScore).toBeCloseTo(3.4, 5);
     expect(agg.shouldRevise).toBe(false);
     const gated = enforceRevisionGate(agg);
     expect(gated.shouldRevise).toBe(true);
+  });
+
+  it('honors custom rubric weight override when aggregating', () => {
+    const agg = aggregateEvaluationReports(
+      {
+        design: worker('design', 4),
+        strategy: worker('strategy', 2),
+        implementation: worker('implementation', 4),
+        browser: worker('browser', 4),
+      },
+      { strategy: 1 },
+    );
+    // resolveRubricWeights({strategy:1}) merges with defaults then normalizes → strategy gets higher share.
+    expect(agg.overallScore).not.toBeCloseTo(3.4, 5);
+    expect(agg.overallScore).toBeGreaterThan(0);
+    expect(agg.overallScore).toBeLessThanOrEqual(5);
+  });
+
+  it('orders findings from design/strategy before implementation/browser at equal severity', () => {
+    const medium = (summary: string, rubric: EvaluatorRubricId) => ({
+      rubric,
+      scores: { c: { score: 4, notes: '' } },
+      findings: [{ severity: 'medium' as const, summary, detail: 'x' }],
+      hardFails: [] as { code: string; message: string }[],
+    });
+    const agg = aggregateEvaluationReports({
+      design: medium('Design finding', 'design'),
+      strategy: { rubric: 'strategy', scores: { c: { score: 4, notes: '' } }, findings: [], hardFails: [] },
+      implementation: medium('Impl finding', 'implementation'),
+      browser: medium('Browser finding', 'browser'),
+    });
+    const joined = agg.prioritizedFixes.join('\n');
+    expect(joined.indexOf('Design finding')).toBeLessThan(joined.indexOf('Impl finding'));
+    expect(joined.indexOf('Design finding')).toBeLessThan(joined.indexOf('Browser finding'));
+    expect(joined.indexOf('Impl finding')).toBeLessThan(joined.indexOf('Browser finding'));
   });
 
   it('includes browser hard fails in aggregated hard fails with source browser', () => {
@@ -204,10 +323,20 @@ describe('runBrowserQA', () => {
     expect(result.scores.js_runtime?.score).toBeLessThan(5);
   });
 
-  it('reports missing external asset as hard fail', () => {
+  it('reports a single missing external asset as a finding but not a hard fail', () => {
     const html = '<!DOCTYPE html><html><head><link rel="stylesheet" href="styles.css"/></head><body><h1>Styled page with enough content here</h1></body></html>';
     const result = runBrowserQA({ files: { 'index.html': html } });
+    expect(result.hardFails.some((hf) => hf.code === 'missing_assets')).toBe(false);
+    expect(result.scores.asset_integrity?.score).toBeLessThan(5);
+    expect(result.findings.some((f) => f.summary === 'Missing asset references')).toBe(true);
+  });
+
+  it('hard-fails when multiple external assets are missing (broken integrity)', () => {
+    const html =
+      '<!DOCTYPE html><html><head><link rel="stylesheet" href="a.css"/><script src="b.js"></script></head><body><h1>Page with enough words here for content check</h1></body></html>';
+    const result = runBrowserQA({ files: { 'index.html': html } });
     expect(result.hardFails.some((hf) => hf.code === 'missing_assets')).toBe(true);
+    expect(result.scores.asset_integrity?.score).toBeLessThanOrEqual(2);
   });
 
   it('passes when external asset is present in file map', () => {
@@ -216,10 +345,78 @@ describe('runBrowserQA', () => {
     expect(result.scores.asset_integrity?.score).toBe(5);
   });
 
+  it('checks asset integrity on secondary html pages (single miss → finding, not hard fail)', () => {
+    const result = runBrowserQA({
+      files: {
+        'index.html':
+          '<!DOCTYPE html><html><body><h1>Home page with words for content</h1><a href="p2.html">Next</a></body></html>',
+        'p2.html':
+          '<!DOCTYPE html><html><head><link rel="stylesheet" href="missing.css"/></head><body><h1>Second page words here</h1></body></html>',
+      },
+    });
+    expect(result.hardFails.some((hf) => hf.code === 'missing_assets')).toBe(false);
+    expect(result.findings.some((f) => f.summary === 'Missing asset references')).toBe(true);
+  });
+
   it('returns degraded-shaped report when files map is empty', () => {
     const result = runBrowserQA({ files: {} });
     expect(result.rubric).toBe('browser');
     expect(result.hardFails.some((hf) => hf.code === 'empty_page')).toBe(true);
+  });
+});
+
+describe('runEvaluationWorkers onWorkerDone', () => {
+  const html =
+    '<!DOCTYPE html><html><head><title>T</title></head><body><h1>Hello</h1><p>World content here with lots of words to make the content check pass easily</p><button onclick="go()">CTA</button><a href="#home">Nav</a></body></html>';
+
+  let getProviderSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    getProviderSpy = vi.spyOn(registry, 'getProvider').mockReturnValue({
+      generateChat: vi.fn().mockResolvedValue({
+        raw: JSON.stringify({
+          rubric: 'design',
+          scores: { x: { score: 4, notes: 'n' } },
+          findings: [],
+          hardFails: [],
+        }),
+      }),
+    } as unknown as GenerationProvider);
+  });
+
+  afterEach(() => {
+    getProviderSpy.mockRestore();
+  });
+
+  it('invokes onWorkerDone once per rubric in parallel mode', async () => {
+    const done: EvaluatorRubricId[] = [];
+    await runEvaluationWorkers({
+      files: { 'index.html': html },
+      compiledPrompt: 'p',
+      providerId: 'openrouter',
+      modelId: 'x',
+      parallel: true,
+      onWorkerDone: (rubric) => {
+        done.push(rubric);
+      },
+    });
+    expect(done).toHaveLength(4);
+    expect(new Set(done).size).toBe(4);
+  });
+
+  it('invokes onWorkerDone in sequential rubric order', async () => {
+    const done: EvaluatorRubricId[] = [];
+    await runEvaluationWorkers({
+      files: { 'index.html': html },
+      compiledPrompt: 'p',
+      providerId: 'openrouter',
+      modelId: 'x',
+      parallel: false,
+      onWorkerDone: (rubric) => {
+        done.push(rubric);
+      },
+    });
+    expect(done).toEqual([...EVALUATOR_RUBRIC_IDS]);
   });
 });
 
@@ -236,6 +433,18 @@ describe('buildEvaluatorUserContent', () => {
     expect(body).toContain('compiled prompt text');
     expect(body).toContain('Bold dark UI');
     expect(body).toContain('Increase trust');
+    expect(body).toContain('bundled_preview_html');
     expect(body).toContain('index.html');
+  });
+
+  it('embeds preview_page_url when provided', () => {
+    const body = buildEvaluatorUserContent(
+      { 'index.html': '<html><body>x</body></html>' },
+      'p',
+      undefined,
+      'http://127.0.0.1:3001/api/preview/sessions/abc/index.html',
+    );
+    expect(body).toContain('<preview_page_url>');
+    expect(body).toContain('http://127.0.0.1:3001/api/preview/sessions/abc/index.html');
   });
 });

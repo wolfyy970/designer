@@ -34,28 +34,28 @@ describe('computeLineage', () => {
 
   it('discovers sibling inputs to a shared target', () => {
     // designBrief → compiler ← model
-    const edges = [makeEdge('brief', 'compiler'), makeEdge('model', 'compiler')];
+    const edges = [makeEdge('brief', 'incubator'), makeEdge('model', 'incubator')];
     const result = computeLineage(edges, 'brief');
-    expect(result.nodeIds).toEqual(new Set(['brief', 'compiler', 'model']));
+    expect(result.nodeIds).toEqual(new Set(['brief', 'incubator', 'model']));
     expect(result.edgeIds.size).toBe(2);
   });
 
   it('discovers sibling inputs from either sibling', () => {
-    const edges = [makeEdge('brief', 'compiler'), makeEdge('model', 'compiler')];
+    const edges = [makeEdge('brief', 'incubator'), makeEdge('model', 'incubator')];
     const resultFromModel = computeLineage(edges, 'model');
-    expect(resultFromModel.nodeIds).toEqual(new Set(['brief', 'compiler', 'model']));
+    expect(resultFromModel.nodeIds).toEqual(new Set(['brief', 'incubator', 'model']));
   });
 
   it('traverses the full pipeline: sections + model → compiler → hypothesis → variant', () => {
     const edges = [
-      makeEdge('brief', 'compiler'),
-      makeEdge('model', 'compiler'),
-      makeEdge('compiler', 'hyp1'),
+      makeEdge('brief', 'incubator'),
+      makeEdge('model', 'incubator'),
+      makeEdge('incubator', 'hyp1'),
       makeEdge('model', 'hyp1'),
       makeEdge('hyp1', 'variant1'),
     ];
-    const result = computeLineage(edges, 'compiler');
-    expect(result.nodeIds).toEqual(new Set(['brief', 'model', 'compiler', 'hyp1', 'variant1']));
+    const result = computeLineage(edges, 'incubator');
+    expect(result.nodeIds).toEqual(new Set(['brief', 'model', 'incubator', 'hyp1', 'variant1']));
   });
 
   it('does not include disconnected nodes', () => {

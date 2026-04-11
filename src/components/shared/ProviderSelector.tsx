@@ -5,12 +5,14 @@ interface ProviderSelectorProps {
   selectedId: string;
   onChange: (id: string) => void;
   label?: string;
+  disabled?: boolean;
 }
 
 export default function ProviderSelector({
   selectedId,
   onChange,
   label = 'Generation Provider',
+  disabled = false,
 }: ProviderSelectorProps) {
   const { data: providers = [] } = useQuery({
     queryKey: ['providers'],
@@ -25,8 +27,9 @@ export default function ProviderSelector({
       </label>
       <select
         value={selectedId}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-md border border-border bg-bg px-3 py-2 text-xs text-fg-secondary input-focus"
+        className="w-full rounded-md border border-border bg-bg px-3 py-2 text-xs text-fg-secondary input-focus disabled:cursor-not-allowed disabled:opacity-60"
       >
         {providers.map((p) => (
           <option key={p.id} value={p.id}>

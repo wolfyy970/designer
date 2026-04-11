@@ -1,72 +1,108 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-const listLatestSkillVersions = vi.hoisted(() => vi.fn());
-const buildVirtualSkillFiles = vi.hoisted(() => vi.fn());
-const selectSkillsForContext = vi.hoisted(() => vi.fn());
-const formatSkillsForPrompt = vi.hoisted(() => vi.fn());
-
-vi.mock('../../db/skills.ts', () => ({
-  listLatestSkillVersions,
-  buildVirtualSkillFiles,
-}));
-
-vi.mock('../skills/select-skills.ts', () => ({
-  selectSkillsForContext,
-}));
-
-vi.mock('../skills/format-for-prompt.ts', () => ({
-  formatSkillsForPrompt,
-}));
+import { describe, it, expect, vi } from 'vitest';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 import { buildAgenticSystemContext } from '../build-agentic-system-context.ts';
 
+vi.mock('../prompt-discovery.ts', () => ({
+  getSystemPromptBody: vi.fn(async () => 'BASE'),
+}));
+
+vi.mock('../skill-discovery.ts', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('../skill-discovery.ts')>();
+  return {
+    ...orig,
+    getSkillBody: vi.fn(async (key: string) => {
+      if (key === 'agents-md-file') return '  hello agent  ';
+      return '';
+    }),
+  };
+});
+
 describe('buildAgenticSystemContext', () => {
-  beforeEach(() => {
-    listLatestSkillVersions.mockReset();
-    buildVirtualSkillFiles.mockReset();
-    selectSkillsForContext.mockReset();
-    formatSkillsForPrompt.mockReset();
+  async function emptySkillsRoot(): Promise<string> {
+    return fs.mkdtemp(path.join(os.tmpdir(), 'ad-ctx-empty-skills-'));
+  }
 
-    listLatestSkillVersions.mockResolvedValue([]);
-    selectSkillsForContext.mockReturnValue([]);
-    formatSkillsForPrompt.mockReturnValue('');
+  it('returns empty catalog and seeds when no skills exist', async () => {
+    const skillsRoot = await emptySkillsRoot();
+    try {
+      const out = await buildAgenticSystemContext({ skillsRoot });
+
+      expect(out.loadedSkills).toEqual([]);
+      expect(out.skillCatalog).toEqual([]);
+      expect(out.systemPrompt).toBe('BASE');
+    } finally {
+      await fs.rm(skillsRoot, { recursive: true, force: true });
+    }
   });
 
-  it('omits sandbox AGENTS.md when sandboxAgentsContext is empty or whitespace', async () => {
-    const getPromptBody = vi.fn(async (key: string) => {
-      if (key === 'genSystemHtmlAgentic') return 'BASE';
-      if (key === 'sandboxAgentsContext') return '  \n  ';
-      return '';
-    });
-
-    const out = await buildAgenticSystemContext({ getPromptBody });
-
-    expect(out.sandboxSeedFiles).toEqual({});
-    expect(out.systemPrompt).toBe('BASE');
+  it('returns skillCatalog + seeds for skills matching session tags', async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'ad-ctx-skills-'));
+    try {
+      const key = 'test-design-skill';
+      await fs.mkdir(path.join(tmp, key), { recursive: true });
+      await fs.writeFile(
+        path.join(tmp, key, 'SKILL.md'),
+        `---
+name: Test Design Skill
+description: A test skill
+tags:
+  - design
+when: auto
+---
+Skill body`,
+        'utf8',
+      );
+      const out = await buildAgenticSystemContext({ skillsRoot: tmp, sessionType: 'design' });
+      expect(out.loadedSkills).toHaveLength(1);
+      expect(out.loadedSkills[0]!.key).toBe(key);
+      expect(out.skillCatalog).toHaveLength(1);
+      expect(out.sandboxSeedFiles[`skills/${key}/SKILL.md`]).toBe('Skill body');
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
   });
 
-  it('seeds AGENTS.md from trimmed sandboxAgentsContext when non-empty', async () => {
-    const getPromptBody = vi.fn(async (key: string) => {
-      if (key === 'genSystemHtmlAgentic') return 'BASE';
-      if (key === 'sandboxAgentsContext') return '  hello agent  ';
-      return '';
-    });
+  it('filters skills by session type tags', async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'ad-ctx-filter-'));
+    try {
+      await fs.mkdir(path.join(tmp, 'design-skill'), { recursive: true });
+      await fs.writeFile(
+        path.join(tmp, 'design-skill', 'SKILL.md'),
+        `---
+name: Design Skill
+description: For design
+tags:
+  - design
+when: auto
+---
+Design body`,
+        'utf8',
+      );
+      await fs.mkdir(path.join(tmp, 'eval-skill'), { recursive: true });
+      await fs.writeFile(
+        path.join(tmp, 'eval-skill', 'SKILL.md'),
+        `---
+name: Eval Skill
+description: For evaluation
+tags:
+  - evaluation
+when: auto
+---
+Eval body`,
+        'utf8',
+      );
+      const designOut = await buildAgenticSystemContext({ skillsRoot: tmp, sessionType: 'design' });
+      expect(designOut.skillCatalog).toHaveLength(1);
+      expect(designOut.skillCatalog[0]!.key).toBe('design-skill');
 
-    const out = await buildAgenticSystemContext({ getPromptBody });
-
-    expect(out.sandboxSeedFiles).toEqual({ 'AGENTS.md': 'hello agent' });
-  });
-
-  it('appends skill catalog to system prompt when formatSkillsForPrompt returns text', async () => {
-    formatSkillsForPrompt.mockReturnValue('<catalog>');
-    const getPromptBody = vi.fn(async (key: string) => {
-      if (key === 'genSystemHtmlAgentic') return 'BASE';
-      if (key === 'sandboxAgentsContext') return '';
-      return '';
-    });
-
-    const out = await buildAgenticSystemContext({ getPromptBody });
-
-    expect(out.systemPrompt).toBe('BASE\n<catalog>');
+      const evalOut = await buildAgenticSystemContext({ skillsRoot: tmp, sessionType: 'evaluation' });
+      expect(evalOut.skillCatalog).toHaveLength(1);
+      expect(evalOut.skillCatalog[0]!.key).toBe('eval-skill');
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
   });
 });

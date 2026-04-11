@@ -3,32 +3,22 @@ import { filterNoisePrioritizedFixes, tryPrettyJson } from './eval-prioritized-f
 const HARD_FAIL_PREFIX = /^\[hard_fail:([^\]]+)\]\s*([\s\S]*)$/;
 const SEVERITY_PREFIX = /^\[(high|medium|low)\]\s*([\s\S]*)$/;
 
-function chipClasses(
-  variant: 'hard_fail' | 'high' | 'medium' | 'low',
-): string {
-  switch (variant) {
-    case 'hard_fail':
-      return 'bg-error-subtle text-error ring-1 ring-inset ring-error/25';
-    case 'high':
-      return 'bg-error-subtle text-error ring-1 ring-inset ring-error/20';
-    case 'medium':
-      return 'bg-warning-subtle text-warning ring-1 ring-inset ring-warning/25';
-    default:
-      return 'bg-info-subtle text-info ring-1 ring-inset ring-info/25';
-  }
+/** Inline eval tags stay neutral — severity is encoded in the label, not hue (see DESIGN_SYSTEM.md). */
+function evalTagChipClasses(): string {
+  return 'bg-surface-raised/90 text-fg-secondary ring-1 ring-inset ring-border-subtle';
 }
 
 function EvalPrioritizedFixRow({ text, dense }: { text: string; dense: boolean }) {
-  let chip: { variant: 'hard_fail' | 'high' | 'medium' | 'low'; label: string } | null = null;
+  let chipLabel: string | null = null;
   let rest = text;
   const hm = text.match(HARD_FAIL_PREFIX);
   if (hm?.[1]) {
-    chip = { variant: 'hard_fail', label: hm[1] };
+    chipLabel = hm[1];
     rest = hm[2] ?? '';
   } else {
     const sm = text.match(SEVERITY_PREFIX);
     if (sm?.[1] && (sm[1] === 'high' || sm[1] === 'medium' || sm[1] === 'low')) {
-      chip = { variant: sm[1], label: sm[1] };
+      chipLabel = sm[1];
       rest = sm[2] ?? '';
     }
   }
@@ -39,11 +29,11 @@ function EvalPrioritizedFixRow({ text, dense }: { text: string; dense: boolean }
 
   return (
     <div className="rounded-md border border-border-subtle/90 bg-bg/50 px-2 py-1.5">
-      {chip && (
+      {chipLabel && (
         <span
-          className={`inline-block rounded px-1 py-px text-badge font-medium uppercase tracking-wide ${chipClasses(chip.variant)}`}
+          className={`inline-block rounded px-1 py-px text-badge font-medium uppercase tracking-wide ${evalTagChipClasses()}`}
         >
-          {chip.label}
+          {chipLabel}
         </span>
       )}
       {jsonBlock ? (

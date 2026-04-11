@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeStreamedAndFormattedAssistantResponse } from '../pi-llm-log.ts';
+import { mergeStreamedAndFormattedAssistantResponse } from '../merge-streamed-formatted-assistant.ts';
 
 describe('mergeStreamedAndFormattedAssistantResponse', () => {
   it('keeps streamed body when it is longer than formatted', () => {

@@ -8,10 +8,35 @@ import type { ReferenceImage } from './spec';
 /** Base constraint required by React Flow */
 type NodeData<T> = Record<string, unknown> & T;
 
-/** Section nodes (designBrief, existingDesign, etc.) store data in spec-store */
-export type SectionNodeData = NodeData<Record<string, never>>;
+/** Input nodes (designBrief, existingDesign, etc.) store data in spec-store */
+export type InputNodeData = NodeData<Record<string, never>>;
 
-export type CompilerNodeData = NodeData<{
+/** Placeholder cards for optional input nodes not yet on the canvas */
+export type InputGhostTargetType =
+  | 'existingDesign'
+  | 'researchContext'
+  | 'objectivesMetrics'
+  | 'designConstraints';
+
+const INPUT_GHOST_TARGET_TYPE_SET = new Set<string>([
+  'existingDesign',
+  'researchContext',
+  'objectivesMetrics',
+  'designConstraints',
+]);
+
+export function isInputGhostTargetType(v: string): v is InputGhostTargetType {
+  return INPUT_GHOST_TARGET_TYPE_SET.has(v);
+}
+
+export type InputGhostData = NodeData<{
+  targetType: InputGhostTargetType;
+}>;
+
+/** Ephemeral “add hypothesis” placeholder; no fields beyond React Flow bag */
+export type HypothesisGhostData = NodeData<object>;
+
+export type IncubatorNodeData = NodeData<{
   hypothesisCount?: number;
 }>;
 
@@ -20,12 +45,11 @@ export type HypothesisNodeData = NodeData<{
   placeholder?: boolean;
   providerId?: string;  // vestigial post-v13, kept for migration safety
   modelId?: string;     // vestigial post-v13
-  agentMode?: 'single' | 'agentic';
 }>;
 
-export type VariantNodeData = NodeData<{
+export type PreviewNodeData = NodeData<{
   refId?: string;
-  variantStrategyId?: string;
+  strategyId?: string;
   pinnedRunId?: string;
 }>;
 
@@ -35,13 +59,6 @@ export type DesignSystemNodeData = NodeData<{
   images?: ReferenceImage[];
   providerId?: string;
   modelId?: string;
-}>;
-
-export type CritiqueNodeData = NodeData<{
-  title?: string;
-  strengths?: string;
-  improvements?: string;
-  direction?: string;
 }>;
 
 export type ModelNodeData = NodeData<{

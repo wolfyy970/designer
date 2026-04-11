@@ -11,7 +11,7 @@ export function saveSpecToLibrary(spec: DesignSpec): void {
 
 export function getSavedSpec(specId: string): DesignSpec | null {
   const canvases = getAllCanvases();
-  return canvases[specId] ?? null;
+  return canvases[specId] ?? Object.values(canvases).find((s) => s.id === specId) ?? null;
 }
 
 /**

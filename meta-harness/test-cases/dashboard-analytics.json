@@ -1,0 +1,29 @@
+{
+  "name": "dashboard-analytics",
+  "description": "Dense analytics dashboard — tables, filters, empty states",
+  "spec": {
+    "title": "PulseOps — incident analytics dashboard",
+    "sections": {
+      "design-brief": {
+        "content": "Design a single-page operational dashboard for on-call engineers. Shows incident volume, MTTR trend, and a sortable recent incidents table. Primary job: scan health in under 10 seconds, then drill into one row.\n\nInclude: top summary KPI row (4 metrics), a simple trend strip (can be CSS-only chart metaphor), filters row (time range + severity), table with 8+ placeholder rows, and an empty state for the table when filters match nothing."
+      },
+      "existing-design": { "content": "Internal tool aesthetic; no consumer fluff." },
+      "research-context": { "content": "Users are interrupted and stressed; contrast and legibility beat decoration." },
+      "objectives-metrics": { "content": "Reduce time to identify worst incident. Emphasize sort affordances and severity color system consistent with status." },
+      "design-constraints": { "content": "Static HTML/CSS/JS. No chart libraries — use div-based or CSS gradients for trends. WCAG-minded contrast for severity badges." }
+    }
+  },
+  "strategy": {
+    "id": "mh-strat-scanability-under-load",
+    "name": "Scanability under load",
+    "hypothesis": "A fixed KPI band plus zebra table striping and sticky column headers will improve scan speed compared to a card-heavy layout, for fatigued on-call users.",
+    "rationale": "Reduced eye travel and predictable grid alignment speed triage.",
+    "measurements": "Rubric: table readable at 375px width; sticky header does not obscure KPIs; empty state explains how to clear filters.",
+    "dimensionValues": { "layout": "dashboard", "density": "high", "format": "static-html" }
+  },
+  "model": {
+    "providerId": "openrouter",
+    "modelId": "minimax/minimax-m2.5",
+    "thinkingLevel": "minimal"
+  }
+}

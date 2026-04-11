@@ -1,6 +1,7 @@
+import { isInputGhostTargetType, type InputGhostTargetType } from '../types/canvas-data';
 import { DEFAULT_COL_GAP } from '../lib/canvas-layout';
 import { STORAGE_KEYS } from '../lib/storage-keys';
-import { EDGE_TYPES, EDGE_STATUS } from '../constants/canvas';
+import { EDGE_TYPES, EDGE_STATUS, NODE_TYPES } from '../constants/canvas';
 
 /** Safely read and parse a localStorage JSON entry. Returns null on any failure. */
 function readLocalStorageJson(key: string): unknown {
@@ -19,14 +20,13 @@ const FRESH_STATE = {
   edges: [],
   viewport: { x: 0, y: 0, zoom: 0.85 },
   showMiniMap: true,
-  showGrid: true,
   colGap: DEFAULT_COL_GAP,
   autoLayout: true,
 };
 
 // ── Per-version migration functions ──────────────────────────────────
 
-/** v2 → v3: fix stale 'incubator' nodes */
+/** v2 → v3: fix stale legacy `compiler` nodes (historical type string before node-type renames). */
 function migrateV2ToV3(s: Record<string, unknown>): Record<string, unknown> {
   const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
   const edges = (s.edges as Array<Record<string, unknown>>) ?? [];
@@ -34,14 +34,14 @@ function migrateV2ToV3(s: Record<string, unknown>): Record<string, unknown> {
     ...s,
     nodes: nodes.map((n) => ({
       ...n,
-      type: n.type === 'incubator' ? 'designer' : n.type,
-      id: n.id === 'incubator-node' ? 'generator-node' : n.id,
+      type: n.type === 'compiler' ? 'designer' : n.type,
+      id: n.id === 'compiler-node' ? 'generator-node' : n.id,
     })),
     edges: edges.map((e) => ({
       ...e,
-      source: e.source === 'incubator-node' ? 'generator-node' : e.source,
-      target: e.target === 'incubator-node' ? 'generator-node' : e.target,
-      id: typeof e.id === 'string' ? e.id.replace('incubator', 'designer') : e.id,
+      source: e.source === 'compiler-node' ? 'generator-node' : e.source,
+      target: e.target === 'compiler-node' ? 'generator-node' : e.target,
+      id: typeof e.id === 'string' ? e.id.replace('compiler', 'designer') : e.id,
     })),
   };
 }
@@ -216,7 +216,7 @@ function migrateV12ToV13(s: Record<string, unknown>): Record<string, unknown> {
   const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
   const edges = (s.edges as Array<Record<string, unknown>>) ?? [];
 
-  const PROCESSING_TYPES = new Set(['compiler', 'hypothesis', 'designSystem']);
+  const PROCESSING_TYPES = new Set(['incubator', 'hypothesis', 'designSystem']);
   const nodesWithModel: Array<{ node: Record<string, unknown>; providerId: string; modelId: string }> = [];
   for (const n of nodes) {
     if (!PROCESSING_TYPES.has(n.type as string)) continue;
@@ -384,6 +384,180 @@ function migrateV14ToV15(s: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
+/** v15 → v16: remove Critique nodes (feature retired) and edges touching them */
+function migrateV15ToV16(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
+  const edges = (s.edges as Array<Record<string, unknown>>) ?? [];
+  const removed = new Set<string>();
+  for (const n of nodes) {
+    if (n.type === 'critique') removed.add(n.id as string);
+  }
+  const nextNodes = nodes.filter((n) => n.type !== 'critique');
+  const nextEdges = edges.filter((e) => {
+    const src = e.source as string;
+    const tgt = e.target as string;
+    return !removed.has(src) && !removed.has(tgt);
+  });
+  return { ...s, nodes: nextNodes, edges: nextEdges };
+}
+
+/** v16 → v17: strip ephemeral section ghosts if any ever leaked into storage */
+function migrateV16ToV17(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
+  return {
+    ...s,
+    nodes: nodes.filter((n) => n.type !== 'sectionGhost' && n.type !== 'inputGhost'),
+  };
+}
+
+/** v17 → v18: default dismissedSectionGhostSlots for ghost dismiss persistence */
+function migrateV17ToV18(s: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(s.dismissedSectionGhostSlots)) {
+    return { ...s, dismissedSectionGhostSlots: [] };
+  }
+  return s;
+}
+
+/** v18 → v19: sanitize dismissedSectionGhostSlots (strip invalid strings) */
+function migrateV18ToV19(s: Record<string, unknown>): Record<string, unknown> {
+  const raw = s.dismissedSectionGhostSlots;
+  if (!Array.isArray(raw)) {
+    return { ...s, dismissedSectionGhostSlots: [] };
+  }
+  const dismissedSectionGhostSlots = raw.filter(
+    (x): x is InputGhostTargetType => typeof x === 'string' && isInputGhostTargetType(x),
+  );
+  return { ...s, dismissedSectionGhostSlots };
+}
+
+/** v19 → v20: rename node type 'variant' → 'preview', node data variantStrategyId → strategyId */
+function migrateV19ToV20(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
+  return {
+    ...s,
+    nodes: nodes.map((n) => {
+      if (n.type === 'variant') {
+        const data = (n.data as Record<string, unknown>) || {};
+        const { variantStrategyId, ...rest } = data;
+        return {
+          ...n,
+          type: 'preview',
+          data: { ...rest, ...(variantStrategyId != null ? { strategyId: variantStrategyId } : {}) },
+        };
+      }
+      return n;
+    }),
+  };
+}
+
+/** v20 → v21: rename node type `compiler` → `incubator` (terminology; same processing role). */
+function migrateV20ToV21(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
+  return {
+    ...s,
+    nodes: nodes.map((n) => (n.type === 'compiler' ? { ...n, type: 'incubator' } : n)),
+  };
+}
+
+const LEGACY_GHOST_ID_PREFIX = 'ghost-section-';
+const INPUT_GHOST_ID_PREFIX = 'ghost-input-';
+
+/** v21 → v22: input-ghost node type/id prefix; persist keys for dismissed slots + toolbar nudge. */
+function migrateV21ToV22(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
+  const idRewrites = new Map<string, string>();
+  for (const n of nodes) {
+    const rawId = n.id as string;
+    if (rawId.startsWith(LEGACY_GHOST_ID_PREFIX)) {
+      idRewrites.set(rawId, INPUT_GHOST_ID_PREFIX + rawId.slice(LEGACY_GHOST_ID_PREFIX.length));
+    }
+  }
+
+  const nextNodes = nodes.map((n) => {
+    const rawId = n.id as string;
+    const id = idRewrites.get(rawId) ?? rawId;
+    const type = n.type === 'sectionGhost' ? 'inputGhost' : n.type;
+    return { ...n, id, type };
+  });
+
+  const edges = (s.edges as Array<Record<string, unknown>>) ?? [];
+  const nextEdges = edges.map((e) => {
+    const src = e.source as string;
+    const tgt = e.target as string;
+    return {
+      ...e,
+      source: idRewrites.get(src) ?? src,
+      target: idRewrites.get(tgt) ?? tgt,
+    };
+  });
+
+  const dismissedRaw = s.dismissedInputGhostSlots ?? s.dismissedSectionGhostSlots;
+  let dismissedInputGhostSlots: InputGhostTargetType[] = [];
+  if (Array.isArray(dismissedRaw)) {
+    dismissedInputGhostSlots = dismissedRaw.filter(
+      (x): x is InputGhostTargetType => typeof x === 'string' && isInputGhostTargetType(x),
+    );
+  }
+
+  const inputGhostToolbarNudge = Boolean(s.inputGhostToolbarNudge ?? s.sectionGhostToolbarNudge);
+
+  const out: Record<string, unknown> = { ...s };
+  delete out.dismissedSectionGhostSlots;
+  delete out.sectionGhostToolbarNudge;
+  out.nodes = nextNodes;
+  out.edges = nextEdges;
+  out.dismissedInputGhostSlots = dismissedInputGhostSlots;
+  out.inputGhostToolbarNudge = inputGhostToolbarNudge;
+  return out;
+}
+
+/** v22 → v23: hypothesis `agentMode` removed — designing is always agentic; settings live in workspace domain. */
+function migrateV22ToV23(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
+  return {
+    ...s,
+    nodes: nodes.map((n) => {
+      if (n.type !== 'hypothesis') return n;
+      const data = { ...((n.data as Record<string, unknown>) || {}) };
+      delete data.agentMode;
+      return { ...n, data };
+    }),
+  };
+}
+
+/** v23 → v24: remove unused `showGrid` (toggle never affected rendering). */
+function migrateV23ToV24(s: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...s };
+  delete out.showGrid;
+  return out;
+}
+
+/** v24 → v25: at most one model→hypothesis edge per hypothesis (keep first in edge order). */
+function migrateV24ToV25(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
+  const nodeById = new Map(nodes.map((n) => [n.id as string, n]));
+  const edges = (s.edges as Array<Record<string, unknown>>) ?? [];
+  const hypHasModel = new Set<string>();
+  const nextEdges: Array<Record<string, unknown>> = [];
+  for (const e of edges) {
+    const src = e.source as string;
+    const tgt = e.target as string;
+    const srcNode = nodeById.get(src);
+    const tgtNode = nodeById.get(tgt);
+    if (
+      srcNode &&
+      tgtNode &&
+      srcNode.type === NODE_TYPES.MODEL &&
+      tgtNode.type === NODE_TYPES.HYPOTHESIS
+    ) {
+      if (hypHasModel.has(tgt)) continue;
+      hypHasModel.add(tgt);
+    }
+    nextEdges.push(e);
+  }
+  return { ...s, edges: nextEdges };
+}
+
 // ── Top-level migration runner ────────────────────────────────────────
 
 /**
@@ -413,6 +587,16 @@ export function migrateCanvasState(
   if (fromVersion < 13) s = migrateV12ToV13(s);
   if (fromVersion < 14) s = migrateV13ToV14(s);
   if (fromVersion < 15) s = migrateV14ToV15(s);
+  if (fromVersion < 16) s = migrateV15ToV16(s);
+  if (fromVersion < 17) s = migrateV16ToV17(s);
+  if (fromVersion < 18) s = migrateV17ToV18(s);
+  if (fromVersion < 19) s = migrateV18ToV19(s);
+  if (fromVersion < 20) s = migrateV19ToV20(s);
+  if (fromVersion < 21) s = migrateV20ToV21(s);
+  if (fromVersion < 22) s = migrateV21ToV22(s);
+  if (fromVersion < 23) s = migrateV22ToV23(s);
+  if (fromVersion < 24) s = migrateV23ToV24(s);
+  if (fromVersion < 25) s = migrateV24ToV25(s);
 
   return s;
 }

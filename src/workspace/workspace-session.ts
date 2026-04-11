@@ -4,8 +4,8 @@
  *
  * Pure logic lives in `hypothesis-generation-pure.ts` (server-importable).
  */
-import { DEFAULT_COMPILER_PROVIDER } from '../lib/constants';
-import type { VariantStrategy } from '../types/compiler';
+import { DEFAULT_INCUBATOR_PROVIDER } from '../lib/constants';
+import type { HypothesisStrategy } from '../types/incubator';
 import type { EvaluationContextPayload } from '../types/evaluation';
 import type { ProvenanceContext } from '../types/provenance-context';
 import type { DesignSpec } from '../types/spec';
@@ -15,17 +15,14 @@ import {
   evaluationPayloadFromHypothesisContext as evaluationPayloadPure,
   provenanceFromHypothesisContext as provenancePure,
   type HypothesisGenerationContext,
-  type ModelCredential,
   type WorkspaceGraphSnapshot,
 } from './hypothesis-generation-pure';
 
-export type { ModelCredential, WorkspaceGraphSnapshot, HypothesisGenerationContext };
-
-export { buildHypothesisGenerationContextFromInputs } from './hypothesis-generation-pure';
+export type { HypothesisGenerationContext };
 
 export function buildHypothesisGenerationContext(input: {
   hypothesisNodeId: string;
-  variantStrategy: VariantStrategy;
+  hypothesisStrategy: HypothesisStrategy;
   snapshot: WorkspaceGraphSnapshot;
   spec: DesignSpec;
 }): HypothesisGenerationContext | null {
@@ -33,13 +30,13 @@ export function buildHypothesisGenerationContext(input: {
   const domainHyp = s.hypotheses[input.hypothesisNodeId];
   return buildHypothesisGenerationContextFromInputs({
     hypothesisNodeId: input.hypothesisNodeId,
-    variantStrategy: input.variantStrategy,
+    hypothesisStrategy: input.hypothesisStrategy,
     spec: input.spec,
     snapshot: input.snapshot,
     domainHypothesis: domainHyp ?? null,
     modelProfiles: s.modelProfiles,
     designSystems: s.designSystems,
-    defaultCompilerProvider: DEFAULT_COMPILER_PROVIDER,
+    defaultIncubatorProvider: DEFAULT_INCUBATOR_PROVIDER,
   });
 }
 
@@ -51,6 +48,6 @@ export function provenanceFromHypothesisContext(
 
 export function evaluationPayloadFromHypothesisContext(
   ctx: HypothesisGenerationContext,
-): EvaluationContextPayload | undefined {
+): EvaluationContextPayload {
   return evaluationPayloadPure(ctx);
 }

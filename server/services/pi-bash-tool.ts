@@ -1,17 +1,19 @@
 /**
  * Pi SDK `bash` tool backed by just-bash (virtual in-memory project).
+ *
+ * `promptSnippet` is omitted on purpose: Pi only injects it when no `customPrompt` is set;
+ * we use `designer-agentic-system` as the custom prompt, so snippets never reach the model.
  */
 import { Type } from '@sinclair/typebox';
 import type { Bash } from 'just-bash';
 import type { ExtensionContext, ToolDefinition } from './pi-sdk/types.ts';
-import { snapshotDesignFiles } from './agent-bash-sandbox.ts';
-
-const MAX_TOOL_CHARS = 51_200;
+import { BASH_TOOL_MAX_CHARS } from '../lib/content-limits.ts';
+import { SANDBOX_PROJECT_ROOT, snapshotDesignFiles } from './agent-bash-sandbox.ts';
 
 const bashParams = Type.Object({
   command: Type.String({
     description:
-      'Shell command in the sandbox (cwd is the project root). Prefer read/write/edit tools for files; use bash for pipelines, npm, or utilities.',
+      'Shell command in the just-bash sandbox (cwd is the project root). No package managers or host binaries — only built-in commands (e.g. rg, grep, sed, awk, jq, cat, find). Prefer read/write/edit tools for files; use bash for text pipelines or when no dedicated tool fits.',
   }),
 });
 
@@ -23,11 +25,10 @@ export function createSandboxBashTool(
     name: 'bash',
     label: 'bash',
     description:
-      'Run a shell command in the isolated project at /home/user/project (your cwd). ' +
-      'For creating or editing design files, prefer the `write` and `edit` tools (SEARCH/REPLACE); use `read` instead of `cat`. ' +
-      'Use bash for npm, multi-step shell pipelines, or when no dedicated tool fits. ' +
-      '`skills/` is read-only — do not modify it.',
-    promptSnippet: 'bash: sandbox shell (prefer write/edit/read tools for files)',
+      `Run a shell command in the just-bash virtual shell at ${SANDBOX_PROJECT_ROOT} (your cwd). ` +
+      'This is not a full Linux machine: no npm, node, python, or external binaries — only just-bash built-ins (text tools like rg, grep, sed, awk, jq, pipes). ' +
+      'For creating or editing design files, prefer the `write` and `edit` tools; use `read` instead of `cat`. ' +
+      'Use bash for multi-step text pipelines or utilities when no dedicated tool fits.',
     parameters: bashParams,
     async execute(_toolCallId, params, signal, _onUpdate, _ctx: ExtensionContext) {
       const { command } = params as { command: string };
@@ -46,8 +47,8 @@ export function createSandboxBashTool(
       const body = merged || (result.exitCode !== 0 ? '(no stdout/stderr)' : '(no output)');
       const full = prefix + body;
       const text =
-        full.length > MAX_TOOL_CHARS
-          ? `${full.slice(0, MAX_TOOL_CHARS)}\n[Output truncated at ${MAX_TOOL_CHARS} characters]`
+        full.length > BASH_TOOL_MAX_CHARS
+          ? `${full.slice(0, BASH_TOOL_MAX_CHARS)}\n[Output truncated at ${BASH_TOOL_MAX_CHARS} characters]`
           : full;
 
       return {

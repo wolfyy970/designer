@@ -1,0 +1,29 @@
+{
+  "name": "onboarding-checklist",
+  "description": "Product onboarding — checklist + progressive disclosure",
+  "spec": {
+    "title": "Ledgerly — small-business bookkeeping onboarding",
+    "sections": {
+      "design-brief": {
+        "content": "First-run onboarding for a bookkeeping web app used by solo founders and tiny teams. One page: welcome, 4-step checklist (connect bank, categorize expenses, invite accountant, set tax year), inline tips, and a persistent 'resume later' secondary action.\n\nTone: calm, encouraging, plain language. Visual: light background, soft green accent for completed steps, clear disabled vs active states."
+      },
+      "existing-design": { "content": "Competitors use modal wizards; we want inline checklist on one scrollable page." },
+      "research-context": { "content": "Users abandon when they feel rushed; progressive disclosure + saved progress reduces drop-off." },
+      "objectives-metrics": { "content": "Increase completion of step 1 and 2 in first session. Success: users understand what 'connect bank' entails before clicking." },
+      "design-constraints": { "content": "Static prototype only. Simulate checklist state with simple JS or CSS :checked patterns; no real OAuth." }
+    }
+  },
+  "strategy": {
+    "id": "mh-strat-progressive-disclosure",
+    "name": "Progressive disclosure checklist",
+    "hypothesis": "Revealing detail for only the active step (collapsed copy for other steps) will reduce cognitive load versus showing all step instructions expanded at once.",
+    "rationale": "Chunking limits parallel tasks; users complete serially when overwhelmed.",
+    "measurements": "Rubric: primary CTA visible without scroll on mobile; step states visually distinct; help text tied to active step only.",
+    "dimensionValues": { "layout": "single-page", "density": "low", "format": "static-html" }
+  },
+  "model": {
+    "providerId": "openrouter",
+    "modelId": "minimax/minimax-m2.5",
+    "thinkingLevel": "minimal"
+  }
+}

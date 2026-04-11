@@ -1,11 +1,58 @@
+import type { InputGhostData, InputGhostTargetType } from '../types/canvas-data';
+import { INPUT_NODE_TYPES } from '../constants/canvas';
 import type { CanvasNodeType, WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 
 type CanvasNode = WorkspaceNode;
 
-export const SECTION_NODE_TYPES = new Set<CanvasNodeType>([
-  'designBrief', 'existingDesign', 'researchContext',
-  'objectivesMetrics', 'designConstraints',
-]);
+export { INPUT_NODE_TYPES };
+
+/**
+ * Canonical vertical order for optional input nodes (ghosts + real nodes in layer 0).
+ * Research → objectives → constraints → existing design.
+ */
+export const OPTIONAL_INPUT_SLOTS: readonly InputGhostTargetType[] = [
+  'researchContext',
+  'objectivesMetrics',
+  'designConstraints',
+  'existingDesign',
+];
+
+/** Prefix for stable input-ghost node ids; keep in sync with onNodesChange remove guard. */
+export const INPUT_GHOST_ID_PREFIX = 'ghost-input-' as const;
+
+const LEGACY_INPUT_GHOST_ID_PREFIX = 'ghost-section-' as const;
+
+/** Stable id for the singleton hypothesis ghost (keep in sync with remove guard). */
+export const HYPOTHESIS_GHOST_STABLE_ID = 'ghost-hypothesis' as const;
+
+/** True when `id` is an ephemeral input ghost (current or pre–v22 prefix). */
+export function isEphemeralInputGhostId(id: string): boolean {
+  return id.startsWith(INPUT_GHOST_ID_PREFIX) || id.startsWith(LEGACY_INPUT_GHOST_ID_PREFIX);
+}
+
+/** True when `id` is the ephemeral hypothesis-add placeholder. */
+export function isEphemeralHypothesisGhostId(id: string): boolean {
+  return id === HYPOTHESIS_GHOST_STABLE_ID;
+}
+
+function inputGhostStableId(slot: InputGhostTargetType): string {
+  return `${INPUT_GHOST_ID_PREFIX}${slot}`;
+}
+
+/** Unknown slot / missing targetType sorts after known slots in a tier. */
+const OPTIONAL_SLOT_UNKNOWN = 99;
+
+/** Auto-layout layer 0: explicit tiers (brief &lt; reals &lt; ghosts &lt; model). */
+const LAYER0_ORDER_BRIEF = 1;
+const LAYER0_REAL_OPTIONAL_BASE = 10;
+const LAYER0_GHOST_BASE = 100;
+const LAYER0_MODEL = 1000;
+const LAYER0_FALLBACK = 500;
+
+function optionalInputSlotIndex(type: string): number {
+  const i = (OPTIONAL_INPUT_SLOTS as readonly string[]).indexOf(type);
+  return i === -1 ? OPTIONAL_SLOT_UNKNOWN : i;
+}
 
 // ── Layout constants ────────────────────────────────────────────────
 
@@ -16,36 +63,127 @@ const NODE_W_VARIANT = 480;
 export const GRID_SIZE = 20;
 const NODE_SPACING = 60;
 const FALLBACK_H: Record<string, number> = {
-  section: 400, compiler: 220, designSystem: 300, hypothesis: 440, variant: 400, critique: 260, model: 180,
+  inputCard: 400,
+  inputGhost: 272,
+  hypothesisGhost: 260,
+  incubator: 220,
+  designSystem: 300,
+  hypothesis: 440,
+  preview: 400,
+  model: 180,
 };
 export const DEFAULT_COL_GAP = 160;
 export const MIN_COL_GAP = 80;
 export const MAX_COL_GAP = 320;
 /** Fallback Y coordinate when no existing nodes can be used as an anchor. */
-export const DEFAULT_CANVAS_Y = 300;
+const DEFAULT_CANVAS_Y = 300;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
 /** Get a node's measured height, or a reasonable estimate */
 function nodeH(node: CanvasNode): number {
-  return (node.measured?.height as number | undefined) ?? (
-    SECTION_NODE_TYPES.has(node.type as CanvasNodeType)
-      ? FALLBACK_H.section
-      : FALLBACK_H[node.type as string] ?? 200
-  );
+  const measured = node.measured?.height as number | undefined;
+  if (measured != null) return measured;
+  if (node.type === 'inputGhost') return FALLBACK_H.inputGhost;
+  if (node.type === 'hypothesisGhost') return FALLBACK_H.hypothesisGhost;
+  if (INPUT_NODE_TYPES.has(node.type as CanvasNodeType)) return FALLBACK_H.inputCard;
+  return FALLBACK_H[node.type as string] ?? 200;
+}
+
+/** Fallback sort for layer 0; input + model ordering is owned by `layoutTypeOrder` tiers, not this map. */
+const TYPE_ORDER_LAYER: Record<string, number> = {
+  incubator: 6,
+  designSystem: 7,
+  hypothesis: 8,
+  preview: 9,
+};
+
+/**
+ * Sort key for auto-layout layer 0: brief top, real optional inputs next (canonical order),
+ * ghosts below reals, model last.
+ */
+export function layoutTypeOrder(n: CanvasNode): number {
+  if (n.type === 'designBrief') return LAYER0_ORDER_BRIEF;
+  if (n.type === 'inputGhost') {
+    const t = (n.data as InputGhostData).targetType;
+    return LAYER0_GHOST_BASE + optionalInputSlotIndex(t ?? '');
+  }
+  if (n.type === 'hypothesisGhost') return 8.5;
+  if (n.type === 'model') return LAYER0_MODEL;
+  if (
+    n.type === 'researchContext' ||
+    n.type === 'objectivesMetrics' ||
+    n.type === 'designConstraints' ||
+    n.type === 'existingDesign'
+  ) {
+    return LAYER0_REAL_OPTIONAL_BASE + optionalInputSlotIndex(n.type);
+  }
+  return TYPE_ORDER_LAYER[n.type as string] ?? LAYER0_FALLBACK;
+}
+
+/**
+ * Strip ephemeral input ghosts and re-append placeholders for each optional input slot
+ * not represented by a real node and not dismissed. Positions are placeholders; run auto-layout after.
+ */
+export function reconcileInputGhostNodes(
+  nodes: WorkspaceNode[],
+  dismissedSlots: readonly InputGhostTargetType[] = [],
+): WorkspaceNode[] {
+  const dismissed = new Set<string>(dismissedSlots);
+  const base = nodes.filter((n) => n.type !== 'inputGhost');
+  const have = new Set(base.map((n) => n.type));
+  const ghosts: WorkspaceNode[] = [];
+  for (const slot of OPTIONAL_INPUT_SLOTS) {
+    if (have.has(slot)) continue;
+    if (dismissed.has(slot)) continue;
+    ghosts.push({
+      id: inputGhostStableId(slot),
+      type: 'inputGhost',
+      position: { x: 0, y: 0 },
+      data: { targetType: slot },
+    });
+  }
+  return [...base, ...ghosts];
+}
+
+/**
+ * Ensure a singleton `hypothesisGhost` exists whenever at least one incubator is on the canvas.
+ * Strip duplicates; positions are placeholders until auto-layout runs.
+ */
+export function reconcileHypothesisGhostNode(nodes: WorkspaceNode[]): WorkspaceNode[] {
+  const base = nodes.filter((n) => n.type !== 'hypothesisGhost');
+  const hasIncubator = base.some((n) => n.type === 'incubator');
+  if (!hasIncubator) return base;
+  return [
+    ...base,
+    {
+      id: HYPOTHESIS_GHOST_STABLE_ID,
+      type: 'hypothesisGhost',
+      position: { x: 0, y: 0 },
+      data: {},
+    },
+  ];
+}
+
+/** Reconcile input ghosts, then hypothesis ghost (order matters for stable layout). */
+export function reconcileEphemeralGhostNodes(
+  nodes: WorkspaceNode[],
+  dismissedInputGhostSlots: readonly InputGhostTargetType[] = [],
+): WorkspaceNode[] {
+  return reconcileHypothesisGhostNode(reconcileInputGhostNodes(nodes, dismissedInputGhostSlots));
 }
 
 function nodeWidth(node: CanvasNode): number {
-  return node.type === 'variant' ? NODE_W_VARIANT : NODE_W_DEFAULT;
+  return node.type === 'preview' ? NODE_W_VARIANT : NODE_W_DEFAULT;
 }
 
-/** Compute column X positions from a given gap (4 columns: sections → compiler → hypothesis → variant) */
+/** Compute column X positions from a given gap (4 columns: inputs → incubator → hypothesis → preview) */
 export function columnX(gap: number) {
   const s = 0;
   const c = s + NODE_W_DEFAULT + gap;
   const h = c + NODE_W_DEFAULT + gap;
   const v = h + NODE_W_DEFAULT + gap;
-  return { sections: s, compiler: c, hypothesis: h, variant: v };
+  return { inputs: s, incubator: c, hypothesis: h, preview: v };
 }
 
 /** Snap a position to the nearest grid point */
@@ -58,7 +196,7 @@ export function snap(pos: { x: number; y: number }): { x: number; y: number } {
 
 /**
  * Position a prerequisite node in the column before its consumer.
- * Model → Incubator: model lands in the sections column.
+ * Model → Incubator: model lands in the inputs column.
  * Model → Hypothesis: model lands in the incubator column.
  */
 export function computeAdjacentPosition(
@@ -78,32 +216,32 @@ export function computeDefaultPosition(
   existingNodes: CanvasNode[],
   col: ReturnType<typeof columnX>
 ): { x: number; y: number } {
-  // Model and Design System are processing nodes — place in the compiler column
+  // Model and Design System are processing nodes — place in the incubator column
   if (type === 'model' || type === 'designSystem') {
     const processingNodes = existingNodes.filter((n) =>
-      n.type === 'compiler' || n.type === 'designSystem' || n.type === 'model'
+      n.type === 'incubator' || n.type === 'designSystem' || n.type === 'model'
     );
     let y = 200;
     for (const pn of processingNodes) {
       y += nodeH(pn) + NODE_SPACING;
     }
-    return snap({ x: col.compiler, y });
+    return snap({ x: col.incubator, y });
   }
-  if (SECTION_NODE_TYPES.has(type)) {
-    const sectionNodes = existingNodes.filter((n) =>
-      SECTION_NODE_TYPES.has(n.type as CanvasNodeType)
+  if (INPUT_NODE_TYPES.has(type)) {
+    const inputNodes = existingNodes.filter((n) =>
+      INPUT_NODE_TYPES.has(n.type as CanvasNodeType)
     );
     let y = 200;
-    for (const sn of sectionNodes) {
-      y += nodeH(sn) + NODE_SPACING;
+    for (const inode of inputNodes) {
+      y += nodeH(inode) + NODE_SPACING;
     }
-    return snap({ x: col.sections, y });
+    return snap({ x: col.inputs, y });
   }
-  if (type === 'compiler') {
-    const compilers = existingNodes.filter((n) => n.type === 'compiler');
-    if (compilers.length === 0) return snap({ x: col.compiler, y: DEFAULT_CANVAS_Y });
-    const lastY = Math.max(...compilers.map((n) => n.position.y + nodeH(n)));
-    return snap({ x: col.compiler, y: lastY + NODE_SPACING });
+  if (type === 'incubator') {
+    const incubators = existingNodes.filter((n) => n.type === 'incubator');
+    if (incubators.length === 0) return snap({ x: col.incubator, y: DEFAULT_CANVAS_Y });
+    const lastY = Math.max(...incubators.map((n) => n.position.y + nodeH(n)));
+    return snap({ x: col.incubator, y: lastY + NODE_SPACING });
   }
   if (type === 'hypothesis') {
     const hypNodes = existingNodes.filter((n) => n.type === 'hypothesis');
@@ -113,18 +251,7 @@ export function computeDefaultPosition(
     }
     return snap({ x: col.hypothesis, y });
   }
-  if (type === 'critique') {
-    const critiqueNodes = existingNodes.filter((n) => n.type === 'critique');
-    const variantNodes = existingNodes.filter((n) => n.type === 'variant');
-    const baseY = variantNodes.length > 0
-      ? Math.max(...variantNodes.map((n) => n.position.y + nodeH(n))) + NODE_SPACING
-      : DEFAULT_CANVAS_Y;
-    const y = critiqueNodes.length > 0
-      ? Math.max(...critiqueNodes.map((n) => n.position.y + nodeH(n))) + NODE_SPACING
-      : baseY;
-    return snap({ x: col.variant + NODE_W_VARIANT + 80, y });
-  }
-  return snap({ x: col.variant, y: DEFAULT_CANVAS_Y });
+  return snap({ x: col.preview, y: DEFAULT_CANVAS_Y });
 }
 
 export function computeHypothesisPositions(
@@ -187,10 +314,10 @@ export function computeAutoLayout(
 
   for (const n of nodes) dfs(n.id);
 
-  // 2b. Force designSystem nodes to the same rank as compiler (processing column)
+  // 2b. Force designSystem nodes to the same rank as incubator (processing column)
   //     DesignSystem has no incoming edges — only outgoing to hypotheses — so DFS gives rank 0.
   const compilerRank = Math.max(1, ...nodes
-    .filter((n) => n.type === 'compiler')
+    .filter((n) => n.type === 'incubator')
     .map((n) => rank.get(n.id) ?? 1));
   for (const n of nodes) {
     if (n.type === 'designSystem') {
@@ -212,16 +339,35 @@ export function computeAutoLayout(
     }
   }
 
-  // 2d. Force disconnected variant nodes (archived/pinned) to the variant column rank
+  // 2d. Force disconnected preview nodes (archived/pinned) to the preview column rank
   //     Without edges, DFS assigns rank 0 which places them in the leftmost column.
-  const variantRank = Math.max(0, ...nodes
-    .filter((n) => n.type === 'variant' && (parents.get(n.id)?.length ?? 0) > 0)
+  const previewRank = Math.max(0, ...nodes
+    .filter((n) => n.type === 'preview' && (parents.get(n.id)?.length ?? 0) > 0)
     .map((n) => rank.get(n.id) ?? 0));
-  if (variantRank > 0) {
+  if (previewRank > 0) {
     for (const n of nodes) {
-      if (n.type === 'variant' && (parents.get(n.id)?.length ?? 0) === 0) {
-        rank.set(n.id, variantRank);
+      if (n.type === 'preview' && (parents.get(n.id)?.length ?? 0) === 0) {
+        rank.set(n.id, previewRank);
       }
+    }
+  }
+
+  // 2e. Hypothesis ghost has no edges — align it with the hypothesis column.
+  const hypothesisRanks = nodes
+    .filter((n) => n.type === 'hypothesis')
+    .map((n) => rank.get(n.id) ?? 0);
+  const ghostHypothesisRank =
+    hypothesisRanks.length > 0
+      ? Math.max(...hypothesisRanks)
+      : Math.max(
+          0,
+          ...nodes
+            .filter((n) => n.type === 'incubator')
+            .map((n) => (rank.get(n.id) ?? 0) + 1),
+        );
+  for (const n of nodes) {
+    if (n.type === 'hypothesisGhost') {
+      rank.set(n.id, ghostHypothesisRank);
     }
   }
 
@@ -236,15 +382,7 @@ export function computeAutoLayout(
   if (nonEmptyLayers.length === 0) return nodes;
 
   // 4. Sort nodes within each layer by barycenter
-  const TYPE_ORDER: Record<string, number> = {
-    designBrief: 0, existingDesign: 1, researchContext: 2,
-    objectivesMetrics: 3, designConstraints: 4, model: 5,
-    compiler: 6, designSystem: 7, hypothesis: 8, variant: 9, critique: 10,
-  };
-
-  nonEmptyLayers[0].sort((a, b) =>
-    (TYPE_ORDER[a.type as string] ?? 99) - (TYPE_ORDER[b.type as string] ?? 99)
-  );
+  nonEmptyLayers[0].sort((a, b) => layoutTypeOrder(a) - layoutTypeOrder(b));
 
   for (let li = 1; li < nonEmptyLayers.length; li++) {
     const prevLayer = nonEmptyLayers[li - 1];

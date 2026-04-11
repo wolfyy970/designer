@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, Columns2, ChevronLeft, ChevronRight, Loader2, AlertCircle, Star } from 'lucide-react';
-import { useCompilerStore, findVariantStrategy } from '../../stores/compiler-store';
+import { useIncubatorStore, findStrategy } from '../../stores/incubator-store';
 import { useCanvasStore } from '../../stores/canvas-store';
 import { useGenerationStore } from '../../stores/generation-store';
 import { useWorkspaceDomainStore } from '../../stores/workspace-domain-store';
 import {
-  findHypothesisIdForVariantNode,
-  getVariantNodeIdsForHypothesis,
-} from '../../workspace/domain-variant-selectors';
-import { bundleVirtualFS, prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
+  findHypothesisIdForPreviewNode,
+  getPreviewNodeIdsForHypothesis,
+} from '../../workspace/domain-preview-selectors';
+import { prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
 import { normalizeError } from '../../lib/error-utils';
 import { useResultCode } from '../../hooks/useResultCode';
 import { useResultFiles } from '../../hooks/useResultFiles';
@@ -16,53 +16,94 @@ import { useVersionStack } from '../../hooks/useVersionStack';
 import { badgeColor } from '../../lib/badge-colors';
 import type { GenerationResult } from '../../types/provider';
 import { GENERATION_STATUS } from '../../constants/generation';
+import { ArtifactPreviewFrame } from './variant-run';
 
-/** All canvas variant nodes with results, sorted by position (fallback). */
-function useAllVariantNodeIdsWithResults(): string[] {
+function ExpandedVariantIframe({
+  files,
+  code,
+  isLoading,
+  title,
+}: {
+  files?: Record<string, string>;
+  code?: string;
+  isLoading: boolean;
+  title: string;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Loader2 size={20} className="animate-spin text-fg-muted" />
+      </div>
+    );
+  }
+  if (files && Object.keys(files).length > 0) {
+    return <ArtifactPreviewFrame files={files} title={title} className="h-full w-full border-0" />;
+  }
+  if (code) {
+    let content: string;
+    try {
+      content = prepareIframeContent(code);
+    } catch (err) {
+      content = renderErrorHtml(normalizeError(err));
+    }
+    return (
+      <iframe srcDoc={content} sandbox="allow-scripts" title={title} className="h-full w-full border-0" />
+    );
+  }
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
+      <AlertCircle size={24} className="text-fg-muted" />
+      <p className="text-sm text-fg-muted">Code unavailable — may need to regenerate</p>
+    </div>
+  );
+}
+
+/** All canvas preview nodes with results, sorted by position (fallback). */
+function useAllPreviewNodeIdsWithResults(): string[] {
   const nodes = useCanvasStore((s) => s.nodes);
   const results = useGenerationStore((s) => s.results);
   return useMemo(() => {
-    const variantNodes = nodes
-      .filter((n) => n.type === 'variant')
+    const previewNodes = nodes
+      .filter((n) => n.type === 'preview')
       .sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
-    const vsIdsWithResults = new Set(results.map((r) => r.variantStrategyId));
-    return variantNodes.filter((n) => {
-      const vsId = n.data.variantStrategyId as string | undefined;
+    const vsIdsWithResults = new Set(results.map((r) => r.strategyId));
+    return previewNodes.filter((n) => {
+      const vsId = n.data.strategyId as string | undefined;
       return vsId && vsIdsWithResults.has(vsId);
     }).map((n) => n.id);
   }, [nodes, results]);
 }
 
-/** Hypothesis-scoped variant node ids with results; falls back to canvas-wide when domain has no slot. */
-function useHypothesisScopedVariantNodeIds(expandedVariantId: string | null): string[] {
-  const variantSlots = useWorkspaceDomainStore((s) => s.variantSlots);
-  const fallback = useAllVariantNodeIdsWithResults();
+/** Hypothesis-scoped preview node ids with results; falls back to canvas-wide when domain has no slot. */
+function useHypothesisScopedPreviewNodeIds(expandedPreviewId: string | null): string[] {
+  const previewSlots = useWorkspaceDomainStore((s) => s.previewSlots);
+  const fallback = useAllPreviewNodeIdsWithResults();
   return useMemo(() => {
-    if (!expandedVariantId) return fallback;
-    const hypothesisId = findHypothesisIdForVariantNode(variantSlots, expandedVariantId);
+    if (!expandedPreviewId) return fallback;
+    const hypothesisId = findHypothesisIdForPreviewNode(previewSlots, expandedPreviewId);
     if (!hypothesisId) return fallback;
-    const candidateIds = getVariantNodeIdsForHypothesis(variantSlots, hypothesisId);
+    const candidateIds = getPreviewNodeIdsForHypothesis(previewSlots, hypothesisId);
     const allowed = new Set(candidateIds);
     const ordered = fallback.filter((id) => allowed.has(id));
     return ordered.length > 0 ? ordered : fallback;
-  }, [variantSlots, expandedVariantId, fallback]);
+  }, [previewSlots, expandedPreviewId, fallback]);
 }
 
 export default function VariantPreviewOverlay() {
-  const expandedVariantId = useCanvasStore((s) => s.expandedVariantId);
-  const setExpandedVariant = useCanvasStore((s) => s.setExpandedVariant);
-  const dimensionMaps = useCompilerStore((s) => s.dimensionMaps);
+  const expandedPreviewId = useCanvasStore((s) => s.expandedPreviewId);
+  const setExpandedPreview = useCanvasStore((s) => s.setExpandedPreview);
+  const incubationPlans = useIncubatorStore((s) => s.incubationPlans);
 
-  const variantStrategyId = useCanvasStore(
+  const strategyId = useCanvasStore(
     (s) => {
-      if (!expandedVariantId) return undefined;
-      return s.nodes.find((n) => n.id === expandedVariantId)?.data.variantStrategyId as string | undefined;
+      if (!expandedPreviewId) return undefined;
+      return s.nodes.find((n) => n.id === expandedPreviewId)?.data.strategyId as string | undefined;
     },
   );
   const pinnedRunId = useCanvasStore(
     (s) => {
-      if (!expandedVariantId) return undefined;
-      return s.nodes.find((n) => n.id === expandedVariantId)?.data.pinnedRunId as string | undefined;
+      if (!expandedPreviewId) return undefined;
+      return s.nodes.find((n) => n.id === expandedPreviewId)?.data.pinnedRunId as string | undefined;
     },
   );
 
@@ -80,14 +121,14 @@ export default function VariantPreviewOverlay() {
     goOlder,
     setUserBest,
     userBestOverrides,
-  } = useVersionStack(variantStrategyId, pinnedRunId);
+  } = useVersionStack(strategyId, pinnedRunId);
 
   const legacyResult = useMemo(
     () =>
-      !activeResult && expandedVariantId
-        ? results.find((r) => r.id === expandedVariantId)
+      !activeResult && expandedPreviewId
+        ? results.find((r) => r.id === expandedPreviewId)
         : undefined,
-    [activeResult, expandedVariantId, results],
+    [activeResult, expandedPreviewId, results],
   );
   const result = activeResult ?? legacyResult;
 
@@ -105,48 +146,48 @@ export default function VariantPreviewOverlay() {
     [stack, result?.id],
   );
 
-  // Cross-variant (left/right) navigation — same hypothesis only when domain slot exists
-  const variantNodeIds = useHypothesisScopedVariantNodeIds(expandedVariantId);
+  // Cross-preview (left/right) navigation — same hypothesis only when domain slot exists
+  const previewNodeIds = useHypothesisScopedPreviewNodeIds(expandedPreviewId);
   const hasUserBestOverride = !!(
-    variantStrategyId && userBestOverrides[variantStrategyId]
+    strategyId && userBestOverrides[strategyId]
   );
-  const variantIdx = expandedVariantId ? variantNodeIds.indexOf(expandedVariantId) : -1;
-  const hasPrevVariant = variantIdx > 0;
-  const hasNextVariant = variantIdx >= 0 && variantIdx < variantNodeIds.length - 1;
+  const previewIdx = expandedPreviewId ? previewNodeIds.indexOf(expandedPreviewId) : -1;
+  const hasPrevPreview = previewIdx > 0;
+  const hasNextPreview = previewIdx >= 0 && previewIdx < previewNodeIds.length - 1;
 
-  const goToPrevVariant = useCallback(() => {
-    if (hasPrevVariant) {
+  const goToPrevPreview = useCallback(() => {
+    if (hasPrevPreview) {
       setCompareId(null);
-      setExpandedVariant(variantNodeIds[variantIdx - 1]);
+      setExpandedPreview(previewNodeIds[previewIdx - 1]);
     }
-  }, [hasPrevVariant, variantNodeIds, variantIdx, setExpandedVariant]);
+  }, [hasPrevPreview, previewNodeIds, previewIdx, setExpandedPreview]);
 
-  const goToNextVariant = useCallback(() => {
-    if (hasNextVariant) {
+  const goToNextPreview = useCallback(() => {
+    if (hasNextPreview) {
       setCompareId(null);
-      setExpandedVariant(variantNodeIds[variantIdx + 1]);
+      setExpandedPreview(previewNodeIds[previewIdx + 1]);
     }
-  }, [hasNextVariant, variantNodeIds, variantIdx, setExpandedVariant]);
+  }, [hasNextPreview, previewNodeIds, previewIdx, setExpandedPreview]);
 
   const close = useCallback(() => {
-    setExpandedVariant(null);
+    setExpandedPreview(null);
     setCompareId(null);
-  }, [setExpandedVariant]);
+  }, [setExpandedPreview]);
 
   useEffect(() => {
-    if (!expandedVariantId) return;
+    if (!expandedPreviewId) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close();
-      if (e.key === 'ArrowLeft' && !e.metaKey && !e.ctrlKey) goToPrevVariant();
-      if (e.key === 'ArrowRight' && !e.metaKey && !e.ctrlKey) goToNextVariant();
+      if (e.key === 'ArrowLeft' && !e.metaKey && !e.ctrlKey) goToPrevPreview();
+      if (e.key === 'ArrowRight' && !e.metaKey && !e.ctrlKey) goToNextPreview();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [expandedVariantId, close, goToPrevVariant, goToNextVariant]);
+  }, [expandedPreviewId, close, goToPrevPreview, goToNextPreview]);
 
-  if (!expandedVariantId || !result) return null;
+  if (!expandedPreviewId || !result) return null;
 
-  const strategy = findVariantStrategy(dimensionMaps, result.variantStrategyId);
+  const strategy = findStrategy(incubationPlans, result.strategyId);
 
   function renderPanel(
     r: GenerationResult,
@@ -155,30 +196,20 @@ export default function VariantPreviewOverlay() {
     panelFiles?: Record<string, string>,
     label?: string,
   ) {
-    const strat = findVariantStrategy(dimensionMaps, r.variantStrategyId);
-    let content: string | null = null;
-
-    if (panelFiles && Object.keys(panelFiles).length > 0) {
-      try {
-        content = bundleVirtualFS(panelFiles);
-      } catch (err) {
-        content = renderErrorHtml(normalizeError(err));
-      }
-    } else if (panelCode) {
-      try {
-        content = prepareIframeContent(panelCode);
-      } catch (err) {
-        content = renderErrorHtml(normalizeError(err));
-      }
-    }
+    const strat = findStrategy(incubationPlans, r.strategyId);
+    const stratName = strat?.name ?? 'Preview';
+    const hasPayload =
+      isLoading ||
+      (panelFiles && Object.keys(panelFiles).length > 0) ||
+      !!panelCode;
 
     return (
       <div className="flex flex-1 flex-col overflow-hidden">
         {label && (
-          <div className="shrink-0 border-b border-white/10 px-4 py-1.5">
-            <span className="text-micro text-white/60">{label}</span>
+          <div className="shrink-0 border-b border-preview-overlay-hairline px-4 py-1.5">
+            <span className="text-micro text-preview-overlay-text-muted">{label}</span>
             <span className="ml-2 text-xs font-medium text-white">
-              {strat?.name ?? 'Variant'}
+              {stratName}
               {r.runNumber != null && (
                 <span
                   className={`ml-1.5 rounded px-1 py-px text-badge font-bold leading-none ${badgeColor(r.runNumber).bg} ${badgeColor(r.runNumber).text}`}
@@ -189,17 +220,13 @@ export default function VariantPreviewOverlay() {
             </span>
           </div>
         )}
-        <div className="flex-1 overflow-hidden bg-white">
-          {isLoading ? (
-            <div className="flex h-full items-center justify-center">
-              <Loader2 size={20} className="animate-spin text-fg-muted" />
-            </div>
-          ) : content ? (
-            <iframe
-              srcDoc={content}
-              sandbox="allow-scripts"
-              title={`Preview: ${strat?.name ?? 'Variant'}`}
-              className="h-full w-full border-0"
+        <div className="flex-1 overflow-hidden bg-preview-canvas">
+          {hasPayload || isLoading ? (
+            <ExpandedVariantIframe
+              files={panelFiles}
+              code={panelCode}
+              isLoading={isLoading}
+              title={`Preview: ${stratName}`}
             />
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
@@ -216,26 +243,26 @@ export default function VariantPreviewOverlay() {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-overlay-heavy">
       {/* Top bar */}
-      <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-2.5">
+      <div className="flex shrink-0 items-center justify-between border-b border-preview-overlay-hairline px-5 py-2.5">
         <div className="flex items-center gap-4">
-          {/* Cross-variant navigation */}
-          {variantNodeIds.length > 1 && (
-            <div className="flex items-center gap-1 text-white/60">
+          {/* Cross-preview navigation (other preview nodes on this hypothesis) */}
+          {previewNodeIds.length > 1 && (
+            <div className="flex items-center gap-1 text-preview-overlay-text-muted">
               <button
-                onClick={goToPrevVariant}
-                disabled={!hasPrevVariant}
-                className="rounded p-1 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
+                onClick={goToPrevPreview}
+                disabled={!hasPrevPreview}
+                className="rounded p-1 transition-colors hover:bg-media-chrome-hover hover:text-white disabled:opacity-30"
                 title="Previous design (←)"
               >
                 <ChevronLeft size={18} />
               </button>
               <span className="text-xs tabular-nums">
-                {variantIdx + 1} / {variantNodeIds.length}
+                {previewIdx + 1} / {previewNodeIds.length}
               </span>
               <button
-                onClick={goToNextVariant}
-                disabled={!hasNextVariant}
-                className="rounded p-1 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
+                onClick={goToNextPreview}
+                disabled={!hasNextPreview}
+                className="rounded p-1 transition-colors hover:bg-media-chrome-hover hover:text-white disabled:opacity-30"
                 title="Next design (→)"
               >
                 <ChevronRight size={18} />
@@ -245,19 +272,19 @@ export default function VariantPreviewOverlay() {
 
           <div>
             <h2 className="text-sm font-semibold text-white">
-              {strategy?.name ?? 'Variant Preview'}
+              {strategy?.name ?? 'Design Preview'}
               {!pinnedRunId && isActiveBest && (
-                <span className="ml-2 rounded bg-success/15 px-1.5 py-px text-badge font-medium text-success">
+                <span className="ml-2 rounded bg-success-highlight px-1.5 py-px text-badge font-medium text-success">
                   Best current
                 </span>
               )}
               {pinnedRunId && (
-                <span className="ml-2 text-xs font-normal text-white/40">
+                <span className="ml-2 text-xs font-normal text-preview-overlay-text-faint">
                   (Archived)
                 </span>
               )}
             </h2>
-            <p className="text-xs text-white/40">
+            <p className="text-xs text-preview-overlay-text-faint">
               {result.metadata?.model}
               {result.metadata?.durationMs != null && (
                 <> &middot; {(result.metadata.durationMs / 1000).toFixed(1)}s</>
@@ -271,24 +298,24 @@ export default function VariantPreviewOverlay() {
             </p>
           </div>
 
-          {/* Version navigation (within the same variant) */}
+          {/* Version navigation (within the same preview / strategy lane) */}
           {stackTotal > 1 && (
-            <div className="flex items-center gap-1 rounded-md border border-white/10 px-1.5 py-0.5 text-white/60">
+            <div className="flex items-center gap-1 rounded-md border border-preview-overlay-hairline px-1.5 py-0.5 text-preview-overlay-text-muted">
               <button
                 onClick={goNewer}
                 disabled={stackIndex <= 0}
-                className="rounded p-0.5 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
+                className="rounded p-0.5 transition-colors hover:bg-media-chrome-hover hover:text-white disabled:opacity-30"
                 title="Newer version"
               >
                 <ChevronLeft size={14} />
               </button>
-              <span className="text-[10px] tabular-nums">
+              <span className="text-nano tabular-nums">
                 v{stackIndex + 1}/{stackTotal}
               </span>
               <button
                 onClick={goOlder}
                 disabled={stackIndex >= stackTotal - 1}
-                className="rounded p-0.5 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
+                className="rounded p-0.5 transition-colors hover:bg-media-chrome-hover hover:text-white disabled:opacity-30"
                 title="Older version"
               >
                 <ChevronRight size={14} />
@@ -299,14 +326,14 @@ export default function VariantPreviewOverlay() {
 
         <div className="flex items-center gap-3">
           {!pinnedRunId &&
-            variantStrategyId &&
+            strategyId &&
             result.status === GENERATION_STATUS.COMPLETE && (
               <>
                 {hasUserBestOverride ? (
                   <button
                     type="button"
-                    onClick={() => setUserBest(variantStrategyId, null)}
-                    className="flex items-center gap-1.5 rounded-md border border-white/20 px-3 py-1.5 text-xs text-amber-200/90 transition-colors hover:border-white/40 hover:text-white"
+                    onClick={() => setUserBest(strategyId, null)}
+                    className="flex items-center gap-1.5 rounded-md border border-preview-overlay-control-border px-3 py-1.5 text-xs text-warning transition-colors hover:border-preview-overlay-control-border-hover hover:text-fg"
                     title="Use evaluator ranking again"
                   >
                     <Star size={14} className="fill-current" />
@@ -316,8 +343,8 @@ export default function VariantPreviewOverlay() {
                 {result.id !== bestCompletedResult?.id ? (
                   <button
                     type="button"
-                    onClick={() => setUserBest(variantStrategyId, result.id)}
-                    className="flex items-center gap-1.5 rounded-md border border-white/20 px-3 py-1.5 text-xs text-white/70 transition-colors hover:border-white/40 hover:text-white"
+                    onClick={() => setUserBest(strategyId, result.id)}
+                    className="flex items-center gap-1.5 rounded-md border border-preview-overlay-control-border px-3 py-1.5 text-xs text-preview-overlay-text-soft transition-colors hover:border-preview-overlay-control-border-hover hover:text-white"
                     title="Prefer this version over evaluator ranking"
                   >
                     <Star size={14} />
@@ -329,7 +356,7 @@ export default function VariantPreviewOverlay() {
           {!compareId && otherResults.length > 0 && (
             <button
               onClick={() => setCompareId(otherResults[0].id)}
-              className="flex items-center gap-1.5 rounded-md border border-white/20 px-3 py-1.5 text-xs text-white/70 transition-colors hover:border-white/40 hover:text-white"
+              className="flex items-center gap-1.5 rounded-md border border-preview-overlay-control-border px-3 py-1.5 text-xs text-preview-overlay-text-soft transition-colors hover:border-preview-overlay-control-border-hover hover:text-white"
             >
               <Columns2 size={14} />
               Compare
@@ -338,14 +365,14 @@ export default function VariantPreviewOverlay() {
           {compareId && (
             <button
               onClick={() => setCompareId(null)}
-              className="flex items-center gap-1.5 rounded-md border border-white/20 px-3 py-1.5 text-xs text-white/70 transition-colors hover:border-white/40 hover:text-white"
+              className="flex items-center gap-1.5 rounded-md border border-preview-overlay-control-border px-3 py-1.5 text-xs text-preview-overlay-text-soft transition-colors hover:border-preview-overlay-control-border-hover hover:text-white"
             >
               Exit Compare
             </button>
           )}
           <button
             onClick={close}
-            className="rounded-md p-1.5 text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+            className="rounded-md p-1.5 text-media-chrome-text-dim transition-colors hover:bg-media-chrome-hover hover:text-white"
             title="Close (Esc)"
           >
             <X size={20} />
@@ -358,16 +385,16 @@ export default function VariantPreviewOverlay() {
         {compareId && compareResult ? (
           <>
             {renderPanel(result, code, codeLoading, files, 'Original')}
-            <div className="w-px bg-white/10" />
+            <div className="w-px bg-preview-overlay-hairline" />
             <div className="flex flex-1 flex-col overflow-hidden">
-              <div className="shrink-0 border-b border-white/10 px-4 py-1.5">
+              <div className="shrink-0 border-b border-preview-overlay-hairline px-4 py-1.5">
                 <select
                   value={compareId}
                   onChange={(e) => setCompareId(e.target.value)}
-                  className="rounded border border-white/20 bg-transparent px-2 py-0.5 text-micro text-white/70 outline-none"
+                  className="rounded border border-preview-overlay-control-border bg-transparent px-2 py-0.5 text-micro text-preview-overlay-text-soft outline-none"
                 >
                   {otherResults.map((r) => {
-                    const s = findVariantStrategy(dimensionMaps, r.variantStrategyId);
+                    const s = findStrategy(incubationPlans, r.strategyId);
                     return (
                       <option key={r.id} value={r.id} className="bg-bg text-white">
                         {s?.name ?? r.metadata?.model ?? r.id}

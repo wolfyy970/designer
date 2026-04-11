@@ -3,9 +3,30 @@
  * Shared between client metadata and server orchestration.
  */
 
-export type EvaluatorRubricId = 'design' | 'strategy' | 'implementation' | 'browser';
+import rubricWeightsJson from '../lib/rubric-weights.json';
 
-export type AgenticStopReason = 'satisfied' | 'max_revisions' | 'aborted' | 'revision_failed';
+/** Canonical rubric order for parallel workers, aggregation, and UI. */
+export const EVALUATOR_RUBRIC_IDS = ['design', 'strategy', 'implementation', 'browser'] as const;
+
+export type EvaluatorRubricId = (typeof EVALUATOR_RUBRIC_IDS)[number];
+
+/** Repo source of truth: `src/lib/rubric-weights.json` */
+export const DEFAULT_RUBRIC_WEIGHTS: Record<EvaluatorRubricId, number> = {
+  design: rubricWeightsJson.design,
+  strategy: rubricWeightsJson.strategy,
+  implementation: rubricWeightsJson.implementation,
+  browser: rubricWeightsJson.browser,
+};
+
+export const EVALUATOR_WORKER_COUNT = EVALUATOR_RUBRIC_IDS.length;
+
+export type AgenticStopReason =
+  | 'satisfied'
+  | 'max_revisions'
+  | 'aborted'
+  | 'revision_failed'
+  /** Initial Pi build finished; evaluation was not requested (single pass). */
+  | 'build_only';
 
 export interface EvalCriterionScore {
   score: number;
@@ -34,6 +55,11 @@ export interface BrowserEvalArtifacts {
 /** Single rubric evaluator JSON output */
 export interface EvaluatorWorkerReport {
   rubric: EvaluatorRubricId;
+  /**
+   * Full LLM response text for LLM rubrics (reasoning + JSON). Omitted for deterministic browser worker.
+   * Not persisted to client localStorage (stripped in generation-store partialize).
+   */
+  rawTrace?: string;
   scores: Record<string, EvalCriterionScore>;
   findings: EvalFinding[];
   hardFails: EvalHardFail[];
@@ -44,6 +70,11 @@ export interface EvaluatorWorkerReport {
   playwrightSkipped?: { reason: 'browser_unavailable' | 'eval_error'; message: string };
   /** Populated by browser-grounded eval (e.g. JPEG viewport capture for debugging / future vision scoring). */
   artifacts?: BrowserEvalArtifacts;
+}
+
+/** True when the worker failed (LLM/parse/infrastructure) rather than returning a normal rubric result. */
+export function isEvaluatorWorkerDegraded(report: EvaluatorWorkerReport): boolean {
+  return report.hardFails.some((h) => h.code === 'evaluator_worker_error');
 }
 
 export interface AggregatedHardFail extends EvalHardFail {
@@ -58,6 +89,11 @@ export interface AggregatedEvaluationReport {
   prioritizedFixes: string[];
   shouldRevise: boolean;
   revisionBrief: string;
+  /**
+   * Per-LLM-rubric raw evaluator responses (typically design / strategy / implementation only).
+   * Not persisted to client localStorage.
+   */
+  evaluatorTraces?: Partial<Record<EvaluatorRubricId, string>>;
 }
 
 export interface EvaluationRoundSnapshot {
@@ -69,6 +105,17 @@ export interface EvaluationRoundSnapshot {
   implementation?: EvaluatorWorkerReport;
   browser?: EvaluatorWorkerReport;
   aggregate: AggregatedEvaluationReport;
+}
+
+/** Any rubric in this round hit a degraded worker path (see `isEvaluatorWorkerDegraded`). */
+export function evaluationRoundSnapshotHasDegradedWorker(
+  snapshot: Pick<EvaluationRoundSnapshot, 'design' | 'strategy' | 'implementation' | 'browser'>,
+): boolean {
+  for (const id of EVALUATOR_RUBRIC_IDS) {
+    const rep = snapshot[id];
+    if (rep && isEvaluatorWorkerDegraded(rep)) return true;
+  }
+  return false;
 }
 
 /** Lightweight checkpoint persisted alongside provenance for observability */

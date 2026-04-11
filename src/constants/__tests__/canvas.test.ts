@@ -16,7 +16,7 @@ describe('NODE_TYPES', () => {
     const expected = [
       'designBrief', 'existingDesign', 'researchContext',
       'objectivesMetrics', 'designConstraints', 'designSystem',
-      'compiler', 'hypothesis', 'variant', 'critique', 'model',
+      'incubator', 'hypothesis', 'hypothesisGhost', 'preview', 'model',
     ];
     expect(Object.values(NODE_TYPES)).toEqual(expect.arrayContaining(expected));
     expect(Object.values(NODE_TYPES)).toHaveLength(expected.length);
@@ -24,8 +24,8 @@ describe('NODE_TYPES', () => {
 
   it('values match their expected string literals', () => {
     expect(NODE_TYPES.DESIGN_BRIEF).toBe('designBrief');
-    expect(NODE_TYPES.COMPILER).toBe('compiler');
-    expect(NODE_TYPES.VARIANT).toBe('variant');
+    expect(NODE_TYPES.INCUBATOR).toBe('incubator');
+    expect(NODE_TYPES.PREVIEW).toBe('preview');
     expect(NODE_TYPES.MODEL).toBe('model');
   });
 

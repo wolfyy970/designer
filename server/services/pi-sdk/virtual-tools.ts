@@ -6,6 +6,16 @@ import path from 'node:path';
 import type { Static } from '@sinclair/typebox';
 import { minimatch } from 'minimatch';
 import type { Bash } from 'just-bash';
+import { debugAgentIngest } from '../../lib/debug-agent-ingest.ts';
+import {
+  DEFAULT_MAX_BYTES,
+  GREP_MAX_LINE_LENGTH,
+  SANDBOX_FIND_MAX_RESULTS,
+  SANDBOX_GREP_DEFAULT_MATCH_LIMIT,
+  SANDBOX_LS_MAX_ENTRIES,
+  SANDBOX_READ_MAX_LINES,
+} from '../../lib/content-limits.ts';
+import { normalizeError } from '../../../src/lib/error-utils.ts';
 import { SANDBOX_PROJECT_ROOT } from '../agent-bash-sandbox.ts';
 import {
   createReadToolDefinition,
@@ -14,7 +24,6 @@ import {
   createLsToolDefinition,
   createFindToolDefinition,
   grepToolDefinition,
-  DEFAULT_MAX_BYTES,
   formatSize,
   truncateHead,
   truncateLine,
@@ -26,18 +35,46 @@ import type {
   GrepToolDetails,
   ToolDefinition,
 } from './types.ts';
+import {
+  attemptMatchCascade,
+  isEditNotFoundError,
+  normalizeEditToolParams,
+  type CascadeDiagnostic,
+} from './edit-match-cascade.ts';
 
-/** Same default as SDK grep (see `pi-coding-agent` grep tool). */
-const GREP_MAX_LINE_LENGTH = 500;
-const DEFAULT_GREP_MATCH_LIMIT = 100;
-
-function isSkillSandboxPath(absPath: string): boolean {
-  return absPath.includes(`${SANDBOX_PROJECT_ROOT}/skills/`);
-}
+/**
+ * Model-facing `description` for virtual tools on the just-bash workspace.
+ *
+ * **promptSnippet / promptGuidelines are NOT used here:** Pi's `buildSystemPrompt()` only injects those when
+ * no `customPrompt` is set. We pass `designer-agentic-system` as `customPrompt`, so that branch is skipped.
+ * Tool descriptions still reach the LLM via the API tool schema (JSON function definitions).
+ *
+ * Keep in sync with [agent-bash-sandbox.ts](../agent-bash-sandbox.ts), `<sandbox_environment>` in prompts/designer-agentic-system/PROMPT.md,
+ * and [ARCHITECTURE.md § Pi design sandbox](../../../ARCHITECTURE.md#pi-design-sandbox-three-layer-contract) (tool inventory + edit wrapper behavior).
+ */
+const SANDBOX_TOOL_OVERRIDES = {
+  read: {
+    description: `Read UTF-8 text from a file in the in-memory project at ${SANDBOX_PROJECT_ROOT}. This workspace is text-only for tool purposes (no image attachments). Output is truncated to ${SANDBOX_READ_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.`,
+  },
+  write: {
+    description: `Create or overwrite a UTF-8 text file under ${SANDBOX_PROJECT_ROOT}. Parent directories are created as needed. Use for **new files** or **complete file rewrites**; prefer **edit** for partial changes to existing files.`,
+  },
+  edit: {
+    description: `Apply exact search-and-replace edits to an existing file under ${SANDBOX_PROJECT_ROOT}. Each \`oldText\` must appear **exactly once** in the **original** file before edits are applied. CRITICAL: Include **at least 3 lines of surrounding context** in each \`oldText\` so it uniquely identifies one occurrence — e.g. the full CSS rule block (selector + braces), not a single property line when that value repeats. Prefer **edit** over bash/sed for file changes.`,
+  },
+  ls: {
+    description: `List directory contents in the virtual project at ${SANDBOX_PROJECT_ROOT}. Returns entries sorted alphabetically, with '/' suffix for directories. Includes dotfiles. Output is truncated to ${SANDBOX_LS_MAX_ENTRIES} entries or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first).`,
+  },
+  find: {
+    description: `Search for files by glob pattern under the in-memory project at ${SANDBOX_PROJECT_ROOT}. Returns matching file paths relative to the search directory. There is no .gitignore in this sandbox — every seeded file is visible. Output is truncated to ${SANDBOX_FIND_MAX_RESULTS} results or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first).`,
+  },
+  grep: {
+    description: `Search file contents in the virtual project workspace using ripgrep-style search (just-bash \`rg\`). Returns matching lines with file paths and line numbers. Only the in-memory design files under ${SANDBOX_PROJECT_ROOT} exist — there is no .gitignore or host filesystem. Output is truncated to ${SANDBOX_GREP_DEFAULT_MATCH_LIMIT} matches or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Long lines are truncated to ${GREP_MAX_LINE_LENGTH} chars.`,
+  },
+} as const;
 
 function toProjectRelative(absPath: string): string | null {
   if (!absPath.startsWith(`${SANDBOX_PROJECT_ROOT}/`)) return null;
-  if (isSkillSandboxPath(absPath)) return null;
   return absPath.slice(SANDBOX_PROJECT_ROOT.length + 1);
 }
 
@@ -75,6 +112,7 @@ function createVirtualGrepTool(bash: Bash, sessionCwd: string) {
   type GrepParams = Static<(typeof base)['parameters']>;
   return {
     ...base,
+    ...SANDBOX_TOOL_OVERRIDES.grep,
     async execute(
       _toolCallId: string,
       params: GrepParams,
@@ -89,9 +127,8 @@ function createVirtualGrepTool(bash: Bash, sessionCwd: string) {
       }
 
       const searchPath = resolveVirtualPath(pathArg, sessionCwd);
-      let st;
       try {
-        st = await bash.fs.stat(searchPath);
+        await bash.fs.stat(searchPath);
       } catch {
         return {
           content: [{ type: 'text', text: `Path not found: ${searchPath}` }],
@@ -99,22 +136,19 @@ function createVirtualGrepTool(bash: Bash, sessionCwd: string) {
         };
       }
 
-      const effectiveLimit = Math.max(1, limit ?? DEFAULT_GREP_MATCH_LIMIT);
+      const effectiveLimit = Math.max(1, limit ?? SANDBOX_GREP_DEFAULT_MATCH_LIMIT);
       const contextLines = context && context > 0 ? context : 0;
 
-      const argv: string[] = ['grep', '-nH', '-I'];
-      if (ignoreCase) argv.push('-i');
-      if (literal) argv.push('-F');
-      else argv.push('-E');
+      const argv: string[] = ['rg', '-nH'];
+      if (ignoreCase) argv.push('--ignore-case');
+      if (literal) argv.push('--fixed-strings');
       if (contextLines > 0) argv.push('-C', String(contextLines));
-      if (st.isDirectory) {
-        argv.push('-r', '--exclude-dir=skills');
-      }
       const g = globPat?.trim();
       if (g) {
-        argv.push(`--include=${shellSingleQuote(g)}`);
+        argv.push('--glob', shellSingleQuote(g));
       }
-      argv.push('--', shellSingleQuote(pattern), shellSingleQuote(searchPath));
+      /** just-bash `rg` does not support GNU `--` end-of-options; pattern/path are shell-quoted. */
+      argv.push(shellSingleQuote(pattern), shellSingleQuote(searchPath));
 
       const cmd = argv.join(' ');
       const result = await bash.exec(cmd, { signal: signal ?? undefined });
@@ -129,7 +163,7 @@ function createVirtualGrepTool(bash: Bash, sessionCwd: string) {
           content: [
             {
               type: 'text',
-              text: errText || `grep failed with exit code ${result.exitCode}`,
+              text: errText || `rg failed with exit code ${result.exitCode}`,
             },
           ],
           details: undefined,
@@ -137,6 +171,14 @@ function createVirtualGrepTool(bash: Bash, sessionCwd: string) {
       }
 
       const rawOut = (result.stdout ?? '').replace(/\r\n/g, '\n').trimEnd();
+      const stderrTrim = (result.stderr ?? '').trim();
+      // Exit 1 usually means "no matches" for rg; non-empty stderr is a real error (e.g. bad flags).
+      if (result.exitCode === 1 && !rawOut && stderrTrim) {
+        return {
+          content: [{ type: 'text', text: stderrTrim }],
+          details: undefined,
+        };
+      }
       if (!rawOut) {
         return {
           content: [{ type: 'text', text: 'No matches found' }],
@@ -204,13 +246,19 @@ function createVirtualGrepTool(bash: Bash, sessionCwd: string) {
   } as ToolDefinition;
 }
 
+function resolveSandboxPathForSession(relativeOrAbsolute: string | undefined, cwd: string): string {
+  return resolveVirtualPath(relativeOrAbsolute, cwd);
+}
+
 export function createVirtualPiCodingTools(
   bash: Bash,
   onDesignFile: (rel: string, content: string) => void,
 ) {
   const sessionCwd = SANDBOX_PROJECT_ROOT;
+  /** Absolute paths the model has read or written this session — strict read-before-edit for existing files (FileTime-style). */
+  const pathsSeenBeforeEdit = new Set<string>();
 
-  const read = createReadToolDefinition(sessionCwd, {
+  const readInner = createReadToolDefinition(sessionCwd, {
     autoResizeImages: false,
     operations: {
       readFile: async (absolutePath) => {
@@ -223,8 +271,33 @@ export function createVirtualPiCodingTools(
       },
     },
   });
+  type ReadExecute = (typeof readInner)['execute'];
+  const read = {
+    ...readInner,
+    ...SANDBOX_TOOL_OVERRIDES.read,
+    execute: async (
+      toolCallId: string,
+      params: Parameters<ReadExecute>[1],
+      signal: Parameters<ReadExecute>[2],
+      onUpdate: Parameters<ReadExecute>[3],
+      extCtx: Parameters<ReadExecute>[4],
+    ) => {
+      const result = await readInner.execute(toolCallId, params, signal, onUpdate, extCtx);
+      const rawPath =
+        params != null &&
+        typeof params === 'object' &&
+        'path' in params &&
+        typeof (params as { path?: unknown }).path === 'string'
+          ? (params as { path: string }).path
+          : '';
+      if (rawPath) {
+        pathsSeenBeforeEdit.add(resolveSandboxPathForSession(rawPath, sessionCwd));
+      }
+      return result;
+    },
+  } as (typeof readInner);
 
-  const write = createWriteToolDefinition(sessionCwd, {
+  const writeInner = createWriteToolDefinition(sessionCwd, {
     operations: {
       mkdir: async (dir) => {
         await bash.fs.mkdir(dir, { recursive: true });
@@ -236,8 +309,33 @@ export function createVirtualPiCodingTools(
       },
     },
   });
+  type WriteExecute = (typeof writeInner)['execute'];
+  const write = {
+    ...writeInner,
+    ...SANDBOX_TOOL_OVERRIDES.write,
+    execute: async (
+      toolCallId: string,
+      params: Parameters<WriteExecute>[1],
+      signal: Parameters<WriteExecute>[2],
+      onUpdate: Parameters<WriteExecute>[3],
+      extCtx: Parameters<WriteExecute>[4],
+    ) => {
+      const result = await writeInner.execute(toolCallId, params, signal, onUpdate, extCtx);
+      const rawPath =
+        params != null &&
+        typeof params === 'object' &&
+        'path' in params &&
+        typeof (params as { path?: unknown }).path === 'string'
+          ? (params as { path: string }).path
+          : '';
+      if (rawPath) {
+        pathsSeenBeforeEdit.add(resolveSandboxPathForSession(rawPath, sessionCwd));
+      }
+      return result;
+    },
+  } as (typeof writeInner);
 
-  const edit = createEditToolDefinition(sessionCwd, {
+  const editInner = createEditToolDefinition(sessionCwd, {
     operations: {
       readFile: async (absolutePath) => {
         const text = await bash.fs.readFile(absolutePath, 'utf8');
@@ -254,6 +352,83 @@ export function createVirtualPiCodingTools(
       },
     },
   });
+  type EditExecute = (typeof editInner)['execute'];
+  const edit = {
+    ...editInner,
+    ...SANDBOX_TOOL_OVERRIDES.edit,
+    execute: async (
+      toolCallId: string,
+      params: Parameters<EditExecute>[1],
+      signal: Parameters<EditExecute>[2],
+      onUpdate: Parameters<EditExecute>[3],
+      extCtx: Parameters<EditExecute>[4],
+    ) => {
+      const rawPath =
+        params != null &&
+        typeof params === 'object' &&
+        'path' in params &&
+        typeof (params as { path?: unknown }).path === 'string'
+          ? (params as { path: string }).path
+          : '';
+      const abs = resolveSandboxPathForSession(rawPath || '.', sessionCwd);
+      const fileExists = await bash.fs.exists(abs);
+      if (fileExists && !pathsSeenBeforeEdit.has(abs)) {
+        throw new Error(
+          `You must read "${rawPath}" before editing it. Use the read tool first to see the current file content.`,
+        );
+      }
+      try {
+        const result = await editInner.execute(toolCallId, params, signal, onUpdate, extCtx);
+        return result;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!isEditNotFoundError(msg)) {
+          throw err;
+        }
+        const normalized = normalizeEditToolParams(params);
+        if (!normalized) {
+          throw err;
+        }
+        let fileContent: string;
+        try {
+          fileContent = await bash.fs.readFile(abs, 'utf8');
+        } catch {
+          throw err;
+        }
+        const diagnostics: CascadeDiagnostic[] = [];
+        const corrected = attemptMatchCascade(fileContent, normalized.edits, diagnostics);
+        if (!corrected) {
+          console.debug(
+            '[edit-cascade] all strategies failed for',
+            rawPath,
+            JSON.stringify(diagnostics),
+          );
+          throw err;
+        }
+        console.debug(
+          '[edit-cascade] resolved via cascade for',
+          rawPath,
+          JSON.stringify(diagnostics),
+        );
+        const retryParams = {
+          path: normalized.path,
+          edits: corrected,
+        } as Parameters<EditExecute>[1];
+        try {
+          const result = await editInner.execute(
+            toolCallId,
+            retryParams,
+            signal,
+            onUpdate,
+            extCtx,
+          );
+          return result;
+        } catch {
+          throw err;
+        }
+      }
+    },
+  } as (typeof editInner);
 
   const lsInner = createLsToolDefinition(sessionCwd, {
     operations: {
@@ -272,6 +447,7 @@ export function createVirtualPiCodingTools(
 
   const ls = {
     ...lsInner,
+    ...SANDBOX_TOOL_OVERRIDES.ls,
     execute: async (
       toolCallId: string,
       params: Parameters<LsExecute>[1],
@@ -290,27 +466,19 @@ export function createVirtualPiCodingTools(
       const stray = vfsPaths.filter(
         (p) => p !== SANDBOX_PROJECT_ROOT && !p.startsWith(`${SANDBOX_PROJECT_ROOT}/`),
       );
-      // #region agent log
-      fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
-        body: JSON.stringify({
-          sessionId: '5b9be9',
-          hypothesisId: stray.length > 0 ? 'H5' : 'H4',
-          location: 'virtual-tools.ts:ls:enter',
-          message: 'virtual ls enter',
-          data: {
-            sandboxRoot: SANDBOX_PROJECT_ROOT,
-            toolCallId,
-            pathArg,
-            vfsTotal: vfsPaths.length,
-            strayCount: stray.length,
-            straySample: stray.slice(0, 6),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
+      debugAgentIngest({
+        hypothesisId: stray.length > 0 ? 'H5' : 'H4',
+        location: 'virtual-tools.ts:ls:enter',
+        message: 'virtual ls enter',
+        data: {
+          sandboxRoot: SANDBOX_PROJECT_ROOT,
+          toolCallId,
+          pathArg,
+          vfsTotal: vfsPaths.length,
+          strayCount: stray.length,
+          straySample: stray.slice(0, 6),
+        },
+      });
       const t0 = Date.now();
       try {
         const result = await lsInner.execute(toolCallId, params, signal, onUpdate, extCtx);
@@ -319,42 +487,26 @@ export function createVirtualPiCodingTools(
           first && typeof first === 'object' && first !== null && 'text' in first
             ? String((first as { text?: unknown }).text ?? '').length
             : 0;
-        // #region agent log
-        fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
-          body: JSON.stringify({
-            sessionId: '5b9be9',
-            hypothesisId: 'H4',
-            location: 'virtual-tools.ts:ls:exit',
-            message: 'virtual ls exit',
-            data: { toolCallId, durationMs: Date.now() - t0, textLen },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
+        debugAgentIngest({
+          hypothesisId: 'H4',
+          location: 'virtual-tools.ts:ls:exit',
+          message: 'virtual ls exit',
+          data: { toolCallId, durationMs: Date.now() - t0, textLen },
+        });
         return result;
       } catch (err) {
-        // #region agent log
-        fetch('http://127.0.0.1:7576/ingest/83c687e1-03e6-457d-9b2a-e5ea8f1db0e1', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5b9be9' },
-          body: JSON.stringify({
-            sessionId: '5b9be9',
-            hypothesisId: 'H4',
-            location: 'virtual-tools.ts:ls:error',
-            message: 'virtual ls throw',
-            data: { toolCallId, err: String(err) },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
+        debugAgentIngest({
+          hypothesisId: 'H4',
+          location: 'virtual-tools.ts:ls:error',
+          message: 'virtual ls throw',
+          data: { toolCallId, err: normalizeError(err) },
+        });
         throw err;
       }
     },
   } as (typeof lsInner);
 
-  const find = createFindToolDefinition(sessionCwd, {
+  const findInner = createFindToolDefinition(sessionCwd, {
     operations: {
       exists: (absolutePath) => bash.fs.exists(absolutePath),
       glob: async (pattern, searchPath, options) => {
@@ -389,6 +541,7 @@ export function createVirtualPiCodingTools(
       },
     },
   });
+  const find = { ...findInner, ...SANDBOX_TOOL_OVERRIDES.find };
 
   const grep = createVirtualGrepTool(bash, sessionCwd);
 

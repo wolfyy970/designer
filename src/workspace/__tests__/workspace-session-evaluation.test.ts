@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { evaluationPayloadFromHypothesisContext } from '../workspace-session';
 import type { HypothesisGenerationContext } from '../workspace-session';
-import type { VariantStrategy } from '../../types/compiler';
+import type { HypothesisStrategy } from '../../types/incubator';
 import type { DesignSpec } from '../../types/spec';
 
-const baseStrategy = (dimensionValues: Record<string, string>): VariantStrategy => ({
+const baseStrategy = (dimensionValues: Record<string, string>): HypothesisStrategy => ({
   id: 'vs1',
   name: 'S',
   hypothesis: 'H',
@@ -38,9 +38,8 @@ const baseSpec: DesignSpec = {
 function ctx(overrides: Partial<HypothesisGenerationContext>): HypothesisGenerationContext {
   return {
     hypothesisNodeId: 'h1',
-    variantStrategy: baseStrategy({}),
+    hypothesisStrategy: baseStrategy({}),
     spec: baseSpec,
-    agentMode: 'agentic',
     modelCredentials: [
       { providerId: 'openrouter', modelId: 'm', thinkingLevel: 'off' },
     ],
@@ -51,43 +50,31 @@ function ctx(overrides: Partial<HypothesisGenerationContext>): HypothesisGenerat
 }
 
 describe('evaluationPayloadFromHypothesisContext', () => {
-  it('returns undefined when not agentic', () => {
-    expect(
-      evaluationPayloadFromHypothesisContext(
-        ctx({
-          variantStrategy: baseStrategy({ format: 'html' }),
-          agentMode: 'single',
-        }),
-      ),
-    ).toBeUndefined();
-  });
-
   it('maps format dimension to outputFormat', () => {
     const p = evaluationPayloadFromHypothesisContext(
-      ctx({ variantStrategy: baseStrategy({ format: 'html' }) }),
+      ctx({ hypothesisStrategy: baseStrategy({ format: 'html' }) }),
     );
-    expect(p?.outputFormat).toBe('html');
-    expect(p?.hypothesis).toBe('H');
-    expect(p?.objectivesMetrics).toBe('Obj content');
-    expect(p?.designConstraints).toBe('Constraint content');
+    expect(p.outputFormat).toBe('html');
+    expect(p.hypothesis).toBe('H');
+    expect(p.objectivesMetrics).toBe('Obj content');
+    expect(p.designConstraints).toBe('Constraint content');
   });
 
   it('accepts output_format and Output Format keys', () => {
     expect(
       evaluationPayloadFromHypothesisContext(
-        ctx({ variantStrategy: baseStrategy({ output_format: 'react' }) }),
-      )?.outputFormat,
+        ctx({ hypothesisStrategy: baseStrategy({ output_format: 'react' }) }),
+      ).outputFormat,
     ).toBe('react');
     expect(
       evaluationPayloadFromHypothesisContext(
-        ctx({ variantStrategy: baseStrategy({ 'Output Format': '  html  ' }) }),
-      )?.outputFormat,
+        ctx({ hypothesisStrategy: baseStrategy({ 'Output Format': '  html  ' }) }),
+      ).outputFormat,
     ).toBe('html');
   });
 
   it('omits outputFormat when no format keys set', () => {
     const p = evaluationPayloadFromHypothesisContext(ctx({}));
-    expect(p).toBeDefined();
-    expect(p?.outputFormat).toBeUndefined();
+    expect(p.outputFormat).toBeUndefined();
   });
 });
