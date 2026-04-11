@@ -19,11 +19,7 @@ import {
 } from './placeholder-trace-rows';
 import { evaluationRoundSnapshotHasDegradedWorker, isEvaluatorWorkerDegraded } from '../types/evaluation';
 import { normalizeError } from '../lib/error-utils';
-
-function streamDevDebug(placeholderId: string, message: string, data?: Record<string, unknown>): void {
-  if (!import.meta.env.DEV) return;
-  console.debug(`(stream:${placeholderId.slice(0, 8)})`, message, data ?? '');
-}
+import { streamPlaceholderDevDebug } from './placeholder-stream-dev-debug';
 
 export function createPlaceholderStreamCallbacks(options: {
   placeholderId: string;
@@ -39,7 +35,7 @@ export function createPlaceholderStreamCallbacks(options: {
   const activatedSkills: SkillInfo[] = [];
 
   const pushTrace = (trace: RunTraceEvent) => {
-    streamDevDebug(placeholderId, 'onTrace', {
+    streamPlaceholderDevDebug(placeholderId, 'onTrace', {
       kind: trace.kind,
       label: trace.label.length > 80 ? `${trace.label.slice(0, 80)}…` : trace.label,
     });
@@ -80,7 +76,7 @@ export function createPlaceholderStreamCallbacks(options: {
 
   return {
     onPhase: (phase) => {
-      streamDevDebug(placeholderId, 'onPhase', { phase });
+      streamPlaceholderDevDebug(placeholderId, 'onPhase', { phase });
       raf.streamingTool.cancelOnly();
       state.streamingToolPending = undefined;
       pushTrace(traceRowAgenticPhase(phase));
@@ -98,7 +94,7 @@ export function createPlaceholderStreamCallbacks(options: {
       });
     },
     onEvaluationProgress: (round, phase, message) => {
-      streamDevDebug(placeholderId, 'onEvaluationProgress', { round, phase, message });
+      streamPlaceholderDevDebug(placeholderId, 'onEvaluationProgress', { round, phase, message });
       state.evalRoundLive = round;
       state.liveEvalWorkers = {};
       const trace = traceRowEvaluationProgress(round, phase, message);
@@ -112,7 +108,7 @@ export function createPlaceholderStreamCallbacks(options: {
       });
     },
     onEvaluationReport: (_round, snapshot) => {
-      streamDevDebug(placeholderId, 'onEvaluationReport', { round: snapshot.round });
+      streamPlaceholderDevDebug(placeholderId, 'onEvaluationReport', { round: snapshot.round });
       debugAgentIngest({
         hypothesisId: 'E1',
         location: 'placeholder-stream-handlers.ts:onEvaluationReport',
@@ -164,7 +160,7 @@ export function createPlaceholderStreamCallbacks(options: {
       }
     },
     onEvaluationWorkerDone: (round, rubric, workerReport) => {
-      streamDevDebug(placeholderId, 'onEvaluationWorkerDone', {
+      streamPlaceholderDevDebug(placeholderId, 'onEvaluationWorkerDone', {
         round,
         rubric,
         degraded: isEvaluatorWorkerDegraded(workerReport),
@@ -175,7 +171,7 @@ export function createPlaceholderStreamCallbacks(options: {
       pushTrace(traceRowEvaluationWorker(round, rubric, workerReport));
     },
     onRevisionRound: (round, brief) => {
-      streamDevDebug(placeholderId, 'onRevisionRound', { round, briefLen: brief.length });
+      streamPlaceholderDevDebug(placeholderId, 'onRevisionRound', { round, briefLen: brief.length });
       pushTrace(traceRowRevisionRound(round));
       updateResult(placeholderId, {
         agenticPhase: 'revising',
@@ -184,24 +180,24 @@ export function createPlaceholderStreamCallbacks(options: {
       });
     },
     onSkillsLoaded: (skills) => {
-      streamDevDebug(placeholderId, 'onSkillsLoaded', { count: skills.length });
+      streamPlaceholderDevDebug(placeholderId, 'onSkillsLoaded', { count: skills.length });
       updateResult(placeholderId, { liveSkills: skills });
     },
     onSkillActivated: (payload) => {
-      streamDevDebug(placeholderId, 'onSkillActivated', { key: payload.key });
+      streamPlaceholderDevDebug(placeholderId, 'onSkillActivated', { key: payload.key });
       const i = activatedSkills.findIndex((s) => s.key === payload.key);
       if (i >= 0) activatedSkills.splice(i, 1);
       activatedSkills.push(payload);
       updateResult(placeholderId, { liveActivatedSkills: [...activatedSkills] });
     },
     onCheckpoint: (checkpoint) => {
-      streamDevDebug(placeholderId, 'onCheckpoint', { stopReason: checkpoint.stopReason });
+      streamPlaceholderDevDebug(placeholderId, 'onCheckpoint', { stopReason: checkpoint.stopReason });
       state.agenticCheckpoint = checkpoint;
       pushTrace(traceRowCheckpoint(checkpoint));
     },
     onActivity: (entry) => {
       const tid = state.currentModelTurnId || 1;
-      streamDevDebug(placeholderId, 'onActivity', { chars: entry.length, turnId: tid });
+      streamPlaceholderDevDebug(placeholderId, 'onActivity', { chars: entry.length, turnId: tid });
       state.activityText += entry;
       state.activityByTurn = {
         ...state.activityByTurn,
@@ -212,7 +208,7 @@ export function createPlaceholderStreamCallbacks(options: {
     onTrace: onTraceWithTurnHandling,
     onThinking: (turnId, delta) => {
       if (!delta) return;
-      streamDevDebug(placeholderId, 'onThinking', { turnId, deltaLen: delta.length });
+      streamPlaceholderDevDebug(placeholderId, 'onThinking', { turnId, deltaLen: delta.length });
       const existing = state.thinkingTurns.find((t) => t.turnId === turnId);
       const startedAt = existing?.startedAt ?? Date.now();
       const next: ThinkingTurnSlice = {
@@ -227,13 +223,13 @@ export function createPlaceholderStreamCallbacks(options: {
       raf.thinking.schedule();
     },
     onProgress: (status) => {
-      streamDevDebug(placeholderId, 'onProgress', {
+      streamPlaceholderDevDebug(placeholderId, 'onProgress', {
         status: status.length > 100 ? `${status.slice(0, 100)}…` : status,
       });
       updateResult(placeholderId, { progressMessage: status, lastActivityAt: Date.now() });
     },
     onStreamingTool: (toolName, streamedChars, done, toolPath) => {
-      streamDevDebug(placeholderId, 'onStreamingTool', { toolName, streamedChars, done, toolPath });
+      streamPlaceholderDevDebug(placeholderId, 'onStreamingTool', { toolName, streamedChars, done, toolPath });
       if (done) {
         state.streamingToolPending = undefined;
         raf.streamingTool.cancelOnly();
@@ -249,13 +245,13 @@ export function createPlaceholderStreamCallbacks(options: {
       raf.streamingTool.schedule();
     },
     onCode: (code) => {
-      streamDevDebug(placeholderId, 'onCode', { chars: code.length });
+      streamPlaceholderDevDebug(placeholderId, 'onCode', { chars: code.length });
       state.generatedCode = code;
       state.pendingLiveCode = code;
       raf.code.schedule();
     },
     onFile: (path, content) => {
-      streamDevDebug(placeholderId, 'onFile', { path, contentChars: content.length });
+      streamPlaceholderDevDebug(placeholderId, 'onFile', { path, contentChars: content.length });
       state.liveFiles = { ...state.liveFiles, [path]: content };
       updateResult(placeholderId, {
         liveFiles: state.liveFiles,
@@ -263,15 +259,15 @@ export function createPlaceholderStreamCallbacks(options: {
       });
     },
     onPlan: (files) => {
-      streamDevDebug(placeholderId, 'onPlan', { fileCount: files.length });
+      streamPlaceholderDevDebug(placeholderId, 'onPlan', { fileCount: files.length });
       updateResult(placeholderId, { liveFilesPlan: files });
     },
     onTodos: (todos) => {
-      streamDevDebug(placeholderId, 'onTodos', { count: todos.length });
+      streamPlaceholderDevDebug(placeholderId, 'onTodos', { count: todos.length });
       updateResult(placeholderId, { liveTodos: todos });
     },
     onError: (error) => {
-      streamDevDebug(placeholderId, 'onError', { error });
+      streamPlaceholderDevDebug(placeholderId, 'onError', { error });
       updateResult(placeholderId, { status: GENERATION_STATUS.ERROR, error });
     },
   };

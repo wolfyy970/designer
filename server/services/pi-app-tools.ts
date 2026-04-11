@@ -6,7 +6,7 @@ import { Script } from 'node:vm';
 import type { Bash } from 'just-bash';
 import type { ExtensionContext, ToolDefinition } from './pi-sdk/types.ts';
 import type { TodoItem } from '../../src/types/provider.ts';
-import { SANDBOX_PROJECT_ROOT } from './agent-bash-sandbox.ts';
+import { sandboxProjectAbsPath } from './agent-bash-sandbox.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import {
   isAllowedGoogleFontStylesheetUrl,
@@ -16,13 +16,8 @@ import { classifyAssetRef, resolveVirtualAssetPath } from '../../src/lib/resolve
 import { buildUseSkillToolDescription, SKILL_FILENAME } from '../lib/skill-discovery.ts';
 import type { SkillCatalogEntry } from '../lib/skill-schema.ts';
 
-function projectAbsPath(rel: string): string {
-  const t = rel.replace(/^\/+/, '');
-  return `${SANDBOX_PROJECT_ROOT}/${t}`;
-}
-
 async function readProjectFile(bash: Bash, rel: string): Promise<string | undefined> {
-  const abs = projectAbsPath(rel);
+  const abs = sandboxProjectAbsPath(rel);
   try {
     if (!(await bash.fs.exists(abs))) return undefined;
     const st = await bash.fs.stat(abs);
@@ -34,7 +29,7 @@ async function readProjectFile(bash: Bash, rel: string): Promise<string | undefi
 }
 
 async function hasProjectFile(bash: Bash, rel: string): Promise<boolean> {
-  const abs = projectAbsPath(rel);
+  const abs = sandboxProjectAbsPath(rel);
   try {
     if (!(await bash.fs.exists(abs))) return false;
     const st = await bash.fs.stat(abs);

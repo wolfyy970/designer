@@ -15,11 +15,11 @@ pnpm dev:all                 # recommended: API + Vite (API waits until /api/hea
 # Or two terminals: pnpm dev:server  then  pnpm dev
 ```
 
-Both processes are required for local development. The Vite dev server proxies `/api/*` to the Hono server on port **3001**. If only Vite is up, the app stays on a full-screen **API server not reachable** gate (with retry) until `**GET /api/config`** succeeds—start the API with `**pnpm dev:all**` or `**pnpm dev:server**`, or hard-refresh after the API is listening.
+Both processes are required for local development. The Vite dev server proxies `/api/*` to the Hono server on port **3001**. If only Vite is up, the app stays on a full-screen **API server not reachable** gate (with retry) until **`GET /api/config`** succeeds—start the API with **`pnpm dev:all`** or **`pnpm dev:server`**, or hard-refresh after the API is listening.
 
 **Screen width:** The canvas workspace needs a **desktop-class** layout. Browser viewports **narrower than 1024px** (typical phones and many tablets) show a full-screen message asking you to open the app on a laptop or desktop instead.
 
-`**EADDRINUSE` on port 3001:** Something is still bound to the API port — often a **background** `pnpm dev:server` left over from `pnpm dev:server & pnpm dev` after `Ctrl+C` (check `jobs` / `fg`; or free the port: `lsof -nP -iTCP:3001 -sTCP:LISTEN` then `kill <pid>`). Prefer `**pnpm dev:all`** or **two terminals** so you don't stack servers.
+**`EADDRINUSE` on port 3001:** Something is still bound to the API port — often a **background** `pnpm dev:server` left over from `pnpm dev:server & pnpm dev` after `Ctrl+C` (check `jobs` / `fg`; or free the port: `lsof -nP -iTCP:3001 -sTCP:LISTEN` then `kill <pid>`). Prefer **`pnpm dev:all`** or **two terminals** so you don't stack servers.
 
 ### API Configuration
 
@@ -27,7 +27,7 @@ Both processes are required for local development. The Vite dev server proxies `
 | Key                           | Where to get it                                | Required       | What it does                                                                                                                                                                                                                                                                                                       |
 | ----------------------------- | ---------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `OPENROUTER_API_KEY`          | [openrouter.ai](https://openrouter.ai)         | For OpenRouter | Server-side only — proxied via Vite, never exposed to browser                                                                                                                                                                                                                                                      |
-| `LOCKDOWN`                    | N/A                                            | Optional       | When **unset or empty**, the API and UI use **OpenRouter + MiniMax M2.5** only (`minimax/minimax-m2.5`); model pickers are disabled. Set to `false`, `0`, `no`, or `off` (case-insensitive) to allow other providers/models. The SPA reads `**GET /api/config`** at runtime — restart the API after changing this. |
+| `LOCKDOWN`                    | N/A                                            | Optional       | When **unset or empty**, the API and UI use **OpenRouter + MiniMax M2.5** only (`minimax/minimax-m2.5`); model pickers are disabled. Set to `false`, `0`, `no`, or `off` (case-insensitive) to allow other providers/models. The SPA reads **`GET /api/config`** at runtime — restart the API after changing this. |
 | `VITE_LMSTUDIO_URL`           | Local (default: `http://192.168.252.213:1234`) | For LM Studio  | Local inference endpoint                                                                                                                                                                                                                                                                                           |
 | `VITE_LMSTUDIO_VISION_MODELS` | N/A                                            | Optional       | Comma-separated model ID substrings that support vision                                                                                                                                                                                                                                                            |
 
@@ -59,11 +59,11 @@ The header also opens **Settings** (General preferences). In **development**, a 
 | `pnpm dev:all`      | Start API then Vite (waits for `/api/health` — avoids proxy race)                                                                                                                        |
 | `pnpm dev:kill`     | Stop processes listening on ports 3001 (API) and 5173 (Vite)                                                                                                                             |
 | `pnpm build`        | Type-check and production build                                                                                                                                                          |
-| `pnpm test`         | Vitest unit tests (Playwright merge test excluded in config; `**pnpm test:playwright-eval`** runs it — see [AGENTS.md](AGENTS.md))                                                       |
+| `pnpm test`         | Vitest unit tests (Playwright merge test excluded in config; **`pnpm test:playwright-eval`** runs it — see [AGENTS.md](AGENTS.md))                                                       |
 | `pnpm lint`         | Run ESLint                                                                                                                                                                               |
 | `pnpm knip`         | Optional unused **files** and **dependencies** report via Knip (`--include files,dependencies`; not run in CI by default)                                                                |
 | `pnpm meta-harness` | Optional **meta-harness** CLI: benchmark/proposer harness against the local API ([meta-harness/README.md](meta-harness/README.md), [RUNBOOK](meta-harness/RUNBOOK.md))                   |
-| `pnpm snap`         | Checkpoint prompt/skill/rubric versions (changed files only); list/diff/restore subcommands ([USER_GUIDE.md](USER_GUIDE.md#version-history); `**pnpm version-snapshot`** = legacy alias) |
+| `pnpm snap`         | Checkpoint prompt/skill/rubric versions (changed files only); list/diff/restore subcommands ([USER_GUIDE.md](USER_GUIDE.md#version-history); **`pnpm version-snapshot`** = legacy alias) |
 
 
 ## Documentation
@@ -86,10 +86,10 @@ The header also opens **Settings** (General preferences). In **development**, a 
 
 ## Deploying (Vercel)
 
-Production uses **Vercel** (`vercel.json` + `api/[[...route]].ts` → Hono). The serverless function `**maxDuration` is 800s** on Pro so long agentic SSE streams fit; Hobby max is shorter—use **Pro** for agentic runs with revision rounds. Set `**OPENROUTER_API_KEY`** in the Vercel project env. `**ALLOWED_ORIGINS**` in env may be required when the SPA is on a custom domain or preview URL that is not same-origin with `/api`—see `.env.example`. `/api/logs` is **disabled when `NODE_ENV=production`** (no shared in-memory ring).
+Production uses **Vercel** (`vercel.json` + `api/[[...route]].ts` → Hono). The serverless function **`maxDuration`** is **800s** on Pro so long agentic SSE streams fit; Hobby max is shorter—use **Pro** for agentic runs with revision rounds. Set **`OPENROUTER_API_KEY`** in the Vercel project env. **`ALLOWED_ORIGINS`** in env may be required when the SPA is on a custom domain or preview URL that is not same-origin with `/api`—see `.env.example`. `/api/logs` is **disabled when `NODE_ENV=production`** (no shared in-memory ring).
 
-Ephemeral **preview sessions** may not persist across separate serverless invocations—the UI falls back to bundled `**srcDoc`** when a preview URL 404s (relative links in that mode are limited).
+Ephemeral **preview sessions** may not persist across separate serverless invocations—the UI falls back to bundled **`srcDoc`** when a preview URL 404s (relative links in that mode are limited).
 
 ## Tech Stack
 
-Vite + React 19 + TypeScript, Zustand (state), Tailwind CSS v4 (styling; UI typefaces in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)), @xyflow/react v12 (canvas), react-router-dom v7 (routing), @tanstack/react-query (async state), Zod (schema validation), Vitest (testing). Agentic mode: `@mariozechner/pi-coding-agent` with `**just-bash`**; native Pi file tools are mapped to the virtual project in `server/services/pi-sdk/` so the host filesystem stays isolated. See [ARCHITECTURE.md](ARCHITECTURE.md).
+Vite + React 19 + TypeScript, Zustand (state), Tailwind CSS v4 (styling; UI typefaces in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)), @xyflow/react v12 (canvas), react-router-dom v7 (routing), @tanstack/react-query (async state), Zod (schema validation), Vitest (testing). Agentic mode: `@mariozechner/pi-coding-agent` with **just-bash**; native Pi file tools are mapped to the virtual project in `server/services/pi-sdk/` so the host filesystem stays isolated. See [ARCHITECTURE.md](ARCHITECTURE.md).

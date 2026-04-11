@@ -8,9 +8,14 @@ import { env } from '../env.ts';
 /** Absolute path to the design workspace root inside just-bash. */
 export const SANDBOX_PROJECT_ROOT = '/home/user/project';
 
-function toSandboxPath(rel: string): string {
+/** Relative project path → absolute path under the sandbox root (shared with pi-app-tools). */
+export function sandboxProjectAbsPath(rel: string): string {
   const trimmed = rel.replace(/^\/+/, '');
   return `${SANDBOX_PROJECT_ROOT}/${trimmed}`;
+}
+
+function toSandboxPath(rel: string): string {
+  return sandboxProjectAbsPath(rel);
 }
 
 export interface AgentBashSandboxOptions {

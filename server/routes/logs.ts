@@ -1,32 +1,17 @@
 import { Hono } from 'hono';
-import { z } from 'zod';
 import { getLogEntries, getTaskLogEntries, clearLogEntries } from '../log-store.ts';
 import { appendTraceLines, getTraceLogLines } from '../trace-log-store.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
 import { env } from '../env.ts';
+import {
+  PostTraceBodySchema,
+  runTraceEventIngestSchema,
+} from '../lib/run-trace-ingest-schema.ts';
 
 const logs = new Hono();
 
-export const RunTraceEventBodySchema = z
-  .object({
-    id: z.string(),
-    at: z.string(),
-    kind: z.string(),
-    label: z.string(),
-    phase: z.string().optional(),
-    round: z.number().optional(),
-    toolName: z.string().optional(),
-    path: z.string().optional(),
-    status: z.enum(['info', 'success', 'warning', 'error']).optional(),
-  })
-  .passthrough();
-
-/** Exported for contract tests; kept in sync with POST /api/logs/trace. */
-export const PostTraceBodySchema = z.object({
-  correlationId: z.string().optional(),
-  resultId: z.string().optional(),
-  events: z.array(RunTraceEventBodySchema),
-});
+/** Re-export for contract tests (alias of ingest schema). */
+export { runTraceEventIngestSchema as RunTraceEventBodySchema, PostTraceBodySchema };
 
 logs.get('/', (c) => {
   if (!env.isDev) {

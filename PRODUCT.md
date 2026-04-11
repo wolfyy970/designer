@@ -2,16 +2,15 @@
 
 ## North Star
 
-Auto Designer exists to **replace the UX designer**, not assist one.
+Auto Designer exists to **assist the UX designer**. Think of it as an auto-designer, like a pair programmer. 
 
-Given a problem statement and appropriate research, a brilliant designer synthesizes everything — user needs, competitive landscape, behavioral patterns, business constraints — and produces groundbreaking hypotheses that break conventions with something genuinely better. Then they execute those hypotheses into designs where every affordance is clear, every interaction is intuitive, time on task drops, and users never have to think. *Don't Make Me Think*, Nielsen Norman heuristics, information architecture, visual hierarchy — the entire discipline, applied at an expert level.
+Given a problem statement and appropriate research, a good designer synthesizes everything — user needs, competitive landscape, behavioral patterns, business constraints — and produces hypotheses that break conventions with something genuinely better. Then they execute those hypotheses into designs where every affordance is clear, every interaction is intuitive, time on task drops, and users never have to think. *Don't Make Me Think*, Nielsen Norman heuristics, information architecture, visual hierarchy — the entire discipline, applied at an expert level.
 
 That is what this application must do autonomously. The ambition is not parity with existing design; it is to **surpass** it. Every feature, every prompt, every evaluation rubric, and every architectural decision exists to deliver against that standard. If a capability does not move the system closer to producing work a brilliant designer would be proud of, it does not belong here.
 
 **Concretely, the pipeline has two jobs:**
 
 1. **Hypothesis generation** — From a design brief (plus research, objectives, and constraints), produce strategies that are genuinely differentiated: not reshuffled templates, not minor variations, but fundamentally different bets about what will work best for the stated audience and problem. The bar is creative and strategic, not just technically valid.
-
 2. **Design execution** — Turn each hypothesis into a rendered, usable artifact that implements the strategy with craft, clarity, and conviction. Typography, spacing, motion, content, interaction — all working together to embody the hypothesis so clearly that the design *is* the argument for why this approach works.
 
 Every subsystem — the incubator, the agentic builder, the evaluator, the revision loop, the skills, the prompts — is measured against these two jobs. Ship work that a senior designer would look at and think: *I wish I'd done that.*
@@ -28,18 +27,20 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 
 ### Node Types
 
-| Node | Type | Purpose |
-|------|------|---------|
-| Design Brief | Input | Primary directive for the design exploration |
-| Existing Design | Input | What exists today — text + reference images (drag-and-drop) |
-| Research Context | Input | User research, behavioral insights |
-| Objectives & Metrics | Input | Success criteria and evaluation measures |
-| Design Constraints | Input | Non-negotiable boundaries + exploration ranges |
-| Model | Processing | Centralizes provider + model selection. Connect to **Incubator**, **Hypothesis**, or **Design System** nodes to configure which LLM they use. |
-| Design System | Processing | Self-contained design token definitions. Supports multiple instances (e.g., Material Design vs custom tokens). Content stored in node data, not spec store. Optional vision-based extraction from uploaded images. |
-| Incubator | Processing | **Incubates** connected inputs into hypothesis strategies via LLM |
-| Hypothesis | Processing | Editable strategy card with **Design** (always **agentic** Pi). **Auto-improve** off: single build, no evaluator. **On:** rubric + browser evaluation and optional revision rounds. Connect a Model node. A dashed **New hypothesis** card can add a **blank** card or **Generate** one via LLM (brief + model required). |
-| Preview | Output | Rendered design preview. Single-file results show an HTML iframe. Multi-file (agentic) results show a file explorer + preview/code tabs + zip download. Completed agentic runs show an **evaluation scorecard** (aggregate score, prioritized fixes, runtime QA) and, when available, a **headless browser thumbnail**. Version navigation across all results. |
+
+| Node                 | Type       | Purpose                                                                                                                                                                                                                                                                                                                                                        |
+| -------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Design Brief         | Input      | Primary directive for the design exploration                                                                                                                                                                                                                                                                                                                   |
+| Existing Design      | Input      | What exists today — text + reference images (drag-and-drop)                                                                                                                                                                                                                                                                                                    |
+| Research Context     | Input      | User research, behavioral insights                                                                                                                                                                                                                                                                                                                             |
+| Objectives & Metrics | Input      | Success criteria and evaluation measures                                                                                                                                                                                                                                                                                                                       |
+| Design Constraints   | Input      | Non-negotiable boundaries + exploration ranges                                                                                                                                                                                                                                                                                                                 |
+| Model                | Processing | Centralizes provider + model selection. Connect to **Incubator**, **Hypothesis**, or **Design System** nodes to configure which LLM they use.                                                                                                                                                                                                                  |
+| Design System        | Processing | Self-contained design token definitions. Supports multiple instances (e.g., Material Design vs custom tokens). Content stored in node data, not spec store. Optional vision-based extraction from uploaded images.                                                                                                                                             |
+| Incubator            | Processing | **Incubates** connected inputs into hypothesis strategies via LLM                                                                                                                                                                                                                                                                                              |
+| Hypothesis           | Processing | Editable strategy card with **Design** (always **agentic** Pi). **Auto-improve** off: single build, no evaluator. **On:** rubric + browser evaluation and optional revision rounds. Connect a Model node. A dashed **New hypothesis** card can add a **blank** card or **Generate** one via LLM (brief + model required).                                      |
+| Preview              | Output     | Rendered design preview. Single-file results show an HTML iframe. Multi-file (agentic) results show a file explorer + preview/code tabs + zip download. Completed agentic runs show an **evaluation scorecard** (aggregate score, prioritized fixes, runtime QA) and, when available, a **headless browser thumbnail**. Version navigation across all results. |
+
 
 ### Canvas Features
 
@@ -64,6 +65,7 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 ### Iteration Loop
 
 Previews can connect to **Existing Design** (screenshot reference) or **Incubator** (prior output as reference code). This creates a feedback loop:
+
 1. Generate designs
 2. Connect a strong preview → Existing Design and/or wire a preview → Incubator
 3. Re-incubate with the new context
@@ -79,18 +81,19 @@ Each hypothesis-model pair produces a design through the **agentic** pipeline (P
 
 ### Agentic design (and optional evaluation + revision)
 
-Start a run with **Design** on the Hypothesis node. With **Auto-improve** **off** (default), the server runs **one** Pi **build** and returns—**no** evaluator workers. With **Auto-improve** **on**, it runs **build → evaluate → optional revise loop**. Powered by `@mariozechner/pi-coding-agent` with a **`just-bash`** in-memory project shell.
+Start a run with **Design** on the Hypothesis node. With **Auto-improve** **off** (default), the server runs **one** Pi **build** and returns—**no** evaluator workers. With **Auto-improve** **on**, it runs **build → evaluate → optional revise loop**. Powered by `@mariozechner/pi-coding-agent` with a **just-bash** in-memory project shell.
 
 **Server pipeline (not a single LLM call when Auto-improve is on):**
+
 1. **Build** — PI multi-turn tool loop produces the file tree (streaming events: plan, files, activity, todos). Always runs.
-2. **Evaluate** — *(Auto-improve on only.)* Four workers run: **design**, **strategy**, and **implementation** rubrics (structured JSON from the LLM) plus **browser QA**. The eval harness registers the same **virtual file tree** the agent wrote and passes a **`preview_page_url`** into LLM evaluators; Playwright **`goto`** that URL for a real render when enabled. Browser **preflight** still uses a **bundled** HTML view for fast VM checks (structure, assets, inline scripts) and scans **all `.html` files** for broken relative references. When Playwright browsers are installed, **headless Chromium** adds console/page errors, layout/text heuristics, and may attach a **viewport screenshot** on the scorecard. If Chromium is unavailable, the merge keeps preflight only and records a note — setup gaps do not hard-fail the whole evaluation.
+2. **Evaluate** — *(Auto-improve on only.)* Four workers run: **design**, **strategy**, and **implementation** rubrics (structured JSON from the LLM) plus **browser QA**. The eval harness registers the same **virtual file tree** the agent wrote and passes a **`preview_page_url`** into LLM evaluators; Playwright **`goto`** visits that URL for a real render when enabled. Browser **preflight** still uses a **bundled** HTML view for fast VM checks (structure, assets, inline scripts) and scans **all `.html` files** for broken relative references. When Playwright browsers are installed, **headless Chromium** adds console/page errors, layout/text heuristics, and may attach a **viewport screenshot** on the scorecard. If Chromium is unavailable, the merge keeps preflight only and records a note — setup gaps do not hard-fail the whole evaluation.
 3. **Revise** — *(Auto-improve on only.)* When the merged scores trip the revision gate, the server can run additional PI sessions seeded with the current files and an evaluation brief, until satisfied or until **max revision rounds** (Settings defaults, per-hypothesis override, env, or API). Provenance stores **checkpoint** metadata (e.g. stop reason, revision attempt count). Single-pass runs record **`build_only`** with no evaluation rounds.
 
 **Tools:** Pi-native **`read`**, **`write`**, **`edit`** (search/replace), **`ls`**, **`find`**, **`grep`** against the **virtual** project tree (not the host disk); plus **`bash`** for shell utilities; **`todo_write`**, **`validate_js`**, **`validate_html`**.
 
 **Typical flow:** plan milestones → create or edit files with `write` / `edit` → validate → optional bash for edge cases. Live **`file`** events update the preview as design artifacts change.
 
-**Skills.** Agent Skills live under **`skills/<key>/SKILL.md`** (YAML frontmatter: `name`, `description`, `tags`, `when`: `auto` | `always` | `manual`). On each agentic **build** and **revision** round, the server walks the directory, puts the **`<available_skills>`** list in the Pi **`use_skill`** tool description (paths + descriptions for non-**`manual`** entries), and **pre-seeds** those packages into **`skills/<key>/…`** in the virtual workspace. The agent should call **`use_skill`** (or **`read`** on `SKILL.md`) when relevant. Streamed **`skills_loaded`** lists the catalog; **`skill_activated`** fires when **`use_skill`** succeeds. Optional reference files in the package copy with the skill (see server limits).
+**Skills.** Agent Skills live under **`skills/<key>/SKILL.md`** (YAML frontmatter: `name`, `description`, `tags`, `when`: `auto` | `always` | `manual`). On each agentic **build** and **revision** round, the server walks the directory, puts the **`<available_skills>`** list in the Pi **`use_skill`** tool description (paths + descriptions for non-`manual` entries), and **pre-seeds** those packages into **`skills/<key>/…`** in the virtual workspace. The agent should call **`use_skill`** (or **`read`** on `SKILL.md`) when relevant. Streamed **`skills_loaded`** lists the catalog; **`skill_activated`** fires when **`use_skill`** succeeds. Optional reference files in the package copy with the skill (see server limits).
 
 **Preview uses the real file tree.** The UI **POSTs** the current map to **`/api/preview/sessions`** (debounced while files stream) and loads the canonical HTML entry in an iframe via **`src`** (relative links and multi-page navigation work). If registration fails, **`bundleVirtualFS()`** falls back to a single **`srcDoc`**. Original paths stay available in the code tab and zip export.
 
@@ -112,10 +115,12 @@ Do not duplicate the full prompt catalog here — keys and labels live in **`src
 
 ## Providers
 
-| Provider | Compilation | Generation | Vision |
-|----------|-------------|------------|--------|
-| OpenRouter | Yes | Yes | Auto-detected from model metadata |
-| LM Studio | Yes | Yes | Configurable via `VITE_LMSTUDIO_VISION_MODELS` env var |
+
+| Provider   | Compilation | Generation | Vision                                                 |
+| ---------- | ----------- | ---------- | ------------------------------------------------------ |
+| OpenRouter | Yes         | Yes        | Auto-detected from model metadata                      |
+| LM Studio  | Yes         | Yes        | Configurable via `VITE_LMSTUDIO_VISION_MODELS` env var |
+
 
 - Both stages (compilation and generation) support independent provider + model selection via connected Model nodes **when server lockdown is off** (`LOCKDOWN=false` or equivalent). Default / locked deployments pin **OpenRouter + MiniMax M2.5** for all LLM calls and disable changing provider/model in the UI.
 - Models fetched dynamically via each provider's API
@@ -133,11 +138,5 @@ Do not duplicate the full prompt catalog here — keys and labels live in **`src
 - Canvas state persists across sessions (nodes, edges, viewport, layout preferences)
 - Automatic garbage collection removes orphaned IndexedDB entries (code, provenance, and files stores) on app startup
 
-## What's Not Built Yet
 
-- Self-hosted inference (vLLM)
-- Experimentation/deployment integration
-- Spec version history
-- Role-based collaboration
-- Admin/canvas UI for authoring **manual** skills or attaching packages without editing the repo
-- End-user controls for agentic **max revision rounds** and optional **early-stop score** thresholds (server env and API already support overrides)
+

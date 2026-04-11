@@ -9,7 +9,6 @@ import {
   type ToolDefinition,
 } from './pi-sdk/index.ts';
 import type { RunTraceEvent, TodoItem } from '../../src/types/provider.ts';
-import { isAppRetryableUpstreamError, sleepMs } from '../lib/upstream-retry.ts';
 import { env } from '../env.ts';
 import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
@@ -32,7 +31,8 @@ import {
 import { createVirtualPiCodingTools } from './pi-sdk/virtual-tools.ts';
 import { subscribePiSessionBridge } from './pi-session-event-bridge.ts';
 import { createSandboxResourceLoader } from './sandbox-resource-loader.ts';
-import type { AgentSession, AssistantMessage } from './pi-sdk/types.ts';
+import { lastAssistantHasAgentError } from '../lib/pi-message-helpers.ts';
+import { runPromptWithUpstreamRetries } from './pi-agent-prompt-retries.ts';
 import type {
   AgentRunParams,
   AgentSessionParams,
@@ -51,66 +51,6 @@ const IDLE_CHECK_MS = 10_000;
 
 /** Dev ingest interval for stall-debug telemetry (ms). */
 const STALL_DEBUG_MS = 60_000;
-
-/** Manual retries after upstream errors the Pi SDK regex does not classify as retryable. */
-const MAX_APP_UPSTREAM_RETRIES = 2;
-
-function findLastAssistantMessage(messages: { role?: string }[]): AssistantMessage | undefined {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m?.role === 'assistant') return m as AssistantMessage;
-  }
-  return undefined;
-}
-
-function lastAssistantHasAgentError(session: AgentSession): boolean {
-  return findLastAssistantMessage(session.agent.state.messages)?.stopReason === 'error';
-}
-
-/**
- * Runs the initial prompt, then optional `continue()` rounds for upstream errors
- * (Friendli/OpenRouter) that Pi auto-retry does not match.
- */
-async function runPromptWithUpstreamRetries(
-  session: AgentSession,
-  userPrompt: string,
-  onEvent: (event: AgentRunEvent) => void | Promise<void>,
-  trace: (
-    kind: RunTraceEvent['kind'],
-    label: string,
-    extra?: Partial<RunTraceEvent>,
-  ) => AgentRunEvent,
-): Promise<void> {
-  await session.prompt(userPrompt, { expandPromptTemplates: false });
-
-  let attempts = 0;
-  while (attempts < MAX_APP_UPSTREAM_RETRIES) {
-    const lastAssistant = findLastAssistantMessage(session.agent.state.messages);
-    if (!lastAssistant || lastAssistant.stopReason !== 'error') return;
-    if (!isAppRetryableUpstreamError(lastAssistant.errorMessage)) return;
-    if (session.retryAttempt !== 0) return;
-
-    attempts += 1;
-    await onEvent({
-      type: 'progress',
-      payload: `Retrying after upstream error (attempt ${attempts}/${MAX_APP_UPSTREAM_RETRIES})…`,
-    });
-    await onEvent(
-      trace('compaction', `Retrying after upstream error (${attempts}/${MAX_APP_UPSTREAM_RETRIES})`, {
-        phase: 'building',
-        status: 'warning',
-        detail: lastAssistant.errorMessage?.slice(0, 500),
-      }),
-    );
-
-    const msgs = session.agent.state.messages;
-    if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') {
-      session.agent.replaceMessages(msgs.slice(0, -1));
-    }
-    await sleepMs(2000 * 2 ** (attempts - 1));
-    await session.agent.continue();
-  }
-}
 
 export type { ThinkingLevel } from './pi-model.ts';
 export type { AgentRunParams, AgentSessionParams, AgentRunEvent, DesignAgentSessionResult };

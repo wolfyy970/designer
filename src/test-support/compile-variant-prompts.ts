@@ -1,3 +1,7 @@
+/**
+ * Test / doc support: historical prompt assembly helper (not used in production bundle paths).
+ * See `SYSTEM_OVERVIEW.md` — `compileVariantPrompts` is a code name for per-hypothesis template merge.
+ */
 import type { DesignSpec, ReferenceImage } from '../types/spec';
 import type { CompiledPrompt, IncubationPlan, HypothesisStrategy } from '../types/incubator';
 import { buildHypothesisPrompt } from '../lib/prompts/hypothesis-prompt';

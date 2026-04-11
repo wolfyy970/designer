@@ -153,14 +153,19 @@ export interface IncubateStreamOptions {
   agentic?: GenerateStreamCallbacks;
 }
 
-function normalizeIncubateOptions(
+function isIncubateStreamOptions(second: unknown): second is IncubateStreamOptions {
+  return typeof second === 'object' && second !== null && ('agentic' in second || 'incubate' in second);
+}
+
+/** @internal Exported for contract tests. */
+export function normalizeIncubateOptions(
   second?: IncubateStreamCallbacks | IncubateStreamOptions,
 ): IncubateStreamOptions {
   if (!second) return {};
-  if (typeof second === 'object' && ('agentic' in second || 'incubate' in second)) {
-    return second as IncubateStreamOptions;
+  if (isIncubateStreamOptions(second)) {
+    return second;
   }
-  return { incubate: second as IncubateStreamCallbacks };
+  return { incubate: second };
 }
 
 /**
@@ -328,7 +333,7 @@ export interface GenerateStreamCallbacks {
 }
 
 /** Parse hypothesis SSE JSON line; returns null if not a plain object (arrays/primitives rejected). */
-function parseHypothesisSseJson(raw: string): Record<string, unknown> | null {
+export function parseHypothesisSseJson(raw: string): Record<string, unknown> | null {
   try {
     const v = JSON.parse(raw) as unknown;
     if (v !== null && typeof v === 'object' && !Array.isArray(v)) {

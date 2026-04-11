@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { generateId } from '../../../src/lib/utils';
 
 /**
- * Mirrors the LLMResponseSchema and HypothesisStrategySchema from server/services/compiler.ts.
+ * Mirrors incubation JSON shapes used by the API (see `extract-llm-json` / incubate routes).
  * Extracted here to test parsing logic without requiring full server bootstrap.
  */
 const HypothesisStrategySchema = z.object({

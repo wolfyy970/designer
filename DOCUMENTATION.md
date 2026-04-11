@@ -68,7 +68,7 @@
 
 ## Maintenance
 
-**Shared modules:** New or renamed `server/lib/*` helpers (e.g. SSE task routes, YAML frontmatter split, Pi bridge narrowers, agentic emit helpers) and client SSE parsing (`src/lib/generate-sse-event-schema.ts`) belong in **[ARCHITECTURE.md](ARCHITECTURE.md)** — update the server / API client tables there; do not scatter file lists across README.
+**Shared modules:** New or renamed `server/lib/*` helpers (e.g. SSE task routes, YAML frontmatter split, Pi bridge narrowers, **`pi-message-helpers`**, **`run-trace-ingest-schema`** (trace POST aligns with `src/lib/run-trace-event-schema.ts`), agentic emit helpers) and client SSE parsing (`src/lib/generate-sse-event-schema.ts`) belong in **[ARCHITECTURE.md](ARCHITECTURE.md)** — update the server / API client tables there; do not scatter file lists across README. Agentic orchestration implementation lives under **`server/services/agentic-orchestrator/`** with a thin **`agentic-orchestrator.ts`** re-export; Pi upstream retries: **`pi-agent-prompt-retries.ts`**.
 
 **After code changes:**
 

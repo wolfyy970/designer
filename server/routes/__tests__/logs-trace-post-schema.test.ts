@@ -33,4 +33,22 @@ describe('POST /api/logs/trace body (Zod)', () => {
       expect(r.data.events[0]!.kind).toBe('tool_started');
     }
   });
+
+  it('allows passthrough fields on trace events (forward-compat)', () => {
+    const r = PostTraceBodySchema.safeParse({
+      events: [
+        {
+          id: 't2',
+          at: '2026-04-01T12:00:00.000Z',
+          kind: 'file_written',
+          label: 'Saved x',
+          extraObservability: 'ok',
+        },
+      ],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect((r.data.events[0] as Record<string, unknown>).extraObservability).toBe('ok');
+    }
+  });
 });
