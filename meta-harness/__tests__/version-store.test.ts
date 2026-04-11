@@ -6,9 +6,12 @@ import { execFileSync } from 'node:child_process';
 import {
   computeHash,
   diffVersions,
+  enumerateVersionedFiles,
   listVersions,
   restoreVersion,
+  snapAll,
   snapshotBeforeWrite,
+  snapshotDirForRelPath,
   toSafeTimestamp,
   VERSION_STORE_DIR,
 } from '../version-store.ts';
@@ -73,9 +76,9 @@ describe('version-store', () => {
     expect(row.action).toBe('update');
     expect(row.source).toBe('test:update');
     expect(row.hash).toBe(computeHash('content-a'));
-    expect(row.snapshotFile).toMatch(/^snapshots\/skills\/pkg\/SKILL\.md\//u);
+    expect(String(row.snapshotFile)).toMatch(/^skills\/pkg\/_versions\//u);
 
-    const snapDir = path.join(root, VERSION_STORE_DIR, 'snapshots', 'skills', 'pkg', 'SKILL.md');
+    const snapDir = path.join(root, 'skills', 'pkg', '_versions');
     const snaps = await readdir(snapDir);
     expect(snaps).toHaveLength(1);
     expect(await readFile(path.join(snapDir, snaps[0]!), 'utf8')).toBe('content-a');
@@ -157,5 +160,57 @@ describe('version-store', () => {
     });
     expect(out).toContain('line1');
     expect(out).toContain('line2');
+  });
+
+  it('enumerateVersionedFiles lists existing SKILL.md and fixed paths', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'vs-enum-'));
+    await mkdir(path.join(root, 'skills', 'a'), { recursive: true });
+    await writeFile(path.join(root, 'skills', 'a', 'SKILL.md'), 'x', 'utf8');
+    await mkdir(path.join(root, 'prompts', 'designer-agentic-system'), { recursive: true });
+    await writeFile(path.join(root, 'prompts', 'designer-agentic-system', 'PROMPT.md'), 'p', 'utf8');
+    await mkdir(path.join(root, 'src', 'lib'), { recursive: true });
+    await writeFile(path.join(root, 'src', 'lib', 'rubric-weights.json'), '{}', 'utf8');
+
+    const paths = await enumerateVersionedFiles(root);
+    expect(paths).toContain('skills/a/SKILL.md');
+    expect(paths).toContain('prompts/designer-agentic-system/PROMPT.md');
+    expect(paths).toContain('src/lib/rubric-weights.json');
+  });
+
+  it('snapAll skips when file hash matches latest snapshot', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'vs-snapall-'));
+    const skillDir = path.join(root, 'skills', 'pkg');
+    await mkdir(skillDir, { recursive: true });
+    const work = path.join(skillDir, 'SKILL.md');
+    await writeFile(work, 'same', 'utf8');
+
+    const r1 = await snapAll(root, 'test');
+    expect(r1.saved).toContain('skills/pkg/SKILL.md');
+
+    const r2 = await snapAll(root, 'test');
+    expect(r2.saved).toHaveLength(0);
+    expect(r2.unchanged).toContain('skills/pkg/SKILL.md');
+  });
+
+  it('snapAll saves again after file content changes', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'vs-snapall2-'));
+    const skillDir = path.join(root, 'skills', 'pkg');
+    await mkdir(skillDir, { recursive: true });
+    const work = path.join(skillDir, 'SKILL.md');
+    await writeFile(work, 'v1', 'utf8');
+    await snapAll(root, 't');
+    await writeFile(work, 'v2', 'utf8');
+    const r = await snapAll(root, 't');
+    expect(r.saved).toContain('skills/pkg/SKILL.md');
+    const vers = path.join(root, 'skills', 'pkg', '_versions');
+    const files = await readdir(vers);
+    expect(files.filter((f) => f.endsWith('.md')).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('snapshotDirForRelPath puts skills under _versions next to the skill', () => {
+    const root = '/repo';
+    expect(snapshotDirForRelPath(root, 'skills/foo/SKILL.md')).toBe(
+      path.join('/repo', 'skills', 'foo', '_versions'),
+    );
   });
 });

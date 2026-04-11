@@ -1,7 +1,7 @@
 {
   "name": "auto-designer",
   "private": true,
-  "version": "0.3.24",
+  "version": "0.3.25",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,6 +15,7 @@
     "dev:kill": "bash scripts/kill-dev-servers.sh",
     "knip": "knip || exit 0",
     "meta-harness": "tsx --tsconfig meta-harness/tsconfig.json meta-harness/runner.tsx",
+    "snap": "tsx scripts/snap.ts",
     "version-snapshot": "tsx scripts/version-snapshot.ts",
     "prepare": "husky"
   },

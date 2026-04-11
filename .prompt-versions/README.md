@@ -1,3 +1,8 @@
 # `.prompt-versions/`
 
-Committed shadow copies of **`skills/`**, **`prompts/designer-agentic-system/PROMPT.md`**, and **`src/lib/rubric-weights.json`** before automated or manual overwrites. **`manifest.jsonl`** + **`snapshots/`** — see **[USER_GUIDE.md § Version history](../USER_GUIDE.md#version-history)** and **`pnpm version-snapshot`**.
+- **`manifest.jsonl`** — Append-only log of every snapshot (manual, **`pnpm snap`**, meta-harness, promotion).
+- **`snapshots/`** — Snapshot files for **`src/lib/rubric-weights.json`** only (skills and `PROMPT.md` use **`_versions/`** next to those files).
+
+**You edit by hand:** **[USER_GUIDE.md § Version history](../USER_GUIDE.md#version-history)** — **`pnpm snap`**
+
+**Meta-harness:** **[meta-harness/VERSIONING.md](../meta-harness/VERSIONING.md)**

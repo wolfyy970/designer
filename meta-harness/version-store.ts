@@ -1,7 +1,9 @@
 /**
  * Shadow version store for skills, designer system prompt, and rubric weights.
- * Artifacts live under repo-root `.prompt-versions/` (committed).
+ * Skills and PROMPT.md use `skills/<key>/_versions/` and `prompts/.../_versions/`;
+ * rubric weights stay under `.prompt-versions/snapshots/`. Manifest: `.prompt-versions/manifest.jsonl`.
  */
+import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
@@ -32,7 +34,7 @@ export type VersionEntry = {
   ts: string;
   /** Filesystem-safe id (filename stem) for CLI `--diff` / `--restore`. */
   safeTs: string;
-  /** Relative to `.prompt-versions/`. */
+  /** Repo-relative path to the snapshot file (forward slashes). */
   snapshotFile: string;
   hash: string;
 };
@@ -62,6 +64,12 @@ export type RestoreVersionOptions = {
   source?: string;
 };
 
+export type SnapAllResult = {
+  saved: string[];
+  unchanged: string[];
+  missing: string[];
+};
+
 function normalizeRelPath(relPath: string): string {
   return relPath.trim().replace(/\\/g, '/').replace(/^\/+/, '');
 }
@@ -78,20 +86,68 @@ export function computeHash(content: string): string {
   return `sha256:${createHash('sha256').update(content, 'utf8').digest('hex')}`;
 }
 
-export function snapshotDirForRelPath(repoRoot: string, relPath: string): string {
+/** Old layout: `.prompt-versions/snapshots/<path segments>/` */
+export function legacySnapshotDirForRelPath(repoRoot: string, relPath: string): string {
   const norm = normalizeRelPath(relPath);
   const segs = norm.split('/').filter(Boolean);
   return path.join(repoRoot, VERSION_STORE_DIR, SNAPSHOTS_SUBDIR, ...segs);
+}
+
+/**
+ * Directory holding timestamped snapshot files for this versioned path.
+ * Skills → `skills/<key>/_versions/`; PROMPT → `prompts/designer-agentic-system/_versions/`;
+ * rubric → legacy under `.prompt-versions/snapshots/`.
+ */
+export function snapshotDirForRelPath(repoRoot: string, relPath: string): string {
+  const norm = normalizeRelPath(relPath);
+  if (norm === 'src/lib/rubric-weights.json') {
+    return legacySnapshotDirForRelPath(repoRoot, norm);
+  }
+  if (norm === 'prompts/designer-agentic-system/PROMPT.md') {
+    return path.join(repoRoot, 'prompts', 'designer-agentic-system', '_versions');
+  }
+  const m = /^skills\/([^/]+)\/SKILL\.md$/u.exec(norm);
+  if (m) {
+    return path.join(repoRoot, 'skills', m[1]!, '_versions');
+  }
+  return legacySnapshotDirForRelPath(repoRoot, norm);
 }
 
 function manifestPath(repoRoot: string): string {
   return path.join(repoRoot, VERSION_STORE_DIR, MANIFEST_FILE);
 }
 
-function posixSnapshotRel(snapshotDir: string, repoRoot: string, baseName: string): string {
-  const abs = path.join(snapshotDir, baseName);
-  const rel = path.relative(path.join(repoRoot, VERSION_STORE_DIR), abs);
-  return rel.split(path.sep).join('/');
+function repoRelativePath(repoRoot: string, absFile: string): string {
+  return path.relative(repoRoot, absFile).split(path.sep).join('/');
+}
+
+async function readSnapshotDirIntoEntries(
+  snapshotDir: string,
+  ext: string,
+  repoRoot: string,
+): Promise<VersionEntry[]> {
+  let names: string[];
+  try {
+    names = await readdir(snapshotDir);
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException;
+    if (err.code === 'ENOENT') return [];
+    throw e;
+  }
+  const files = names.filter((n) => n.endsWith(ext));
+  const entries: VersionEntry[] = [];
+  for (const name of files) {
+    const safeTs = name.slice(0, -ext.length);
+    const abs = path.join(snapshotDir, name);
+    const body = await readFile(abs, 'utf8');
+    entries.push({
+      ts: safeTsToIsoGuess(safeTs),
+      safeTs,
+      snapshotFile: repoRelativePath(repoRoot, abs),
+      hash: computeHash(body),
+    });
+  }
+  return entries;
 }
 
 export async function snapshotBeforeWrite(opts: SnapshotBeforeWriteOptions): Promise<SnapshotResult> {
@@ -117,15 +173,24 @@ export async function snapshotBeforeWrite(opts: SnapshotBeforeWriteOptions): Pro
     return { ok: false, error: String(e) };
   }
 
-  const safeTs = toSafeTimestamp(new Date());
+  const safeTsBase = toSafeTimestamp(new Date());
   const ext = path.extname(relPath) || '.bin';
   const snapshotDir = snapshotDirForRelPath(opts.repoRoot, relPath);
   await mkdir(snapshotDir, { recursive: true });
-  const baseName = `${safeTs}${ext}`;
-  const absSnap = path.join(snapshotDir, baseName);
+  let counter = 0;
+  let baseName: string;
+  let absSnap: string;
+  for (;;) {
+    const stem = counter === 0 ? safeTsBase : `${safeTsBase}-${counter}`;
+    baseName = `${stem}${ext}`;
+    absSnap = path.join(snapshotDir, baseName);
+    if (!existsSync(absSnap)) break;
+    counter += 1;
+  }
   await writeFile(absSnap, prior, 'utf8');
 
-  const snapRel = posixSnapshotRel(snapshotDir, opts.repoRoot, baseName);
+  const snapRel = repoRelativePath(opts.repoRoot, absSnap);
+  const safeTs = baseName.slice(0, -ext.length);
   const line = JSON.stringify({
     ts: new Date().toISOString(),
     path: relPath,
@@ -138,38 +203,33 @@ export async function snapshotBeforeWrite(opts: SnapshotBeforeWriteOptions): Pro
   await mkdir(path.dirname(manifestPath(opts.repoRoot)), { recursive: true });
   await appendFile(manifestPath(opts.repoRoot), `${line}\n`, 'utf8');
 
-  return { ok: true, skipped: false, snapshotFile: snapRel, safeTs, hash: computeHash(prior) };
+  return {
+    ok: true,
+    skipped: false,
+    snapshotFile: snapRel,
+    safeTs,
+    hash: computeHash(prior),
+  };
 }
 
 export async function listVersions(opts: ListVersionsOptions): Promise<VersionEntry[]> {
   const relPath = normalizeRelPath(opts.relPath);
-  const snapshotDir = snapshotDirForRelPath(opts.repoRoot, relPath);
-  let names: string[];
-  try {
-    names = await readdir(snapshotDir);
-  } catch (e) {
-    const err = e as NodeJS.ErrnoException;
-    if (err.code === 'ENOENT') return [];
-    throw e;
-  }
-
   const ext = path.extname(relPath) || '.bin';
-  const files = names.filter((n) => n.endsWith(ext));
-  files.sort((a, b) => b.localeCompare(a));
+  const primaryDir = snapshotDirForRelPath(opts.repoRoot, relPath);
+  const legacyDir = legacySnapshotDirForRelPath(opts.repoRoot, relPath);
 
-  const entries: VersionEntry[] = [];
-  for (const name of files) {
-    const safeTs = name.slice(0, -ext.length);
-    const abs = path.join(snapshotDir, name);
-    const body = await readFile(abs, 'utf8');
-    entries.push({
-      ts: safeTsToIsoGuess(safeTs),
-      safeTs,
-      snapshotFile: posixSnapshotRel(snapshotDir, opts.repoRoot, name),
-      hash: computeHash(body),
-    });
-  }
-  return entries;
+  const primary = await readSnapshotDirIntoEntries(primaryDir, ext, opts.repoRoot);
+  const legacy =
+    path.resolve(primaryDir) === path.resolve(legacyDir)
+      ? []
+      : await readSnapshotDirIntoEntries(legacyDir, ext, opts.repoRoot);
+
+  const merged = new Map<string, VersionEntry>();
+  for (const e of legacy) merged.set(e.safeTs, e);
+  for (const e of primary) merged.set(e.safeTs, e);
+  const arr = [...merged.values()];
+  arr.sort((a, b) => b.safeTs.localeCompare(a.safeTs));
+  return arr;
 }
 
 /** Best-effort ISO string from safe filename stem for display. */
@@ -199,8 +259,12 @@ export function diffVersions(opts: DiffVersionsByTsOptions | DiffFilesOptions): 
 function snapshotFileAbs(repoRoot: string, relPath: string, safeTs: string): string {
   const norm = normalizeRelPath(relPath);
   const ext = path.extname(norm) || '.bin';
-  const snapshotDir = snapshotDirForRelPath(repoRoot, norm);
-  return path.join(snapshotDir, `${safeTs}${ext}`);
+  const baseName = `${safeTs}${ext}`;
+  const primary = path.join(snapshotDirForRelPath(repoRoot, norm), baseName);
+  if (existsSync(primary)) return primary;
+  const legacy = path.join(legacySnapshotDirForRelPath(repoRoot, norm), baseName);
+  if (existsSync(legacy)) return legacy;
+  return primary;
 }
 
 export async function restoreVersion(opts: RestoreVersionOptions): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -240,4 +304,84 @@ export async function diffCurrentVsSnapshot(
   const absSnap = snapshotFileAbs(repoRoot, relPath, safeTs);
   const absWork = path.join(repoRoot, ...normalizeRelPath(relPath).split('/'));
   return diffVersions({ fileA: absSnap, fileB: absWork });
+}
+
+/** All repo-backed versioned files that exist on disk (each `skills/<key>/SKILL.md`, PROMPT.md, rubric JSON). */
+export async function enumerateVersionedFiles(repoRoot: string): Promise<string[]> {
+  const out: string[] = [];
+  const skillsRoot = path.join(repoRoot, 'skills');
+  try {
+    const names = await readdir(skillsRoot);
+    for (const name of names) {
+      if (name.startsWith('_') || name.startsWith('.')) continue;
+      const rel = `skills/${name}/SKILL.md`;
+      const abs = path.join(skillsRoot, name, 'SKILL.md');
+      try {
+        const st = await stat(abs);
+        if (st.isFile()) out.push(rel);
+      } catch {
+        /* skip */
+      }
+    }
+  } catch {
+    /* no skills dir */
+  }
+  const fixed = ['prompts/designer-agentic-system/PROMPT.md', 'src/lib/rubric-weights.json'] as const;
+  for (const rel of fixed) {
+    try {
+      const st = await stat(path.join(repoRoot, ...rel.split('/')));
+      if (st.isFile()) out.push(rel);
+    } catch {
+      /* missing */
+    }
+  }
+  return out.sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Snapshot every versioned file whose content hash differs from the newest snapshot (or has no snapshot).
+ */
+export async function snapAll(repoRoot: string, source: string): Promise<SnapAllResult> {
+  const paths = await enumerateVersionedFiles(repoRoot);
+  const saved: string[] = [];
+  const unchanged: string[] = [];
+  const missing: string[] = [];
+
+  for (const relPath of paths) {
+    const absWork = path.join(repoRoot, ...relPath.split('/'));
+    let content: string;
+    try {
+      const st = await stat(absWork);
+      if (!st.isFile()) {
+        missing.push(relPath);
+        continue;
+      }
+      content = await readFile(absWork, 'utf8');
+    } catch {
+      missing.push(relPath);
+      continue;
+    }
+    const h = computeHash(content);
+    const entries = await listVersions({ repoRoot, relPath });
+    if (entries.length > 0 && entries[0]!.hash === h) {
+      unchanged.push(relPath);
+      continue;
+    }
+    const r = await snapshotBeforeWrite({
+      repoRoot,
+      relPath,
+      source,
+      action: 'snapshot',
+    });
+    if (!r.ok) {
+      missing.push(relPath);
+      continue;
+    }
+    if (r.skipped) {
+      unchanged.push(relPath);
+      continue;
+    }
+    saved.push(relPath);
+  }
+  return { saved, unchanged, missing };
 }

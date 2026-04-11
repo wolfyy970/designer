@@ -177,6 +177,25 @@ describe('buildSkillSandboxSeedMap', () => {
     expect(seed['skills/my-skill/example.html']).toBe('<h1>Hi</h1>');
     expect(seed).not.toHaveProperty('skills/my-skill/data.bin');
   });
+
+  it('does not seed _versions/ (prompt snapshot history stays out of Pi sandbox)', async () => {
+    const dir = path.join(tmp, 'snap-skill');
+    await fs.mkdir(path.join(dir, '_versions'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'SKILL.md'), '---\nname: S\ndescription: D\n---\nBody');
+    await fs.writeFile(path.join(dir, '_versions', 'old-snap.md'), 'historical copy');
+    const entry: SkillCatalogEntry = {
+      key: 'snap-skill',
+      dir,
+      name: 'S',
+      description: 'D',
+      tags: [],
+      when: 'auto',
+      bodyMarkdown: 'Body',
+    };
+    const seed = await buildSkillSandboxSeedMap([entry]);
+    expect(seed['skills/snap-skill/SKILL.md']).toBe('Body');
+    expect(seed).not.toHaveProperty('skills/snap-skill/_versions/old-snap.md');
+  });
 });
 
 describe('resolveSkillsRoot', () => {

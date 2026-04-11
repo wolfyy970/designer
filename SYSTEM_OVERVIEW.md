@@ -12,20 +12,22 @@ This document is the **narrative** companion to [ARCHITECTURE.md](ARCHITECTURE.m
 4. **Design system node** — Optional; injects tokens/text into prompts when wired to hypotheses or used from domain snapshots.
 5. **Preview nodes** — Show iframe previews (URL-backed virtual FS for agentic multi-file); zip, evaluation summary. Versions stack per strategy; **Existing design** feedback loops can capture screenshots from previews.
 
-Multi-model runs per hypothesis use **`/api/hypothesis/generate`**: one SSE stream multiplexed with `laneIndex` and `lane_done` per model.
+Multi-model runs per hypothesis use `**/api/hypothesis/generate`**: one SSE stream multiplexed with `laneIndex` and `lane_done` per model.
 
 ---
 
 ## Prompts and where they come from
 
-Prompt **bodies** live on disk: **`skills/<key>/SKILL.md`** plus **`prompts/designer-agentic-system/PROMPT.md`**. **`server/lib/prompt-resolution.ts`** loads and composes them per request; **`src/lib/prompts/defaults.ts`** defines **keys** and labels only. Canvas usage and editing workflow: [USER_GUIDE.md](USER_GUIDE.md).
+Prompt **bodies** live on disk: `**skills/<key>/SKILL.md`** plus `**prompts/designer-agentic-system/PROMPT.md**`. `**server/lib/prompt-resolution.ts**` loads and composes them per request; `**src/lib/prompts/defaults.ts**` defines **keys** and labels only. Canvas usage and editing workflow: [USER_GUIDE.md](USER_GUIDE.md).
 
-| Role | Purpose | Typical storage |
-|------|---------|-----------------|
-| **Incubator (plan)** | Turn connected inputs into dimensions + hypothesis strategies | Skills **`hypotheses-generator-system`**, **`incubator-user-inputs`** |
-| **Hypothesis prompt** | Per-hypothesis user-facing generation prompt template | Skill **`designer-hypothesis-inputs`** + client **`compileVariantPrompts()`** (merges strategy into the template — function name is historical); API uses the same template server-side |
-| **Agentic system** | Multi-file static artifact rules (entry `index.html`, local assets, tool use) | **`prompts/designer-agentic-system/PROMPT.md`** plus relevant **`skills/`**; optional sandbox **`AGENTS.md`** from **`agents-md-file`** |
-| **Skills** | Repo-backed Agent Skills packages | Files under repo-root **`skills/<key>/SKILL.md`**. Each Pi session embeds **`<available_skills>`** in the **`use_skill`** tool (non-**`manual`**) and pre-seeds packages under **`skills/<key>/…`** in **`just-bash`**; the agent calls **`use_skill`** or **`read`** when needed |
+
+| Role                  | Purpose                                                                       | Typical storage                                                                                                                                                                                                                                                                   |
+| --------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Incubator (plan)**  | Turn connected inputs into dimensions + hypothesis strategies                 | Skills `**hypotheses-generator-system`**, `**incubator-user-inputs**`                                                                                                                                                                                                             |
+| **Hypothesis prompt** | Per-hypothesis user-facing generation prompt template                         | Skill `**designer-hypothesis-inputs`** + client `**compileVariantPrompts()**` (merges strategy into the template — function name is historical); API uses the same template server-side                                                                                           |
+| **Agentic system**    | Multi-file static artifact rules (entry `index.html`, local assets, tool use) | `**prompts/designer-agentic-system/PROMPT.md`** plus relevant `**skills/**`; optional sandbox `**AGENTS.md**` from `**agents-md-file**`                                                                                                                                           |
+| **Skills**            | Repo-backed Agent Skills packages                                             | Files under repo-root `**skills/<key>/SKILL.md`**. Each Pi session embeds `**<available_skills>**` in the `**use_skill**` tool (non-`**manual**`) and pre-seeds packages under `**skills/<key>/…**` in `**just-bash**`; the agent calls `**use_skill**` or `**read**` when needed |
+
 
 Evaluators use separate LLM rubrics (browser / design / strategy / implementation) orchestrated on the server — not the same prompts as the builder model.
 
@@ -33,9 +35,9 @@ Evaluators use separate LLM rubrics (browser / design / strategy / implementatio
 
 ## PI engine (agentic generation)
 
-**Swap boundary** — Only `server/services/pi-sdk/` imports **`@mariozechner/pi-ai`** / **`@mariozechner/pi-coding-agent`**. Session wiring lives in **`pi-agent-service.ts`** (plus `agent-bash-sandbox.ts`, **`sandbox-resource-loader.ts`** for a no-op Pi resource loader, `pi-bash-tool.ts`, `pi-app-tools.ts`, `pi-session-event-bridge.ts`). The rest of the server calls **`runDesignAgentSession`** through generate/orchestrator code — not the Pi SDK directly — so another agent runtime could replace Pi behind the same seam.
+**Swap boundary** — Only `server/services/pi-sdk/` imports `**@mariozechner/pi-ai`** / `**@mariozechner/pi-coding-agent**`. Session wiring lives in `**pi-agent-service.ts**` (plus `agent-bash-sandbox.ts`, `**sandbox-resource-loader.ts**` for a no-op Pi resource loader, `pi-bash-tool.ts`, `pi-app-tools.ts`, `pi-session-event-bridge.ts`). The rest of the server calls `**runDesignAgentSession**` through generate/orchestrator code — not the Pi SDK directly — so another agent runtime could replace Pi behind the same seam.
 
-**Sandbox** — **`just-bash`** provides an in-memory tree at a fixed project root; non-**`manual`** skill packages are copied into **`skills/<key>/…`** at each Pi session start. **`tools: []`** disables Pi’s default host-FS tools. **`pi-sdk/virtual-tools.ts`** registers the same Pi tool *schemas* (`read`, `write`, `edit`, `ls`, `find`, `grep`) with `operations` / `bash.exec` backed by that virtual FS, plus **`bash`**, **`todo_write`**, **`validate_js`**, **`validate_html`**. The wrapped **`edit`** tool can **retry once** after a “could not find” error using [`edit-match-cascade.ts`](server/services/pi-sdk/edit-match-cascade.ts) (see [ARCHITECTURE.md § Pi design sandbox](ARCHITECTURE.md#pi-design-sandbox-three-layer-contract) for the full tool table and cascade behavior). SSE **`file`** events fire when paths under the project root change via virtual tool writes or bash (including under **`skills/`** when those files are updated in-session).
+**Sandbox** — `**just-bash`** provides an in-memory tree at a fixed project root; non-`**manual**` skill packages are copied into `**skills/<key>/…**` at each Pi session start. `**tools: []**` disables Pi’s default host-FS tools. `**pi-sdk/virtual-tools.ts**` registers the same Pi tool *schemas* (`read`, `write`, `edit`, `ls`, `find`, `grep`) with `operations` / `bash.exec` backed by that virtual FS, plus `**bash*`*, `**todo_write**`, `**validate_js**`, `**validate_html**`. The wrapped `**edit**` tool can **retry once** after a “could not find” error using `[edit-match-cascade.ts](server/services/pi-sdk/edit-match-cascade.ts)` (see [ARCHITECTURE.md § Pi design sandbox](ARCHITECTURE.md#pi-design-sandbox-three-layer-contract) for the full tool table and cascade behavior). SSE `**file`** events fire when paths under the project root change via virtual tool writes or bash (including under `**skills/**` when those files are updated in-session).
 
 **Loop** — `createAgentSession` + `session.prompt`; subscribe events are bridged to app SSE. Long histories **compact** with the SDK’s token-aware compaction; evaluation context is appended in revision rounds when **Auto-improve** is on.
 
@@ -52,10 +54,11 @@ Evaluators use separate LLM rubrics (browser / design / strategy / implementatio
 
 ## Where to read next
 
-| Topic | Document |
-|-------|----------|
-| API routes, stores, file map | [ARCHITECTURE.md](ARCHITECTURE.md) |
-| Feature list and modes | [PRODUCT.md](PRODUCT.md) |
-| Step-by-step canvas usage | [USER_GUIDE.md](USER_GUIDE.md) |
-| Repo commands / agent gotchas | [AGENTS.md](AGENTS.md) |
-| How we maintain docs | [DOCUMENTATION.md](DOCUMENTATION.md) |
+
+| Topic                         | Document                             |
+| ----------------------------- | ------------------------------------ |
+| API routes, stores, file map  | [ARCHITECTURE.md](ARCHITECTURE.md)   |
+| Feature list and modes        | [PRODUCT.md](PRODUCT.md)             |
+| Step-by-step canvas usage     | [USER_GUIDE.md](USER_GUIDE.md)       |
+| Repo commands / agent gotchas | [AGENTS.md](AGENTS.md)               |
+| How we maintain docs          | [DOCUMENTATION.md](DOCUMENTATION.md) |

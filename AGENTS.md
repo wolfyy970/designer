@@ -1,8 +1,8 @@
-# AGENTS.md
+# [AGENTS.md](http://AGENTS.md)
 
 **Canonical instructions for AI coding agents** working in this repository—commands, where to read architecture (including Pi/just-bash sandbox), and gotchas. Follows the vendor-neutral [AGENTS.md](https://agents.md) convention (Cursor, Codex, Windsurf, and similar tools commonly load this filename).
 
-**Claude Code** still discovers `**CLAUDE.md`** at the repo root first; that file is a **stub** pointing here. **Do not confuse** this document with the **`agents-md-file`** skill: its instructions are surfaced as a **virtual** `AGENTS.md` under `/home/user/project` inside the **Pi design sandbox** only (output rules for generated artifacts), not this developer-facing file.
+**Claude Code** still discovers `**CLAUDE.md`** at the repo root first; that file is a **stub** pointing here. **Do not confuse** this document with the `**agents-md-file`** skill: its instructions are surfaced as a **virtual** `AGENTS.md` under `/home/user/project` inside the **Pi design sandbox** only (output rules for generated artifacts), not this developer-facing file.
 
 ## North Star
 
@@ -44,9 +44,9 @@ Vitest excludes `server/services/__tests__/browser-playwright-evaluator.test.ts`
 
 **Full technical reference:** [ARCHITECTURE.md](ARCHITECTURE.md) — routes, server modules, client stores, canvas, generation (agentic Pi sandbox + optional auto-improve loop), preview URLs, Pi NPM boundary. **Pi design sandbox** (three-layer contract, **tool inventory** table, edit cascade / `edit-match-cascade.ts`): [ARCHITECTURE.md § Pi design sandbox](ARCHITECTURE.md#pi-design-sandbox-three-layer-contract).
 
-**Prompts and skills:** Agent-facing prompt text lives in **`skills/*/SKILL.md`** files (YAML frontmatter plus body). The designer system prompt is **`prompts/designer-agentic-system/PROMPT.md`**. Resolution and composition from disk are centralized in **[server/lib/prompt-resolution.ts](server/lib/prompt-resolution.ts)**; structural placeholder glue with template variables is in **[server/lib/prompt-templates.ts](server/lib/prompt-templates.ts)**. Incubation, inputs-gen, design-system extraction, and evaluation run through the Pi agentic pipeline with session-scoped skill catalogs.
+**Prompts and skills:** Agent-facing prompt text lives in `**skills/*/SKILL.md`** files (YAML frontmatter plus body). The designer system prompt is `**prompts/designer-agentic-system/PROMPT.md`**. Resolution and composition from disk are centralized in **[server/lib/prompt-resolution.ts](server/lib/prompt-resolution.ts)**; structural placeholder glue with template variables is in **[server/lib/prompt-templates.ts](server/lib/prompt-templates.ts)**. Incubation, inputs-gen, design-system extraction, and evaluation run through the Pi agentic pipeline with session-scoped skill catalogs.
 
-**Version store (committed):** Repo-root **`.prompt-versions/`** retains prior contents of **`skills/**`**, **`prompts/designer-agentic-system/PROMPT.md`**, and **`src/lib/rubric-weights.json`** before meta-harness **proposer** or **promotion** writes (**[meta-harness/version-store.ts](meta-harness/version-store.ts)**). Before **manual** edits to those paths, run **`pnpm version-snapshot <path>`** from the repo root; see **USER_GUIDE.md** and **`pnpm version-snapshot`** (no args) for **`--list` / `--diff` / `--restore`**.
+**Version store (committed):** Skills and `PROMPT.md` keep timestamped copies under **`skills/<key>/_versions/`** and **`prompts/designer-agentic-system/_versions/`**; rubric snapshots stay under **`.prompt-versions/snapshots/`**; **`.prompt-versions/manifest.jsonl`** logs everything. Meta-harness **proposer** / **promotion** still use **`snapshotBeforeWrite`** (**[meta-harness/version-store.ts](meta-harness/version-store.ts)**). **Manual workflow:** **`pnpm snap`** (no args) saves only files that changed since the last snapshot; pre-commit runs the same unless **`SKIP_SNAP=1`**. Details: **[USER_GUIDE.md § Version history](USER_GUIDE.md#version-history)**; harness-only: **[meta-harness/VERSIONING.md](meta-harness/VERSIONING.md)**.
 
 ### Two-process dev setup
 
@@ -56,10 +56,10 @@ The frontend (Vite, port **5173** only — `strictPort`) proxies `/api/*` to the
 
 ### Production / Vercel / shared deployments
 
-- **`NODE_ENV=production`:** `GET`/`POST`/`DELETE` **`/api/logs`** return **404** (no shared in-memory LLM/trace ring).
-- **CORS:** Optional **`ALLOWED_ORIGINS`** (comma-separated) in [server/env.ts](server/env.ts); when unset, only localhost dev origins. Set on Vercel when using a custom domain or preview URL that is not same-origin as `/api`.
-- **Limits:** Request bodies capped at **2MB** (`hono/body-limit` on the API app). Preview map: **`MAX_PREVIEW_SESSIONS`** (default 200), **`MAX_PREVIEW_PAYLOAD_BYTES`** (default 5MB). Agentic: **`MAX_CONCURRENT_AGENTIC_RUNS`** per instance (default 5) → **503**-style error event on overload. **`LLM_LOG_MAX_BODY_CHARS`** defaults to **2000** in production for the NDJSON sink when unset.
-- **Vercel Pro:** `api/[[...route]].ts` sets **`maxDuration = 800`** for long agentic streams.
+- `**NODE_ENV=production`:** `GET`/`POST`/`DELETE` `**/api/logs`** return **404** (no shared in-memory LLM/trace ring).
+- **CORS:** Optional `**ALLOWED_ORIGINS`** (comma-separated) in [server/env.ts](server/env.ts); when unset, only localhost dev origins. Set on Vercel when using a custom domain or preview URL that is not same-origin as `/api`.
+- **Limits:** Request bodies capped at **2MB** (`hono/body-limit` on the API app). Preview map: `**MAX_PREVIEW_SESSIONS`** (default 200), `**MAX_PREVIEW_PAYLOAD_BYTES`** (default 5MB). Agentic: `**MAX_CONCURRENT_AGENTIC_RUNS**` per instance (default 5) → **503**-style error event on overload. `**LLM_LOG_MAX_BODY_CHARS`** defaults to **2000** in production for the NDJSON sink when unset.
+- **Vercel Pro:** `api/[[...route]].ts` sets `**maxDuration = 800`** for long agentic streams.
 
 ## Critical gotchas
 

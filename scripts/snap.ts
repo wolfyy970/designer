@@ -1,25 +1,31 @@
 /**
- * Legacy CLI for the prompt/skill/rubric version store.
- * Prefer **`pnpm snap`** from repo root; this script remains for backwards compatibility.
+ * Smart snapshots: `pnpm snap` compares versioned files to their latest snapshot and saves only what changed.
+ * Subcommands mirror version-snapshot for list/diff/restore.
  */
 import { access } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import process from 'node:process';
 import {
   diffCurrentVsSnapshot,
   diffVersions,
+  enumerateVersionedFiles,
   listVersions,
   restoreVersion,
+  snapAll,
   snapshotBeforeWrite,
+  snapshotDirForRelPath,
 } from '../meta-harness/version-store.ts';
 
 function usage(): never {
   console.error(`Usage:
-  pnpm version-snapshot <repo-relative-path> [<path> …]     snapshot current file(s) before manual edit
-  pnpm version-snapshot --list <path>                       list saved versions (newest first)
-  pnpm version-snapshot --diff <path> <safeTsA> <safeTsB>   unified diff between two snapshots
-  pnpm version-snapshot --diff-current <path> [safeTs]     diff snapshot vs working file (default: latest)
-  pnpm version-snapshot --restore <path> <safeTs>           restore working file from snapshot
+  pnpm snap                              snapshot all changed versioned files (skills, PROMPT.md, rubric)
+  pnpm snap --hook                       same as above, for Husky (quiet; stages new files if any)
+  pnpm snap --list <path>                list saved versions (newest first)
+  pnpm snap --diff <path> <safeTsA> <safeTsB>   unified diff between two snapshots
+  pnpm snap --diff-current <path> [safeTs]     diff snapshot vs working file (default: latest)
+  pnpm snap --restore <path> <safeTs>           restore working file from snapshot
+  pnpm snap <repo-relative-path> […]     legacy: snapshot current file(s) before manual edit
 `);
   process.exit(1);
 }
@@ -37,20 +43,59 @@ function isVersionedPath(rel: string): boolean {
   return false;
 }
 
-async function fileExists(p: string): Promise<boolean> {
-  try {
-    await access(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  if (argv.length === 0) usage();
-
   const repoRoot = process.cwd();
+
+  if (argv[0] === '--hook') {
+    if (process.env.SKIP_SNAP === '1') {
+      return;
+    }
+    const result = await snapAll(repoRoot, 'husky:pre-commit');
+    if (result.saved.length === 0) {
+      return;
+    }
+    try {
+      execFileSync('git', ['add', '--', path.join(repoRoot, '.prompt-versions', 'manifest.jsonl')], {
+        cwd: repoRoot,
+        stdio: 'ignore',
+      });
+    } catch {
+      /* manifest may not exist */
+    }
+    for (const rel of result.saved) {
+      const dir = snapshotDirForRelPath(repoRoot, rel);
+      try {
+        execFileSync('git', ['add', '--', dir], { cwd: repoRoot, stdio: 'ignore' });
+      } catch {
+        /* */
+      }
+    }
+    return;
+  }
+
+  if (argv.length === 0) {
+    const tracked = await enumerateVersionedFiles(repoRoot);
+    if (tracked.length === 0) {
+      console.warn('No versioned files found (skills/*/SKILL.md, PROMPT.md, rubric-weights.json).');
+      return;
+    }
+    const result = await snapAll(repoRoot, 'manual:snap');
+    if (result.saved.length === 0 && result.missing.length === 0) {
+      console.log('Everything up to date — nothing changed since last snapshot.');
+      return;
+    }
+    if (result.saved.length > 0) {
+      console.log(`Saved: ${result.saved.join(', ')}`);
+    }
+    if (result.unchanged.length > 0) {
+      console.log(`Unchanged: ${result.unchanged.length} file(s)`);
+    }
+    if (result.missing.length > 0) {
+      console.warn(`Skipped (unreadable or error): ${result.missing.join(', ')}`);
+    }
+    return;
+  }
 
   if (argv[0] === '--list') {
     const rel = argv[1];
@@ -121,7 +166,7 @@ async function main(): Promise<void> {
       repoRoot,
       relPath: n,
       ts,
-      source: 'manual:version-snapshot-cli',
+      source: 'manual:snap-cli',
     });
     if (!r.ok) {
       console.error(r.error);
@@ -138,14 +183,16 @@ async function main(): Promise<void> {
       process.exit(1);
     }
     const abs = path.join(repoRoot, ...n.split('/'));
-    if (!(await fileExists(abs))) {
+    try {
+      await access(abs);
+    } catch {
       console.error(`File does not exist: ${n}`);
       process.exit(1);
     }
     const res = await snapshotBeforeWrite({
       repoRoot,
       relPath: n,
-      source: 'manual:version-snapshot-cli',
+      source: 'manual:snap-cli',
       action: 'snapshot',
     });
     if (!res.ok) {

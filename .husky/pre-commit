@@ -1,2 +1,3 @@
 pnpm exec tsx scripts/bump-patch-version.ts
+pnpm exec tsx scripts/snap.ts --hook
 git add package.json

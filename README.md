@@ -62,8 +62,8 @@ The header also opens **Settings** (General preferences). In **development**, a 
 | `pnpm test`                  | Vitest unit tests (Playwright merge test excluded in config; see [AGENTS.md](AGENTS.md))                                                                                                                                                              |
 | `pnpm lint`                  | Run ESLint                                                                                                                                                                                                                                           |
 | `pnpm knip`                  | Optional unused-export report (not run in CI by default)                                                                                                                                                                                             |
-| `pnpm meta-harness`          | Optional **meta-harness** CLI: benchmark/proposer outer loop against the local API ([meta-harness/README.md](meta-harness/README.md))                                                                                                                |
-| `pnpm version-snapshot`      | Backup/list/diff/restore **skills/**, **PROMPT.md**, **rubric-weights.json** under **`.prompt-versions/`** ([USER_GUIDE.md](USER_GUIDE.md#version-history))                                                                          |
+| `pnpm meta-harness`          | Optional **meta-harness** CLI: benchmark/proposer harness against the local API ([meta-harness/README.md](meta-harness/README.md), [RUNBOOK](meta-harness/RUNBOOK.md))                                                                                |
+| `pnpm snap`                  | Checkpoint prompt/skill/rubric versions (changed files only); list/diff/restore subcommands ([USER_GUIDE.md](USER_GUIDE.md#version-history); **`pnpm version-snapshot`** = legacy alias)                                                                 |
 
 
 ## Documentation
@@ -79,7 +79,7 @@ The header also opens **Settings** (General preferences). In **development**, a 
 | [USER_GUIDE.md](USER_GUIDE.md)                         | Setup and day-to-day canvas workflow                                                                                                                    |
 | [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)                   | SPA design tokens: accent vs status, typography, typefaces, file-role colors (`src/index.css`)                                                          |
 | [ARCHITECTURE.md](ARCHITECTURE.md)                     | Technical reference: routes, stores, data flow, Pi adapter boundary, **Pi sandbox** (layers, tool inventory, edit cascade)                                |
-| [meta-harness/README.md](meta-harness/README.md)       | Optional meta-harness CLI for systematic API benchmarks and prompt/skill search ([META_HARNESS_OUTER_LOOP.md](meta-harness/META_HARNESS_OUTER_LOOP.md)) |
+| [meta-harness/README.md](meta-harness/README.md)       | Optional **meta-harness** CLI (separate from the designer app): benchmarks, proposer ([RUNBOOK.md](meta-harness/RUNBOOK.md), [VERSIONING.md](meta-harness/VERSIONING.md)) |
 | [DOCUMENTATION.md](DOCUMENTATION.md)                   | How this doc set is organized (hub = this README)                                                                                                       |
 
 

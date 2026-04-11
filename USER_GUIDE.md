@@ -10,6 +10,7 @@ pnpm exec playwright install chromium
 ```
 
 Add your API key to `.env.local`:
+
 ```
 OPENROUTER_API_KEY=sk-or-...
 ```
@@ -17,6 +18,7 @@ OPENROUTER_API_KEY=sk-or-...
 This key stays server-side only (the Hono API reads it; Vite proxies `/api` in dev).
 
 For LM Studio vision models, optionally set:
+
 ```
 VITE_LMSTUDIO_VISION_MODELS=llava,minicpm-v,qwen2-vl
 ```
@@ -28,48 +30,65 @@ pnpm dev:all      # recommended: API then Vite (avoids early proxy errors)
 
 Both processes are needed for local development.
 
-**Only Vite running:** The UI blocks on **`GET /api/config`** until the API on port **3001** answers—use **`pnpm dev:all`** or run **`pnpm dev:server`** alongside **`pnpm dev`**. The dev design-token page **`/dev/design-tokens`** is the only route that skips that check.
+**Only Vite running:** The UI blocks on `**GET /api/config`** until the API on port **3001** answers—use `**pnpm dev:all`** or run `**pnpm dev:server`** alongside `**pnpm dev`**. The dev design-token page `**/dev/design-tokens**` is the only route that skips that check.
 
-**Saved canvases and browser storage:** The app keeps your **active spec** and **Canvas manager** library in **localStorage** for **`http://localhost:5173`** (not `127.0.0.1` — that is a separate origin to the browser). The URL includes the **port**: opening the app on a different port is a different site, so lists and the current canvas can look empty. The dev server **requires port 5173**; if Vite won’t start, run `pnpm dev:kill` and retry.
+**Saved canvases and browser storage:** The app keeps your **active spec** and **Canvas manager** library in **localStorage** for `**http://localhost:5173`** (not `127.0.0.1` — that is a separate origin to the browser). The URL includes the **port**: opening the app on a different port is a different site, so lists and the current canvas can look empty. The dev server **requires port 5173**; if Vite won’t start, run `pnpm dev:kill` and retry.
 
 ## Dev logs
 
-In **development** only, the API keeps an in-memory **`/api/logs`** ring (LLM rows + run-trace lines) and can append optional NDJSON—handy for **curl** or ad-hoc inspection; see [ARCHITECTURE.md](ARCHITECTURE.md). That route returns **404** in **production**. The **variant run timeline** still shows live tool activity for the current preview.
+In **development** only, the API keeps an in-memory `**/api/logs`** ring (LLM rows + run-trace lines) and can append optional NDJSON—handy for **curl** or ad-hoc inspection; see [ARCHITECTURE.md](ARCHITECTURE.md). That route returns **404** in **production**. The **variant run timeline** still shows live tool activity for the current preview.
 
 ## Design tokens reference (Settings)
 
-**Development only:** **Settings** (gear) → **General** → **Open design tokens kitchen sink** opens a scrollable modal of live `@theme` colors, typography, and composition classes (`ds-*`, `.input-focus`). The same content is available at **`/dev/design-tokens`**. Semantics and rules: [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
+**Development only:** **Settings** (gear) → **General** → **Open design tokens kitchen sink** opens a scrollable modal of live `@theme` colors, typography, and composition classes (`ds-*`, `.input-focus`). The same content is available at `**/dev/design-tokens`**. Semantics and rules: [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 
 ## Prompts and skills (editing the repo)
 
-All LLM-facing prompt **bodies** ship with the repo: **`skills/<key>/SKILL.md`** (YAML frontmatter + markdown body) and the designer **system** text in **`prompts/designer-agentic-system/PROMPT.md`**. The server loads and composes them per request via **`server/lib/prompt-resolution.ts`**. Prompt **keys** (`PromptKey`, `PROMPT_KEYS`) live in **`src/lib/prompts/defaults.ts`**. There is no in-app prompt editor—change files, restart the API if needed, and run tests. See [ARCHITECTURE.md](ARCHITECTURE.md) and [PRODUCT.md](PRODUCT.md).
+All LLM-facing prompt **bodies** ship with the repo: `skills/<key>/SKILL.md` (YAML frontmatter + markdown body) and the designer **system** text in `prompts/designer-agentic-system/PROMPT.md`. The server loads and composes them per request via `server/lib/prompt-resolution.ts`. Prompt keys (`PromptKey`, `PROMPT_KEYS`) live in `src/lib/prompts/defaults.ts`. There is no in-app prompt editor—change files, restart the API if needed, and run tests. See [ARCHITECTURE.md](ARCHITECTURE.md) and [PRODUCT.md](PRODUCT.md).
 
 ### Version history
 
-Prompt/skill/rubric backups live in **`.prompt-versions/`** (committed). Before you **manually** edit a skill, **`PROMPT.md`**, or **`src/lib/rubric-weights.json`**, save the current file into that store:
+If you edit **skills**, **`prompts/designer-agentic-system/PROMPT.md`**, or **`src/lib/rubric-weights.json`** yourself (this app’s prompts live in the repo—there is no in-app editor), you can keep a history without snapshotting *before* every edit.
+
+**What gets saved**
+
+- **Skills:** Timestamped copies under **`skills/<key>/_versions/`** next to each `SKILL.md`.
+- **Designer system prompt:** **`prompts/designer-agentic-system/_versions/`** next to `PROMPT.md`.
+- **Rubric weights:** Still under **`.prompt-versions/snapshots/`** (so `src/lib/` stays clean).
+- **Manifest:** **`.prompt-versions/manifest.jsonl`** records every snapshot (manual + meta-harness).
+
+**What to do**
+
+1. **Edit** — Change files in your editor and save as usual. Iterate as much as you want.
+2. **Checkpoint** — From the repo root, run **`pnpm snap`** (no arguments). It compares each versioned file to its **latest snapshot** and saves **only** what changed. Run it whenever you want a named point in time, or rely on **git commit** (the pre-commit hook runs the same logic and stages new snapshots).
+3. **Commit** — Commit your edits **and** new files under **`_versions/`**, **`.prompt-versions/`**, and the manifest so the team shares history.
+
+That is the normal loop: edit first, snap after.
+
+**Power user: one explicit file**
 
 ```bash
-pnpm version-snapshot skills/<key>/SKILL.md
-pnpm version-snapshot prompts/designer-agentic-system/PROMPT.md
-pnpm version-snapshot src/lib/rubric-weights.json
+pnpm snap skills/<key>/SKILL.md
 ```
 
-**Meta-harness** (proposer tools and **`P`** promotion) **snapshots automatically** for those same paths—no extra step.
+That still snapshots the **current on-disk** contents of that path (legacy “save this version now”).
 
-Useful commands (always from repo root):
+**Later: list, diff, or restore**
 
 | Goal | Command |
 |------|---------|
-| List saved versions (newest first) | `pnpm version-snapshot --list <path>` |
-| Diff two saved versions | `pnpm version-snapshot --diff <path> <safeTsA> <safeTsB>` |
-| Diff latest snapshot vs your working file | `pnpm version-snapshot --diff-current <path>` |
-| Restore a saved version (backs up current file first) | `pnpm version-snapshot --restore <path> <safeTs>` |
+| List saved versions (newest first) | `pnpm snap --list <path>` |
+| Diff two saved versions | `pnpm snap --diff <path> <safeTsA> <safeTsB>` |
+| Diff latest snapshot vs working file | `pnpm snap --diff-current <path>` |
+| Restore a saved version (backs up current file first) | `pnpm snap --restore <path> <safeTs>` |
 
-The **`safeTs`** id is the first column from **`--list`** (filesystem-safe timestamp). Snapshots and **`manifest.jsonl`** live under **`.prompt-versions/`**; commit them so history is shared with the team.
+The **`safeTs`** id is the first column from `--list`. **`pnpm version-snapshot`** is still available as an alias to the older script if you have muscle memory.
+
+**Note — meta-harness:** The separate **`pnpm meta-harness`** app snapshots those paths **automatically** when its proposer or promotion **`P`** writes files. You **do not** run **`pnpm snap`** for that flow. See **[meta-harness/VERSIONING.md](meta-harness/VERSIONING.md)**.
 
 ## Evaluator defaults (Settings → Evaluator defaults)
 
-**Settings** (gear) → **Evaluator defaults** sets **global defaults** for **maximum revision rounds**, optional **target quality score**, and **rubric weights**—used only when **Auto-improve** is **on** (that path runs evaluators and may loop). **Auto-improve** **off** = one **agentic** build with **no** evaluator (faster). Each Hypothesis node can override max rounds and target score when Auto-improve is on. When the target score is set, a revising run can stop early when the **weighted overall score** meets the threshold with **no hard fails**—otherwise stopping follows the revision gate and the round cap. Env defaults (`AGENTIC_MAX_REVISION_ROUNDS`, `AGENTIC_MIN_OVERALL_SCORE`) are served in **`GET /api/config`** and seed the UI once before you customize; see [ARCHITECTURE.md](ARCHITECTURE.md).
+**Settings** (gear) → **Evaluator defaults** sets **global defaults** for **maximum revision rounds**, optional **target quality score**, and **rubric weights**—used only when **Auto-improve** is **on** (that path runs evaluators and may loop). **Auto-improve** **off** = one **agentic** build with **no** evaluator (faster). Each Hypothesis node can override max rounds and target score when Auto-improve is on. When the target score is set, a revising run can stop early when the **weighted overall score** meets the threshold with **no hard fails**—otherwise stopping follows the revision gate and the round cap. Env defaults (`AGENTIC_MAX_REVISION_ROUNDS`, `AGENTIC_MIN_OVERALL_SCORE`) are served in `**GET /api/config`** and seed the UI once before you customize; see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Canvas Workflow
 
@@ -89,7 +108,7 @@ Write in prose, not bullets. Precision is the product.
 
 **Optional inputs:** The default template focuses on Design Brief + Model + Incubator. Other sections may show as **ghost** prompts on the canvas until you add the node from the toolbar (or load a saved canvas whose spec already fills that section—see **Managing Canvases**).
 
-**Auto-generate (Research / Objectives / Constraints):** On those three input nodes, an **auto-generate** action (when shown) drafts or refines the spec facet body from your **Design Brief** and any other spec sections you have already filled in. It uses the **first Model node** on the canvas (document order—the same fallback as auto-connect). **Lockdown** still pins provider/model server-side. The server resolves copy from the **`inputs-gen-research-context`**, **`inputs-gen-objectives-metrics`**, and **`inputs-gen-design-constraints`** skill packages under **`skills/`** (see [ARCHITECTURE.md](ARCHITECTURE.md)).
+**Auto-generate (Research / Objectives / Constraints):** On those three input nodes, an **auto-generate** action (when shown) drafts or refines the spec facet body from your **Design Brief** and any other spec sections you have already filled in. It uses the **first Model node** on the canvas (document order—the same fallback as auto-connect). **Lockdown** still pins provider/model server-side. The server resolves copy from the `**inputs-gen-research-context`**, `**inputs-gen-objectives-metrics`**, and `**inputs-gen-design-constraints**` skill packages under `**skills/**` (see [ARCHITECTURE.md](ARCHITECTURE.md)).
 
 ### 2. Connect a Model Node
 
@@ -104,6 +123,7 @@ Connect input nodes to the **Incubator** (edges auto-connect on add). With a Mod
 The **New hypothesis** placeholder (dashed card) offers **Blank** (empty card) or **Generate** (runs the same incubation LLM with **count = 1** to fill the new card from your **Design Brief** and sibling strategies — requires a connected **Model** and a non-empty brief).
 
 Hypothesis nodes appear to the right of the Incubator. Each represents a hypothesis strategy with:
+
 - **Name** — Editable label (double-click or pencil icon)
 - **Hypothesis** — The core design bet
 - **Details** (expandable) — Rationale, measurements
@@ -140,12 +160,14 @@ Preview nodes render the generated code in sandboxed iframes. Open the **run wor
 **Best pick:** If you disagree with the evaluator’s ranking, use **Mark as best** (star on the preview toolbar or “Mark as best” in full-screen). **Clear best pick** restores score-based default for that strategy lane. Full-screen **prev/next design** moves between preview nodes **for the same hypothesis** when domain slots are present.
 
 **Single-file results:**
+
 - **Zoom** — +/- buttons or auto-fit
 - **Source** — Toggle Preview/Source to see the raw HTML
 - **Full-screen** — Click the expand icon for full-viewport preview
 
 **Multi-file (agentic) results:**
-- **Preview tab** — Serves the virtual tree from **`/api/preview/sessions`** in the iframe (relative links work). If registration fails, falls back to a bundled **`srcDoc`**. See [PRODUCT.md](PRODUCT.md).
+
+- **Preview tab** — Serves the virtual tree from `**/api/preview/sessions`** in the iframe (relative links work). If registration fails, falls back to a bundled `**srcDoc`**. See [PRODUCT.md](PRODUCT.md).
 - **Code tab** — File explorer on the left, raw file content on the right
 - **Download** — Zip button downloads all files as a `.zip` archive
 - **Eval strip** — Aggregate score, suggested fixes, and runtime QA (including optional headless screenshot)
@@ -156,6 +178,7 @@ Preview nodes render the generated code in sandboxed iframes. Open the **run wor
 ### 8. Iterate
 
 To iterate on results:
+
 - **Screenshot feedback** — Drag a connection from a preview's right handle to the Existing Design node. This captures a screenshot and adds it as a reference image.
 - **Reference code** — Connect a preview to an Incubator to pass the prior design into the next **incubate** run as a **reference design** in the prompt.
 - **Re-incubate** — The Incubator reads **reference designs** (and input-node facets from the spec) from its connected nodes, producing improved hypotheses. In **agentic** mode, evaluator feedback and revision passes are built into the generation run (see the preview run workspace scorecard).
@@ -163,6 +186,7 @@ To iterate on results:
 ### Auto-Layout
 
 Open **Settings** (gear) → **General** and toggle **Auto layout**. When on:
+
 - All nodes are positioned automatically based on their connections
 - Nodes are not draggable (prevents accidental misalignment)
 - Layout updates after incubation, generation, adding/removing nodes, or new connections
@@ -180,3 +204,4 @@ Click **Canvas Manager** in the header:
 - **Import JSON** — Loads a previously exported canvas
 - **Load** — Switch to a saved canvas
 - **Delete** — Remove a saved canvas from localStorage
+

@@ -133,7 +133,7 @@ async function collectRelativeFiles(dir: string, base: string): Promise<string[]
   const out: string[] = [];
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const e of entries) {
-    if (e.name.startsWith('.') || e.name === 'node_modules') continue;
+    if (e.name.startsWith('.') || e.name === 'node_modules' || e.name === '_versions') continue;
     const abs = path.join(dir, e.name);
     const rel = base ? `${base}/${e.name}` : e.name;
     if (e.isDirectory()) {

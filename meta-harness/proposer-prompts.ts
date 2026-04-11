@@ -123,7 +123,7 @@ export function systemPromptForMode(mode: MetaHarnessMode): string {
 
 /**
  * Filter proposer tools by mode. If you change tool availability here,
- * update META_HARNESS_OUTER_LOOP.md sections 3.1 and 3.3 (tunable surfaces).
+ * update RUNBOOK.md sections 3.1 and 3.3 (tunable surfaces).
  */
 export function openRouterToolsForMode(mode: MetaHarnessMode): OpenRouterFunctionTool[] {
   if (mode === 'incubate' || mode === 'inputs') {
