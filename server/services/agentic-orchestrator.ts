@@ -42,8 +42,15 @@ import { normalizeError } from '../../src/lib/error-utils.ts';
 import { env } from '../env.ts';
 import { writeAgenticEvalRunLog } from '../lib/eval-run-logger.ts';
 import { acquireAgenticSlotOrReject, releaseAgenticSlot } from '../lib/agentic-concurrency.ts';
+import { emitSkillsLoadedOrchestratorEvents } from '../lib/agentic-emit-helpers.ts';
 
 type AgenticOrchestratorBuildInput = Omit<AgentSessionParams, 'systemPrompt'>;
+
+/** Server-side cap for revision rounds (aligned with client evaluator settings). */
+const MAX_REVISION_ROUNDS_CAP = 20;
+
+/** Max design-finding summaries folded into checkpoint todos line. */
+const CHECKPOINT_TODO_SUMMARY_MAX = 5;
 
 export type AgenticOrchestratorEvent =
   | AgentRunEvent
@@ -102,27 +109,6 @@ async function emit(ctx: StreamEmissionContext, e: AgenticOrchestratorEvent): Pr
     }
     ctx.onDeliveryFailure?.();
   }
-}
-
-async function emitSkillsLoaded(
-  streamCtx: StreamEmissionContext,
-  skills: LoadedSkillSummary[],
-  tracePhase: AgenticPhase,
-): Promise<void> {
-  const label =
-    skills.length === 0
-      ? 'No agent skills in catalog for this session'
-      : `Skills catalog (${skills.length}): ${skills.map((s) => s.name).join(', ')}`;
-  await emit(streamCtx, {
-    type: 'trace',
-    trace: makeRunTraceEvent({
-      kind: 'skills_loaded',
-      label,
-      phase: tracePhase,
-      status: skills.length === 0 ? 'info' : 'success',
-    }),
-  });
-  await emit(streamCtx, { type: 'skills_loaded', skills });
 }
 
 /** Omit server-only diagnostics from snapshots sent to the browser (SSE). */
@@ -222,7 +208,7 @@ function buildCheckpoint(
 ): AgenticCheckpoint {
   const finalRound = rounds[rounds.length - 1];
   const completedTodos = finalRound
-    ? [...(finalRound.design?.findings.map((f) => f.summary) ?? [])].slice(0, 5)
+    ? [...(finalRound.design?.findings.map((f) => f.summary) ?? [])].slice(0, CHECKPOINT_TODO_SUMMARY_MAX)
     : [];
   return {
     totalRounds: rounds.length,
@@ -313,7 +299,7 @@ async function runAgenticPiSessionRound(
     | ((ctx: AgenticSystemContextBundle) => PiSessionExtras),
 ): Promise<DesignAgentSessionResult | null> {
   const ctx = await buildAgenticSystemContext({ sessionType: options.sessionType });
-  await emitSkillsLoaded(streamCtx, ctx.loadedSkills, tracePhase);
+  await emitSkillsLoadedOrchestratorEvents((e) => emit(streamCtx, e), ctx.loadedSkills, tracePhase);
   setPiTracePhase(tracePhase);
   const extras = typeof sessionExtras === 'function' ? sessionExtras(ctx) : sessionExtras;
   return runDesignAgentSession(
@@ -355,7 +341,7 @@ async function runAgenticWithEvaluationImpl(
     onStream: options.onStream,
     onDeliveryFailure: () => streamFailureCtrl.abort(),
   };
-  const maxRevisions = Math.max(0, Math.min(20, options.maxRevisionRounds));
+  const maxRevisions = Math.max(0, Math.min(MAX_REVISION_ROUNDS_CAP, options.maxRevisionRounds));
   const satisfactionOpts =
     options.minOverallScore != null && Number.isFinite(options.minOverallScore)
       ? { minOverallScore: options.minOverallScore }
@@ -372,169 +358,82 @@ async function runAgenticWithEvaluationImpl(
   }
 
   try {
-    let piTracePhase: AgenticPhase = 'building';
-  const forward = async (e: AgentRunEvent) => {
-    if (e.type === 'skill_activated') {
-      await emit(streamCtx, {
-        type: 'trace',
-        trace: makeRunTraceEvent({
-          kind: 'skill_activated',
-          label: `Skill activated: ${e.name} (${e.key})`,
-          phase: piTracePhase,
-          status: 'success',
-        }),
-      });
-    }
-    await emit(streamCtx, e);
-  };
+    const tracePhaseRef = { current: 'building' as AgenticPhase };
+    const forward = async (e: AgentRunEvent) => {
+      if (e.type === 'skill_activated') {
+        await emit(streamCtx, {
+          type: 'trace',
+          trace: makeRunTraceEvent({
+            kind: 'skill_activated',
+            label: `Skill activated: ${e.name} (${e.key})`,
+            phase: tracePhaseRef.current,
+            status: 'success',
+          }),
+        });
+      }
+      await emit(streamCtx, e);
+    };
 
-  await emit(streamCtx, { type: 'phase', phase: 'building' });
+    await emit(streamCtx, { type: 'phase', phase: 'building' });
 
-  const setPiTrace = (p: AgenticPhase) => {
-    piTracePhase = p;
-  };
-  const buildResult = await runAgenticPiSessionRound(
-    mergedOptions,
-    streamCtx,
-    forward,
-    'building',
-    setPiTrace,
-    (ctx) => {
-      const initialSeedFiles = {
-        ...ctx.sandboxSeedFiles,
-        ...(mergedOptions.build.seedFiles ?? {}),
-      };
-      const seedFilesForBuild =
-        Object.keys(initialSeedFiles).length > 0 ? initialSeedFiles : undefined;
-      return { seedFiles: seedFilesForBuild };
-    },
-  );
-  if (!buildResult || effectiveSignal.aborted) return null;
-
-  let files = buildResult.files;
-  const emittedDuringRun = new Set<string>(buildResult.emittedFilePaths ?? []);
-  const rounds: EvaluationRoundSnapshot[] = [];
-  const roundHistory: EvaluationRoundHistoryEntry[] = [];
-  const revisionPromptByEvalRound = new Map<number, string>();
-  let revisionAttempts = 0;
-  let lastRevisionBrief: string | undefined;
-
-  const finishWithLog = (result: AgenticOrchestratorResult): AgenticOrchestratorResult => {
-    const baseDir = env.OBSERVABILITY_LOG_BASE_DIR;
-    if (baseDir) {
-      void writeAgenticEvalRunLog({
-        baseDir,
-        runId: mergedOptions.build.correlationId ?? randomUUID(),
-        compiledPrompt: mergedOptions.compiledPrompt,
-        evaluationContext: mergedOptions.evaluationContext ?? undefined,
-        getPromptBody,
-        rounds: result.rounds,
-        revisionPromptByEvalRound,
-        stopReason: result.checkpoint.stopReason ?? 'unknown',
-        finalAggregate: result.finalAggregate,
-      }).catch((err) => {
-        if (env.isDev) console.warn('[eval-run-log]', normalizeError(err), err);
-      });
-    }
-    return result;
-  };
-
-  if (mergedOptions.evaluationContext === null) {
-    await emit(streamCtx, { type: 'phase', phase: 'complete' });
-    return finishWithLog(agenticBuildOnlyResult(files, [...emittedDuringRun]));
-  }
-
-  await emit(streamCtx, { type: 'phase', phase: 'evaluating' });
-  let evalRound = 1;
-  let snapshot = await runEvaluationRound(mergedOptions, streamCtx, evalRound, files, parallel);
-  rounds.push(snapshot);
-  appendEvaluationRoundHistory(snapshot, roundHistory);
-
-  if (effectiveSignal.aborted) {
-    return finishWithLog(
-      agenticResult(
-        files,
-        rounds,
-        snapshot,
-        {
-          stopReason: 'aborted',
-          revisionAttempts,
-          revisionBriefApplied: lastRevisionBrief,
-        },
-        [...emittedDuringRun],
-      ),
-    );
-  }
-
-  const revisionUserInstructions = (await getPromptBody('designer-agentic-revision-user')).trim();
-
-  while (
-    !isEvalSatisfied(snapshot.aggregate, satisfactionOpts) &&
-    revisionAttempts < maxRevisions &&
-    !effectiveSignal.aborted
-  ) {
-    await emit(streamCtx, { type: 'phase', phase: 'revising' });
-    const brief = snapshot.aggregate.revisionBrief;
-    lastRevisionBrief = brief;
-
-    await emit(streamCtx, {
-      type: 'revision_round',
-      round: revisionAttempts + 1,
-      brief,
-    });
-
-    const tracesSection = buildEvaluatorTracesSection(snapshot.aggregate.evaluatorTraces);
-    const revisionParts = [
-      buildRevisionUserContext(options.compiledPrompt, options.evaluationContext ?? undefined),
-      revisionUserInstructions,
-      '',
-      buildRoundHistorySection(roundHistory),
-      '## Revision brief',
-      brief,
-    ];
-    if (tracesSection.length > 0) {
-      revisionParts.push('', tracesSection);
-    }
-    revisionParts.push(
-      '',
-      '## Prioritized fixes',
-      ...snapshot.aggregate.prioritizedFixes.map((f, i) => `${i + 1}. ${f}`),
-    );
-    const revisionUser = revisionParts.join('\n');
-    revisionPromptByEvalRound.set(snapshot.round, revisionUser);
-
-    debugAgentIngest({
-      hypothesisId: 'H7',
-      location: 'agentic-orchestrator.ts:revision_start',
-      message: 'runDesignAgentSession (revision) starting',
-      data: {
-        revisionAttempt: revisionAttempts + 1,
-        revisionUserChars: revisionUser.length,
-        prioritizedFixesCount: snapshot.aggregate.prioritizedFixes.length,
-        designFileCount: Object.keys(files).length,
+    const setPiTrace = (p: AgenticPhase) => {
+      tracePhaseRef.current = p;
+    };
+    const buildResult = await runAgenticPiSessionRound(
+      mergedOptions,
+      streamCtx,
+      forward,
+      'building',
+      setPiTrace,
+      (ctx) => {
+        const initialSeedFiles = {
+          ...ctx.sandboxSeedFiles,
+          ...(mergedOptions.build.seedFiles ?? {}),
+        };
+        const seedFilesForBuild =
+          Object.keys(initialSeedFiles).length > 0 ? initialSeedFiles : undefined;
+        return { seedFiles: seedFilesForBuild };
       },
-    });
+    );
+    if (!buildResult || effectiveSignal.aborted) return null;
 
-    const revised = await runAgenticPiSessionRound(mergedOptions, streamCtx, forward, 'revising', setPiTrace, (ctx) => ({
-      userPrompt: revisionUser,
-      seedFiles: mergeSeedWithDesign(files, ctx.sandboxSeedFiles),
-      compactionNote: `Post-evaluation revision requested. Overall ${snapshot.aggregate.overallScore.toFixed(2)}. Hard fails: ${snapshot.aggregate.hardFails.length}.`,
-      initialProgressMessage: 'Revising design from evaluation feedback…',
-    }));
+    let files = buildResult.files;
+    const emittedDuringRun = new Set<string>(buildResult.emittedFilePaths ?? []);
+    const rounds: EvaluationRoundSnapshot[] = [];
+    const roundHistory: EvaluationRoundHistoryEntry[] = [];
+    const revisionPromptByEvalRound = new Map<number, string>();
+    let revisionAttempts = 0;
+    let lastRevisionBrief: string | undefined;
 
-    if (!revised || effectiveSignal.aborted) {
-      const stopReason: AgenticStopReason = effectiveSignal.aborted ? 'aborted' : 'revision_failed';
-      debugAgentIngest({
-        hypothesisId: 'H7',
-        location: 'agentic-orchestrator.ts:revision_end',
-        message: 'runDesignAgentSession (revision) aborted or null',
-        data: { revisionAttempt: revisionAttempts + 1, aborted: !!effectiveSignal.aborted },
-      });
-      return finishWithLog(
+    const finishWithLog = (result: AgenticOrchestratorResult): AgenticOrchestratorResult => {
+      const baseDir = env.OBSERVABILITY_LOG_BASE_DIR;
+      if (baseDir) {
+        void writeAgenticEvalRunLog({
+          baseDir,
+          runId: mergedOptions.build.correlationId ?? randomUUID(),
+          compiledPrompt: mergedOptions.compiledPrompt,
+          evaluationContext: mergedOptions.evaluationContext ?? undefined,
+          getPromptBody,
+          rounds: result.rounds,
+          revisionPromptByEvalRound,
+          stopReason: result.checkpoint.stopReason ?? 'unknown',
+          finalAggregate: result.finalAggregate,
+        }).catch((err) => {
+          if (env.isDev) console.warn('[eval-run-log]', normalizeError(err), err);
+        });
+      }
+      return result;
+    };
+
+    const returnWithCheckpoint = (
+      snapshotArg: EvaluationRoundSnapshot,
+      stopReason: AgenticStopReason,
+    ): AgenticOrchestratorResult =>
+      finishWithLog(
         agenticResult(
           files,
           rounds,
-          snapshot,
+          snapshotArg,
           {
             stopReason,
             revisionAttempts,
@@ -543,68 +442,125 @@ async function runAgenticWithEvaluationImpl(
           [...emittedDuringRun],
         ),
       );
-    }
 
-    debugAgentIngest({
-      hypothesisId: 'H7',
-      location: 'agentic-orchestrator.ts:revision_end',
-      message: 'runDesignAgentSession (revision) finished',
-      data: {
-        revisionAttempt: revisionAttempts + 1,
-        outFileCount: Object.keys(revised.files).length,
-      },
-    });
-
-    files = revised.files;
-    for (const p of revised.emittedFilePaths ?? []) {
-      emittedDuringRun.add(p);
+    if (mergedOptions.evaluationContext === null) {
+      await emit(streamCtx, { type: 'phase', phase: 'complete' });
+      return finishWithLog(agenticBuildOnlyResult(files, [...emittedDuringRun]));
     }
-    revisionAttempts += 1;
-    evalRound += 1;
 
     await emit(streamCtx, { type: 'phase', phase: 'evaluating' });
-    snapshot = await runEvaluationRound(mergedOptions, streamCtx, evalRound, files, parallel);
+    let evalRound = 1;
+    let snapshot = await runEvaluationRound(mergedOptions, streamCtx, evalRound, files, parallel);
     rounds.push(snapshot);
     appendEvaluationRoundHistory(snapshot, roundHistory);
 
     if (effectiveSignal.aborted) {
-      return finishWithLog(
-        agenticResult(
-          files,
-          rounds,
-          snapshot,
-          {
-            stopReason: 'aborted',
-            revisionAttempts,
-            revisionBriefApplied: lastRevisionBrief,
-          },
-          [...emittedDuringRun],
-        ),
-      );
+      return returnWithCheckpoint(snapshot, 'aborted');
     }
-  }
 
-  const satisfied = isEvalSatisfied(snapshot.aggregate, satisfactionOpts);
-  const stopReason: AgenticStopReason = effectiveSignal.aborted
-    ? 'aborted'
-    : satisfied
-      ? 'satisfied'
-      : 'max_revisions';
+    const revisionUserInstructions = (await getPromptBody('designer-agentic-revision-user')).trim();
 
-  await emit(streamCtx, { type: 'phase', phase: 'complete' });
-  return finishWithLog(
-    agenticResult(
-      files,
-      rounds,
-      snapshot,
-      {
-        stopReason,
-        revisionAttempts,
-        revisionBriefApplied: lastRevisionBrief,
-      },
-      [...emittedDuringRun],
-    ),
-  );
+    while (
+      !isEvalSatisfied(snapshot.aggregate, satisfactionOpts) &&
+      revisionAttempts < maxRevisions &&
+      !effectiveSignal.aborted
+    ) {
+      await emit(streamCtx, { type: 'phase', phase: 'revising' });
+      const brief = snapshot.aggregate.revisionBrief;
+      lastRevisionBrief = brief;
+
+      await emit(streamCtx, {
+        type: 'revision_round',
+        round: revisionAttempts + 1,
+        brief,
+      });
+
+      const tracesSection = buildEvaluatorTracesSection(snapshot.aggregate.evaluatorTraces);
+      const revisionParts = [
+        buildRevisionUserContext(options.compiledPrompt, options.evaluationContext ?? undefined),
+        revisionUserInstructions,
+        '',
+        buildRoundHistorySection(roundHistory),
+        '## Revision brief',
+        brief,
+      ];
+      if (tracesSection.length > 0) {
+        revisionParts.push('', tracesSection);
+      }
+      revisionParts.push(
+        '',
+        '## Prioritized fixes',
+        ...snapshot.aggregate.prioritizedFixes.map((f, i) => `${i + 1}. ${f}`),
+      );
+      const revisionUser = revisionParts.join('\n');
+      revisionPromptByEvalRound.set(snapshot.round, revisionUser);
+
+      debugAgentIngest({
+        hypothesisId: 'H7',
+        location: 'agentic-orchestrator.ts:revision_start',
+        message: 'runDesignAgentSession (revision) starting',
+        data: {
+          revisionAttempt: revisionAttempts + 1,
+          revisionUserChars: revisionUser.length,
+          prioritizedFixesCount: snapshot.aggregate.prioritizedFixes.length,
+          designFileCount: Object.keys(files).length,
+        },
+      });
+
+      const revised = await runAgenticPiSessionRound(mergedOptions, streamCtx, forward, 'revising', setPiTrace, (ctx) => ({
+        userPrompt: revisionUser,
+        seedFiles: mergeSeedWithDesign(files, ctx.sandboxSeedFiles),
+        compactionNote: `Post-evaluation revision requested. Overall ${snapshot.aggregate.overallScore.toFixed(2)}. Hard fails: ${snapshot.aggregate.hardFails.length}.`,
+        initialProgressMessage: 'Revising design from evaluation feedback…',
+      }));
+
+      if (!revised || effectiveSignal.aborted) {
+        const stopReason: AgenticStopReason = effectiveSignal.aborted ? 'aborted' : 'revision_failed';
+        debugAgentIngest({
+          hypothesisId: 'H7',
+          location: 'agentic-orchestrator.ts:revision_end',
+          message: 'runDesignAgentSession (revision) aborted or null',
+          data: { revisionAttempt: revisionAttempts + 1, aborted: !!effectiveSignal.aborted },
+        });
+        return returnWithCheckpoint(snapshot, stopReason);
+      }
+
+      debugAgentIngest({
+        hypothesisId: 'H7',
+        location: 'agentic-orchestrator.ts:revision_end',
+        message: 'runDesignAgentSession (revision) finished',
+        data: {
+          revisionAttempt: revisionAttempts + 1,
+          outFileCount: Object.keys(revised.files).length,
+        },
+      });
+
+      files = revised.files;
+      for (const p of revised.emittedFilePaths ?? []) {
+        emittedDuringRun.add(p);
+      }
+      revisionAttempts += 1;
+      evalRound += 1;
+
+      await emit(streamCtx, { type: 'phase', phase: 'evaluating' });
+      snapshot = await runEvaluationRound(mergedOptions, streamCtx, evalRound, files, parallel);
+      rounds.push(snapshot);
+      appendEvaluationRoundHistory(snapshot, roundHistory);
+
+      if (effectiveSignal.aborted) {
+        return returnWithCheckpoint(snapshot, 'aborted');
+      }
+    }
+
+    const satisfied = isEvalSatisfied(snapshot.aggregate, satisfactionOpts);
+    const stopReason: AgenticStopReason = effectiveSignal.aborted
+      ? 'aborted'
+      : satisfied
+        ? 'satisfied'
+        : 'max_revisions';
+
+    await emit(streamCtx, { type: 'phase', phase: 'complete' });
+    return returnWithCheckpoint(snapshot, stopReason);
   } finally {
     releaseAgenticSlot();
   }

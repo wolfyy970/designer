@@ -1,9 +1,13 @@
 /**
  * Runtime discovery of repo-backed Agent Skills (skills/<key>/SKILL.md per package).
+ * Skills are **optional** catalog entries: invalid YAML or schema failures omit the skill (see dev warnings).
+ * Contrast `prompt-discovery.ts`: the system `PROMPT.md` is required and throws when invalid.
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parse as parseYaml } from 'yaml';
+import { env } from '../env.ts';
+import { splitYamlFrontmatter } from './frontmatter.ts';
 import { skillFrontmatterSchema, type LoadedSkillSummary, type SkillCatalogEntry } from './skill-schema.ts';
 
 export type { SkillCatalogEntry };
@@ -47,19 +51,7 @@ export function resolveSkillsRoot(explicit?: string): string {
 
 /** Split `SKILL.md` into YAML frontmatter and body. */
 export function splitSkillMarkdown(raw: string): { frontmatterYaml: string; body: string } | null {
-  const lines = raw.replace(/^\uFEFF/, '').split(/\r?\n/);
-  if (lines[0]?.trim() !== '---') return null;
-  let end = -1;
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i].trim() === '---') {
-      end = i;
-      break;
-    }
-  }
-  if (end === -1) return null;
-  const frontmatterYaml = lines.slice(1, end).join('\n');
-  const body = lines.slice(end + 1).join('\n').replace(/^\n+/, '');
-  return { frontmatterYaml, body };
+  return splitYamlFrontmatter(raw);
 }
 
 async function safeReadSkillDir(skillsRoot: string, name: string): Promise<SkillCatalogEntry | null> {
@@ -77,11 +69,19 @@ async function safeReadSkillDir(skillsRoot: string, name: string): Promise<Skill
   let data: unknown;
   try {
     data = parseYaml(split.frontmatterYaml);
-  } catch {
+  } catch (err) {
+    if (env.isDev) {
+      console.warn(`[skill-discovery] Invalid YAML in ${skillPath}`, err);
+    }
     return null;
   }
   const parsed = skillFrontmatterSchema.safeParse(data);
-  if (!parsed.success) return null;
+  if (!parsed.success) {
+    if (env.isDev) {
+      console.warn(`[skill-discovery] Invalid skill frontmatter in ${skillPath}`, parsed.error.flatten());
+    }
+    return null;
+  }
 
   return {
     ...parsed.data,
@@ -94,11 +94,6 @@ async function safeReadSkillDir(skillsRoot: string, name: string): Promise<Skill
 /**
  * Walk each subdirectory under the skills root for SKILL.md (invalid packages omitted).
  */
-/** Skills listed in the system prompt and pre-seeded into the sandbox (excludes `when: manual`). */
-export function filterSkillsForCatalog(entries: SkillCatalogEntry[]): SkillCatalogEntry[] {
-  return entries.filter((e) => e.when !== 'manual');
-}
-
 /** Filter skills for a specific Pi session type by matching tags. */
 export function filterSkillsForSession(entries: SkillCatalogEntry[], sessionType: SessionType): SkillCatalogEntry[] {
   const allowedTags = SESSION_TAGS[sessionType];
@@ -256,8 +251,4 @@ export async function getSkillBody(key: string, skillsRoot?: string): Promise<st
   if (!entry) throw new Error(`Skill "${key}" not found under ${root}`);
   skillBodyCache.set(key, entry.bodyMarkdown);
   return entry.bodyMarkdown;
-}
-
-export function clearSkillBodyCache(): void {
-  skillBodyCache.clear();
 }

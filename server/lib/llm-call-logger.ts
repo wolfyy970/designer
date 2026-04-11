@@ -69,8 +69,8 @@ function usageLogFields(meta?: ChatResponseMetadata): Partial<LlmLogEntry> {
 
 
 /**
- * Shared lifecycle: Langfuse input metadata, dev log row, abort wiring, waiting pulse,
- * finalize/fail + Langfuse output on success/error.
+ * Shared lifecycle: input metadata, dev log row, abort wiring, waiting pulse,
+ * finalize/fail + output on success/error.
  */
 export async function withLlmCallLifecycle(
   ctx: LlmLogContext,

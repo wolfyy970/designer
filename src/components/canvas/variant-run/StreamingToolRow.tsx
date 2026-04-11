@@ -6,10 +6,6 @@ type Props = {
   streamedChars: number;
   /** Outer wrapper (layout + typography). */
   className: string;
-  /** Pulsing indicator: default matches footer; timeline matches monitor timeline density. */
-  dotClassName?: string;
-  /** Applied to the streamed size span after the tool name/path. */
-  sizeClassName?: string;
 };
 
 const DEFAULT_DOT =
@@ -25,13 +21,11 @@ export function StreamingToolRow({
   toolPath,
   streamedChars,
   className,
-  dotClassName = DEFAULT_DOT,
-  sizeClassName = 'text-fg-muted',
 }: Props) {
   const path = toolPath != null && toolPath.length > 0 ? toolPath : null;
   return (
     <span className={className}>
-      <span className={dotClassName} aria-hidden />
+      <span className={DEFAULT_DOT} aria-hidden />
       <span className="min-w-0">
         Streaming <code className="text-fg-secondary">{toolName}</code>
         {path != null ? (
@@ -40,7 +34,7 @@ export function StreamingToolRow({
             → <span className="text-fg-muted">{path}</span>
           </>
         ) : null}
-        <span className={sizeClassName}>
+        <span className="text-fg-muted">
           {' '}
           ({formatStreamArgSize(streamedChars)})
         </span>

@@ -6,10 +6,9 @@ import type { IncubatorPromptOptions } from '../../src/lib/prompts/incubator-use
 import { buildIncubatorUserPrompt } from '../../src/lib/prompts/incubator-user.ts';
 import { HypothesisStrategySchema } from '../lib/hypothesis-schemas.ts';
 import { getPromptBody } from '../lib/prompt-resolution.ts';
-import { normalizeError } from '../../src/lib/error-utils.ts';
 import { clampProviderModel } from '../lib/lockdown-model.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
-import { createWriteGate } from '../lib/sse-write-gate.ts';
+import { runTaskAgentSseBody } from '../lib/sse-task-route.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { executeTaskAgentStream } from '../services/task-agent-execution.ts';
 import { parseJsonLenient } from '../lib/parse-json-lenient.ts';
@@ -114,19 +113,8 @@ ${assembledSpec}`;
 
   return streamSSE(c, async (stream) => {
     const abortSignal = c.req.raw.signal;
-    let seq = 0;
-    const allocId = () => String(seq++);
-    const gate = createWriteGate();
     const correlationId = crypto.randomUUID();
-
-    const write = async (event: string, data: Record<string, unknown>): Promise<void> => {
-      const payload = JSON.stringify(data);
-      await gate.enqueue(async () => {
-        await stream.writeSSE({ data: payload, event, id: allocId() });
-      });
-    };
-
-    try {
+    await runTaskAgentSseBody(stream, async ({ write, allocId, gate }) => {
       const taskResult = await executeTaskAgentStream(
         stream,
         {
@@ -158,13 +146,7 @@ ${assembledSpec}`;
         };
         await write(SSE_EVENT_NAMES.incubate_result, JSON.parse(JSON.stringify(plan)));
       }
-
-      await write(SSE_EVENT_NAMES.phase, { phase: 'complete' });
-      await write(SSE_EVENT_NAMES.done, {});
-    } catch (err) {
-      await write(SSE_EVENT_NAMES.error, { error: normalizeError(err) });
-      await write(SSE_EVENT_NAMES.done, {});
-    }
+    });
   });
 });
 

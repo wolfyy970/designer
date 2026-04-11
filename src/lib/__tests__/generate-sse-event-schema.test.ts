@@ -48,10 +48,19 @@ describe('safeParseGenerateSSEEvent', () => {
     if (r.ok) expect(r.event.type).toBe('done');
   });
 
-  it('accepts evaluation_report with loose snapshot', () => {
+  const minimalAggregate = {
+    overallScore: 3,
+    normalizedScores: { design: 0.5, strategy: 0.5, implementation: 0.5, browser: 0.5 },
+    hardFails: [] as { code: string; message: string; source: 'design' }[],
+    prioritizedFixes: [] as string[],
+    shouldRevise: false,
+    revisionBrief: '',
+  };
+
+  it('accepts evaluation_report with full snapshot shape', () => {
     const r = safeParseGenerateSSEEvent('evaluation_report', {
       round: 1,
-      snapshot: { round: 1, aggregate: { overallScore: 3 } },
+      snapshot: { round: 1, aggregate: minimalAggregate },
     });
     expect(r.ok).toBe(true);
   });
@@ -59,7 +68,7 @@ describe('safeParseGenerateSSEEvent', () => {
   it('rejects evaluation_report snapshot missing round', () => {
     const r = safeParseGenerateSSEEvent('evaluation_report', {
       round: 1,
-      snapshot: { aggregate: { overallScore: 3 } },
+      snapshot: { aggregate: minimalAggregate },
     });
     expect(r.ok).toBe(false);
   });
@@ -134,6 +143,7 @@ describe('safeParseGenerateSSEEvent', () => {
         totalRounds: 2,
         completedAt: '2026-01-01T00:00:00.000Z',
         filesWritten: ['index.html'],
+        finalTodosSummary: 'Done',
         stopReason: 'satisfied',
       },
     });
@@ -142,7 +152,11 @@ describe('safeParseGenerateSSEEvent', () => {
 
   it('rejects checkpoint missing completedAt', () => {
     const r = safeParseGenerateSSEEvent('checkpoint', {
-      checkpoint: { totalRounds: 1 },
+      checkpoint: {
+        totalRounds: 1,
+        filesWritten: [],
+        finalTodosSummary: 'x',
+      },
     });
     expect(r.ok).toBe(false);
   });

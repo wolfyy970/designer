@@ -102,6 +102,21 @@ export interface LivenessSlice {
   activeThinkingStartedAt?: number;
 }
 
+/** Copied from {@link GenerationResult} into {@link LivenessSlice} (excludes computed `activeThinkingStartedAt`). */
+const LIVENESS_SLICE_KEYS = [
+  'progressMessage',
+  'lastAgentFileAt',
+  'lastActivityAt',
+  'lastTraceAt',
+  'activeToolName',
+  'activeToolPath',
+  'streamingToolName',
+  'streamingToolPath',
+  'streamingToolChars',
+  'agenticPhase',
+  'evaluationStatus',
+] as const satisfies readonly (keyof Omit<LivenessSlice, 'activeThinkingStartedAt'>)[];
+
 export function pickLivenessSlice(result: GenerationResult): LivenessSlice {
   const turns = result.thinkingTurns;
   let openTurn: ThinkingTurnSlice | undefined;
@@ -110,18 +125,12 @@ export function pickLivenessSlice(result: GenerationResult): LivenessSlice {
       if (turns[i].endedAt == null) { openTurn = turns[i]; break; }
     }
   }
+  const base = Object.fromEntries(LIVENESS_SLICE_KEYS.map((k) => [k, result[k]])) as Pick<
+    LivenessSlice,
+    (typeof LIVENESS_SLICE_KEYS)[number]
+  >;
   return {
-    progressMessage: result.progressMessage,
-    lastAgentFileAt: result.lastAgentFileAt,
-    lastActivityAt: result.lastActivityAt,
-    lastTraceAt: result.lastTraceAt,
-    activeToolName: result.activeToolName,
-    activeToolPath: result.activeToolPath,
-    streamingToolName: result.streamingToolName,
-    streamingToolPath: result.streamingToolPath,
-    streamingToolChars: result.streamingToolChars,
-    agenticPhase: result.agenticPhase,
-    evaluationStatus: result.evaluationStatus,
+    ...base,
     activeThinkingStartedAt: openTurn?.startedAt,
   };
 }
@@ -131,12 +140,16 @@ export type StreamingToolLiveness = Pick<
   'streamingToolName' | 'streamingToolPath' | 'streamingToolChars'
 >;
 
+const STREAMING_TOOL_LIVENESS_KEYS = [
+  'streamingToolName',
+  'streamingToolPath',
+  'streamingToolChars',
+] as const satisfies readonly (keyof StreamingToolLiveness)[];
+
 export function pickStreamingToolLiveness(result: GenerationResult): StreamingToolLiveness {
-  return {
-    streamingToolName: result.streamingToolName,
-    streamingToolPath: result.streamingToolPath,
-    streamingToolChars: result.streamingToolChars,
-  };
+  return Object.fromEntries(
+    STREAMING_TOOL_LIVENESS_KEYS.map((k) => [k, result[k]]),
+  ) as StreamingToolLiveness;
 }
 
 export interface GenerationResult {

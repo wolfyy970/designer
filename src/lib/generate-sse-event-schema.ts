@@ -8,16 +8,10 @@ import { z } from 'zod';
 import { evaluatorRubricIdZodSchema } from './evaluator-rubric-zod';
 import { SSE_EVENT_NAMES } from '../constants/sse-events';
 import { agenticPhaseZodSchema } from '../constants/agentic-stream';
+import { runTraceEventSchema as canonicalRunTraceEventSchema } from './run-trace-event-schema';
 
-/** Trace envelope: required fields + passthrough for optional RunTraceEvent keys. */
-const runTraceEventSchema = z
-  .object({
-    id: z.string(),
-    at: z.string(),
-    kind: z.string(),
-    label: z.string(),
-  })
-  .passthrough();
+/** Trace payload: canonical shape + passthrough for forward-compatible server fields. */
+const traceSSESchema = canonicalRunTraceEventSchema.passthrough();
 
 const todoItemSchema = z.object({
   id: z.string(),
@@ -25,18 +19,98 @@ const todoItemSchema = z.object({
   status: z.enum(['pending', 'in_progress', 'completed']),
 });
 
-/** Minimum envelope for `evaluation_report.snapshot`; extra fields preserved via passthrough. */
-const evaluationReportSnapshotSchema = z
+const evalCriterionScoreSchema = z.object({
+  score: z.number(),
+  notes: z.string(),
+});
+
+const evalFindingSchema = z.object({
+  severity: z.enum(['high', 'medium', 'low']),
+  summary: z.string(),
+  detail: z.string(),
+});
+
+const evalHardFailSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+});
+
+/** Matches {@link import('../types/evaluation').EvaluatorWorkerReport} for SSE wire validation. */
+const evaluatorWorkerReportSSESchema = z
   .object({
-    round: z.number(),
+    rubric: evaluatorRubricIdZodSchema,
+    scores: z.record(z.string(), evalCriterionScoreSchema),
+    findings: z.array(evalFindingSchema),
+    hardFails: z.array(evalHardFailSchema),
+    rawTrace: z.string().optional(),
+    playwrightSkipped: z
+      .object({
+        reason: z.enum(['browser_unavailable', 'eval_error']),
+        message: z.string(),
+      })
+      .optional(),
+    artifacts: z
+      .object({
+        browserScreenshot: z
+          .object({
+            mediaType: z.enum(['image/jpeg', 'image/png']),
+            base64: z.string(),
+          })
+          .optional(),
+      })
+      .optional(),
   })
   .passthrough();
 
-/** Minimum envelope for `checkpoint` SSE payloads. */
-const agenticCheckpointSchema = z
+const aggregatedHardFailSSESchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  source: evaluatorRubricIdZodSchema,
+});
+
+const aggregatedEvaluationReportSSESchema = z
+  .object({
+    overallScore: z.number(),
+    normalizedScores: z.record(z.string(), z.number()),
+    hardFails: z.array(aggregatedHardFailSSESchema),
+    prioritizedFixes: z.array(z.string()),
+    shouldRevise: z.boolean(),
+    revisionBrief: z.string(),
+    evaluatorTraces: z.record(z.string(), z.string()).optional(),
+  })
+  .passthrough();
+
+/** Matches {@link import('../types/evaluation').EvaluationRoundSnapshot} for SSE. */
+const evaluationRoundSnapshotSSESchema = z
+  .object({
+    round: z.number(),
+    files: z.record(z.string(), z.string()).optional(),
+    design: evaluatorWorkerReportSSESchema.optional(),
+    strategy: evaluatorWorkerReportSSESchema.optional(),
+    implementation: evaluatorWorkerReportSSESchema.optional(),
+    browser: evaluatorWorkerReportSSESchema.optional(),
+    aggregate: aggregatedEvaluationReportSSESchema,
+  })
+  .passthrough();
+
+const agenticStopReasonSchema = z.enum([
+  'satisfied',
+  'max_revisions',
+  'aborted',
+  'revision_failed',
+  'build_only',
+]);
+
+/** Matches {@link import('../types/evaluation').AgenticCheckpoint} for SSE. */
+const agenticCheckpointSSESchema = z
   .object({
     totalRounds: z.number(),
+    filesWritten: z.array(z.string()),
+    finalTodosSummary: z.string(),
+    revisionBriefApplied: z.string().optional(),
     completedAt: z.string(),
+    stopReason: agenticStopReasonSchema.optional(),
+    revisionAttempts: z.number().optional(),
   })
   .passthrough();
 
@@ -59,7 +133,7 @@ export const generateSSEEventSchema = z.union([
     done: z.boolean(),
     toolPath: z.string().optional(),
   }),
-  z.object({ type: z.literal(SSE_EVENT_NAMES.trace), trace: runTraceEventSchema }),
+  z.object({ type: z.literal(SSE_EVENT_NAMES.trace), trace: traceSSESchema }),
   z.object({ type: z.literal(SSE_EVENT_NAMES.code), code: z.string() }),
   z.object({ type: z.literal(SSE_EVENT_NAMES.error), error: z.string() }),
   z.object({ type: z.literal(SSE_EVENT_NAMES.file), path: z.string(), content: z.string() }),
@@ -76,16 +150,12 @@ export const generateSSEEventSchema = z.union([
     type: z.literal(SSE_EVENT_NAMES.evaluation_worker_done),
     round: z.number(),
     rubric: evaluatorRubricIdZodSchema,
-    report: z
-      .object({
-        rubric: evaluatorRubricIdZodSchema,
-      })
-      .passthrough(),
+    report: evaluatorWorkerReportSSESchema,
   }),
   z.object({
     type: z.literal(SSE_EVENT_NAMES.evaluation_report),
     round: z.number(),
-    snapshot: evaluationReportSnapshotSchema,
+    snapshot: evaluationRoundSnapshotSSESchema,
   }),
   z.object({ type: z.literal(SSE_EVENT_NAMES.revision_round), round: z.number(), brief: z.string() }),
   z.object({
@@ -104,7 +174,7 @@ export const generateSSEEventSchema = z.union([
     name: z.string(),
     description: z.string(),
   }),
-  z.object({ type: z.literal(SSE_EVENT_NAMES.checkpoint), checkpoint: agenticCheckpointSchema }),
+  z.object({ type: z.literal(SSE_EVENT_NAMES.checkpoint), checkpoint: agenticCheckpointSSESchema }),
   z.object({ type: z.literal(SSE_EVENT_NAMES.lane_done), laneIndex: z.number() }),
   z.object({ type: z.literal(SSE_EVENT_NAMES.done) }),
 ]);

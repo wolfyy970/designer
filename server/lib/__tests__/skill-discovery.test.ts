@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,7 +7,6 @@ import {
   buildUseSkillToolDescription,
   catalogEntriesToSummaries,
   discoverSkills,
-  filterSkillsForCatalog,
   formatSkillsCatalogXml,
   resolveSkillsRoot,
   splitSkillMarkdown,
@@ -59,6 +58,23 @@ Hi`,
     expect(out).toHaveLength(1);
     expect(out[0]!.key).toBe('good');
     expect(out[0]!.bodyMarkdown.trim()).toBe('Hi');
+  });
+
+  it('warns in dev and omits packages with invalid YAML frontmatter', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await fs.mkdir(path.join(tmp, 'bad-yaml'), { recursive: true });
+    await fs.writeFile(
+      path.join(tmp, 'bad-yaml', 'SKILL.md'),
+      `---
+name: [ broken
+---
+body`,
+      'utf8',
+    );
+    const out = await discoverSkills(tmp);
+    expect(out).toHaveLength(0);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
 
@@ -129,15 +145,15 @@ describe('skillFrontmatterSchema', () => {
   });
 });
 
-describe('filterSkillsForCatalog', () => {
+describe('catalog skills (when !== manual)', () => {
   const entries: SkillCatalogEntry[] = [
     { key: 'a', dir: '/a', name: 'A', description: 'A', tags: [], when: 'auto', bodyMarkdown: '' },
     { key: 'b', dir: '/b', name: 'B', description: 'B', tags: [], when: 'always', bodyMarkdown: '' },
     { key: 'c', dir: '/c', name: 'C', description: 'C', tags: [], when: 'manual', bodyMarkdown: '' },
   ];
 
-  it('excludes manual skills', () => {
-    const result = filterSkillsForCatalog(entries);
+  it('excludes manual skills from pre-seeded catalog-style lists', () => {
+    const result = entries.filter((e) => e.when !== 'manual');
     expect(result.map((e) => e.key)).toEqual(['a', 'b']);
   });
 });

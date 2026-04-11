@@ -37,6 +37,18 @@ import type {
   DesignAgentSessionResult,
 } from './pi-agent-run-types.ts';
 
+/** Default max context when registry has no entry (non-LM Studio). */
+const FALLBACK_CONTEXT_WINDOW_DEFAULT = 131_072;
+
+/** Emit “Still working…” progress if the model stream is quiet for this long (seconds). */
+const IDLE_PROGRESS_GAP_SEC = 18;
+
+/** How often to check stream idleness for progress heartbeats (ms). */
+const IDLE_CHECK_MS = 10_000;
+
+/** Dev ingest interval for stall-debug telemetry (ms). */
+const STALL_DEBUG_MS = 60_000;
+
 export type { ThinkingLevel } from './pi-model.ts';
 export type { AgentRunParams, AgentSessionParams, AgentRunEvent, DesignAgentSessionResult };
 
@@ -79,7 +91,7 @@ export async function runDesignAgentSession(
 
   const registryCw = await getProviderModelContextWindow(params.providerId, params.modelId);
   const fallbackCw =
-    params.providerId === 'lmstudio' ? env.LM_STUDIO_CONTEXT_WINDOW : 131_072;
+    params.providerId === 'lmstudio' ? env.LM_STUDIO_CONTEXT_WINDOW : FALLBACK_CONTEXT_WINDOW_DEFAULT;
   const contextWindow = registryCw ?? fallbackCw;
   const model = buildModel(
     params.providerId,
@@ -191,8 +203,6 @@ export async function runDesignAgentSession(
     params.signal.addEventListener('abort', () => session.agent.abort());
   }
 
-  const IDLE_PROGRESS_GAP_SEC = 18;
-  const idleCheckMs = 10_000;
   const idleTimer = setInterval(() => {
     if (params.signal?.aborted) return;
     const gapSec = Math.floor((Date.now() - streamActivityAt.current) / 1000);
@@ -201,9 +211,8 @@ export async function runDesignAgentSession(
       type: 'progress',
       payload: `Still working… ${gapSec}s since last streamed output`,
     });
-  }, idleCheckMs);
+  }, IDLE_CHECK_MS);
 
-  const STALL_DEBUG_MS = 60_000;
   const stallDebugTimer = setInterval(() => {
     if (params.signal?.aborted) return;
     const idleSec = Math.floor((Date.now() - streamActivityAt.current) / 1000);

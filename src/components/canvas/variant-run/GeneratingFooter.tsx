@@ -1,13 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { LivenessSlice, SkillInfo, TodoItem } from '../../../types/provider';
-import {
-  FILE_STALL_WARN_SEC,
-  FIRST_FILE_WAIT_ELAPSED_SEC,
-  modelQuietSeconds,
-  MODEL_REASONING_HUSH_SEC,
-  STREAM_QUIET_WARN_SEC,
-} from '../../../lib/generation-liveness';
+import { buildGeneratingPrimaryLine, buildNoPlanBuildingLine } from '../../../lib/generating-footer-primary';
+import { useGenerationStallHints } from '../../../hooks/use-generation-stall-hints';
 import { StreamingToolRow } from './StreamingToolRow';
 
 export function GeneratingFooter({
@@ -34,9 +29,6 @@ export function GeneratingFooter({
 }) {
   const {
     progressMessage,
-    lastAgentFileAt,
-    lastActivityAt,
-    lastTraceAt,
     activeToolName,
     activeToolPath,
     streamingToolName,
@@ -44,7 +36,6 @@ export function GeneratingFooter({
     streamingToolChars,
     agenticPhase,
     evaluationStatus,
-    activeThinkingStartedAt,
   } = liveness;
   const total = plan?.length ?? 0;
   const hasPlan = total > 0;
@@ -53,11 +44,23 @@ export function GeneratingFooter({
   const isEvaluating = agenticPhase === 'evaluating';
   const isRevising = agenticPhase === 'revising';
 
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
+  const {
+    fileStallSec,
+    modelQuietSec,
+    showStreamQuietWarning,
+    showFileStall,
+    firstFileWait,
+    modelActivityDetail,
+    thinkingSec,
+    isActivelyThinking,
+    isStreamingToolArgs,
+  } = useGenerationStallHints({
+    liveness,
+    written,
+    total,
+    hasPlan,
+    elapsed,
+  });
 
   const todoHint = useMemo(() => {
     if (!liveTodos?.length) return undefined;
@@ -73,79 +76,47 @@ export function GeneratingFooter({
     return activeToolPath ? `${activeToolName} → ${activeToolPath}` : activeToolName;
   }, [activeToolName, activeToolPath]);
 
-  const isActivelyThinking =
-    isBuilding && activeThinkingStartedAt != null && activeThinkingStartedAt > 0;
-  const thinkingSec = isActivelyThinking
-    ? Math.max(0, Math.floor((now - activeThinkingStartedAt) / 1000))
-    : 0;
-
   const isServerStallHeartbeat =
     !!progressMessage && progressMessage.startsWith('Still working');
 
-  const noPlanBuildingLine = useMemo(() => {
-    if (!isBuilding) return progressMessage || 'Generating…';
-    if (isActivelyThinking && isServerStallHeartbeat) {
-      return written > 0
-        ? `${written} file(s) saved · model thinking (${thinkingSec}s)`
-        : `Model thinking (${thinkingSec}s)…`;
-    }
-    if (progressMessage && progressMessage !== 'Generating…') return progressMessage;
-    if (activeToolLabel) {
-      return written > 0 ? `${written} file(s) · ${activeToolLabel}` : activeToolLabel;
-    }
-    if (written > 0) return `${written} design file(s) saved`;
-    return 'Exploring & generating…';
-  }, [isBuilding, progressMessage, activeToolLabel, written, isActivelyThinking, isServerStallHeartbeat, thinkingSec]);
+  const noPlanBuildingLine = useMemo(
+    () =>
+      buildNoPlanBuildingLine({
+        isBuilding,
+        progressMessage,
+        written,
+        isActivelyThinking,
+        isServerStallHeartbeat,
+        activeToolLabel,
+        thinkingSec,
+      }),
+    [
+      isBuilding,
+      progressMessage,
+      written,
+      isActivelyThinking,
+      isServerStallHeartbeat,
+      activeToolLabel,
+      thinkingSec,
+    ],
+  );
 
-  const primaryLine = isEvaluating
-    ? (evaluationStatus || progressMessage || 'Running evaluators…')
-    : isRevising
-      ? (progressMessage || evaluationStatus || 'Applying feedback from evaluators…')
-      : hasPlan
-        ? `${written} / ${total} files`
-        : noPlanBuildingLine;
+  const primaryLine = buildGeneratingPrimaryLine({
+    isEvaluating,
+    isRevising,
+    hasPlan,
+    written,
+    total,
+    evaluationStatus,
+    progressMessage,
+    noPlanBuildingLine,
+  });
 
   const toolLineRedundant = useMemo(() => {
     if (!isBuilding || hasPlan || !activeToolName) return false;
     if (activeToolPath && primaryLine.includes(activeToolPath)) return true;
     return primaryLine.includes(activeToolName);
   }, [isBuilding, hasPlan, activeToolName, activeToolPath, primaryLine]);
-
-  const isStreamingToolArgs = isBuilding && streamingToolName != null;
-
-  const fileStallSec =
-    isBuilding && lastAgentFileAt != null && (!hasPlan || written < total)
-      ? Math.max(0, Math.floor((now - lastAgentFileAt) / 1000))
-      : 0;
-  const modelQuietSec = modelQuietSeconds(now, lastActivityAt, lastTraceAt);
-  const showStreamQuietWarning =
-    isBuilding &&
-    !isStreamingToolArgs &&
-    !isActivelyThinking &&
-    modelQuietSec != null &&
-    modelQuietSec >= STREAM_QUIET_WARN_SEC;
-  const showFileStall =
-    !isStreamingToolArgs && !isActivelyThinking && fileStallSec >= FILE_STALL_WARN_SEC;
-  const firstFileWait =
-    !isStreamingToolArgs &&
-    !isActivelyThinking &&
-    isBuilding &&
-    written === 0 &&
-    lastAgentFileAt == null &&
-    elapsed >= FIRST_FILE_WAIT_ELAPSED_SEC;
-
-  const modelActivityDetail = (() => {
-    if (!isBuilding || isStreamingToolArgs || modelQuietSec == null) return null;
-    if (isActivelyThinking) {
-      return thinkingSec > 3
-        ? `Model reasoning (${thinkingSec}s)…`
-        : 'Model reasoning…';
-    }
-    if (modelQuietSec === 0) return 'Model activity updating';
-    if (modelQuietSec < MODEL_REASONING_HUSH_SEC) return 'Model reasoning…';
-    if (modelQuietSec < STREAM_QUIET_WARN_SEC) return `Last model activity ${modelQuietSec}s ago`;
-    return null;
-  })();
 
   return (
     <div className="flex flex-col gap-2 border-t border-border-subtle px-4 py-3">
@@ -167,7 +138,7 @@ export function GeneratingFooter({
             <Loader2 size={10} className="shrink-0 animate-spin text-accent" />
             <span className="truncate">{primaryLine}</span>
           </span>
-          {isStreamingToolArgs && (
+          {isStreamingToolArgs && streamingToolName != null && (
             <StreamingToolRow
               toolName={streamingToolName}
               toolPath={streamingToolPath}

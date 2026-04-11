@@ -6,7 +6,7 @@ import {
 
 describe('inputs-generate helpers', () => {
   describe('promptKeyForInputsGenerate', () => {
-    it('maps spec input ids to Langfuse / defaults keys', () => {
+    it('maps spec input ids to prompt defaults keys', () => {
       expect(promptKeyForInputsGenerate('research-context')).toBe('inputs-gen-research-context');
       expect(promptKeyForInputsGenerate('objectives-metrics')).toBe('inputs-gen-objectives-metrics');
       expect(promptKeyForInputsGenerate('design-constraints')).toBe('inputs-gen-design-constraints');

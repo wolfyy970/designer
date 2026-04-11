@@ -1,6 +1,6 @@
 /**
  * Pi resource loader for embedded agent sessions: does not read the host repo
- * (e.g. root AGENTS.md for developers vs Langfuse virtual AGENTS.md in Pi). System prompt is supplied in-app so
+ * (e.g. root AGENTS.md for developers vs the virtual AGENTS.md inside Pi). System prompt is supplied in-app so
  * AgentSession `_baseSystemPrompt` includes our designer-agentic text (survives
  * per-turn resets when customTools/extensions exist).
  *
@@ -21,7 +21,7 @@ export interface SandboxResourceLoaderOptions {
   systemPrompt?: string;
   /** Model context window for this session — drives conservative auto-compaction threshold. */
   contextWindow: number;
-  /** When set, Pi `compact()` receives this text as custom "Additional focus" (e.g. Langfuse `agent-context-compaction`). */
+  /** When set, Pi `compact()` receives this text as custom "Additional focus" (e.g. `agent-context-compaction` prompt). */
   getCompactionPromptBody?: () => Promise<string>;
 }
 

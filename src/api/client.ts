@@ -332,7 +332,7 @@ function dispatchParsedGenerateStreamEvent(
       );
       break;
     case SSE_EVENT_NAMES.trace:
-      callbacks.onTrace?.(event.trace as RunTraceEvent);
+      callbacks.onTrace?.(event.trace);
       break;
     case SSE_EVENT_NAMES.code:
       callbacks.onCode?.(event.code);
@@ -356,17 +356,10 @@ function dispatchParsedGenerateStreamEvent(
       callbacks.onEvaluationProgress?.(event.round, event.phase, event.message);
       break;
     case SSE_EVENT_NAMES.evaluation_worker_done:
-      callbacks.onEvaluationWorkerDone?.(
-        event.round,
-        event.rubric,
-        event.report as unknown as EvaluatorWorkerReport,
-      );
+      callbacks.onEvaluationWorkerDone?.(event.round, event.rubric, event.report);
       break;
     case SSE_EVENT_NAMES.evaluation_report:
-      callbacks.onEvaluationReport?.(
-        event.round,
-        event.snapshot as unknown as EvaluationRoundSnapshot,
-      );
+      callbacks.onEvaluationReport?.(event.round, event.snapshot);
       break;
     case SSE_EVENT_NAMES.revision_round:
       callbacks.onRevisionRound?.(event.round, event.brief);
@@ -382,7 +375,7 @@ function dispatchParsedGenerateStreamEvent(
       });
       break;
     case SSE_EVENT_NAMES.checkpoint:
-      callbacks.onCheckpoint?.(event.checkpoint as unknown as AgenticCheckpoint);
+      callbacks.onCheckpoint?.(event.checkpoint);
       break;
     case SSE_EVENT_NAMES.lane_done:
       break;

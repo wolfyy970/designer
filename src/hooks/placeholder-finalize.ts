@@ -8,6 +8,15 @@ import { useGenerationStore } from '../stores/generation-store';
 import type { PlaceholderGenerationSessionState, PlaceholderRafBatchers } from './placeholder-session-state';
 import { clearTransientResultFields } from './placeholder-session-state';
 import { normalizeError } from '../lib/error-utils';
+import type { EvaluationRoundSnapshot } from '../types/evaluation';
+
+function stripEvalRoundFiles(rounds: EvaluationRoundSnapshot[]): EvaluationRoundSnapshot[] {
+  return rounds.map((er) => {
+    const meta = { ...er };
+    delete meta.files;
+    return meta;
+  });
+}
 
 export function createPlaceholderFinalizeAfterStream(options: {
   placeholderId: string;
@@ -78,32 +87,35 @@ export function createPlaceholderFinalizeAfterStream(options: {
       });
     };
 
-    if (state.generatedCode) {
+    const persistStep = async (step: string, fn: () => Promise<void>): Promise<boolean> => {
       try {
-        await storage.saveCode(placeholderId, state.generatedCode);
+        await fn();
+        return true;
       } catch (err) {
-        failPersistence('saveCode', err);
+        failPersistence(step, err);
         onResultComplete?.(placeholderId);
+        return false;
+      }
+    };
+
+    if (state.generatedCode) {
+      if (!(await persistStep('saveCode', () => storage.saveCode(placeholderId, state.generatedCode!)))) {
         return;
       }
     }
     if (Object.keys(state.liveFiles).length > 0) {
-      try {
-        await storage.saveFiles(placeholderId, state.liveFiles);
-      } catch (err) {
-        failPersistence('saveFiles', err);
-        onResultComplete?.(placeholderId);
+      if (!(await persistStep('saveFiles', () => storage.saveFiles(placeholderId, state.liveFiles)))) {
         return;
       }
     }
 
     for (const er of state.evaluationRounds) {
       if (er.files && Object.keys(er.files).length > 0) {
-        try {
-          await storage.saveRoundFiles(placeholderId, er.round, er.files);
-        } catch (err) {
-          failPersistence(`saveRoundFiles(round ${er.round})`, err);
-          onResultComplete?.(placeholderId);
+        if (
+          !(await persistStep(`saveRoundFiles(round ${er.round})`, () =>
+            storage.saveRoundFiles(placeholderId, er.round, er.files!),
+          ))
+        ) {
           return;
         }
       }
@@ -113,13 +125,7 @@ export function createPlaceholderFinalizeAfterStream(options: {
       const strategySnapshot = provenanceCtx.strategies[prompt.strategyId];
       if (strategySnapshot) {
         const roundsWithoutFileBodies =
-          state.evaluationRounds.length > 0
-            ? state.evaluationRounds.map((er) => {
-                const meta = { ...er };
-                delete meta.files;
-                return meta;
-              })
-            : [];
+          state.evaluationRounds.length > 0 ? stripEvalRoundFiles(state.evaluationRounds) : [];
         const provenance: Provenance = {
           hypothesisSnapshot: strategySnapshot,
           designSystemSnapshot: provenanceCtx.designSystemSnapshot,
@@ -136,24 +142,14 @@ export function createPlaceholderFinalizeAfterStream(options: {
               : undefined,
           checkpoint: state.agenticCheckpoint,
         };
-        try {
-          await storage.saveProvenance(placeholderId, provenance);
-        } catch (err) {
-          failPersistence('saveProvenance', err);
-          onResultComplete?.(placeholderId);
+        if (!(await persistStep('saveProvenance', () => storage.saveProvenance(placeholderId, provenance)))) {
           return;
         }
       }
     }
 
     const roundsMetaOnly =
-      state.evaluationRounds.length > 0
-        ? state.evaluationRounds.map((er) => {
-            const meta = { ...er };
-            delete meta.files;
-            return meta;
-          })
-        : undefined;
+      state.evaluationRounds.length > 0 ? stripEvalRoundFiles(state.evaluationRounds) : undefined;
 
     const lastEvalAggregate =
       state.evaluationRounds.length > 0

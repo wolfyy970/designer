@@ -1,7 +1,7 @@
 /**
  * Unified prompt body resolution — reads from skills, system prompt files, or code constants.
  *
- * Replaces the Langfuse-based `server/db/prompts.ts` `getPromptBody`.
+ * Replaces the legacy DB-backed `getPromptBody` path.
  * All prompt content is repo-backed: SKILL.md files, PROMPT.md files, or glue templates.
  */
 import type { PromptKey } from '../../src/lib/prompts/defaults.ts';

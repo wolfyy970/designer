@@ -8,19 +8,27 @@ import {
   LOG_PREVIEW_SNIPPET_MAX,
 } from '../lib/content-limits.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
-import type { AgentSessionEvent, AgentSession, AssistantMessage } from './pi-sdk/types.ts';
+import type { AgentSessionEvent, AgentSession } from './pi-sdk/types.ts';
 import { appendLlmCallResponse } from '../log-store.ts';
 import {
   AGENTIC_PROGRESS_WORKING,
   RUN_TRACE_LABEL_AGENT_WORKING,
 } from '../lib/agentic-user-copy.ts';
 import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
-import { extractPiToolPathFromArguments, parsePiToolExecutionArgs } from '../lib/pi-tool-args.ts';
+import { parsePiToolExecutionArgs } from '../lib/pi-tool-args.ts';
 import {
   serializePiToolArgsForTrace,
   serializePiToolResultForTrace,
 } from '../lib/pi-tool-trace.ts';
 import { stripProviderControlTokens } from '../lib/stream-sanitize.ts';
+import {
+  extractToolPathFromAssistantPartial,
+  parseCompactionDetails,
+  parsePiToolCallEnd,
+  parseUnknownArgsRecord,
+  toolMetaFromPartialNarrowed,
+  toolPathFromNarrowedToolCall,
+} from '../lib/pi-bridge-narrowing.ts';
 import type { AgentRunEvent } from './pi-agent-run-types.ts';
 import type { RunTraceEvent } from '../../src/types/provider.ts';
 
@@ -112,29 +120,6 @@ interface StreamingToolAcc {
   lastEmitAt: number;
 }
 
-function toolMetaFromPartial(
-  partial: AssistantMessage,
-  contentIndex: number,
-): { toolName: string; toolPath?: string } {
-  const slice = partial.content[contentIndex];
-  if (
-    slice &&
-    typeof slice === 'object' &&
-    'type' in slice &&
-    (slice as { type?: string }).type === 'toolCall'
-  ) {
-    const tc = slice as { name?: string; arguments?: Record<string, unknown> };
-    const toolName = typeof tc.name === 'string' && tc.name.length > 0 ? tc.name : 'tool';
-    const toolPath = extractPiToolPathFromArguments(tc.arguments);
-    return { toolName, toolPath };
-  }
-  return { toolName: 'tool' };
-}
-
-function toolPathFromToolCall(toolCall: { name?: string; arguments?: Record<string, unknown> }): string | undefined {
-  return extractPiToolPathFromArguments(toolCall.arguments);
-}
-
 /** text_delta and thinking_delta share append + emit behavior; only SSE event shape differs. */
 function handleAssistantTextStreamDelta(
   ctx: PiSessionBridgeContext,
@@ -209,7 +194,7 @@ function handleMessageUpdate(
       emitFirstTokenIfNeeded(ctx);
       bumpStreamActivity(ctx);
       const idx = msg.contentIndex;
-      const { toolName, toolPath } = toolMetaFromPartial(msg.partial, idx);
+      const { toolName, toolPath } = toolMetaFromPartialNarrowed(msg.partial, idx);
       const now = Date.now();
       streamingToolByIndex.set(idx, {
         toolName,
@@ -233,7 +218,7 @@ function handleMessageUpdate(
       const idx = msg.contentIndex;
       let acc = streamingToolByIndex.get(idx);
       if (!acc) {
-        const meta = toolMetaFromPartial(msg.partial, idx);
+        const meta = toolMetaFromPartialNarrowed(msg.partial, idx);
         const now = Date.now();
         acc = {
           toolName: meta.toolName,
@@ -243,7 +228,7 @@ function handleMessageUpdate(
         };
         streamingToolByIndex.set(idx, acc);
       }
-      const pathFromPartial = toolMetaFromPartial(msg.partial, idx).toolPath;
+      const pathFromPartial = extractToolPathFromAssistantPartial(msg.partial, idx);
       if (pathFromPartial && !acc.toolPath) acc.toolPath = pathFromPartial;
       acc.streamedChars += msg.delta.length;
       const t = Date.now();
@@ -263,10 +248,11 @@ function handleMessageUpdate(
       bumpStreamActivity(ctx);
       const idx = msg.contentIndex;
       const acc = streamingToolByIndex.get(idx);
-      const tc = msg.toolCall as { name?: string; arguments?: Record<string, unknown> };
+      const tcNarrowed = parsePiToolCallEnd(msg.toolCall);
+      const tc = tcNarrowed ?? {};
       const toolName =
-        (typeof tc?.name === 'string' && tc.name.length > 0 ? tc.name : acc?.toolName) ?? 'tool';
-      const toolPath = toolPathFromToolCall(tc) ?? acc?.toolPath;
+        (typeof tc.name === 'string' && tc.name.length > 0 ? tc.name : acc?.toolName) ?? 'tool';
+      const toolPath = toolPathFromNarrowedToolCall(tc) ?? acc?.toolPath;
       const streamedChars = acc?.streamedChars ?? 0;
       streamingToolByIndex.delete(idx);
       safeBridgeEmit(ctx, {
@@ -288,7 +274,7 @@ function handleToolExecutionStart(ctx: PiSessionBridgeContext, maps: BridgeMaps,
   const { toolStartMs } = maps;
   bumpStreamActivity(ctx);
   const tn = event.toolName;
-  const rawArgs = event.args as Record<string, unknown> | undefined;
+  const rawArgs = parseUnknownArgsRecord(event.args);
   const command = typeof rawArgs?.command === 'string' ? rawArgs.command : undefined;
   const { path, pattern } = parsePiToolExecutionArgs(tn, event.args);
   const reusedToolCallId = toolStartMs.has(event.toolCallId);
@@ -421,7 +407,7 @@ function handleCompactionEnd(
   if (result) {
     detailBits.push(`tokensBefore=${result.tokensBefore}`);
     detailBits.push(`summaryChars=${result.summary.length}`);
-    const d = result.details as { readFiles?: string[]; modifiedFiles?: string[] } | undefined;
+    const d = parseCompactionDetails(result.details);
     if (d?.modifiedFiles?.length) detailBits.push(`modifiedFiles=${d.modifiedFiles.length}`);
     if (d?.readFiles?.length) detailBits.push(`readFiles=${d.readFiles.length}`);
   }
@@ -453,43 +439,34 @@ export function subscribePiSessionBridge(session: AgentSession, ctx: PiSessionBr
   };
   syncPendingToolProbe(ctx, maps.toolStartMs);
   return session.subscribe((event: AgentSessionEvent) => {
-    let handled = false;
     switch (event.type) {
       case 'turn_start':
-        handled = true;
         handleTurnStart(ctx, maps);
         return;
       case 'message_update':
-        handled = true;
         handleMessageUpdate(ctx, maps, event);
         return;
       case 'tool_execution_start':
-        handled = true;
         handleToolExecutionStart(ctx, maps, event);
         return;
       case 'tool_execution_end':
-        handled = true;
         handleToolExecutionEnd(ctx, maps, event);
         return;
       case 'compaction_start':
-        handled = true;
         handleCompactionStart(ctx, event);
         return;
       case 'compaction_end':
-        handled = true;
         handleCompactionEnd(ctx, event);
         return;
-      // Pi session framing-only events (no app SSE); treat as handled so we don't spam dev logs.
+      // Pi session framing-only events (no app SSE); no-op.
       case 'message_start':
       case 'message_end':
       case 'turn_end':
-        handled = true;
         return;
       default:
-        break;
-    }
-    if (!handled && process.env.NODE_ENV !== 'production') {
-      console.debug('[bridge] unhandled Pi event type:', (event as { type?: string }).type);
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[bridge] unhandled Pi event type:', (event as { type?: string }).type);
+        }
     }
   });
 }

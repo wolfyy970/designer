@@ -7,7 +7,6 @@ import { buildAgenticSystemContext } from '../build-agentic-system-context.ts';
 
 vi.mock('../prompt-discovery.ts', () => ({
   getSystemPromptBody: vi.fn(async () => 'BASE'),
-  clearPromptCache: vi.fn(),
 }));
 
 vi.mock('../skill-discovery.ts', async (importOriginal) => {

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { parseLockdownEnvValue } from '../src/lib/lockdown-model.ts';
 
 // Must run before `export const env` reads `process.env`. ESM hoists `import`s above the body of
-// `server/dev.ts`, so `config()` there ran too late — Langfuse keys from `.env.local` were missed.
+// `server/dev.ts`, so `config()` there ran too late — keys from `.env.local` were missed.
 loadEnv({ path: '.env.local' });
 loadEnv({ path: '.env' });
 

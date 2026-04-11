@@ -13,8 +13,7 @@ import { agenticOrchestratorEventToSse } from '../lib/agentic-sse-map.ts';
 import { buildAgenticSystemContext } from '../lib/build-agentic-system-context.ts';
 import type { SessionType } from '../lib/skill-discovery.ts';
 import { runDesignAgentSession, type AgentRunEvent } from './pi-agent-service.ts';
-import type { LoadedSkillSummary } from '../lib/skill-schema.ts';
-import { makeRunTraceEvent } from '../lib/run-trace.ts';
+import { emitSkillsLoadedOrchestratorEvents } from '../lib/agentic-emit-helpers.ts';
 import { acquireAgenticSlotOrReject, releaseAgenticSlot } from '../lib/agentic-concurrency.ts';
 import { env } from '../env.ts';
 import type { SseStreamWriter } from './generate-execution.ts';
@@ -37,26 +36,6 @@ export interface TaskAgentResult {
   result: string;
   resultFile: string;
   files: Record<string, string>;
-}
-
-async function emitSkillsLoaded(
-  onStream: (e: Parameters<typeof agenticOrchestratorEventToSse>[0]) => Promise<void>,
-  skills: LoadedSkillSummary[],
-): Promise<void> {
-  const label =
-    skills.length === 0
-      ? 'No agent skills in catalog for this session'
-      : `Skills catalog (${skills.length}): ${skills.map((s) => s.name).join(', ')}`;
-  await onStream({
-    type: 'trace',
-    trace: makeRunTraceEvent({
-      kind: 'skills_loaded',
-      label,
-      phase: 'building',
-      status: skills.length === 0 ? 'info' : 'success',
-    }),
-  });
-  await onStream({ type: 'skills_loaded', skills });
 }
 
 /**
@@ -99,7 +78,7 @@ export async function executeTaskAgentStream(
     await write(SSE_EVENT_NAMES.phase, { phase: 'building' });
 
     const ctx = await buildAgenticSystemContext({ sessionType: input.sessionType });
-    await emitSkillsLoaded(writeEvent, ctx.loadedSkills);
+    await emitSkillsLoadedOrchestratorEvents(writeEvent, ctx.loadedSkills, 'building');
 
     const forward = async (e: AgentRunEvent): Promise<void> => {
       await writeEvent(e);
