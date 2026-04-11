@@ -198,7 +198,7 @@ export function DesignTokensKitchenSinkContent({ embedded = false }: { embedded?
             <div>
               <p className="label mb-1">Body / UI — font-sans</p>
               <p className="font-sans text-sm text-fg">
-                The quick brown fox jumps over the lazy dog — Space Grotesk / Inter stack.
+                The quick brown fox jumps over the lazy dog — Space Grotesk (Latin subset) + system fallback.
               </p>
               <p className="mt-1 text-nano text-fg-muted">
                 <span className="font-mono">--font-sans:</span> {fontSans}

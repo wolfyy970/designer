@@ -13,6 +13,7 @@ import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { executeTaskAgentStream } from '../services/task-agent-execution.ts';
 import { parseJsonLenient } from '../lib/parse-json-lenient.ts';
 import { extractLlmJsonObjectSegment } from '../lib/extract-llm-json.ts';
+import { incubationLooksLikeTemplateEcho } from '../lib/incubation-template-echo.ts';
 import { generateId, now } from '../../src/lib/utils.ts';
 
 const incubate = new Hono();
@@ -144,6 +145,11 @@ ${assembledSpec}`;
           generatedAt: now(),
           incubatorModel: body.modelId,
         };
+        if (incubationLooksLikeTemplateEcho(plan)) {
+          throw new Error(
+            'The model returned placeholder text instead of real hypotheses (often from copying a schema example). Try Generate again, or switch model.',
+          );
+        }
         await write(SSE_EVENT_NAMES.incubate_result, JSON.parse(JSON.stringify(plan)));
       }
     });

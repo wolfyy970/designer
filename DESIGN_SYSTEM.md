@@ -10,9 +10,9 @@
 
 | Role | `@theme` / utilities | Packages (`src/index.css` imports) |
 |------|----------------------|-------------------------------------|
-| **Body / UI** | `--font-sans` → default `font-sans` | `@fontsource-variable/space-grotesk` (primary); `@fontsource-variable/inter` remains loaded as fallback |
-| **Code** | `--font-mono` | `@fontsource-variable/jetbrains-mono` |
-| **Header wordmark** | `--font-logo` → `font-logo` (e.g. `CanvasHeader`) | `@fontsource/orbitron` weight **500** only |
+| **Body / UI** | `--font-sans` → default `font-sans` | Latin-only **Space Grotesk Variable** (`src/fonts/latin-subsets.css` → package `files/*.woff2`); system fonts fallback — **Inter not bundled** |
+| **Code** | `--font-mono` | Latin-only **JetBrains Mono Variable** (same `latin-subsets.css`) |
+| **Header wordmark** | `--font-logo` → `font-logo` (e.g. `CanvasHeader`) | `@fontsource/orbitron` **latin-500** (weight 500, Latin subset) |
 
 Do not list font file names elsewhere — change imports and `--font-*` in `src/index.css` once; this table stays semantic.
 
