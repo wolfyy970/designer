@@ -1,4 +1,5 @@
 import type { ReferenceImage } from './spec';
+import type { ThinkingLevel } from './workspace-domain';
 
 // ── Per-node data interfaces ────────────────────────────────────────
 // These provide type safety within node components, eliminating `as` casts.
@@ -65,5 +66,5 @@ export type ModelNodeData = NodeData<{
   title?: string;
   providerId?: string;
   modelId?: string;
-  thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high';
+  thinkingLevel?: ThinkingLevel;
 }>;

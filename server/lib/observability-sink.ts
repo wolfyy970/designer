@@ -8,8 +8,8 @@ import type { ObservabilityLine } from './observability-line.ts';
 import { TRACE_LABEL_MAX, TRACE_TOOL_FIELD_MAX } from './content-limits.ts';
 import { truncateUtf16WithSuffix } from './string-truncate.ts';
 
-/** Deep clone line and truncate LLM bodies / trace label for file only. */
-function observabilityLineForFile(line: ObservabilityLine): ObservabilityLine {
+/** Deep clone line and truncate LLM bodies / trace label for file only. Exported for unit tests. */
+export function observabilityLineForFile(line: ObservabilityLine): ObservabilityLine {
   if (line.type === 'incubate_parsed') {
     const max = env.LLM_LOG_MAX_BODY_CHARS;
     if (max <= 0) return line;

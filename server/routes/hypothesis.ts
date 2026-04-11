@@ -1,10 +1,8 @@
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { getProvider } from '../services/providers/registry.ts';
-import {
-  createWriteGate,
-  executeGenerateStreamSafe,
-} from '../services/generate-execution.ts';
+import { executeGenerateStreamSafe } from '../services/generate-execution.ts';
+import { createWriteGate } from '../lib/sse-write-gate.ts';
 import { GenerateStreamBodySchema } from '../lib/generate-stream-schema.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import { clampEvaluatorOptional } from '../lib/lockdown-model.ts';

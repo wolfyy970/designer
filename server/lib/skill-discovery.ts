@@ -117,25 +117,14 @@ type CatalogSkillXmlRow = {
 
 /**
  * Build `<available_skills>` XML (for embedding in the use_skill tool description).
- * `variant: 'tool'` — routing copy + use_skill naming; `system_prompt` is deprecated (catalog lives on tool only).
  */
-export function formatSkillsCatalogXml(
-  rows: CatalogSkillXmlRow[],
-  variant: 'tool' | 'system_prompt' = 'tool',
-): string {
+export function formatSkillsCatalogXml(rows: CatalogSkillXmlRow[]): string {
   if (rows.length === 0) return '';
-  const intro =
-    variant === 'tool'
-      ? [
-          "Load a skill's full instructions into context. Call before implementing work that matches a skill's description.",
-          'Parameter `name` is the skill key (directory name under skills/), same as the XML `key` attribute below.',
-          '',
-        ].join('\n')
-      : [
-          '  Skills are loaded only via the use_skill tool (host-backed catalog), not as files in the sandbox.',
-          '  Match entries to the hypothesis and milestones; call use_skill for skills you will apply this run.',
-          '',
-        ].join('\n');
+  const intro = [
+    "Load a skill's full instructions into context. Call before implementing work that matches a skill's description.",
+    'Parameter `name` is the skill key (directory name under skills/), same as the XML `key` attribute below.',
+    '',
+  ].join('\n');
   const lines = rows.map(
     (s) =>
       `  <skill key="${escapeXmlAttr(s.key)}" name="${escapeXmlAttr(s.name)}">${escapeXmlAttr(s.description)}</skill>`,
@@ -145,7 +134,7 @@ export function formatSkillsCatalogXml(
 
 /** Full tool description string for Pi use_skill (empty catalog still registers the tool). */
 export function buildUseSkillToolDescription(rows: CatalogSkillXmlRow[]): string {
-  const catalog = formatSkillsCatalogXml(rows, 'tool').trim();
+  const catalog = formatSkillsCatalogXml(rows).trim();
   if (!catalog) {
     return (
       'use_skill: No repo skills are configured for this session (or all are manual). ' +

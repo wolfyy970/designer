@@ -14,10 +14,6 @@ export function sandboxProjectAbsPath(rel: string): string {
   return `${SANDBOX_PROJECT_ROOT}/${trimmed}`;
 }
 
-function toSandboxPath(rel: string): string {
-  return sandboxProjectAbsPath(rel);
-}
-
 export interface AgentBashSandboxOptions {
   seedFiles?: Record<string, string>;
 }
@@ -29,7 +25,7 @@ export function buildSandboxSeedMaps(options: AgentBashSandboxOptions): Record<s
   const files: Record<string, string> = {};
   if (options.seedFiles) {
     for (const [path, content] of Object.entries(options.seedFiles)) {
-      files[toSandboxPath(path)] = content;
+      files[sandboxProjectAbsPath(path)] = content;
     }
   }
   return files;

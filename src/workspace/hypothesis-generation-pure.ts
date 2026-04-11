@@ -16,15 +16,13 @@ import type {
 } from '../types/workspace-domain';
 import type { WorkspaceSnapshotWire } from '../lib/workspace-snapshot-schema';
 import type { WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
+import type { WorkspaceGraphSnapshot } from './graph-queries.ts';
 import {
   LOCKDOWN_MODEL_ID,
   LOCKDOWN_PROVIDER_ID,
 } from '../lib/lockdown-model';
 
-export interface WorkspaceGraphSnapshot {
-  readonly nodes: readonly WorkspaceNode[];
-  readonly edges: readonly WorkspaceEdge[];
-}
+export type { WorkspaceGraphSnapshot };
 
 const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high'] as const satisfies readonly ThinkingLevel[];
 

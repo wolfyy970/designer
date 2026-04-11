@@ -4,9 +4,7 @@ import { runAgenticWithEvaluation } from './agentic-orchestrator.ts';
 import type { GenerateStreamBody } from '../lib/generate-stream-schema.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { agenticOrchestratorEventToSse } from '../lib/agentic-sse-map.ts';
-import { createWriteGate, type WriteGate } from '../lib/sse-write-gate.ts';
-
-export { createWriteGate };
+import type { WriteGate } from '../lib/sse-write-gate.ts';
 
 export interface SseStreamWriter {
   writeSSE: (opts: { data: string; event: string; id: string }) => void | Promise<void>;

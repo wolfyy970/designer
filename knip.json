@@ -13,5 +13,9 @@
     "api/**",
     "**/.vendor/**",
     "**/dist/**"
+  ],
+  "ignoreDependencies": [
+    "@fontsource-variable/jetbrains-mono",
+    "@fontsource-variable/space-grotesk"
   ]
 }

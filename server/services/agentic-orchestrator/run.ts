@@ -82,7 +82,6 @@ async function runAgenticWithEvaluationImpl(
           runId: mergedOptions.build.correlationId ?? randomUUID(),
           compiledPrompt: mergedOptions.compiledPrompt,
           evaluationContext: mergedOptions.evaluationContext ?? undefined,
-          getPromptBody,
           rounds: result.rounds,
           revisionPromptByEvalRound,
           stopReason: result.checkpoint.stopReason ?? 'unknown',

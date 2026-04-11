@@ -4,7 +4,7 @@ import type { AgenticOrchestratorOptions } from './types.ts';
 import { emitOrchestratorEvent, type StreamEmissionContext } from './emit.ts';
 
 /** Omit server-only diagnostics from snapshots sent to the browser (SSE). */
-export function stripEvaluationSnapshotForStream(s: EvaluationRoundSnapshot): EvaluationRoundSnapshot {
+function stripEvaluationSnapshotForStream(s: EvaluationRoundSnapshot): EvaluationRoundSnapshot {
   const stripWorker = (w?: EvaluatorWorkerReport): EvaluatorWorkerReport | undefined => {
     if (!w) return w;
     const { rawTrace: _rt, ...rest } = w;

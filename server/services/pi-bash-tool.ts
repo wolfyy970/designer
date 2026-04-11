@@ -9,6 +9,7 @@ import type { Bash } from 'just-bash';
 import type { ExtensionContext, ToolDefinition } from './pi-sdk/types.ts';
 import { BASH_TOOL_MAX_CHARS } from '../lib/content-limits.ts';
 import { SANDBOX_PROJECT_ROOT, snapshotDesignFiles } from './agent-bash-sandbox.ts';
+import { piToolParams } from './pi-tool-params.ts';
 
 const bashParams = Type.Object({
   command: Type.String({
@@ -31,7 +32,7 @@ export function createSandboxBashTool(
       'Use bash for multi-step text pipelines or utilities when no dedicated tool fits.',
     parameters: bashParams,
     async execute(_toolCallId, params, signal, _onUpdate, _ctx: ExtensionContext) {
-      const { command } = params as { command: string };
+      const { command } = piToolParams<{ command: string }>(params);
       const before = await snapshotDesignFiles(bash);
       const result = await bash.exec(command, { signal: signal ?? undefined });
       const after = await snapshotDesignFiles(bash);

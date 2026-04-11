@@ -2,6 +2,8 @@
 
 **Read the [North Star](PRODUCT.md#north-star) first.** Every decision in this repo serves that ambition.
 
+**Picking up after a break (humans and AI):** Prior chats are not retained—treat **this repository** as the source of truth. Start with **[AGENTS.md](AGENTS.md)** (commands and gotchas), **[EXPLORATION_LOG.md](EXPLORATION_LOG.md)** (what we meant to explore next, risk-ordered seams, recent notes), then **[ARCHITECTURE.md](ARCHITECTURE.md)** for depth. Optional: `git log -10 --oneline` for the latest merged work. When you finish a meaningful pass on a risky area, add **one line** to the log’s session notes or update a pathway row so the next person is not flying blind.
+
 A design brief feeds the **Incubator**, which produces hypothesis strategies that systematically explore the solution space. Each hypothesis **Design** run uses the **agentic** pipeline (multi-file Pi sandbox). By default that is a **single** agent build with **no** evaluator. Turn **Auto-improve** on the node to run **evaluation** and optional **revision** loops (round cap and target score; rubric weights under Settings). Everything connects on a visual node-graph canvas.
 
 ## Quick Start
@@ -82,6 +84,7 @@ The header also opens **Settings** (General preferences). In **development**, a 
 | [ARCHITECTURE.md](ARCHITECTURE.md)               | Technical reference: routes, stores, data flow, Pi adapter boundary, **Pi sandbox** (layers, tool inventory, edit cascade)                                                                            |
 | [meta-harness/README.md](meta-harness/README.md) | Optional **meta-harness** CLI (separate from the designer app): benchmarks, proposer ([RUNBOOK.md](meta-harness/RUNBOOK.md), [VERSIONING.md](meta-harness/VERSIONING.md))                             |
 | [DOCUMENTATION.md](DOCUMENTATION.md)             | How this doc set is organized (hub = this README)                                                                                                                                                     |
+| [EXPLORATION_LOG.md](EXPLORATION_LOG.md)         | Pathways to explore across sessions (risk-ordered seams, status, short notes for future contributors)                                                                                                  |
 
 
 ## Deploying (Vercel)

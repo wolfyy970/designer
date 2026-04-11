@@ -37,7 +37,6 @@ export async function writeAgenticEvalRunLog(input: {
   runId: string;
   compiledPrompt: string;
   evaluationContext?: { hypothesis?: string; strategyName?: string };
-  getPromptBody: (key: PromptKey) => Promise<string>;
   rounds: EvaluationRoundSnapshot[];
   revisionPromptByEvalRound: Map<number, string>;
   stopReason: string;

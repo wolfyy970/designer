@@ -47,15 +47,16 @@ export const SPEC_SECTIONS: SpecSectionMeta[] = [
 ];
 
 // Default providers (incubator / hypothesis workspace fallback)
+const viteEnv = (import.meta as unknown as { env: Record<string, string | undefined> }).env;
 export const DEFAULT_INCUBATOR_PROVIDER =
-  import.meta.env.VITE_DEFAULT_INCUBATOR_PROVIDER ||
-  import.meta.env.VITE_DEFAULT_COMPILER_PROVIDER ||
+  viteEnv.VITE_DEFAULT_INCUBATOR_PROVIDER ||
+  viteEnv.VITE_DEFAULT_COMPILER_PROVIDER ||
   'openrouter';
 /** @deprecated Use {@link DEFAULT_INCUBATOR_PROVIDER} */
 export const DEFAULT_COMPILER_PROVIDER = DEFAULT_INCUBATOR_PROVIDER;
 
 // Default model for auto-created Model nodes (OpenRouter slug; matches lockdown pin)
-export const DEFAULT_MODEL_ID = import.meta.env.VITE_DEFAULT_MODEL_ID || LOCKDOWN_MODEL_ID;
+export const DEFAULT_MODEL_ID = viteEnv.VITE_DEFAULT_MODEL_ID || LOCKDOWN_MODEL_ID;
 
 /**
  * Default node data for each auto-created prerequisite type.

@@ -82,14 +82,11 @@ describe('formatSkillsCatalogXml', () => {
     expect(formatSkillsCatalogXml([])).toBe('');
   });
 
-  it('tool variant includes Load guidance and skill keys (no sandbox paths)', () => {
-    const xml = formatSkillsCatalogXml(
-      [
-        { key: 'a', name: 'A', description: 'Alpha' },
-        { key: 'b', name: 'B', description: 'Beta' },
-      ],
-      'tool',
-    );
+  it('includes Load guidance and skill keys (no sandbox paths)', () => {
+    const xml = formatSkillsCatalogXml([
+      { key: 'a', name: 'A', description: 'Alpha' },
+      { key: 'b', name: 'B', description: 'Beta' },
+    ]);
     expect(xml).toContain('Load');
     expect(xml).toContain('key="a"');
     expect(xml).toContain('key="b"');

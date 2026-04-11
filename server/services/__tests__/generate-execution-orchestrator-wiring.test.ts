@@ -10,7 +10,8 @@ vi.mock('../agentic-orchestrator.ts', () => ({
   runAgenticWithEvaluation: mocks.runAgenticWithEvaluation,
 }));
 
-import { createWriteGate, executeGenerateStreamSafe } from '../generate-execution.ts';
+import { createWriteGate } from '../../lib/sse-write-gate.ts';
+import { executeGenerateStreamSafe } from '../generate-execution.ts';
 
 const baseBody: GenerateStreamBody = {
   prompt: 'x',

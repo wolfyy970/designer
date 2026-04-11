@@ -4,6 +4,10 @@
 
 **Claude Code** still discovers `**CLAUDE.md`** at the repo root first; that file is a **stub** pointing here. **Do not confuse** this document with the `**agents-md-file`** skill: that skill’s body is for the Pi agent and is loaded via **`use_skill`** (not this repo-root file).
 
+## Session continuity
+
+**There is no persistent memory across assistant sessions**—only files and git history. On each new thread, read **[EXPLORATION_LOG.md](EXPLORATION_LOG.md)** first for pathway status and recent handoff notes, then this file and **[ARCHITECTURE.md](ARCHITECTURE.md)**. After you complete work on a seam (or discover a new gap), update **[EXPLORATION_LOG.md](EXPLORATION_LOG.md)** in the same commit or immediately after—one short note beats a long chat summary.
+
 ## North Star
 
 Read [PRODUCT.md § North Star](PRODUCT.md#north-star) before making any design or architecture decision. If a change does not serve that ambition, question whether it belongs.
@@ -41,6 +45,8 @@ pnpm vitest run src/hooks/__tests__/resolve-evaluator-settings.test.ts  # single
 Vitest excludes `server/services/__tests__/browser-playwright-evaluator.test.ts` via `vite.config.ts` so the default suite stays hermetic; run **`pnpm test:playwright-eval`** (or `vitest run -c vitest.playwright.config.ts …` on that file) when changing Playwright merge logic. Pi virtual FS tools are covered in `server/services/pi-sdk/__tests__/virtual-tools.test.ts`.
 
 ## Architecture (quick reference)
+
+**Pathway backlog:** [EXPLORATION_LOG.md](EXPLORATION_LOG.md) — table + session notes; update after a pass (see **Session continuity** above).
 
 **Full technical reference:** [ARCHITECTURE.md](ARCHITECTURE.md) — routes, server modules, client stores, canvas, generation (agentic Pi sandbox + optional auto-improve loop), preview URLs, Pi NPM boundary. **Pi design sandbox** (three-layer contract, **tool inventory** table, edit cascade / `edit-match-cascade.ts`): [ARCHITECTURE.md § Pi design sandbox](ARCHITECTURE.md#pi-design-sandbox-three-layer-contract).
 

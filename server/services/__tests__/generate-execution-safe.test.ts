@@ -6,7 +6,8 @@ vi.mock('../agentic-orchestrator.ts', () => ({
   runAgenticWithEvaluation: vi.fn(() => Promise.reject(new Error('forced orchestrator failure'))),
 }));
 
-import { createWriteGate, executeGenerateStreamSafe } from '../generate-execution.ts';
+import { createWriteGate } from '../../lib/sse-write-gate.ts';
+import { executeGenerateStreamSafe } from '../generate-execution.ts';
 
 const baseBody: GenerateStreamBody = {
   prompt: 'x',
