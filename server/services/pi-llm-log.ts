@@ -10,7 +10,7 @@ import {
   type UserMessage,
   type ToolResultMessage,
   piStreamCompletionMaxTokens,
-} from '../services/pi-sdk/index.ts';
+} from './pi-sdk/index.ts';
 
 /** Pi agent `streamFn` hook: `streamSimple` arity, stream or Promise of stream. */
 export type PiAgentStreamFn = (
@@ -25,9 +25,9 @@ import {
   logLlmCall,
 } from '../log-store.ts';
 import { providerLogFields } from './llm-log-metadata.ts';
-import { stripProviderControlTokens } from './stream-sanitize.ts';
+import { stripProviderControlTokens } from '../lib/stream-sanitize.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
-import { mergeStreamedAndFormattedAssistantResponse } from './merge-streamed-formatted-assistant.ts';
+import { mergeStreamedAndFormattedAssistantResponse } from '../lib/merge-streamed-formatted-assistant.ts';
 
 /** `phase` on LLM log rows for Pi agent turns (see `wrapPiStreamWithLogging`). */
 export const PI_LLM_LOG_PHASE = {

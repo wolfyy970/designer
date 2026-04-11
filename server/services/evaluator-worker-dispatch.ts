@@ -11,7 +11,7 @@ import { evaluatorRubricIdZodSchema } from '../../src/lib/evaluator-rubric-zod.t
 import { env } from '../env.ts';
 import { getPromptBody } from '../lib/prompt-resolution.ts';
 import { getProvider } from './providers/registry.ts';
-import { loggedGenerateChat, type LlmLogContext } from '../lib/llm-call-logger.ts';
+import { loggedGenerateChat, type LlmLogContext } from './llm-call-logger.ts';
 import { runBrowserQA } from './browser-qa-evaluator.ts';
 import { mergePreflightWithPlaywright, runBrowserPlaywrightEval } from './browser-playwright-evaluator.ts';
 import { parseJsonLenient } from '../lib/parse-json-lenient.ts';

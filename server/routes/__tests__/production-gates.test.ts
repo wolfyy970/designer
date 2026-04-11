@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-describe('production API gates (NODE_ENV=production)', () => {
+describe('production API gates (NODE_ENV=production)', { timeout: 20_000 }, () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.resetModules();

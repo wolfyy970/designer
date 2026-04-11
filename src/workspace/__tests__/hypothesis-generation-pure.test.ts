@@ -129,6 +129,50 @@ describe('hypothesis-generation-pure', () => {
     ]);
   });
 
+  it('listIncomingModelCredentialsFromGraph uses only the first model edge when several exist', () => {
+    const snapshot = {
+      nodes: [
+        {
+          id: 'm1',
+          type: NODE_TYPES.MODEL,
+          position: { x: 0, y: 0 },
+          data: { modelId: 'first', providerId: 'openrouter' },
+        },
+        {
+          id: 'm2',
+          type: NODE_TYPES.MODEL,
+          position: { x: 0, y: 0 },
+          data: { modelId: 'second', providerId: 'openrouter' },
+        },
+        {
+          id: 'h1',
+          type: NODE_TYPES.HYPOTHESIS,
+          position: { x: 0, y: 0 },
+          data: {},
+        },
+      ],
+      edges: [
+        {
+          id: 'e1',
+          source: 'm1',
+          target: 'h1',
+          type: 'dataFlow',
+          data: { status: EDGE_STATUS.IDLE },
+        },
+        {
+          id: 'e2',
+          source: 'm2',
+          target: 'h1',
+          type: 'dataFlow',
+          data: { status: EDGE_STATUS.IDLE },
+        },
+      ],
+    };
+    expect(listIncomingModelCredentialsFromGraph('h1', snapshot, 'openrouter')).toEqual([
+      { providerId: 'openrouter', modelId: 'first', thinkingLevel: 'minimal' },
+    ]);
+  });
+
   it('buildHypothesisGenerationContextFromInputs uses domain records when provided', () => {
     const ctx = buildHypothesisGenerationContextFromInputs({
       hypothesisNodeId: 'hyp1',

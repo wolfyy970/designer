@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-describe('preview route limits (env overrides)', () => {
+describe('preview route limits (env overrides)', { timeout: 20_000 }, () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.resetModules();

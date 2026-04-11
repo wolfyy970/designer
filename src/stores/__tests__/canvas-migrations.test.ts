@@ -701,3 +701,24 @@ describe('v23 → v24: remove dead showGrid flag', () => {
     expect(result).not.toHaveProperty('showGrid');
   });
 });
+
+describe('v24 → v25: single model edge per hypothesis', () => {
+  it('keeps the first model→hypothesis edge and drops later duplicates', () => {
+    const state = {
+      nodes: [
+        makeNode('m1', 'model'),
+        makeNode('m2', 'model'),
+        makeNode('h1', 'hypothesis'),
+      ],
+      edges: [
+        makeEdge('e1', 'm1', 'h1'),
+        makeEdge('e2', 'm2', 'h1'),
+      ],
+    };
+    const result = migrateCanvasState(state, 24);
+    const edges = result.edges as Array<Record<string, unknown>>;
+    expect(edges).toHaveLength(1);
+    expect(edges[0].source).toBe('m1');
+    expect(edges[0].target).toBe('h1');
+  });
+});

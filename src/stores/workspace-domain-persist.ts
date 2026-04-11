@@ -22,7 +22,7 @@ export const workspaceDomainPersistOptions = {
     designSystems: state.designSystems,
     previewSlots: state.previewSlots,
   }),
-  version: 8,
+  version: 9,
   migrate: (persisted: unknown, fromVersion: number) => {
     let p = persisted as Record<string, unknown>;
     if (fromVersion < 2) {
@@ -180,6 +180,17 @@ export const workspaceDomainPersistOptions = {
           revisionEnabled,
           placeholder: Boolean(copy.placeholder),
         } as DomainHypothesis;
+      }
+      p = { ...p, hypotheses };
+    }
+    if (fromVersion < 9) {
+      const rawHyp = (p.hypotheses as Record<string, DomainHypothesis>) ?? {};
+      const hypotheses: Record<string, DomainHypothesis> = {};
+      for (const [hid, h] of Object.entries(rawHyp)) {
+        hypotheses[hid] = {
+          ...h,
+          modelNodeIds: h.modelNodeIds.slice(0, 1),
+        };
       }
       p = { ...p, hypotheses };
     }

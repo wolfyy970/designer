@@ -1,14 +1,19 @@
-/**
- * Shared SSE emission helpers for agentic orchestration (design pipeline + task-agent routes).
- */
 import type { AgenticPhase } from '../../src/types/evaluation.ts';
-import { makeRunTraceEvent } from './run-trace.ts';
+import type { RunTraceEvent } from '../../src/types/provider.ts';
 import type { LoadedSkillSummary } from './skill-schema.ts';
-import type { AgenticOrchestratorEvent } from '../services/agentic-orchestrator.ts';
+import { makeRunTraceEvent } from './run-trace.ts';
 
-/** Emits `skills_loaded` trace + `skills_loaded` event (same sequence as Pi session start). */
-export async function emitSkillsLoadedOrchestratorEvents(
-  emit: (e: AgenticOrchestratorEvent) => Promise<void>,
+/** Trace + `skills_loaded` pair emitted at the start of each Pi session round. */
+export type SkillsLoadedStreamEvent =
+  | { type: 'trace'; trace: RunTraceEvent }
+  | { type: 'skills_loaded'; skills: LoadedSkillSummary[] };
+
+/**
+ * Emit the standard skills catalog trace row and `skills_loaded` SSE payload.
+ * Used by the agentic orchestrator and task-agent SSE paths.
+ */
+export async function emitSkillsLoadedEvents(
+  emit: (e: SkillsLoadedStreamEvent) => void | Promise<void>,
   skills: LoadedSkillSummary[],
   tracePhase: AgenticPhase,
 ): Promise<void> {

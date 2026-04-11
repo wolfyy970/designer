@@ -8,15 +8,21 @@ type ParseJsonOptions = {
 };
 
 /**
- * `await c.req.json()` + Zod `safeParse`; on failure returns the same 400 shape as route handlers:
- * `{ error: 'Invalid request', details: flatten() }`.
+ * `await c.req.json()` + Zod `safeParse`.
+ * - Malformed JSON → 400 `{ error: 'Invalid JSON body' }`.
+ * - Schema failure → 400 `{ error: 'Invalid request', details: flatten() }`.
  */
 export async function parseRequestJson<T extends ZodType>(
   c: Context,
   schema: T,
   options?: ParseJsonOptions,
 ): Promise<{ ok: true; data: z.infer<T> } | { ok: false; response: Response }> {
-  const raw: unknown = await c.req.json();
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    return { ok: false, response: apiJsonError(c, 400, 'Invalid JSON body') };
+  }
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     const details = parsed.error.flatten();

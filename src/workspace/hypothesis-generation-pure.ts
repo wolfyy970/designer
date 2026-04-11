@@ -117,6 +117,7 @@ export function listIncomingModelCredentialsFromGraph(
     const providerId = md.providerId || defaultIncubatorProvider;
     const thinkingLevel = (isThinkingLevel(md.thinkingLevel) ? md.thinkingLevel : undefined) ?? 'minimal';
     out.push({ providerId, modelId: md.modelId, thinkingLevel });
+    break;
   }
   return out;
 }
@@ -175,7 +176,7 @@ function listModelCredentialsFromDomain(
 ): ModelCredential[] {
   if (!hypothesis) return [];
   const out: ModelCredential[] = [];
-  for (const mid of hypothesis.modelNodeIds) {
+  for (const mid of hypothesis.modelNodeIds.slice(0, 1)) {
     const p = modelProfiles[mid];
     if (!p?.modelId) continue;
     out.push({

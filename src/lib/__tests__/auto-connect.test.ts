@@ -158,12 +158,12 @@ describe('buildModelEdgesFromParent', () => {
     expect(result[1]).toMatchObject({ source: 'm1', target: 'h2' });
   });
 
-  it('propagates multiple models connected to compiler', () => {
+  it('propagates only the first model when multiple are connected to the incubator', () => {
     const nodes = [makeNode('m1', 'model'), makeNode('m2', 'model'), makeNode('c1', 'incubator')];
     const edges = [makeEdge('m1', 'c1'), makeEdge('m2', 'c1')];
     const result = buildModelEdgesFromParent('c1', ['h1'], nodes, edges);
-    expect(result).toHaveLength(2);
-    expect(result.map((e) => e.source).sort()).toEqual(['m1', 'm2']);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ source: 'm1', target: 'h1' });
   });
 
   it('falls back to first canvas model when compiler has no model', () => {

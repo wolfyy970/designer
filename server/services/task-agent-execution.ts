@@ -13,7 +13,7 @@ import { agenticOrchestratorEventToSse } from '../lib/agentic-sse-map.ts';
 import { buildAgenticSystemContext } from '../lib/build-agentic-system-context.ts';
 import type { SessionType } from '../lib/skill-discovery.ts';
 import { runDesignAgentSession, type AgentRunEvent } from './pi-agent-service.ts';
-import { emitSkillsLoadedOrchestratorEvents } from '../lib/agentic-emit-helpers.ts';
+import { emitSkillsLoadedEvents } from '../lib/agentic-skills-emission.ts';
 import { acquireAgenticSlotOrReject, releaseAgenticSlot } from '../lib/agentic-concurrency.ts';
 import { env } from '../env.ts';
 import type { SseStreamWriter } from './generate-execution.ts';
@@ -78,7 +78,7 @@ export async function executeTaskAgentStream(
     await write(SSE_EVENT_NAMES.phase, { phase: 'building' });
 
     const ctx = await buildAgenticSystemContext({ sessionType: input.sessionType });
-    await emitSkillsLoadedOrchestratorEvents(writeEvent, ctx.loadedSkills, 'building');
+    await emitSkillsLoadedEvents(writeEvent, ctx.loadedSkills, 'building');
 
     const forward = async (e: AgentRunEvent): Promise<void> => {
       await writeEvent(e);

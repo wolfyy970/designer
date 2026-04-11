@@ -3,17 +3,16 @@ import { streamSSE } from 'hono/streaming';
 import { env } from '../env.ts';
 import { GenerateStreamBodySchema } from '../lib/generate-stream-schema.ts';
 import { executeGenerateStreamSafe } from '../services/generate-execution.ts';
-import { apiJsonError } from '../lib/api-json-error.ts';
+import { parseRequestJson } from '../lib/parse-request.ts';
 import { clampEvaluatorOptional, clampProviderModel } from '../lib/lockdown-model.ts';
 
 const generate = new Hono();
 
 generate.post('/', async (c) => {
-  const raw = await c.req.json();
-  const parsed = GenerateStreamBodySchema.safeParse(raw);
-  if (!parsed.success) {
-    return apiJsonError(c, 400, 'Invalid request', parsed.error.flatten());
-  }
+  const parsed = await parseRequestJson(c, GenerateStreamBodySchema, {
+    devWarnLabel: '[generate]',
+  });
+  if (!parsed.ok) return parsed.response;
   const m = clampProviderModel(parsed.data.providerId, parsed.data.modelId);
   const ev = clampEvaluatorOptional(parsed.data.evaluatorProviderId, parsed.data.evaluatorModelId);
   const body = { ...parsed.data, ...ev, providerId: m.providerId, modelId: m.modelId };

@@ -1,7 +1,6 @@
-import { v4 as uuidv4 } from 'uuid';
-
+/** Stable random id for client-side entities (matches server `crypto.randomUUID()` usage). */
 export function generateId(): string {
-  return uuidv4();
+  return crypto.randomUUID();
 }
 
 export function now(): string {

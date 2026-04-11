@@ -1,7 +1,7 @@
 import { isInputGhostTargetType, type InputGhostTargetType } from '../types/canvas-data';
 import { DEFAULT_COL_GAP } from '../lib/canvas-layout';
 import { STORAGE_KEYS } from '../lib/storage-keys';
-import { EDGE_TYPES, EDGE_STATUS } from '../constants/canvas';
+import { EDGE_TYPES, EDGE_STATUS, NODE_TYPES } from '../constants/canvas';
 
 /** Safely read and parse a localStorage JSON entry. Returns null on any failure. */
 function readLocalStorageJson(key: string): unknown {
@@ -532,6 +532,32 @@ function migrateV23ToV24(s: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
+/** v24 → v25: at most one model→hypothesis edge per hypothesis (keep first in edge order). */
+function migrateV24ToV25(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
+  const nodeById = new Map(nodes.map((n) => [n.id as string, n]));
+  const edges = (s.edges as Array<Record<string, unknown>>) ?? [];
+  const hypHasModel = new Set<string>();
+  const nextEdges: Array<Record<string, unknown>> = [];
+  for (const e of edges) {
+    const src = e.source as string;
+    const tgt = e.target as string;
+    const srcNode = nodeById.get(src);
+    const tgtNode = nodeById.get(tgt);
+    if (
+      srcNode &&
+      tgtNode &&
+      srcNode.type === NODE_TYPES.MODEL &&
+      tgtNode.type === NODE_TYPES.HYPOTHESIS
+    ) {
+      if (hypHasModel.has(tgt)) continue;
+      hypHasModel.add(tgt);
+    }
+    nextEdges.push(e);
+  }
+  return { ...s, edges: nextEdges };
+}
+
 // ── Top-level migration runner ────────────────────────────────────────
 
 /**
@@ -570,6 +596,7 @@ export function migrateCanvasState(
   if (fromVersion < 22) s = migrateV21ToV22(s);
   if (fromVersion < 23) s = migrateV22ToV23(s);
   if (fromVersion < 24) s = migrateV23ToV24(s);
+  if (fromVersion < 25) s = migrateV24ToV25(s);
 
   return s;
 }

@@ -9,12 +9,12 @@ import {
   workspaceSnapshotWireToGraph,
   type HypothesisGenerationContext,
 } from '../../src/workspace/hypothesis-generation-pure.ts';
-import { incubateHypothesisPrompts } from '../services/incubator.ts';
-import { getPromptBody } from './prompt-resolution.ts';
+import { incubateHypothesisPrompts } from './incubator.ts';
+import { getPromptBody } from '../lib/prompt-resolution.ts';
 import { generateId, now } from '../../src/lib/utils.ts';
 
-import { applyLockdownToHypothesisContext } from './lockdown-model.ts';
-import type { HypothesisWorkspaceCoreInput } from './hypothesis-schemas.ts';
+import { applyLockdownToHypothesisContext } from '../lib/lockdown-model.ts';
+import type { HypothesisWorkspaceCoreInput } from '../lib/hypothesis-schemas.ts';
 
 export interface HypothesisWorkspaceBundle {
   readonly ctx: HypothesisGenerationContext;

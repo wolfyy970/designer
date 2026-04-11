@@ -12,8 +12,8 @@ import type { RunTraceEvent, TodoItem } from '../../src/types/provider.ts';
 import { env } from '../env.ts';
 import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
-import { wrapPiStreamWithLogging, PI_LLM_LOG_PHASE } from '../lib/pi-llm-log.ts';
-import { getProviderModelContextWindow } from '../lib/provider-model-context.ts';
+import { wrapPiStreamWithLogging, PI_LLM_LOG_PHASE } from './pi-llm-log.ts';
+import { getProviderModelContextWindow } from './provider-model-context.ts';
 import { buildModel } from './pi-model.ts';
 import {
   createAgentBashSandbox,

@@ -123,8 +123,26 @@ export const createGraphSlice: StateCreator<
 
   onConnect: (connection) => {
     if (!get().isValidConnection(connection)) return;
+    const nodes = get().nodes;
+    const sourceNode = nodes.find((n) => n.id === connection.source);
+    const targetNode = nodes.find((n) => n.id === connection.target);
+    if (!sourceNode || !targetNode) return;
+
+    let edges = [...get().edges];
+
+    if (sourceNode.type === NODE_TYPES.MODEL && targetNode.type === NODE_TYPES.HYPOTHESIS) {
+      const removed = edges.filter((e) => {
+        if (e.target !== connection.target) return false;
+        return nodes.find((n) => n.id === e.source)?.type === NODE_TYPES.MODEL;
+      });
+      for (const e of removed) {
+        syncDomainForRemovedEdge(e, nodes);
+      }
+      edges = edges.filter((e) => !removed.some((r) => r.id === e.id));
+    }
+
     const edgeId = buildEdgeId(connection.source!, connection.target!);
-    if (get().edges.some((e) => e.id === edgeId)) return;
+    if (edges.some((e) => e.id === edgeId)) return;
     const newEdge: WorkspaceEdge = {
       id: edgeId,
       source: connection.source!,
@@ -132,7 +150,7 @@ export const createGraphSlice: StateCreator<
       type: EDGE_TYPES.DATA_FLOW,
       data: { status: EDGE_STATUS.IDLE },
     };
-    const edges = [...get().edges, newEdge];
+    edges = [...edges, newEdge];
     set({ edges });
     syncDomainForNewEdge(newEdge, get().nodes, edges);
   },

@@ -134,7 +134,8 @@ function findModelsConnectedTo(
 
 /**
  * Build model→child edges scoped to a specific parent.
- * Propagates the parent's model connections to the child nodes.
+ * Uses the **first** model wired to the parent only — a hypothesis (or design system)
+ * may only have one model edge; incubators may still have multiple models upstream.
  * Falls back to the first model on the canvas if the parent has none.
  */
 export function buildModelEdgesFromParent(
@@ -148,6 +149,8 @@ export function buildModelEdgesFromParent(
   if (models.length === 0) {
     const firstModel = nodes.find((n) => n.type === NODE_TYPES.MODEL);
     if (firstModel) models = [firstModel];
+  } else {
+    models = [models[0]!];
   }
 
   const result: AutoEdge[] = [];

@@ -1,7 +1,7 @@
 /**
  * Cached OpenRouter `/models` lookup so agent + HTTP paths can align budgets with each model's context.
  */
-import { OpenRouterGenerationProvider } from '../services/providers/openrouter.ts';
+import { OpenRouterGenerationProvider } from './providers/openrouter.ts';
 
 const CACHE_TTL_MS = 60_000;
 

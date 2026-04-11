@@ -161,8 +161,6 @@
   --min-height-hypothesis-shell: 200px;
   --min-height-input-textarea: 240px;
   --min-height-prompt-textarea: 200px;
-  /** Unified diff gutter column (leading +/− / space) */
-  --width-prompt-diff-gutter: 2rem;
   --min-height-prompt-editor: 420px;
   --min-height-hypothesis-textarea: 176px;
   --max-height-eval-scorecard: 180px;

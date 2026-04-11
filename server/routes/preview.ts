@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import { z } from 'zod';
 import {
   createPreviewSession,
   deletePreviewSession,
@@ -10,63 +9,26 @@ import {
 import { mimeForPath } from '../lib/preview-mime.ts';
 import { encodeVirtualPathForUrl, resolvePreviewEntryPath } from '../../src/lib/preview-entry.ts';
 import { apiJsonError } from '../lib/api-json-error.ts';
-import { env } from '../env.ts';
-import { approximatePreviewFilesUtf8Bytes } from '../lib/preview-payload-bytes.ts';
-
-const bodySchema = z.object({
-  files: z.record(z.string(), z.string()),
-});
+import { parsePreviewSessionFiles } from '../lib/preview-session-files-request.ts';
 
 const preview = new Hono();
 
 /** POST body — register a virtual tree; returns opaque id + default entry path. */
 preview.post('/sessions', async (c) => {
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
-    return apiJsonError(c, 400, 'Invalid JSON body');
-  }
-  const parsed = bodySchema.safeParse(body);
-  if (!parsed.success) {
-    return apiJsonError(c, 400, 'Expected { files: Record<string, string> }');
-  }
-  const { files } = parsed.data;
-  if (Object.keys(files).length === 0) {
-    return apiJsonError(c, 400, 'files must be non-empty');
-  }
-  if (approximatePreviewFilesUtf8Bytes(files) > env.MAX_PREVIEW_PAYLOAD_BYTES) {
-    return apiJsonError(c, 413, 'Preview files payload too large');
-  }
+  const parsed = await parsePreviewSessionFiles(c);
+  if (!parsed.ok) return parsed.response;
+  const { files } = parsed;
   const id = createPreviewSession(files);
   const entry = resolvePreviewEntryPath(files);
   return c.json({ id, entry });
 });
 
-const putBodySchema = z.object({
-  files: z.record(z.string(), z.string()),
-});
-
 /** Replace files for an existing session (live updates). */
 preview.put('/sessions/:id', async (c) => {
   const id = c.req.param('id');
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
-    return apiJsonError(c, 400, 'Invalid JSON body');
-  }
-  const parsed = putBodySchema.safeParse(body);
-  if (!parsed.success) {
-    return apiJsonError(c, 400, 'Expected { files: Record<string, string> }');
-  }
-  const { files } = parsed.data;
-  if (Object.keys(files).length === 0) {
-    return apiJsonError(c, 400, 'files must be non-empty');
-  }
-  if (approximatePreviewFilesUtf8Bytes(files) > env.MAX_PREVIEW_PAYLOAD_BYTES) {
-    return apiJsonError(c, 413, 'Preview files payload too large');
-  }
+  const parsed = await parsePreviewSessionFiles(c);
+  if (!parsed.ok) return parsed.response;
+  const { files } = parsed;
   const ok = replacePreviewSessionFiles(id, files);
   if (!ok) return apiJsonError(c, 404, 'Unknown or expired session');
   const entry = resolvePreviewEntryPath(files);

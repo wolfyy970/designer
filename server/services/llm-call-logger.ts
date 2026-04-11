@@ -20,9 +20,9 @@ import {
   setLlmCallResponseBody,
   setLlmCallWaitingStatus,
 } from '../log-store.ts';
-import type { CompletionPurpose } from './completion-budget.ts';
-import { getProvider } from '../services/providers/registry.ts';
-import { mergeReferenceImagesIntoMessages } from './merge-reference-images-into-messages.ts';
+import type { CompletionPurpose } from '../lib/completion-budget.ts';
+import { getProvider } from './providers/registry.ts';
+import { mergeReferenceImagesIntoMessages } from '../lib/merge-reference-images-into-messages.ts';
 import { providerLogFields } from './llm-log-metadata.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 

@@ -1,5 +1,17 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "entry": ["src/main.tsx"],
-  "ignore": ["api/**"]
+  "entry": [
+    "src/main.tsx",
+    "server/dev.ts",
+    "server/app.ts",
+    "meta-harness/runner.tsx",
+    "scripts/snap.ts",
+    "scripts/version-snapshot.ts",
+    "scripts/bump-patch-version.ts"
+  ],
+  "ignore": [
+    "api/**",
+    "**/.vendor/**",
+    "**/dist/**"
+  ]
 }

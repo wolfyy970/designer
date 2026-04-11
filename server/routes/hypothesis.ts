@@ -8,7 +8,7 @@ import {
 import { GenerateStreamBodySchema } from '../lib/generate-stream-schema.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import { clampEvaluatorOptional } from '../lib/lockdown-model.ts';
-import { buildHypothesisWorkspaceBundle } from '../lib/hypothesis-workspace.ts';
+import { buildHypothesisWorkspaceBundle } from '../services/hypothesis-workspace.ts';
 import {
   HypothesisGenerateRequestSchema,
   PromptBundleRequestSchema,

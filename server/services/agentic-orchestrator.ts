@@ -42,7 +42,7 @@ import { normalizeError } from '../../src/lib/error-utils.ts';
 import { env } from '../env.ts';
 import { writeAgenticEvalRunLog } from '../lib/eval-run-logger.ts';
 import { acquireAgenticSlotOrReject, releaseAgenticSlot } from '../lib/agentic-concurrency.ts';
-import { emitSkillsLoadedOrchestratorEvents } from '../lib/agentic-emit-helpers.ts';
+import { emitSkillsLoadedEvents } from '../lib/agentic-skills-emission.ts';
 
 type AgenticOrchestratorBuildInput = Omit<AgentSessionParams, 'systemPrompt'>;
 
@@ -299,7 +299,7 @@ async function runAgenticPiSessionRound(
     | ((ctx: AgenticSystemContextBundle) => PiSessionExtras),
 ): Promise<DesignAgentSessionResult | null> {
   const ctx = await buildAgenticSystemContext({ sessionType: options.sessionType });
-  await emitSkillsLoadedOrchestratorEvents((e) => emit(streamCtx, e), ctx.loadedSkills, tracePhase);
+  await emitSkillsLoadedEvents((e) => emit(streamCtx, e), ctx.loadedSkills, tracePhase);
   setPiTracePhase(tracePhase);
   const extras = typeof sessionExtras === 'function' ? sessionExtras(ctx) : sessionExtras;
   return runDesignAgentSession(

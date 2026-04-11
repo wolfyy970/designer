@@ -123,6 +123,32 @@ describe('workspace domain persist migration v6 → v7', () => {
   });
 });
 
+describe('workspace domain persist migration v8 → v9', () => {
+  it('truncates hypothesis modelNodeIds to a single entry', () => {
+    const v8State = {
+      incubatorWirings: {},
+      incubatorModelNodeIds: {},
+      hypotheses: {
+        h1: {
+          id: 'h1',
+          incubatorId: 'i',
+          strategyId: 's',
+          modelNodeIds: ['m1', 'm2'],
+          designSystemNodeIds: [],
+          placeholder: false,
+          revisionEnabled: false,
+        },
+      },
+      modelProfiles: {},
+      designSystems: {},
+      previewSlots: {},
+    };
+    const result = migrate(structuredClone(v8State), 8) as Record<string, unknown>;
+    const hyps = result.hypotheses as Record<string, { modelNodeIds: string[] }>;
+    expect(hyps.h1.modelNodeIds).toEqual(['m1']);
+  });
+});
+
 describe('workspace domain persist migration v7 → v8', () => {
   it('maps legacy agentMode to revisionEnabled and strips agentMode', () => {
     const v7State = {

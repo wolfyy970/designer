@@ -174,6 +174,8 @@ flowchart TB
 
 **Canonical client model** — `src/stores/workspace-domain-store.ts` (persisted) holds workflow semantics without requiring a graph: incubator input wiring (input / preview node ids), model assignments per incubator and per hypothesis, design-system attachments, hypothesis ↔ incubator ↔ hypothesis-strategy links, preview slots (active result / pins), and mirrors for model/design-system payloads synced from the canvas. `src/types/workspace-domain.ts` defines the shapes.
 
+**Hypothesis ↔ model (single active wiring)** — A hypothesis may have **only one** Model node connected at a time: connecting a new model replaces the previous edge, and domain `modelNodeIds` holds at most one id. Persisted state migrates with canvas **v25** (dedupe model→hypothesis edges, first edge wins) and workspace domain **v9** (truncate legacy multi-id lists). When an incubator has several models, auto-wiring new hypotheses inherits only the **first** model edge from the incubator.
+
 **Canvas as projection** — `src/stores/canvas-store.ts` still persists React Flow–backed **nodes and edges** for layout and interaction. Graph edits call `src/workspace/domain-commands.ts` so domain relations stay the source of truth for incubate/generate. Pure graph helpers live in `src/workspace/graph-queries.ts`.
 
 **Incubate → graph** — When incubation returns new **strategies**, the incubator UI calls `syncAfterIncubate` on the canvas store to add **hypothesis** nodes and edges (and `linkHypothesesAfterIncubate` for domain rows). Existing strategies already represented by a hypothesis `refId` are not duplicated.
@@ -267,7 +269,7 @@ POST endpoints validate bodies with Zod (typically via `**parse-request**` / `sa
 ### Import convention (server ↔ `src/`)
 
 - **Direct `../../src/...` imports are OK** for pure types, Zod schemas, and shared **constants** with no Node/browser coupling (e.g. `src/types/*`, `src/lib/workspace-snapshot-schema.ts`, `src/constants/*`).
-- Prefer `**server/lib/`** modules for server-local shared logic (`api-json-error`, `parse-request`, `provider-helpers`, `lockdown-model`, hypothesis workspace helpers, etc.) so routes stay shallow.
+- Prefer `**server/lib/`** for small shared helpers (`api-json-error`, `parse-request`, `provider-helpers`, `lockdown-model`, skill/prompt discovery, `build-agentic-system-context`, etc.) so routes stay shallow. Orchestration and modules that need route-adjacent logging or workspace bundling live under `**server/services/`** (e.g. `llm-call-logger`, `pi-llm-log`, `hypothesis-workspace`, `provider-model-context`) — `server/lib/` must not import upward into `server/services/`.
 - **Pure shared helpers** that live only under `**src/lib/`** (`error-utils`, `utils`, Zod schemas, constants) are imported from `**../../src/...`** directly — do not add one-line re-export barrels in `server/lib/`.
 - Do **not** import React, Vite-only code, or browser APIs from `server/`.
 
@@ -315,10 +317,10 @@ POST endpoints validate bodies with Zod (typically via `**parse-request**` / `sa
 | `lib/build-agentic-system-context.ts`      | Composes agentic system context: resolved `**prompts/designer-agentic-system/PROMPT.md`** body + optional `**AGENTS.md`** seed + `**skillCatalog`** entries + skill file seeds (no catalog on system string)                                            |
 | `lib/skill-discovery.ts`                   | Walk `**skills/*/SKILL.md**`, filter by `when` mode, `**formatSkillsCatalogXml**` / `**buildUseSkillToolDescription**` + sandbox seed map; invalid packages omitted (dev `console.warn` on bad YAML / schema)                                            |
 | `lib/skill-schema.ts`                      | Zod: skill YAML frontmatter                                                                                                                                                                                                                             |
-| `lib/frontmatter.ts`                       | Shared `---` YAML frontmatter split for `**prompt-discovery**` / `**skill-discovery**`                                                                                                                                                                  |
+| `lib/frontmatter.ts` / `lib/frontmatter-split.ts` | Shared `---` YAML frontmatter split for `**prompt-discovery**` / `**skill-discovery**` (split implementation + re-export)                                                                                                                            |
 | `lib/sse-task-route.ts`                    | Shared SSE wrapper for task-agent routes (`incubate`, `inputs-generate`, `design-system`) — write gate, `error`+`done` on throw                                                                                                                          |
 | `lib/pi-bridge-narrowing.ts`               | Runtime guards for Pi SDK message slices at the NPM boundary (`pi-session-event-bridge`)                                                                                                                                                                |
-| `lib/agentic-emit-helpers.ts`              | Shared `skills_loaded` trace + SSE for orchestrator and task-agent execution                                                                                                                                                                            |
+| `lib/agentic-skills-emission.ts`           | Shared `skills_loaded` trace + SSE for orchestrator and task-agent execution                                                                                                                                                                            |
 
 
 ## Generation Engine

@@ -53,7 +53,23 @@ export function hydrateDomainFromCanvasGraph(input: {
     ...input.edges.filter((e) => !compilerHypFirst(e)),
   ];
 
+  const nodeById = new Map(input.nodes.map((n) => [n.id, n]));
+  const hypHasModelEdge = new Set<string>();
+  const dedupedEdges: typeof orderedEdges = [];
   for (const e of orderedEdges) {
+    const src = nodeById.get(e.source);
+    const tgt = nodeById.get(e.target);
+    if (
+      src?.type === NODE_TYPES.MODEL &&
+      tgt?.type === NODE_TYPES.HYPOTHESIS
+    ) {
+      if (hypHasModelEdge.has(e.target)) continue;
+      hypHasModelEdge.add(e.target);
+    }
+    dedupedEdges.push(e);
+  }
+
+  for (const e of dedupedEdges) {
     const src = input.nodes.find((node) => node.id === e.source);
     const tgt = input.nodes.find((node) => node.id === e.target);
     if (!src || !tgt) continue;

@@ -14,7 +14,7 @@ import {
   estimateChatMessagesTokens,
 } from '../../src/lib/token-estimate.ts';
 import type { ChatMessage } from '../../src/types/provider.ts';
-import { getProviderModelContextWindow } from './provider-model-context.ts';
+import { getProviderModelContextWindow } from '../services/provider-model-context.ts';
 
 export type CompletionPurpose = 'incubate' | 'compaction' | 'agent_turn' | 'default';
 

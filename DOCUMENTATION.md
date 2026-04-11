@@ -77,6 +77,7 @@
 3. Update or remove outdated content; verify cross-references.
 4. When a **GET** response shape used by the client changes (e.g. `/api/config`), update `src/api/response-schemas.ts` and `src/api/__tests__/response-schemas.test.ts`.
 5. **Header log viewer** removed — docs point to dev `**/api/logs`** instead; server routes unchanged. Canvas **keyboard delete** (no duplicate React Flow `remove` vs `removeNode`, edge delete without dialog) → **USER_GUIDE.md**; selection guard tests → `src/lib/__tests__/canvas-keyboard-delete.test.ts`.
+6. **Hypothesis — one active model edge** (graph + domain + canvas **v25** / workspace domain **v9** migrations) → **[ARCHITECTURE.md](ARCHITECTURE.md)** only; product copy in **README.md** / **USER_GUIDE.md** only if UX-facing.
 
 **Where architecture lives:** Client domain model vs canvas projection, API routes, stores, and data flow live in [ARCHITECTURE.md](ARCHITECTURE.md) only — do not copy that narrative into other docs; link to it. SPA design token **semantics** (accent vs status, typography scale, file-role colors) live in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) only; actual values stay in `src/index.css`.
 

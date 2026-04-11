@@ -10,7 +10,7 @@ import { buildHypothesisPrompt } from '../../src/lib/prompts/hypothesis-prompt.t
 import { generateId, now } from '../../src/lib/utils.ts';
 import { env } from '../env.ts';
 import { logLlmCall } from '../log-store.ts';
-import { loggedCallLLM, loggedGenerateChatStream } from '../lib/llm-call-logger.ts';
+import { loggedCallLLM, loggedGenerateChatStream } from './llm-call-logger.ts';
 import { mergeReferenceImagesIntoMessages } from '../lib/merge-reference-images-into-messages.ts';
 import { getProvider } from './providers/registry.ts';
 import { parseJsonLenient } from '../lib/parse-json-lenient.ts';

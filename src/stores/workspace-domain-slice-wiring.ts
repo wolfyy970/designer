@@ -40,7 +40,8 @@ export function createWorkspaceDomainWiringSlice(set: DomainSet): Pick<
               ...s.hypotheses,
               [targetId]: {
                 ...h,
-                modelNodeIds: uniqPush(h.modelNodeIds, modelNodeId),
+                /** At most one model per hypothesis (matches canvas: single model→hypothesis edge). */
+                modelNodeIds: [modelNodeId],
               },
             },
           };
