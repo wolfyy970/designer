@@ -96,7 +96,11 @@ export async function runDesignAgentSession(
     authStorage.setRuntimeApiKey('openrouter', env.OPENROUTER_API_KEY);
   }
 
+  let fileEventCount = 0;
+  const emittedFilePaths = new Set<string>();
   const onDesignFile = (path: string, content: string) => {
+    fileEventCount += 1;
+    emittedFilePaths.add(path);
     void onEvent({ type: 'file', path, content });
     void onEvent(
       trace('file_written', `Saved ${path}`, {
@@ -218,12 +222,30 @@ export async function runDesignAgentSession(
     });
   }, STALL_DEBUG_MS);
 
+  if (env.isDev) {
+    const seedKeys = hasSeed ? Object.keys(params.seedFiles!) : [];
+    console.debug('[pi-agent] session start', {
+      correlationId: params.correlationId,
+      provider: params.providerId,
+      model: params.modelId,
+      contextWindow,
+      seedFileCount: seedKeys.length,
+      seedFilePaths: seedKeys.slice(0, 20),
+      toolCount: virtualPiTools.length + 5,
+      userPromptChars: params.userPrompt.length,
+      systemPromptChars: params.systemPrompt.length,
+    });
+  }
+
   try {
     await session.prompt(
       `${params.userPrompt}\n\n[Workspace root: ${SANDBOX_PROJECT_ROOT} — use read, write, edit, ls, find, and grep for files; use bash for shell/commands.]`,
       { expandPromptTemplates: false },
     );
   } catch (err) {
+    if (env.isDev) {
+      console.error('[pi-agent] session.prompt failed', normalizeError(err), err);
+    }
     await onEvent({ type: 'error', payload: `Agent error: ${normalizeError(err)}` });
     return null;
   } finally {
@@ -234,7 +256,26 @@ export async function runDesignAgentSession(
 
   const files = await extractDesignFiles(bash);
 
+  if (env.isDev) {
+    const seedCount = params.seedFiles ? Object.keys(params.seedFiles).length : 0;
+    console.debug('[pi-agent] session complete', {
+      correlationId: params.correlationId,
+      filesExtracted: Object.keys(files).length,
+      fileNames: Object.keys(files),
+      fileEventsEmitted: fileEventCount,
+      hasSeed,
+      seedFileCount: seedCount,
+      todoCount: todoState.current.length,
+      aborted: !!params.signal?.aborted,
+      provider: params.providerId,
+      model: params.modelId,
+    });
+  }
+
   if (!hasSeed && Object.keys(files).length === 0 && !params.signal?.aborted) {
+    if (env.isDev) {
+      console.warn('[pi-agent] agent produced zero design files (no seed, empty sandbox)');
+    }
     await onEvent({
       type: 'error',
       payload:
@@ -246,5 +287,6 @@ export async function runDesignAgentSession(
   return {
     files,
     todos: [...todoState.current],
+    emittedFilePaths: [...emittedFilePaths],
   };
 }

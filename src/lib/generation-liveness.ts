@@ -7,6 +7,9 @@ export const FILE_STALL_WARN_SEC = 40;
 /** After this many seconds with zero files, show “first write may be slow” hint. */
 export const FIRST_FILE_WAIT_ELAPSED_SEC = 50;
 
+/** Below this many seconds since last model activity, show a soft “model reasoning…” hint (before stream-quiet warning). */
+export const MODEL_REASONING_HUSH_SEC = 30;
+
 /** Latest of two optional unix ms timestamps; undefined if neither set. */
 export function lastDefinedMax(a?: number, b?: number): number | undefined {
   if (a == null) return b ?? undefined;

@@ -16,6 +16,7 @@ import {
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { apiJsonError } from '../lib/api-json-error.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
+import { env } from '../env.ts';
 
 const hypothesis = new Hono();
 
@@ -77,6 +78,15 @@ hypothesis.post('/generate', async (c) => {
 
     const baseCorrelation =
       body.correlationId?.trim() || crypto.randomUUID();
+
+    if (env.isDev) {
+      console.debug('[hypothesis/generate] request', {
+        correlationId: baseCorrelation,
+        lanes: modelCredentials.length,
+        promptChars: prompt.prompt.length,
+        evalContext: effectiveEvaluationContext === null ? 'build_only' : 'eval',
+      });
+    }
 
     const base = {
       prompt: prompt.prompt,

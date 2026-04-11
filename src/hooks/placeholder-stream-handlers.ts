@@ -1,7 +1,7 @@
 import { debugAgentIngest } from '../lib/debug-agent-ingest';
 import { AGENTIC_PHASE } from '../constants/agentic-stream';
 import { GENERATION_STATUS } from '../constants/generation';
-import type { GenerationResult, RunTraceEvent, ThinkingTurnSlice } from '../types/provider';
+import type { GenerationResult, RunTraceEvent, SkillInfo, ThinkingTurnSlice } from '../types/provider';
 import type { GenerateStreamCallbacks } from '../api/client';
 import {
   clearTransientResultFields,
@@ -36,7 +36,7 @@ export function createPlaceholderStreamCallbacks(options: {
   const { placeholderId, traceLimit, updateResult, scheduleTraceServerForward, state, raf } =
     options;
 
-  const activatedSkills: { key: string; name: string; description: string }[] = [];
+  const activatedSkills: SkillInfo[] = [];
 
   const pushTrace = (trace: RunTraceEvent) => {
     streamDevDebug(placeholderId, 'onTrace', {

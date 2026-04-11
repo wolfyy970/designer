@@ -59,8 +59,7 @@ export function VariantNodeGenerating({
         elapsed={elapsed}
         liveness={pickLivenessSlice(result)}
         liveTodos={result.liveTodos}
-        liveSkills={result.liveSkills}
-        liveActivatedSkills={result.liveActivatedSkills}
+        skillCatalogEmpty={result.liveSkills != null && result.liveSkills.length === 0}
         compact={isWorkspaceOpen}
       />
     </div>

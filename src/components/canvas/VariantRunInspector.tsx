@@ -329,7 +329,7 @@ export default function VariantRunInspector() {
                   elapsed={elapsed}
                   liveness={pickLivenessSlice(result)}
                   liveTodos={result.liveTodos}
-                  liveSkills={result.liveSkills}
+                  skillCatalogEmpty={result.liveSkills != null && result.liveSkills.length === 0}
                   liveActivatedSkills={result.liveActivatedSkills}
                 />
               </div>

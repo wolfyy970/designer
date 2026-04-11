@@ -54,6 +54,15 @@ export function createPlaceholderFinalizeAfterStream(options: {
     if (current?.status === GENERATION_STATUS.ERROR) return;
 
     if (!state.generatedCode && Object.keys(state.liveFiles).length === 0) {
+      if (import.meta.env.DEV) {
+        console.warn('[finalize] no code or files received', {
+          placeholderId,
+          hadCheckpoint: !!state.agenticCheckpoint,
+          checkpointFiles: state.agenticCheckpoint?.filesWritten,
+          traceCount: state.liveTrace.length,
+          evalRounds: state.evaluationRounds.length,
+        });
+      }
       updateResult(placeholderId, {
         status: GENERATION_STATUS.ERROR,
         error: 'Server returned no code.',

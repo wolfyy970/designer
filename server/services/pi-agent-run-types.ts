@@ -25,6 +25,8 @@ export interface AgentSessionParams extends AgentRunParams {
 export interface DesignAgentSessionResult {
   files: Record<string, string>;
   todos: TodoItem[];
+  /** Paths that already received live `file` SSE via `onDesignFile` during this session. */
+  emittedFilePaths: string[];
 }
 
 export type AgentRunEvent =

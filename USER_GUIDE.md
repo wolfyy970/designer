@@ -151,6 +151,8 @@ Running generation again adds new versions — use the version navigation arrows
 
 **While a run is in flight:** Use **Stop** on the hypothesis or in the preview run workspace to abort the in-flight request for that strategy lane (same as ending the SSE stream).
 
+**Progress and workspace:** The preview card footer summarizes live status (including streamed size while a tool argument is building). **Skills in use** and the full **Monitor** timeline—including tool traces—are in the **run workspace** side panel; keep the panel closed for a calmer card. The timeline’s **Tool use** block shows the active tool in the header when collapsed; when expanded, the header drops that label so it isn’t duplicated above the streaming line in the log.
+
 **Removing nodes from the canvas:** Use **Backspace** or **Delete** with one or more nodes selected. A short confirmation appears for nodes that can be removed (input cards and structural nodes like the incubator stay protected). Removing a hypothesis also drops its preview nodes. **Selected connections** (edges) delete with the same keys and no extra dialog. The shared spec document is separate; text in section cards may still exist there until you edit it elsewhere.
 
 ### 7. Review Designs

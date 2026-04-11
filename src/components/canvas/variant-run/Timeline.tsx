@@ -9,7 +9,7 @@ import { Brain, Wrench } from 'lucide-react';
 import { RF_INTERACTIVE } from '../../../constants/canvas';
 import type { RunTraceEvent, StreamingToolLiveness, ThinkingTurnSlice } from '../../../types/provider';
 import { StreamdownTimeline } from './StreamdownTimeline.tsx';
-import { formatStreamArgSize } from '../../../lib/format-stream-arg-size';
+import { TIMELINE_DOT } from './StreamingToolRow';
 import {
   TimelineAccordionChrome,
   TimelineEmptyStateSkeleton,
@@ -18,6 +18,16 @@ import {
 import { ToolTraceObservabilityBlocks } from '../../shared/ToolTraceObservabilityBlocks';
 
 const NEAR_BOTTOM_PX = 48;
+
+/** Cycling ".", "..", "..." indicator — lightweight signal that data is flowing. */
+function StreamingEllipsis() {
+  const [dots, setDots] = useState(1);
+  useEffect(() => {
+    const id = window.setInterval(() => setDots((d) => (d % 3) + 1), 500);
+    return () => window.clearInterval(id);
+  }, []);
+  return <span className="ml-0.5 inline-block w-[1.2em] text-left text-fg-faint">{'.'.repeat(dots)}</span>;
+}
 
 const STATUS_COLOR: Record<string, string> = {
   error: 'text-error',
@@ -179,7 +189,6 @@ function ToolUseBlock({
   onToggle,
   streamingToolName,
   streamingToolPath,
-  streamingToolChars,
 }: {
   traces: RunTraceEvent[];
   isStreaming: boolean;
@@ -188,7 +197,6 @@ function ToolUseBlock({
   onToggle: () => void;
   streamingToolName?: string;
   streamingToolPath?: string;
-  streamingToolChars?: number;
 }) {
   const isStreamingArgs =
     isStreaming && isActiveTurn && streamingToolName != null;
@@ -214,12 +222,12 @@ function ToolUseBlock({
           {isStreamingArgs && (
             <>
               <span className="ml-1 inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-              <span className="min-w-0 truncate text-fg-secondary">
-                {headerLabel}
-                <span className="ml-1 text-fg-faint">
-                  ({formatStreamArgSize(streamingToolChars ?? 0)})
+              {!open && (
+                <span className="min-w-0 truncate text-fg-secondary">
+                  {headerLabel}
+                  <StreamingEllipsis />
                 </span>
-              </span>
+              )}
             </>
           )}
           {!isStreamingArgs && isStreaming && isActiveTurn && (
@@ -235,13 +243,11 @@ function ToolUseBlock({
           ))}
           {isStreamingArgs && (
             <div className="flex items-center gap-1.5 font-mono text-badge leading-snug text-fg-secondary">
-              <span className="inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+              <span className={TIMELINE_DOT} />
               <span>
                 Streaming <code>{streamingToolName}</code>
                 {streamingToolPath ? ` → ${streamingToolPath}` : ''}
-              </span>
-              <span className="text-fg-faint">
-                ({formatStreamArgSize(streamingToolChars ?? 0)})
+                <StreamingEllipsis />
               </span>
             </div>
           )}
@@ -271,7 +277,6 @@ export function Timeline({
 }) {
   const streamingToolName = streamingLiveness?.streamingToolName;
   const streamingToolPath = streamingLiveness?.streamingToolPath;
-  const streamingToolChars = streamingLiveness?.streamingToolChars;
   const scrollRef = useRef<HTMLDivElement>(null);
   const followLatestRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
@@ -352,8 +357,8 @@ export function Timeline({
       activityByTurn != null
         ? Object.values(activityByTurn).join('').length
         : fallbackActivity.length;
-    return `${trace?.length ?? 0}:${thLen}:${actLen}:${streamingToolChars ?? 0}`;
-  }, [trace?.length, thinkingTurns, activityByTurn, fallbackActivity.length, streamingToolChars]);
+    return `${trace?.length ?? 0}:${thLen}:${actLen}:${streamingToolName ?? ''}`;
+  }, [trace?.length, thinkingTurns, activityByTurn, fallbackActivity.length, streamingToolName]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -492,7 +497,6 @@ export function Timeline({
                     onToggle={() => toggleToolUse(seg.turnId)}
                     streamingToolName={isActive ? streamingToolName : undefined}
                     streamingToolPath={isActive ? streamingToolPath : undefined}
-                    streamingToolChars={isActive ? streamingToolChars : undefined}
                   />
 
                   {otherTraces.length > 0 && (

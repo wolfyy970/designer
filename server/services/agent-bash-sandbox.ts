@@ -3,6 +3,7 @@
  */
 import type { Bash } from 'just-bash';
 import { Bash as BashCtor } from 'just-bash';
+import { env } from '../env.ts';
 
 /** Absolute path to the design workspace root inside just-bash. */
 export const SANDBOX_PROJECT_ROOT = '/home/user/project';
@@ -59,6 +60,9 @@ export async function extractDesignFiles(bash: Bash): Promise<Record<string, str
     try {
       stat = await bash.fs.stat(abs);
     } catch {
+      if (env.isDev) {
+        console.warn('[sandbox] extractDesignFiles: stat failed for', abs);
+      }
       continue;
     }
     if (!stat.isFile) continue;
@@ -66,6 +70,9 @@ export async function extractDesignFiles(bash: Bash): Promise<Record<string, str
     try {
       body = await bash.fs.readFile(abs, 'utf8');
     } catch {
+      if (env.isDev) {
+        console.warn('[sandbox] extractDesignFiles: readFile failed for', abs);
+      }
       continue;
     }
     const rel = abs.startsWith(`${SANDBOX_PROJECT_ROOT}/`)

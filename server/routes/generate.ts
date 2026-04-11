@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
+import { env } from '../env.ts';
 import { GenerateStreamBodySchema } from '../lib/generate-stream-schema.ts';
 import { executeGenerateStreamSafe } from '../services/generate-execution.ts';
 import { apiJsonError } from '../lib/api-json-error.ts';
@@ -18,6 +19,16 @@ generate.post('/', async (c) => {
   const body = { ...parsed.data, ...ev, providerId: m.providerId, modelId: m.modelId };
   const correlationId =
     body.correlationId?.trim() || crypto.randomUUID();
+
+  if (env.isDev) {
+    console.debug('[generate] request', {
+      correlationId,
+      provider: body.providerId,
+      model: body.modelId,
+      promptChars: body.prompt.length,
+      evalContext: body.evaluationContext === null ? 'build_only' : 'eval',
+    });
+  }
 
   return streamSSE(c, async (stream) => {
     const abortSignal = c.req.raw.signal;

@@ -1,6 +1,6 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type NodeProps, type Node, Handle, Position } from '@xyflow/react';
-import { FileText, Loader2, Pencil, X, Zap } from 'lucide-react';
+import { FileText, Loader2, Pencil, X } from 'lucide-react';
 import { useIncubatorStore, findStrategy } from '../../../stores/incubator-store';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { useGenerationStore } from '../../../stores/generation-store';
@@ -16,12 +16,6 @@ import { useRequestPermanentDelete } from '../../../hooks/useRequestPermanentDel
 import { hypothesisDeleteCopy } from '../../../lib/canvas-permanent-delete-copy';
 import { processingOrFilled } from '../../../lib/node-status';
 import { GENERATION_STATUS } from '../../../constants/generation';
-import {
-  EVALUATOR_MAX_REVISION_ROUNDS_MAX,
-  EVALUATOR_MAX_REVISION_ROUNDS_MIN,
-  EVALUATOR_MAX_SCORE,
-  EVALUATOR_MIN_SCORE,
-} from '../../../types/evaluator-settings';
 import { abortGenerationForStrategy } from '../../../lib/generation-abort-registry';
 import { NODE_STATUS, NODE_TYPES, RF_INTERACTIVE } from '../../../constants/canvas';
 import {
@@ -37,7 +31,12 @@ import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
 import GeneratingSkeleton from './GeneratingSkeleton';
 import { NodeErrorBlock } from './shared/NodeErrorBlock';
-import { DsHelpTooltip } from '../../shared/DsHelpTooltip';
+import {
+  decodeStrategyStreamingSnapshot,
+  encodeStrategyStreamingSnapshot,
+} from '../../../lib/strategy-streaming-snapshot';
+import { HypothesisAutoImproveSettings } from './HypothesisAutoImproveSettings';
+import { HypothesisGenerateButton } from './HypothesisGenerateButton';
 
 type HypothesisEditorTab = 'hypothesis' | 'why' | 'measurements';
 
@@ -48,11 +47,6 @@ const TAB_DEFS: { id: HypothesisEditorTab; label: string }[] = [
 ];
 
 type HypothesisNodeType = Node<HypothesisNodeData, 'hypothesis'>;
-
-function smallNumberToWord(n: number): string {
-  const words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
-  return n <= 10 ? words[n]! : n.toString();
-}
 
 function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNodeType>) {
   const strategyId = data.refId ?? '';
@@ -94,6 +88,31 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
 
   const isGenerating = useGenerationStore((s) =>
     s.results.some((r) => r.strategyId === strategyId && r.status === GENERATION_STATUS.GENERATING),
+  );
+
+  /** Stable string: best streaming lane (max streamed chars) for multi-model runs. */
+  const strategyStreamingKey = useGenerationStore((s) => {
+    let bestChars = -1;
+    let name: string | undefined;
+    let path: string | undefined;
+    let chars = 0;
+    for (const r of s.results) {
+      if (r.strategyId !== strategyId || r.status !== GENERATION_STATUS.GENERATING) continue;
+      if (r.streamingToolName == null) continue;
+      const c = r.streamingToolChars ?? 0;
+      if (c > bestChars) {
+        bestChars = c;
+        name = r.streamingToolName;
+        path = r.streamingToolPath;
+        chars = c;
+      }
+    }
+    return name != null ? encodeStrategyStreamingSnapshot(name, chars, path ?? '') : '';
+  });
+
+  const strategyStreamingSnap = useMemo(
+    () => (strategyStreamingKey ? decodeStrategyStreamingSnapshot(strategyStreamingKey) : null),
+    [strategyStreamingKey],
   );
 
   const { handleGenerate, generationProgress, generationError } =
@@ -359,136 +378,37 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
       <div className="border-t border-border-subtle px-3 py-2.5">
         {generationError && <NodeErrorBlock message={generationError} />}
 
-        <div className={`${RF_INTERACTIVE} mb-2 space-y-1.5`}>
-          <div className="rounded-md border border-border-subtle bg-surface/40 px-2 py-1.5">
+        <HypothesisAutoImproveSettings
+          nodeId={nodeId}
+          revisionEnabled={revisionEnabled}
+          onRevisionEnabledChange={setRevisionEnabled}
+          displayMaxRounds={displayMaxRounds}
+          onMaxRoundsChange={(value) =>
+            setHypothesisGenerationSettings(nodeId, { maxRevisionRounds: value })
+          }
+          targetScoreChecked={targetScoreChecked}
+          effectiveMinScore={effectiveMinScore}
+          onTargetScoreToggle={(checked) => {
+            if (checked) {
+              setHypothesisGenerationSettings(nodeId, { minOverallScore: globalMinScore ?? 4 });
+            } else {
+              setHypothesisGenerationSettings(nodeId, { minOverallScore: null });
+            }
+          }}
+          onMinScoreChange={(value) =>
+            setHypothesisGenerationSettings(nodeId, { minOverallScore: value })
+          }
+        />
 
-            <div className="flex items-center gap-1">
-              <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 select-none">
-                <input
-                  type="checkbox"
-                  checked={revisionEnabled}
-                  onChange={(e) => setRevisionEnabled(e.target.checked)}
-                  className="accent-accent shrink-0"
-                />
-                <span className="text-nano font-medium text-fg-secondary">Auto-improve</span>
-              </label>
-              <DsHelpTooltip
-                aria-label="What Auto-improve does"
-                content={
-                  <>
-                    <span className="font-medium text-fg-secondary">Off:</span> one design pass, no quality loop.{' '}
-                    <span className="font-medium text-fg-secondary">On:</span> score the work, then the agent can refine
-                    it—bounded by max rounds and an optional score target below.
-                  </>
-                }
-              />
-            </div>
-            {revisionEnabled ? (
-              <div className="mt-2 space-y-2 pl-7">
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="text-nano text-fg-muted" htmlFor={`${nodeId}-max-rounds`}>
-                    Max rounds
-                  </label>
-                  <input
-                    id={`${nodeId}-max-rounds`}
-                    type="number"
-                    min={EVALUATOR_MAX_REVISION_ROUNDS_MIN}
-                    max={EVALUATOR_MAX_REVISION_ROUNDS_MAX}
-                    value={displayMaxRounds}
-                    onChange={(e) =>
-                      setHypothesisGenerationSettings(nodeId, {
-                        maxRevisionRounds: Number(e.target.value),
-                      })
-                    }
-                    className="w-14 rounded border border-border bg-bg px-1.5 py-1 text-nano text-fg-secondary input-focus"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="flex cursor-pointer items-start gap-2 select-none">
-                    <input
-                      type="checkbox"
-                      checked={targetScoreChecked}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setHypothesisGenerationSettings(nodeId, {
-                            minOverallScore: globalMinScore ?? 4,
-                          });
-                        } else {
-                          setHypothesisGenerationSettings(nodeId, {
-                            minOverallScore: null,
-                          });
-                        }
-                      }}
-                      className="accent-accent mt-0.5 shrink-0"
-                    />
-                    <span className="text-nano text-fg-secondary">
-                      Target quality score (early stop when reached)
-                    </span>
-                  </label>
-                  {targetScoreChecked ? (
-                    <input
-                      type="number"
-                      min={EVALUATOR_MIN_SCORE}
-                      max={EVALUATOR_MAX_SCORE}
-                      step={0.1}
-                      value={effectiveMinScore ?? EVALUATOR_MIN_SCORE}
-                      onChange={(e) =>
-                        setHypothesisGenerationSettings(nodeId, {
-                          minOverallScore: Number(e.target.value),
-                        })
-                      }
-                      className="ml-6 w-20 rounded border border-border bg-bg px-1.5 py-1 text-nano text-fg-secondary input-focus"
-                    />
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className={RF_INTERACTIVE}>
-          {hint && (
-            <p className="mb-1.5 text-center text-nano text-fg-muted">{hint}</p>
-          )}
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={isGenerating || !canGenerate}
-            aria-busy={isGenerating}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-fg px-3 py-2 text-xs font-medium text-bg transition-colors hover:bg-fg-on-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 size={12} className="animate-spin" aria-hidden />
-                {generationProgress && generationProgress.total > 1
-                  ? generationProgress.completed === 0
-                    ? `Designing ${smallNumberToWord(generationProgress.total)} previews…`
-                    : `${generationProgress.completed} of ${generationProgress.total} ready…`
-                  : 'Designing…'}
-              </>
-            ) : (
-              <>
-                <Zap size={12} className="shrink-0 opacity-90" aria-hidden />
-                Design
-              </>
-            )}
-          </button>
-          {isGenerating ? (
-            <p className="mt-1.5 text-center text-nano leading-snug text-fg-muted">
-              Stopping ends the server request; partial output may remain on the card.
-            </p>
-          ) : null}
-          {isGenerating ? (
-            <button
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={handleStopGeneration}
-              className="mt-2 w-full rounded-md border border-error-border bg-error-subtle px-3 py-2 text-xs font-semibold text-error transition-colors hover:bg-error-surface-hover"
-            >
-              Stop generation
-            </button>
-          ) : null}
-        </div>
+        <HypothesisGenerateButton
+          hint={hint}
+          isGenerating={isGenerating}
+          canGenerate={canGenerate}
+          onGenerate={handleGenerate}
+          onStop={handleStopGeneration}
+          generationProgress={generationProgress}
+          streamingSnap={strategyStreamingSnap}
+        />
       </div>
     </NodeShell>
   );

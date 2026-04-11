@@ -12,7 +12,7 @@ import type {
   InputsGenerateResponse,
   HypothesisWorkspaceApiPayload,
 } from './types';
-import type { RunTraceEvent, TodoItem } from '../types/provider';
+import type { RunTraceEvent, SkillInfo, TodoItem } from '../types/provider';
 import type {
   AgenticCheckpoint,
   AgenticPhase,
@@ -272,9 +272,9 @@ export interface GenerateStreamCallbacks {
   onEvaluationReport?: (round: number, snapshot: EvaluationRoundSnapshot) => void;
   onRevisionRound?: (round: number, brief: string) => void;
   /** Non-manual skills pre-seeded for this Pi session (may update on revision rounds). */
-  onSkillsLoaded?: (skills: { key: string; name: string; description: string }[]) => void;
+  onSkillsLoaded?: (skills: SkillInfo[]) => void;
   /** Fired when the agent calls use_skill successfully. */
-  onSkillActivated?: (payload: { key: string; name: string; description: string }) => void;
+  onSkillActivated?: (payload: SkillInfo) => void;
   onCheckpoint?: (checkpoint: AgenticCheckpoint) => void;
   onDone?: () => void;
   /** Fired when SSE JSON fails schema validation (wire `event:` name + body). */

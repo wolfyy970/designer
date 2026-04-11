@@ -78,6 +78,23 @@ async function executeGenerateStream(
       rubricWeights: body.rubricWeights,
       onStream: writeAgentic,
     });
+    /** Ensure client receives `file` SSE for every path in the final sandbox map (live tool hooks can miss paths). */
+    if (agenticResult) {
+      const alreadyEmitted = new Set(agenticResult.emittedFilePaths ?? []);
+      let replayed = 0;
+      for (const [path, content] of Object.entries(agenticResult.files)) {
+        if (!alreadyEmitted.has(path)) {
+          await writeAgentic({ type: 'file', path, content });
+          replayed += 1;
+        }
+      }
+      if (env.isDev && replayed > 0) {
+        console.debug('[generate:SSE] replayed file events for paths not streamed live', {
+          replayed,
+          paths: Object.keys(agenticResult.files).filter((p) => !alreadyEmitted.has(p)),
+        });
+      }
+    }
     if (agenticResult?.checkpoint) {
       await write(SSE_EVENT_NAMES.checkpoint, { checkpoint: agenticResult.checkpoint });
     }
@@ -91,6 +108,13 @@ async function executeGenerateStream(
         byType: sseWriteAudit.byType,
         skippedAbort: sseWriteAudit.skippedAbort,
         durationMs: Date.now() - sseWriteAudit.t0,
+        checkpoint: agenticResult?.checkpoint
+          ? {
+              stopReason: agenticResult.checkpoint.stopReason,
+              filesWritten: agenticResult.checkpoint.filesWritten,
+              revisionAttempts: agenticResult.checkpoint.revisionAttempts,
+            }
+          : null,
       });
     }
   };

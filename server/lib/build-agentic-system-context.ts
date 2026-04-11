@@ -13,6 +13,7 @@ import {
   type SessionType,
 } from './skill-discovery.ts';
 import { getSystemPromptBody } from './prompt-discovery.ts';
+import { env } from '../env.ts';
 
 export async function buildAgenticSystemContext(input: {
   /** Session type controls which skills are visible. Defaults to 'design'. */
@@ -46,6 +47,17 @@ export async function buildAgenticSystemContext(input: {
 
   const skillSeeds = await buildSkillSandboxSeedMap(catalogEntries);
   Object.assign(sandboxSeedFiles, skillSeeds);
+
+  if (env.isDev) {
+    console.debug('[agentic-context] skills', {
+      sessionType,
+      discovered: allEntries.length,
+      filtered: catalogEntries.length,
+      keys: catalogEntries.map((e) => e.key),
+      seedFileCount: Object.keys(sandboxSeedFiles).length,
+      systemPromptChars: systemPrompt.length,
+    });
+  }
 
   return { systemPrompt, sandboxSeedFiles, loadedSkills, skillCatalog: catalogEntries };
 }

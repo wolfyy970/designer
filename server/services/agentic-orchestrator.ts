@@ -83,6 +83,8 @@ interface AgenticOrchestratorResult {
   rounds: EvaluationRoundSnapshot[];
   finalAggregate: AggregatedEvaluationReport;
   checkpoint: AgenticCheckpoint;
+  /** Paths that already received live `file` SSE during Pi sessions (build + revisions). */
+  emittedFilePaths: string[];
 }
 
 /** Mirrors Pi bridge: SSE delivery failures abort the run instead of unhandled rejections. */
@@ -250,12 +252,14 @@ function agenticResult(
     revisionAttempts: number;
     revisionBriefApplied?: string;
   },
+  emittedFilePaths: string[],
 ): AgenticOrchestratorResult {
   return {
     files,
     rounds,
     finalAggregate: snapshot.aggregate,
     checkpoint: buildCheckpoint(files, rounds, checkpointOpts),
+    emittedFilePaths,
   };
 }
 
@@ -274,7 +278,10 @@ function buildSkippedEvalAggregate(): AggregatedEvaluationReport {
 }
 
 /** Pi build finished without running evaluator workers (single pass). */
-function agenticBuildOnlyResult(files: Record<string, string>): AgenticOrchestratorResult {
+function agenticBuildOnlyResult(
+  files: Record<string, string>,
+  emittedFilePaths: string[],
+): AgenticOrchestratorResult {
   const aggregate = buildSkippedEvalAggregate();
   return {
     files,
@@ -284,6 +291,7 @@ function agenticBuildOnlyResult(files: Record<string, string>): AgenticOrchestra
       stopReason: 'build_only',
       revisionAttempts: 0,
     }),
+    emittedFilePaths,
   };
 }
 
@@ -404,6 +412,7 @@ async function runAgenticWithEvaluationImpl(
   if (!buildResult || effectiveSignal.aborted) return null;
 
   let files = buildResult.files;
+  const emittedDuringRun = new Set<string>(buildResult.emittedFilePaths ?? []);
   const rounds: EvaluationRoundSnapshot[] = [];
   const roundHistory: EvaluationRoundHistoryEntry[] = [];
   const revisionPromptByEvalRound = new Map<number, string>();
@@ -432,7 +441,7 @@ async function runAgenticWithEvaluationImpl(
 
   if (mergedOptions.evaluationContext === null) {
     await emit(streamCtx, { type: 'phase', phase: 'complete' });
-    return finishWithLog(agenticBuildOnlyResult(files));
+    return finishWithLog(agenticBuildOnlyResult(files, [...emittedDuringRun]));
   }
 
   await emit(streamCtx, { type: 'phase', phase: 'evaluating' });
@@ -443,11 +452,17 @@ async function runAgenticWithEvaluationImpl(
 
   if (effectiveSignal.aborted) {
     return finishWithLog(
-      agenticResult(files, rounds, snapshot, {
-        stopReason: 'aborted',
-        revisionAttempts,
-        revisionBriefApplied: lastRevisionBrief,
-      }),
+      agenticResult(
+        files,
+        rounds,
+        snapshot,
+        {
+          stopReason: 'aborted',
+          revisionAttempts,
+          revisionBriefApplied: lastRevisionBrief,
+        },
+        [...emittedDuringRun],
+      ),
     );
   }
 
@@ -516,11 +531,17 @@ async function runAgenticWithEvaluationImpl(
         data: { revisionAttempt: revisionAttempts + 1, aborted: !!effectiveSignal.aborted },
       });
       return finishWithLog(
-        agenticResult(files, rounds, snapshot, {
-          stopReason,
-          revisionAttempts,
-          revisionBriefApplied: lastRevisionBrief,
-        }),
+        agenticResult(
+          files,
+          rounds,
+          snapshot,
+          {
+            stopReason,
+            revisionAttempts,
+            revisionBriefApplied: lastRevisionBrief,
+          },
+          [...emittedDuringRun],
+        ),
       );
     }
 
@@ -535,6 +556,9 @@ async function runAgenticWithEvaluationImpl(
     });
 
     files = revised.files;
+    for (const p of revised.emittedFilePaths ?? []) {
+      emittedDuringRun.add(p);
+    }
     revisionAttempts += 1;
     evalRound += 1;
 
@@ -545,11 +569,17 @@ async function runAgenticWithEvaluationImpl(
 
     if (effectiveSignal.aborted) {
       return finishWithLog(
-        agenticResult(files, rounds, snapshot, {
-          stopReason: 'aborted',
-          revisionAttempts,
-          revisionBriefApplied: lastRevisionBrief,
-        }),
+        agenticResult(
+          files,
+          rounds,
+          snapshot,
+          {
+            stopReason: 'aborted',
+            revisionAttempts,
+            revisionBriefApplied: lastRevisionBrief,
+          },
+          [...emittedDuringRun],
+        ),
       );
     }
   }
@@ -563,11 +593,17 @@ async function runAgenticWithEvaluationImpl(
 
   await emit(streamCtx, { type: 'phase', phase: 'complete' });
   return finishWithLog(
-    agenticResult(files, rounds, snapshot, {
-      stopReason,
-      revisionAttempts,
-      revisionBriefApplied: lastRevisionBrief,
-    }),
+    agenticResult(
+      files,
+      rounds,
+      snapshot,
+      {
+        stopReason,
+        revisionAttempts,
+        revisionBriefApplied: lastRevisionBrief,
+      },
+      [...emittedDuringRun],
+    ),
   );
   } finally {
     releaseAgenticSlot();

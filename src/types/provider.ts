@@ -70,6 +70,13 @@ export interface TodoItem {
   status: 'pending' | 'in_progress' | 'completed';
 }
 
+/** Skill catalog entry or activation payload (SSE skills_loaded / skill_activated). */
+export interface SkillInfo {
+  key: string;
+  name: string;
+  description: string;
+}
+
 /** One PI model turn's streamed reasoning (collapsible timeline). */
 export interface ThinkingTurnSlice {
   turnId: number;
@@ -180,9 +187,9 @@ export interface GenerationResult {
   /** Capped structured trace for this in-flight run. Never persisted. */
   liveTrace?: RunTraceEvent[];
   /** Agent skills pre-seeded for this Pi session (non-manual catalog). Never persisted. */
-  liveSkills?: { key: string; name: string; description: string }[];
+  liveSkills?: SkillInfo[];
   /** Skills the agent activated via use_skill this run. Never persisted. */
-  liveActivatedSkills?: { key: string; name: string; description: string }[];
+  liveActivatedSkills?: SkillInfo[];
   /** Agentic harness: high-level phase for UI */
   agenticPhase?: AgenticPhase;
   /** Live evaluation progress label during SSE */

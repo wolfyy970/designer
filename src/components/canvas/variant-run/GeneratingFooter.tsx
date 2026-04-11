@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import type { LivenessSlice, TodoItem } from '../../../types/provider';
+import type { LivenessSlice, SkillInfo, TodoItem } from '../../../types/provider';
 import {
   FILE_STALL_WARN_SEC,
   FIRST_FILE_WAIT_ELAPSED_SEC,
   modelQuietSeconds,
+  MODEL_REASONING_HUSH_SEC,
   STREAM_QUIET_WARN_SEC,
 } from '../../../lib/generation-liveness';
-import { formatStreamArgSize } from '../../../lib/format-stream-arg-size';
+import { StreamingToolRow } from './StreamingToolRow';
 
 export function GeneratingFooter({
   plan,
@@ -15,9 +16,10 @@ export function GeneratingFooter({
   elapsed,
   liveness,
   liveTodos,
-  liveSkills,
+  /** When true, server sent an empty skills catalog for this run (skills_loaded with []). */
+  skillCatalogEmpty,
   liveActivatedSkills,
-  /** When true, only the progress bar and primary status row (spinner + line + timer). Detail lines duplicate the run workspace Monitor tab. */
+  /** When true, hide redundant detail lines (todos, skills, stall hints); primary row, timer, and live streaming KB always show. */
   compact = false,
 }: {
   plan: string[] | undefined;
@@ -25,9 +27,9 @@ export function GeneratingFooter({
   elapsed: number;
   liveness: LivenessSlice;
   liveTodos?: TodoItem[];
-  liveSkills?: { key: string; name: string; description: string }[];
+  skillCatalogEmpty?: boolean;
   /** Skills successfully loaded via use_skill this run. */
-  liveActivatedSkills?: { key: string; name: string; description: string }[];
+  liveActivatedSkills?: SkillInfo[];
   compact?: boolean;
 }) {
   const {
@@ -140,15 +142,10 @@ export function GeneratingFooter({
         : 'Model reasoning…';
     }
     if (modelQuietSec === 0) return 'Model activity updating';
-    if (modelQuietSec < 30) return 'Model reasoning…';
+    if (modelQuietSec < MODEL_REASONING_HUSH_SEC) return 'Model reasoning…';
     if (modelQuietSec < STREAM_QUIET_WARN_SEC) return `Last model activity ${modelQuietSec}s ago`;
     return null;
   })();
-
-  const activatedKeys = useMemo(
-    () => new Set((liveActivatedSkills ?? []).map((s) => s.key)),
-    [liveActivatedSkills],
-  );
 
   return (
     <div className="flex flex-col gap-2 border-t border-border-subtle px-4 py-3">
@@ -170,6 +167,14 @@ export function GeneratingFooter({
             <Loader2 size={10} className="shrink-0 animate-spin text-accent" />
             <span className="truncate">{primaryLine}</span>
           </span>
+          {isStreamingToolArgs && (
+            <StreamingToolRow
+              toolName={streamingToolName}
+              toolPath={streamingToolPath}
+              streamedChars={streamingToolChars ?? 0}
+              className="flex items-center gap-1.5 pl-[18px] text-nano leading-snug text-fg-secondary"
+            />
+          )}
           {!compact ? (
             <>
               {(isEvaluating || isRevising) && hasPlan && (
@@ -190,50 +195,25 @@ export function GeneratingFooter({
                   {progressMessage}
                 </span>
               )}
-              {isStreamingToolArgs && (
-                <span className="flex items-center gap-1.5 pl-[18px] text-nano leading-snug text-fg-secondary">
-                  <span
-                    className="inline-block size-1.5 shrink-0 animate-pulse rounded-full bg-accent"
-                    aria-hidden
-                  />
-                  <span className="min-w-0">
-                    Streaming <code className="text-fg-secondary">{streamingToolName}</code>
-                    {streamingToolPath != null && streamingToolPath.length > 0 ? (
-                      <>
-                        {' '}
-                        → <span className="text-fg-muted">{streamingToolPath}</span>
-                      </>
-                    ) : null}
-                    <span className="text-fg-muted">
-                      {' '}
-                      ({formatStreamArgSize(streamingToolChars ?? 0)})
-                    </span>
-                  </span>
-                </span>
-              )}
               {todoHint && (
                 <span className="pl-[18px] text-nano leading-snug text-fg-muted">
                   {todoHint.label}: <span className="text-fg-secondary">{todoHint.task}</span>
                 </span>
               )}
-              {liveSkills != null && liveSkills.length > 0 && (
+              {liveActivatedSkills != null && liveActivatedSkills.length > 0 && (
                 <span className="pl-[18px] text-nano leading-snug text-fg-muted">
-                  Skills (✓ = use_skill):{' '}
-                  {liveSkills.map((s, i) => (
+                  Skills in use:{' '}
+                  {liveActivatedSkills.map((s, i) => (
                     <span key={s.key}>
                       {i > 0 ? ', ' : ''}
-                      <span
-                        className={activatedKeys.has(s.key) ? 'text-fg-secondary' : 'text-fg-faint'}
-                        title={s.description}
-                      >
-                        {activatedKeys.has(s.key) ? '✓ ' : ''}
+                      <span className="text-fg-secondary" title={s.description}>
                         {s.name}
                       </span>
                     </span>
                   ))}
                 </span>
               )}
-              {liveSkills != null && liveSkills.length === 0 && isBuilding && (
+              {skillCatalogEmpty && isBuilding && (
                 <span className="pl-[18px] text-nano leading-snug text-fg-faint">
                   Skills: no catalog entries (configure under <code>skills/</code> or all are{' '}
                   <code>manual</code>)
