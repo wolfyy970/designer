@@ -13,7 +13,6 @@ import { skillFrontmatterSchema, type LoadedSkillSummary, type SkillCatalogEntry
 export type { SkillCatalogEntry };
 
 export const SKILL_FILENAME = 'SKILL.md';
-const MAX_SEED_FILE_BYTES = 256_000;
 
 export type SessionType = 'design' | 'incubation' | 'evaluation' | 'inputs-gen' | 'design-system';
 
@@ -24,22 +23,6 @@ const SESSION_TAGS: Record<SessionType, string[]> = {
   'inputs-gen': ['inputs-gen'],
   'design-system': ['design-system'],
 };
-
-const TEXT_EXT = new Set([
-  '.md',
-  '.txt',
-  '.html',
-  '.htm',
-  '.css',
-  '.js',
-  '.mjs',
-  '.cjs',
-  '.json',
-  '.svg',
-  '.tsx',
-  '.ts',
-  '.jsx',
-]);
 
 /** Skills root: repo skills directory, or SKILLS_ROOT env (tests). */
 export function resolveSkillsRoot(explicit?: string): string {
@@ -118,65 +101,6 @@ export async function discoverSkills(skillsRoot: string): Promise<SkillCatalogEn
   return out.sort((a, b) => a.key.localeCompare(b.key));
 }
 
-function isTextFile(filePath: string): boolean {
-  const ext = path.extname(filePath).toLowerCase();
-  if (!ext) return false;
-  return TEXT_EXT.has(ext);
-}
-
-async function collectRelativeFiles(dir: string, base: string): Promise<string[]> {
-  const out: string[] = [];
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  for (const e of entries) {
-    if (e.name.startsWith('.') || e.name === 'node_modules' || e.name === '_versions') continue;
-    const abs = path.join(dir, e.name);
-    const rel = base ? `${base}/${e.name}` : e.name;
-    if (e.isDirectory()) {
-      out.push(...(await collectRelativeFiles(abs, rel)));
-    } else {
-      out.push(rel);
-    }
-  }
-  return out;
-}
-
-/**
- * Read all text files under a skill package into sandbox-relative paths `skills/<key>/<rel>`.
- */
-export async function loadSkillPackageSeedFiles(skill: SkillCatalogEntry): Promise<Record<string, string>> {
-  const rels = await collectRelativeFiles(skill.dir, '');
-  const seed: Record<string, string> = {};
-  for (const rel of rels) {
-    if (rel === SKILL_FILENAME || !isTextFile(rel)) continue;
-    const abs = path.join(skill.dir, rel);
-    let st: Awaited<ReturnType<typeof fs.stat>>;
-    try {
-      st = await fs.stat(abs);
-    } catch {
-      continue;
-    }
-    if (!st.isFile() || st.size > MAX_SEED_FILE_BYTES) continue;
-    try {
-      const body = await fs.readFile(abs, 'utf8');
-      seed[`skills/${skill.key}/${rel}`] = body;
-    } catch {
-      /* ignore */
-    }
-  }
-  return seed;
-}
-
-/** Full SKILL.md body at `skills/<key>/SKILL.md` plus optional reference files. */
-export async function buildSkillSandboxSeedMap(selected: SkillCatalogEntry[]): Promise<Record<string, string>> {
-  const out: Record<string, string> = {};
-  for (const s of selected) {
-    out[`skills/${s.key}/${SKILL_FILENAME}`] = s.bodyMarkdown;
-    const extras = await loadSkillPackageSeedFiles(s);
-    Object.assign(out, extras);
-  }
-  return out;
-}
-
 export function catalogEntriesToSummaries(entries: SkillCatalogEntry[]): LoadedSkillSummary[] {
   return entries.map((s) => ({
     key: s.key,
@@ -189,7 +113,6 @@ type CatalogSkillXmlRow = {
   key: string;
   name: string;
   description: string;
-  path: string;
 };
 
 /**
@@ -209,13 +132,13 @@ export function formatSkillsCatalogXml(
           '',
         ].join('\n')
       : [
-          '  Skill packages are under skills/&lt;key&gt;/SKILL.md (your system prompt describes when to consult them).',
-          '  Match entries to the hypothesis and milestones; read only paths you will apply this run. Do not bulk-read every skill.',
+          '  Skills are loaded only via the use_skill tool (host-backed catalog), not as files in the sandbox.',
+          '  Match entries to the hypothesis and milestones; call use_skill for skills you will apply this run.',
           '',
         ].join('\n');
   const lines = rows.map(
     (s) =>
-      `  <skill key="${escapeXmlAttr(s.key)}" name="${escapeXmlAttr(s.name)}" path="${escapeXmlAttr(s.path)}">${escapeXmlAttr(s.description)}</skill>`,
+      `  <skill key="${escapeXmlAttr(s.key)}" name="${escapeXmlAttr(s.name)}">${escapeXmlAttr(s.description)}</skill>`,
   );
   return `\n\n<available_skills>\n${intro}${lines.join('\n')}\n</available_skills>\n`;
 }

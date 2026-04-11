@@ -13,7 +13,7 @@ import {
   isAllowedGoogleFontsExternalRef,
 } from '../../src/lib/google-fonts-allowlist.ts';
 import { classifyAssetRef, resolveVirtualAssetPath } from '../../src/lib/resolve-virtual-asset-path.ts';
-import { buildUseSkillToolDescription, SKILL_FILENAME } from '../lib/skill-discovery.ts';
+import { buildUseSkillToolDescription } from '../lib/skill-discovery.ts';
 import type { SkillCatalogEntry } from '../lib/skill-schema.ts';
 
 async function readProjectFile(bash: Bash, rel: string): Promise<string | undefined> {
@@ -103,7 +103,6 @@ export function createUseSkillTool(
     key: e.key,
     name: e.name,
     description: e.description,
-    path: `skills/${e.key}/${SKILL_FILENAME}`,
   }));
   const description = buildUseSkillToolDescription(rows);
 

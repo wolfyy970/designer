@@ -9,23 +9,12 @@ vi.mock('../prompt-discovery.ts', () => ({
   getSystemPromptBody: vi.fn(async () => 'BASE'),
 }));
 
-vi.mock('../skill-discovery.ts', async (importOriginal) => {
-  const orig = await importOriginal<typeof import('../skill-discovery.ts')>();
-  return {
-    ...orig,
-    getSkillBody: vi.fn(async (key: string) => {
-      if (key === 'agents-md-file') return '  hello agent  ';
-      return '';
-    }),
-  };
-});
-
 describe('buildAgenticSystemContext', () => {
   async function emptySkillsRoot(): Promise<string> {
     return fs.mkdtemp(path.join(os.tmpdir(), 'ad-ctx-empty-skills-'));
   }
 
-  it('returns empty catalog and seeds when no skills exist', async () => {
+  it('returns empty catalog and empty sandbox seeds when no skills exist', async () => {
     const skillsRoot = await emptySkillsRoot();
     try {
       const out = await buildAgenticSystemContext({ skillsRoot });
@@ -33,12 +22,13 @@ describe('buildAgenticSystemContext', () => {
       expect(out.loadedSkills).toEqual([]);
       expect(out.skillCatalog).toEqual([]);
       expect(out.systemPrompt).toBe('BASE');
+      expect(out.sandboxSeedFiles).toEqual({});
     } finally {
       await fs.rm(skillsRoot, { recursive: true, force: true });
     }
   });
 
-  it('returns skillCatalog + seeds for skills matching session tags', async () => {
+  it('returns skillCatalog but does not copy skills into sandboxSeedFiles', async () => {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'ad-ctx-skills-'));
     try {
       const key = 'test-design-skill';
@@ -59,7 +49,7 @@ Skill body`,
       expect(out.loadedSkills).toHaveLength(1);
       expect(out.loadedSkills[0]!.key).toBe(key);
       expect(out.skillCatalog).toHaveLength(1);
-      expect(out.sandboxSeedFiles[`skills/${key}/SKILL.md`]).toBe('Skill body');
+      expect(out.sandboxSeedFiles).toEqual({});
     } finally {
       await fs.rm(tmp, { recursive: true, force: true });
     }

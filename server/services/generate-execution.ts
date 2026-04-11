@@ -42,6 +42,10 @@ async function executeGenerateStream(
     ? { byType: {} as Record<string, number>, skippedAbort: 0, t0: Date.now() }
     : null;
 
+  /** Matches orchestrator `effectiveSignal`: upstream client abort + SSE delivery failure. */
+  const streamFailureCtrl = new AbortController();
+  const sseWriteAbort = AbortSignal.any([abortSignal, streamFailureCtrl.signal]);
+
   const write = async (event: string, data: Record<string, unknown>) => {
     if (sseWriteAudit) sseWriteAudit.byType[event] = (sseWriteAudit.byType[event] ?? 0) + 1;
     const payload = JSON.stringify(wrap(data));
@@ -51,7 +55,7 @@ async function executeGenerateStream(
   };
 
   const writeAgentic = async (event: Parameters<typeof agenticOrchestratorEventToSse>[0]) => {
-    if (abortSignal.aborted) {
+    if (sseWriteAbort.aborted) {
       if (sseWriteAudit) sseWriteAudit.skippedAbort += 1;
       return;
     }
@@ -69,6 +73,7 @@ async function executeGenerateStream(
         signal: abortSignal,
         ...(correlationId ? { correlationId } : {}),
       },
+      streamFailureController: streamFailureCtrl,
       compiledPrompt: body.prompt,
       evaluationContext: body.evaluationContext,
       evaluatorProviderId: body.evaluatorProviderId,

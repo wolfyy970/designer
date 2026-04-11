@@ -322,7 +322,7 @@ export interface GenerateStreamCallbacks {
   ) => void;
   onEvaluationReport?: (round: number, snapshot: EvaluationRoundSnapshot) => void;
   onRevisionRound?: (round: number, brief: string) => void;
-  /** Non-manual skills pre-seeded for this Pi session (may update on revision rounds). */
+  /** Non-manual skills in the catalog for this Pi session (may update on revision rounds). */
   onSkillsLoaded?: (skills: SkillInfo[]) => void;
   /** Fired when the agent calls use_skill successfully. */
   onSkillActivated?: (payload: SkillInfo) => void;

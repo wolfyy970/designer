@@ -199,7 +199,7 @@ export interface GenerationResult {
   thinkingTurns?: ThinkingTurnSlice[];
   /** Capped structured trace for this in-flight run. Never persisted. */
   liveTrace?: RunTraceEvent[];
-  /** Agent skills pre-seeded for this Pi session (non-manual catalog). Never persisted. */
+  /** Agent skills in the catalog for this Pi session (non-manual). Never persisted. */
   liveSkills?: SkillInfo[];
   /** Skills the agent activated via use_skill this run. Never persisted. */
   liveActivatedSkills?: SkillInfo[];

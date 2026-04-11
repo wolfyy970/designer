@@ -47,14 +47,6 @@ export function buildCheckpoint(
   };
 }
 
-export function mergeSeedWithDesign(
-  designFiles: Record<string, string>,
-  sandboxSeedFiles?: Record<string, string>,
-): Record<string, string> {
-  const sand = sandboxSeedFiles && Object.keys(sandboxSeedFiles).length > 0 ? sandboxSeedFiles : {};
-  return { ...sand, ...designFiles };
-}
-
 export function agenticResult(
   files: Record<string, string>,
   rounds: EvaluationRoundSnapshot[],
@@ -89,10 +81,11 @@ export function buildSkippedEvalAggregate(): AggregatedEvaluationReport {
   };
 }
 
-/** Pi build finished without running evaluator workers (single pass). */
+/** Pi build finished without running evaluator workers (single pass), or build-only early exit (e.g. aborted). */
 export function agenticBuildOnlyResult(
   files: Record<string, string>,
   emittedFilePaths: string[],
+  stopReason: AgenticStopReason = 'build_only',
 ): AgenticOrchestratorResult {
   const aggregate = buildSkippedEvalAggregate();
   return {
@@ -100,7 +93,7 @@ export function agenticBuildOnlyResult(
     rounds: [],
     finalAggregate: aggregate,
     checkpoint: buildCheckpoint(files, [], {
-      stopReason: 'build_only',
+      stopReason,
       revisionAttempts: 0,
     }),
     emittedFilePaths,

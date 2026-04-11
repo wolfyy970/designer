@@ -91,7 +91,6 @@ export async function runDesignAgentSession(
 
   const todoState: { current: TodoItem[] } = { current: [] };
   const hasSeed = !!params.seedFiles && Object.keys(params.seedFiles).length > 0;
-  const seedFilesSnapshot = params.seedFiles;
 
   const registryCw = await getProviderModelContextWindow(params.providerId, params.modelId);
   const fallbackCw =
@@ -271,14 +270,19 @@ export async function runDesignAgentSession(
 
   const files = await extractDesignFiles(bash);
 
-  const beyondSeed = computeDesignFilesBeyondSeed(files, seedFilesSnapshot);
+  const seedSnapshot = params.seedFiles;
+  const hasRevisionSeed = !!seedSnapshot && Object.keys(seedSnapshot).length > 0;
+  /** With no pre-seeded files, the sandbox should only contain agent output. With revision seeds, compare to detect no net new work. */
+  const outputVsSeed = hasRevisionSeed
+    ? computeDesignFilesBeyondSeed(files, seedSnapshot)
+    : files;
 
   if (env.isDev) {
     const seedCount = params.seedFiles ? Object.keys(params.seedFiles).length : 0;
     console.debug('[pi-agent] session complete', {
       correlationId: params.correlationId,
       filesExtracted: Object.keys(files).length,
-      beyondSeedCount: Object.keys(beyondSeed).length,
+      beyondSeedCount: Object.keys(outputVsSeed).length,
       fileNames: Object.keys(files),
       fileEventsEmitted: fileEventCount,
       hasSeed,
@@ -290,10 +294,12 @@ export async function runDesignAgentSession(
     });
   }
 
-  if (Object.keys(beyondSeed).length === 0 && !params.signal?.aborted) {
+  if (Object.keys(outputVsSeed).length === 0 && !params.signal?.aborted) {
     if (!lastAssistantHasAgentError(session)) {
       if (env.isDev) {
-        console.warn('[pi-agent] agent produced no new or changed design files vs seed (empty beyond-seed)');
+        console.warn(
+          '[pi-agent] agent produced no new or changed files vs seed (empty workspace or unchanged revision seed)',
+        );
       }
       await onEvent({
         type: 'error',

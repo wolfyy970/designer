@@ -63,11 +63,11 @@ export async function writeAgenticEvalRunLog(input: {
   }
 
   const ctx = await buildAgenticSystemContext({});
-  for (const [relPath, content] of Object.entries(ctx.sandboxSeedFiles)) {
-    if (!relPath.startsWith('skills/')) continue;
+  for (const entry of ctx.skillCatalog) {
+    const relPath = `skills/${entry.key}/SKILL.md`;
     const dest = path.join(root, relPath);
     await mkdir(path.dirname(dest), { recursive: true });
-    await writeFile(dest, content, 'utf8');
+    await writeFile(dest, entry.bodyMarkdown, 'utf8');
   }
 
   for (const snap of input.rounds) {

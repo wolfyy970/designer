@@ -48,6 +48,11 @@ export interface AgenticOrchestratorOptions {
   rubricWeights?: Partial<Record<EvaluatorRubricId, number>>;
   /** Session type for skill filtering. Defaults to 'design'. */
   sessionType?: import('../../lib/skill-discovery.ts').SessionType;
+  /**
+   * When set, SSE delivery failures abort this controller (same instance the orchestrator wires to
+   * `onDeliveryFailure`). Lets callers align their own writers with `AbortSignal.any([upstream, signal])`.
+   */
+  streamFailureController?: AbortController;
   onStream: (e: AgenticOrchestratorEvent) => void | Promise<void>;
 }
 

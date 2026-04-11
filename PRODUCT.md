@@ -19,7 +19,7 @@ Every subsystem — the incubator, the agentic builder, the evaluator, the revis
 
 ## What Exists Today
 
-**Status:** Canvas interface complete. Single-shot and agentic generation operational with post-build evaluation, bounded revision rounds, and optional headless browser QA. Vision support implemented. Repo **Agent Skills** under **`skills/`** are discovered per Pi session, pre-seeded into the virtual workspace (all non-`manual`), and surfaced in the preview run UI; the model reads relevant skills on demand.
+**Status:** Canvas interface complete. Single-shot and agentic generation operational with post-build evaluation, bounded revision rounds, and optional headless browser QA. Vision support implemented. Repo **Agent Skills** under **`skills/`** are discovered per Pi session, listed in the **`use_skill`** tool catalog (all non-`manual`), and surfaced in the preview run UI; the model loads relevant skills via **`use_skill`** (host-backed), not as files in the virtual workspace.
 
 ## Canvas Interface (`/canvas` — default route)
 
@@ -93,7 +93,7 @@ Start a run with **Design** on the Hypothesis node. With **Auto-improve** **off*
 
 **Typical flow:** plan milestones → create or edit files with `write` / `edit` → validate → optional bash for edge cases. Live **`file`** events update the preview as design artifacts change.
 
-**Skills.** Agent Skills live under **`skills/<key>/SKILL.md`** (YAML frontmatter: `name`, `description`, `tags`, `when`: `auto` | `always` | `manual`). On each agentic **build** and **revision** round, the server walks the directory, puts the **`<available_skills>`** list in the Pi **`use_skill`** tool description (paths + descriptions for non-`manual` entries), and **pre-seeds** those packages into **`skills/<key>/…`** in the virtual workspace. The agent should call **`use_skill`** (or **`read`** on `SKILL.md`) when relevant. Streamed **`skills_loaded`** lists the catalog; **`skill_activated`** fires when **`use_skill`** succeeds. Optional reference files in the package copy with the skill (see server limits).
+**Skills.** Agent Skills live under **`skills/<key>/SKILL.md`** (YAML frontmatter: `name`, `description`, `tags`, `when`: `auto` | `always` | `manual`). On each agentic **build** and **revision** round, the server walks the directory and puts the **`<available_skills>`** list in the Pi **`use_skill`** tool description (keys + descriptions for non-`manual` entries). Skills are **not** copied into the virtual workspace; the agent calls **`use_skill`** to load instructions from the host catalog. Streamed **`skills_loaded`** lists the catalog; **`skill_activated`** fires when **`use_skill`** succeeds.
 
 **Preview uses the real file tree.** The UI **POSTs** the current map to **`/api/preview/sessions`** (debounced while files stream) and loads the canonical HTML entry in an iframe via **`src`** (relative links and multi-page navigation work). If registration fails, **`bundleVirtualFS()`** falls back to a single **`srcDoc`**. Original paths stay available in the code tab and zip export.
 

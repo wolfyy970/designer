@@ -2,7 +2,7 @@
 
 **Canonical instructions for AI coding agents** working in this repository—commands, where to read architecture (including Pi/just-bash sandbox), and gotchas. Follows the vendor-neutral [AGENTS.md](https://agents.md) convention (Cursor, Codex, Windsurf, and similar tools commonly load this filename).
 
-**Claude Code** still discovers `**CLAUDE.md`** at the repo root first; that file is a **stub** pointing here. **Do not confuse** this document with the `**agents-md-file`** skill: its instructions are surfaced as a **virtual** `AGENTS.md` under `/home/user/project` inside the **Pi design sandbox** only (output rules for generated artifacts), not this developer-facing file.
+**Claude Code** still discovers `**CLAUDE.md`** at the repo root first; that file is a **stub** pointing here. **Do not confuse** this document with the `**agents-md-file`** skill: that skill’s body is for the Pi agent and is loaded via **`use_skill`** (not this repo-root file).
 
 ## North Star
 
@@ -44,7 +44,7 @@ Vitest excludes `server/services/__tests__/browser-playwright-evaluator.test.ts`
 
 **Full technical reference:** [ARCHITECTURE.md](ARCHITECTURE.md) — routes, server modules, client stores, canvas, generation (agentic Pi sandbox + optional auto-improve loop), preview URLs, Pi NPM boundary. **Pi design sandbox** (three-layer contract, **tool inventory** table, edit cascade / `edit-match-cascade.ts`): [ARCHITECTURE.md § Pi design sandbox](ARCHITECTURE.md#pi-design-sandbox-three-layer-contract).
 
-**Prompts and skills:** Agent-facing prompt text lives in `**skills/*/SKILL.md`** files (YAML frontmatter plus body). The designer system prompt is `**prompts/designer-agentic-system/PROMPT.md`**. Resolution and composition from disk are centralized in **[server/lib/prompt-resolution.ts](server/lib/prompt-resolution.ts)**; structural placeholder glue with template variables is in **[server/lib/prompt-templates.ts](server/lib/prompt-templates.ts)**. Incubation, inputs-gen, design-system extraction, and evaluation run through the Pi agentic pipeline with session-scoped skill catalogs.
+**Prompts and skills:** Agent-facing prompt text lives in `**skills/*/SKILL.md`** files (YAML frontmatter plus body). The designer system prompt is `**prompts/designer-agentic-system/PROMPT.md`**. Resolution and composition from disk are centralized in **[server/lib/prompt-resolution.ts](server/lib/prompt-resolution.ts)**; structural placeholder glue with template variables is in **[server/lib/prompt-templates.ts](server/lib/prompt-templates.ts)**. Incubation, inputs-gen, design-system extraction, and evaluation run through the Pi agentic pipeline with session-scoped skill catalogs. Skills are **not** copied into the just-bash virtual filesystem — the Pi agent loads them via **`use_skill`** (host-backed).
 
 **Version store (committed):** Skills and `PROMPT.md` keep timestamped copies under **`skills/<key>/_versions/`** and **`prompts/designer-agentic-system/_versions/`**; rubric snapshots stay under **`.prompt-versions/snapshots/`**; **`.prompt-versions/manifest.jsonl`** logs everything. Meta-harness **proposer** / **promotion** still use **`snapshotBeforeWrite`** (**[meta-harness/version-store.ts](meta-harness/version-store.ts)**). **Manual workflow:** **`pnpm snap`** (no args) saves only files that changed since the last snapshot; pre-commit runs the same unless **`SKIP_SNAP=1`**. Details: **[USER_GUIDE.md § Version history](USER_GUIDE.md#version-history)**; harness-only: **[meta-harness/VERSIONING.md](meta-harness/VERSIONING.md)**.
 
@@ -76,6 +76,7 @@ The frontend (Vite, port **5173** only — `strictPort`) proxies `/api/*` to the
 In development, every agentic generation stream writes structured `console.debug` entries across the pipeline:
 
 - **Server:** `[bridge]` for event-bridge errors/unhandled types; `[write-gate]` for SSE write failures; `[generate:SSE]` write-count summary at stream close; `(task:SSE)` write summary for **task routes** (`incubate`, `inputs-generate`, `design-system` — see `server/lib/sse-task-route.ts`).
+- **Agentic abort correlation (dev):** grep around the run’s `correlationId` (request body / LLM logs) for `[agentic-orchestrator] onStream failed` (SSE delivery → delivery abort), `[agentic-orchestrator] build phase: effectiveSignal aborted after Pi session` (includes `upstreamAbort` vs `deliveryAbort`), `[generate:SSE]`, and `[write-gate]`. If `onStream failed` is absent but the client disconnected, expect upstream abort only.
 - **Client:** `SseStreamDiagnostics` (`src/lib/sse-diagnostics.ts`) counts events and drops — inspect via `window.__SSE_DIAG`; `(stream:<id>)` per-callback logs in `placeholder-stream-handlers.ts`; `(raf:<id>)` batcher stats at finalize. (Prefixes use parentheses so Tailwind’s scanner does not treat them as arbitrary class names.)
 
 All diagnostics are tree-shaken in production or gated behind `import.meta.env.DEV` / `env.isDev`.

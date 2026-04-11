@@ -89,9 +89,8 @@ export async function extractDesignFiles(bash: Bash): Promise<Record<string, str
 }
 
 /**
- * Files the agent actually added or changed vs the initial seed map.
- * Pre-seeded skill files that are unchanged do not count as "design output" so we can detect
- * empty runs when the model fails before writing anything new.
+ * Files the agent added or changed vs the initial seed map (revision rounds re-seed prior design files).
+ * When `seedFiles` is empty, callers should treat the full extracted map as output.
  */
 export function computeDesignFilesBeyondSeed(
   extracted: Record<string, string>,

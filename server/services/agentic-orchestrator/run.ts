@@ -28,7 +28,6 @@ import {
   agenticBuildOnlyResult,
   agenticResult,
   appendEvaluationRoundHistory,
-  mergeSeedWithDesign,
 } from './checkpoint.ts';
 import { runAgenticPiSessionRound } from './pi-session-round.ts';
 
@@ -43,7 +42,7 @@ async function runAgenticWithEvaluationImpl(
 ): Promise<AgenticOrchestratorResult | null> {
   const provider = getProvider(options.build.providerId);
   const parallel = provider?.supportsParallel ?? false;
-  const streamFailureCtrl = new AbortController();
+  const streamFailureCtrl = options.streamFailureController ?? new AbortController();
   const upstreamSignal = options.build.signal;
   const effectiveSignal =
     upstreamSignal != null
@@ -74,6 +73,27 @@ async function runAgenticWithEvaluationImpl(
   }
 
   try {
+    const revisionPromptByEvalRound = new Map<number, string>();
+    const finishWithLog = (result: AgenticOrchestratorResult): AgenticOrchestratorResult => {
+      const baseDir = env.OBSERVABILITY_LOG_BASE_DIR;
+      if (baseDir) {
+        void writeAgenticEvalRunLog({
+          baseDir,
+          runId: mergedOptions.build.correlationId ?? randomUUID(),
+          compiledPrompt: mergedOptions.compiledPrompt,
+          evaluationContext: mergedOptions.evaluationContext ?? undefined,
+          getPromptBody,
+          rounds: result.rounds,
+          revisionPromptByEvalRound,
+          stopReason: result.checkpoint.stopReason ?? 'unknown',
+          finalAggregate: result.finalAggregate,
+        }).catch((err) => {
+          if (env.isDev) console.warn('[eval-run-log]', normalizeError(err), err);
+        });
+      }
+      return result;
+    };
+
     const tracePhaseRef = { current: 'building' as AgenticPhase };
     const forward = async (e: AgentRunEvent) => {
       if (e.type === 'skill_activated') {
@@ -101,45 +121,37 @@ async function runAgenticWithEvaluationImpl(
       forward,
       'building',
       setPiTrace,
-      (ctx) => {
-        const initialSeedFiles = {
-          ...ctx.sandboxSeedFiles,
-          ...(mergedOptions.build.seedFiles ?? {}),
-        };
-        const seedFilesForBuild =
-          Object.keys(initialSeedFiles).length > 0 ? initialSeedFiles : undefined;
+      () => {
+        const extra = mergedOptions.build.seedFiles ?? {};
+        const seedFilesForBuild = Object.keys(extra).length > 0 ? extra : undefined;
         return { seedFiles: seedFilesForBuild };
       },
     );
-    if (!buildResult || effectiveSignal.aborted) return null;
+    if (!buildResult) return null;
+
+    if (effectiveSignal.aborted) {
+      if (env.isDev) {
+        console.debug('[agentic-orchestrator] build phase: effectiveSignal aborted after Pi session', {
+          correlationId: mergedOptions.build.correlationId,
+          upstreamAbort: upstreamSignal?.aborted ?? false,
+          deliveryAbort: streamFailureCtrl.signal.aborted,
+        });
+      }
+      return finishWithLog(
+        agenticBuildOnlyResult(
+          buildResult.files,
+          [...(buildResult.emittedFilePaths ?? [])],
+          'aborted',
+        ),
+      );
+    }
 
     let files = buildResult.files;
     const emittedDuringRun = new Set<string>(buildResult.emittedFilePaths ?? []);
     const rounds: EvaluationRoundSnapshot[] = [];
     const roundHistory: EvaluationRoundHistoryEntry[] = [];
-    const revisionPromptByEvalRound = new Map<number, string>();
     let revisionAttempts = 0;
     let lastRevisionBrief: string | undefined;
-
-    const finishWithLog = (result: AgenticOrchestratorResult): AgenticOrchestratorResult => {
-      const baseDir = env.OBSERVABILITY_LOG_BASE_DIR;
-      if (baseDir) {
-        void writeAgenticEvalRunLog({
-          baseDir,
-          runId: mergedOptions.build.correlationId ?? randomUUID(),
-          compiledPrompt: mergedOptions.compiledPrompt,
-          evaluationContext: mergedOptions.evaluationContext ?? undefined,
-          getPromptBody,
-          rounds: result.rounds,
-          revisionPromptByEvalRound,
-          stopReason: result.checkpoint.stopReason ?? 'unknown',
-          finalAggregate: result.finalAggregate,
-        }).catch((err) => {
-          if (env.isDev) console.warn('[eval-run-log]', normalizeError(err), err);
-        });
-      }
-      return result;
-    };
 
     const returnWithCheckpoint = (
       snapshotArg: EvaluationRoundSnapshot,
@@ -223,9 +235,9 @@ async function runAgenticWithEvaluationImpl(
         },
       });
 
-      const revised = await runAgenticPiSessionRound(mergedOptions, streamCtx, forward, 'revising', setPiTrace, (ctx) => ({
+      const revised = await runAgenticPiSessionRound(mergedOptions, streamCtx, forward, 'revising', setPiTrace, () => ({
         userPrompt: revisionUser,
-        seedFiles: mergeSeedWithDesign(files, ctx.sandboxSeedFiles),
+        seedFiles: files,
         compactionNote: `Post-evaluation revision requested. Overall ${snapshot.aggregate.overallScore.toFixed(2)}. Hard fails: ${snapshot.aggregate.hardFails.length}.`,
         initialProgressMessage: 'Revising design from evaluation feedback…',
       }));

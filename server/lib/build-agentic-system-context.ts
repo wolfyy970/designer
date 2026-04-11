@@ -1,15 +1,17 @@
 /**
- * Fresh agentic system prompt + sandbox seed from disk-backed skills and PROMPT.md.
+ * Fresh agentic system prompt + skill catalog from disk-backed skills and PROMPT.md.
  * Call once per PI session boundary so skill edits apply to the next build or revision.
+ *
+ * Skills are **not** copied into the just-bash virtual filesystem; the agent loads them via `use_skill`
+ * (host-backed catalog). The returned `sandboxSeedFiles` is always empty unless callers add seeds
+ * (e.g. revision rounds merge prior design files in the orchestrator).
  */
 import type { LoadedSkillSummary, SkillCatalogEntry } from './skill-schema.ts';
 import {
-  buildSkillSandboxSeedMap,
   catalogEntriesToSummaries,
   discoverSkills,
   filterSkillsForSession,
   resolveSkillsRoot,
-  getSkillBody,
   type SessionType,
 } from './skill-discovery.ts';
 import { getSystemPromptBody } from './prompt-discovery.ts';
@@ -22,10 +24,11 @@ export async function buildAgenticSystemContext(input: {
   skillsRoot?: string;
 }): Promise<{
   systemPrompt: string;
+  /** Always empty from this builder; orchestrator may pass prior design files as seeds for revisions. */
   sandboxSeedFiles: Record<string, string>;
-  /** Skills pre-seeded + listed in `skills_loaded` SSE / UI. */
+  /** Skills listed in `skills_loaded` SSE / UI and in the `use_skill` tool catalog. */
   loadedSkills: LoadedSkillSummary[];
-  /** Full catalog entries for `use_skill` tool (same set as pre-seed). */
+  /** Full catalog entries for `use_skill` tool (host-backed reads). */
   skillCatalog: SkillCatalogEntry[];
 }> {
   const systemPrompt = await getSystemPromptBody('designer-agentic-system');
@@ -33,20 +36,10 @@ export async function buildAgenticSystemContext(input: {
 
   const sessionType = input.sessionType ?? 'design';
 
-  if (sessionType === 'design') {
-    const agentsContext = (await getSkillBody('agents-md-file', input.skillsRoot)).trim();
-    if (agentsContext.length > 0) {
-      sandboxSeedFiles['AGENTS.md'] = agentsContext;
-    }
-  }
-
   const skillsRoot = resolveSkillsRoot(input.skillsRoot);
   const allEntries = await discoverSkills(skillsRoot);
   const catalogEntries = filterSkillsForSession(allEntries, sessionType);
   const loadedSkills = catalogEntriesToSummaries(catalogEntries);
-
-  const skillSeeds = await buildSkillSandboxSeedMap(catalogEntries);
-  Object.assign(sandboxSeedFiles, skillSeeds);
 
   if (env.isDev) {
     console.debug('[agentic-context] skills', {

@@ -459,4 +459,28 @@ describe('runAgenticWithEvaluation', () => {
     expect(result?.checkpoint.stopReason).toBe('aborted');
     expect(ac.signal.aborted).toBe(false);
   });
+
+  it('returns build checkpoint with stopReason aborted when Pi succeeds but delivery already aborted (preserves files)', async () => {
+    const streamFailureCtrl = new AbortController();
+    mocks.runDesignAgentSession.mockImplementation(async () => {
+      streamFailureCtrl.abort();
+      return {
+        files: { 'index.html': '<html></html>' },
+        todos: [],
+        emittedFilePaths: ['index.html'],
+      };
+    });
+
+    const result = await runAgenticWithEvaluation({
+      ...baseOpts,
+      streamFailureController: streamFailureCtrl,
+      evaluationContext: null,
+      onStream: vi.fn(),
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.checkpoint.stopReason).toBe('aborted');
+    expect(result?.files['index.html']).toBe('<html></html>');
+    expect(mocks.runEvaluationWorkers).not.toHaveBeenCalled();
+  });
 });

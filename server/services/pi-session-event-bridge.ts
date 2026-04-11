@@ -433,7 +433,7 @@ function handleCompactionEnd(
     if (d?.readFiles?.length) detailBits.push(`readFiles=${d.readFiles.length}`);
   }
   const rehydrationHint =
-    'Rehydrate: read AGENTS.md; use last todo_write / checkpoint lists; re-read key HTML/CSS/JS you were editing; grep if uncertain.';
+    'Rehydrate: use_skill for needed sandbox guides; use last todo_write / checkpoint lists; re-read key HTML/CSS/JS you were editing; grep if uncertain.';
   safeBridgeEmit(
     ctx,
     ctx.trace(

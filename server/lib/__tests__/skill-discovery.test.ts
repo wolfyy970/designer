@@ -3,7 +3,6 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  buildSkillSandboxSeedMap,
   buildUseSkillToolDescription,
   catalogEntriesToSummaries,
   discoverSkills,
@@ -83,22 +82,23 @@ describe('formatSkillsCatalogXml', () => {
     expect(formatSkillsCatalogXml([])).toBe('');
   });
 
-  it('tool variant includes Load guidance and path attributes', () => {
+  it('tool variant includes Load guidance and skill keys (no sandbox paths)', () => {
     const xml = formatSkillsCatalogXml(
       [
-        { key: 'a', name: 'A', description: 'Alpha', path: 'skills/a/SKILL.md' },
-        { key: 'b', name: 'B', description: 'Beta', path: 'skills/b/SKILL.md' },
+        { key: 'a', name: 'A', description: 'Alpha' },
+        { key: 'b', name: 'B', description: 'Beta' },
       ],
       'tool',
     );
     expect(xml).toContain('Load');
-    expect(xml).toContain('path="skills/a/SKILL.md"');
-    expect(xml).toContain('path="skills/b/SKILL.md"');
+    expect(xml).toContain('key="a"');
+    expect(xml).toContain('key="b"');
+    expect(xml).not.toContain('path=');
   });
 
   it('buildUseSkillToolDescription wraps catalog for Pi tool', () => {
     const desc = buildUseSkillToolDescription([
-      { key: 'x', name: 'X', description: 'Xd', path: 'skills/x/SKILL.md' },
+      { key: 'x', name: 'X', description: 'Xd' },
     ]);
     expect(desc).toContain('use_skill:');
     expect(desc).toContain('<available_skills>');
@@ -152,7 +152,7 @@ describe('catalog skills (when !== manual)', () => {
     { key: 'c', dir: '/c', name: 'C', description: 'C', tags: [], when: 'manual', bodyMarkdown: '' },
   ];
 
-  it('excludes manual skills from pre-seeded catalog-style lists', () => {
+  it('excludes manual skills from session catalog lists', () => {
     const result = entries.filter((e) => e.when !== 'manual');
     expect(result.map((e) => e.key)).toEqual(['a', 'b']);
   });
@@ -166,51 +166,6 @@ describe('catalogEntriesToSummaries', () => {
     expect(catalogEntriesToSummaries(entries)).toEqual([
       { key: 'x', name: 'X', description: 'XD' },
     ]);
-  });
-});
-
-describe('buildSkillSandboxSeedMap', () => {
-  let tmp: string;
-  beforeEach(async () => {
-    tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'ad-seed-'));
-  });
-  afterEach(async () => {
-    await fs.rm(tmp, { recursive: true, force: true });
-  });
-
-  it('seeds SKILL.md body and eligible reference files', async () => {
-    const dir = path.join(tmp, 'my-skill');
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, 'SKILL.md'), '---\nname: S\ndescription: D\n---\nBody');
-    await fs.writeFile(path.join(dir, 'example.html'), '<h1>Hi</h1>');
-    await fs.writeFile(path.join(dir, 'data.bin'), Buffer.from([0x00, 0x01]));
-
-    const entry: SkillCatalogEntry = {
-      key: 'my-skill', dir, name: 'S', description: 'D', tags: [], when: 'auto', bodyMarkdown: 'Body',
-    };
-    const seed = await buildSkillSandboxSeedMap([entry]);
-    expect(seed['skills/my-skill/SKILL.md']).toBe('Body');
-    expect(seed['skills/my-skill/example.html']).toBe('<h1>Hi</h1>');
-    expect(seed).not.toHaveProperty('skills/my-skill/data.bin');
-  });
-
-  it('does not seed _versions/ (prompt snapshot history stays out of Pi sandbox)', async () => {
-    const dir = path.join(tmp, 'snap-skill');
-    await fs.mkdir(path.join(dir, '_versions'), { recursive: true });
-    await fs.writeFile(path.join(dir, 'SKILL.md'), '---\nname: S\ndescription: D\n---\nBody');
-    await fs.writeFile(path.join(dir, '_versions', 'old-snap.md'), 'historical copy');
-    const entry: SkillCatalogEntry = {
-      key: 'snap-skill',
-      dir,
-      name: 'S',
-      description: 'D',
-      tags: [],
-      when: 'auto',
-      bodyMarkdown: 'Body',
-    };
-    const seed = await buildSkillSandboxSeedMap([entry]);
-    expect(seed['skills/snap-skill/SKILL.md']).toBe('Body');
-    expect(seed).not.toHaveProperty('skills/snap-skill/_versions/old-snap.md');
   });
 });
 
