@@ -40,3 +40,4 @@ Append newest first.
 | 2026-04-11 | Initial pathway table seeded from architecture map + hardening focus. **E9:** Knip `ignoreDependencies` for font packages used only via CSS paths. **E1:** `design-system` extract route test added. |
 | 2026-04-11 | README + AGENTS + DOCUMENTATION now describe **session continuity** (no chat memory; read this log first; leave notes for the next session). |
 | 2026-04-11 | **Shipped hardening batch:** route + lib tests (prompt resolution/templates, eval logger, observability sink, generate + design-system routes, HTML validation), Pi bridge modules (`pi-bridge-*`), `pi-tool-params`, API client split, skill-discovery cleanup, `createWriteGate` import from `sse-write-gate` only, knip `ignoreDependencies` for CSS-referenced fonts, docs (EXPLORATION_LOG, ARCHITECTURE API client table). |
+| 2026-04-11 | Pushed: **`5ce1f58`** — full message in `git log -1`; use as anchor for this hardening wave. |
