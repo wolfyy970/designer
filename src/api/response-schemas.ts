@@ -133,6 +133,8 @@ export const AppConfigResponseSchema = z.object({
   agenticMinOverallScore: z.number().min(0).max(5).nullable(),
   /** Matches repo defaults until promotion or manual edit + server restart. */
   defaultRubricWeights: DefaultRubricWeightsSchema,
+  /** Server env `MAX_CONCURRENT_AGENTIC_RUNS` (1–100); parallel design/hypothesis lanes each use one slot. */
+  maxConcurrentRuns: z.number().int().min(1).max(100),
 });
 
 export type AppConfigResponse = z.infer<typeof AppConfigResponseSchema>;

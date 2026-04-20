@@ -1,48 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { GENERATION_STATUS } from '../../constants/generation';
-import { pickValidatedGenerationPersistSlice } from '../generation-store';
-
-/**
- * Extracted migration logic matching the generation store's persist.migrate callback.
- * Tests the v4→v5 rename of variantStrategyId to strategyId.
- */
-function runGenerationMigrate(persisted: unknown, version: number): Record<string, unknown> {
-  const state = persisted as Record<string, unknown>;
-
-  if (version < 2) {
-    const results = (state.results as Record<string, unknown>[]) ?? [];
-    state.results = results.map((r) => ({
-      ...r,
-      runId: (r as Record<string, unknown>).runId ?? 'legacy',
-      runNumber: (r as Record<string, unknown>).runNumber ?? 1,
-    }));
-    state.selectedVersions = state.selectedVersions ?? {};
-  }
-  if (version < 3) {
-    const results = (state.results as Record<string, unknown>[]) ?? [];
-    state.results = results.map((r) => {
-      const next = { ...r };
-      delete next.evaluationSummary;
-      delete next.evaluationRounds;
-      delete next.evaluationStatus;
-      return next;
-    });
-  }
-  if (version < 4) {
-    state.userBestOverrides = state.userBestOverrides ?? {};
-  }
-  if (version < 5) {
-    const results = (state.results as Record<string, unknown>[]) ?? [];
-    state.results = results.map((r) => {
-      if ('variantStrategyId' in r && !('strategyId' in r)) {
-        const { variantStrategyId, ...rest } = r;
-        return { ...rest, strategyId: variantStrategyId };
-      }
-      return r;
-    });
-  }
-  return state;
-}
+import {
+  migrateGenerationPersistState,
+  pickValidatedGenerationPersistSlice,
+} from '../generation-store';
 
 describe('generation store migration v4 → v5 (variantStrategyId → strategyId)', () => {
   it('renames variantStrategyId to strategyId on result rows', () => {
@@ -71,8 +32,8 @@ describe('generation store migration v4 → v5 (variantStrategyId → strategyId
       userBestOverrides: {},
     };
 
-    const migrated = runGenerationMigrate(structuredClone(v4State), 4);
-    const results = migrated.results as Record<string, unknown>[];
+    const migrated = migrateGenerationPersistState(structuredClone(v4State), 4);
+    const results = migrated.results as { strategyId: string }[];
 
     expect(results[0].strategyId).toBe('vs1');
     expect(results[0]).not.toHaveProperty('variantStrategyId');
@@ -97,12 +58,12 @@ describe('generation store migration v4 → v5 (variantStrategyId → strategyId
       userBestOverrides: {},
     };
 
-    const migrated = runGenerationMigrate(structuredClone(v4State), 4);
-    const results = migrated.results as Record<string, unknown>[];
+    const migrated = migrateGenerationPersistState(structuredClone(v4State), 4);
+    const results = migrated.results as { strategyId: string }[];
     expect(results[0].strategyId).toBe('vs1');
   });
 
-  it('migrated results pass Zod validation', () => {
+  it('migrated results pass Zod validation via pickValidatedGenerationPersistSlice', () => {
     const v4State = {
       results: [
         {
@@ -119,10 +80,9 @@ describe('generation store migration v4 → v5 (variantStrategyId → strategyId
       userBestOverrides: {},
     };
 
-    const migrated = runGenerationMigrate(structuredClone(v4State), 4);
+    const migrated = migrateGenerationPersistState(structuredClone(v4State), 4);
     const validated = pickValidatedGenerationPersistSlice(migrated);
-    expect(validated).not.toBeNull();
-    expect(validated!.results[0].strategyId).toBe('vs1');
+    expect(validated.results[0].strategyId).toBe('vs1');
   });
 });
 
@@ -140,7 +100,7 @@ describe('generation store full migration ladder (v0 → v5)', () => {
       ],
     };
 
-    const migrated = runGenerationMigrate(structuredClone(v0State), 0);
+    const migrated = migrateGenerationPersistState(structuredClone(v0State), 0);
     const results = migrated.results as Record<string, unknown>[];
     expect(results[0].strategyId).toBe('vs1');
     expect(results[0].runId).toBe('legacy');

@@ -97,6 +97,69 @@ function mutateStrategy(
   return updated;
 }
 
+/**
+ * Zustand persist migration for the incubator store. Exported so tests exercise the same
+ * ladder as production (no duplicated migration logic).
+ */
+export function migrateIncubatorPersistState(
+  persistedState: unknown,
+  version: number,
+): Record<string, unknown> {
+  const state = persistedState as Record<string, unknown>;
+
+  if (version < 1) {
+    const incubationPlans: Record<string, IncubationPlan> = {};
+    if (state.dimensionMap) {
+      incubationPlans['compiler-node'] = state.dimensionMap as IncubationPlan;
+    }
+    Object.assign(state, { incubationPlans });
+  }
+
+  if (version < 2) {
+    const maps = (state.dimensionMaps ?? state.incubationPlans) as
+      | Record<string, Record<string, unknown>>
+      | undefined;
+    if (maps) {
+      for (const map of Object.values(maps)) {
+        const items = (map.variants ?? map.hypotheses) as Record<string, unknown>[] | undefined;
+        if (!items) continue;
+        for (const v of items) {
+          if ('primaryEmphasis' in v && !('hypothesis' in v)) {
+            v.hypothesis = v.primaryEmphasis;
+            delete v.primaryEmphasis;
+          }
+          if (!('measurements' in v)) v.measurements = '';
+          delete v.howItDiffers;
+          delete v.coupledDecisions;
+        }
+      }
+    }
+  }
+
+  if (version < 3) {
+    const oldMaps = state.dimensionMaps as Record<string, Record<string, unknown>> | undefined;
+    if (oldMaps && !state.incubationPlans) {
+      const incubationPlans: Record<string, unknown> = {};
+      for (const [k, map] of Object.entries(oldMaps)) {
+        const { variants, ...rest } = map;
+        incubationPlans[k] = { ...rest, hypotheses: variants ?? [] };
+      }
+      state.incubationPlans = incubationPlans;
+      delete state.dimensionMaps;
+    } else if (state.incubationPlans) {
+      const plans = state.incubationPlans as Record<string, Record<string, unknown>>;
+      for (const plan of Object.values(plans)) {
+        if (plan.variants && !plan.hypotheses) {
+          plan.hypotheses = plan.variants;
+          delete plan.variants;
+        }
+      }
+    }
+  }
+
+  return state;
+}
+
 // ── Store implementation ────────────────────────────────────────────
 
 export const useIncubatorStore = create<IncubatorStore>()(
@@ -209,61 +272,8 @@ export const useIncubatorStore = create<IncubatorStore>()(
     {
       name: STORAGE_KEYS.INCUBATOR,
       version: 3,
-      migrate: (persistedState: unknown, version: number) => {
-        const state = persistedState as Record<string, unknown>;
-
-        if (version < 1) {
-          const incubationPlans: Record<string, IncubationPlan> = {};
-          if (state.dimensionMap) {
-            incubationPlans['compiler-node'] = state.dimensionMap as IncubationPlan;
-          }
-          Object.assign(state, { incubationPlans });
-        }
-
-        if (version < 2) {
-          const maps = (state.dimensionMaps ?? state.incubationPlans) as
-            | Record<string, Record<string, unknown>>
-            | undefined;
-          if (maps) {
-            for (const map of Object.values(maps)) {
-              const items = (map.variants ?? map.hypotheses) as Record<string, unknown>[] | undefined;
-              if (!items) continue;
-              for (const v of items) {
-                if ('primaryEmphasis' in v && !('hypothesis' in v)) {
-                  v.hypothesis = v.primaryEmphasis;
-                  delete v.primaryEmphasis;
-                }
-                if (!('measurements' in v)) v.measurements = '';
-                delete v.howItDiffers;
-                delete v.coupledDecisions;
-              }
-            }
-          }
-        }
-
-        if (version < 3) {
-          const oldMaps = state.dimensionMaps as Record<string, Record<string, unknown>> | undefined;
-          if (oldMaps && !state.incubationPlans) {
-            const incubationPlans: Record<string, unknown> = {};
-            for (const [k, map] of Object.entries(oldMaps)) {
-              const { variants, ...rest } = map;
-              incubationPlans[k] = { ...rest, hypotheses: variants ?? [] };
-            }
-            state.incubationPlans = incubationPlans;
-            delete state.dimensionMaps;
-          } else if (state.incubationPlans) {
-            const plans = state.incubationPlans as Record<string, Record<string, unknown>>;
-            for (const plan of Object.values(plans)) {
-              if (plan.variants && !plan.hypotheses) {
-                plan.hypotheses = plan.variants;
-                delete plan.variants;
-              }
-            }
-          }
-        }
-
-        return state;
-      },
+      migrate: (persistedState, version) =>
+        migrateIncubatorPersistState(persistedState, version) as unknown as IncubatorStore,
       partialize: (state) => ({
         incubationPlans: state.incubationPlans,
         selectedProvider: state.selectedProvider,

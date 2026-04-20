@@ -17,6 +17,7 @@ const validConfigJson = {
     implementation: 0.25,
     browser: 0.1,
   },
+  maxConcurrentRuns: 5,
 };
 
 function renderGate(initialPath: string, ui: ReactNode, queryClient?: QueryClient) {

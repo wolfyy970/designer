@@ -159,3 +159,62 @@ describe('generateHypothesisStream error surfacing', () => {
     expect(onError0.mock.calls[0][0]).toMatch(/missing laneIndex/);
   });
 });
+
+describe('generateHypothesisStream finalize-after-stream sweep', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('finalizes every lane when the stream closes without lane_done', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse([])));
+
+    const finalize0 = vi.fn().mockResolvedValue(undefined);
+    const finalize1 = vi.fn().mockResolvedValue(undefined);
+
+    await generateHypothesisStream(dummyBody, [
+      { callbacks: {}, finalizeAfterStream: finalize0 },
+      { callbacks: {}, finalizeAfterStream: finalize1 },
+    ]);
+
+    expect(finalize0).toHaveBeenCalledTimes(1);
+    expect(finalize1).toHaveBeenCalledTimes(1);
+  });
+
+  it('finalizes only lanes that did not emit lane_done', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        sseResponse([
+          { name: SSE_EVENT_NAMES.lane_done, data: { laneIndex: 0 } },
+        ]),
+      ),
+    );
+
+    const finalize0 = vi.fn().mockResolvedValue(undefined);
+    const finalize1 = vi.fn().mockResolvedValue(undefined);
+
+    await generateHypothesisStream(dummyBody, [
+      { callbacks: {}, finalizeAfterStream: finalize0 },
+      { callbacks: {}, finalizeAfterStream: finalize1 },
+    ]);
+
+    // lane 0 finalized via lane_done; lane 1 finalized via sweep
+    expect(finalize0).toHaveBeenCalledTimes(1);
+    expect(finalize1).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces onError when sweep finalize throws', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse([])));
+
+    const onError = vi.fn();
+    const finalize = vi.fn().mockRejectedValue(new Error('finalize boom'));
+
+    await generateHypothesisStream(dummyBody, [
+      { callbacks: { onError }, finalizeAfterStream: finalize },
+    ]);
+
+    expect(finalize).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][0]).toMatch(/finalize boom/);
+  });
+});

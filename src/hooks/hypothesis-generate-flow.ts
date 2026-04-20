@@ -122,7 +122,12 @@ export async function runHypothesisGenerateFlow({
     designSystems: workspacePayload.designSystems,
     defaultIncubatorProvider: workspacePayload.defaultIncubatorProvider,
   });
-  if (!genCtxRaw) return;
+  if (!genCtxRaw) {
+    setGenerationError(
+      'No model connected for this hypothesis. Connect a Model node to the hypothesis and try again.',
+    );
+    return;
+  }
   const genCtx = {
     ...genCtxRaw,
     modelCredentials: pinModelCredentialsIfLockdown(genCtxRaw.modelCredentials, lockdown),

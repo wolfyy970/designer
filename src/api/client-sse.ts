@@ -402,6 +402,8 @@ export async function generateHypothesisStream(
   const diag = createSseStreamDiagnostics();
   attachSseDiagWindow(diag);
 
+  const finalizedLaneIndices = new Set<number>();
+
   try {
     await readSseEventStream(reader, async (currentEvent, raw) => {
       let notifyError: GenerateStreamCallbacks | undefined;
@@ -427,6 +429,7 @@ export async function generateHypothesisStream(
           const idx = parsed.laneIndex;
           if (typeof idx === 'number' && lanes[idx]) {
             notifyError = lanes[idx].callbacks;
+            finalizedLaneIndices.add(idx);
             await lanes[idx].finalizeAfterStream();
           }
           return;
@@ -478,5 +481,23 @@ export async function generateHypothesisStream(
     });
   } finally {
     diag.logClose();
+  }
+
+  for (let i = 0; i < lanes.length; i++) {
+    if (!finalizedLaneIndices.has(i)) {
+      try {
+        await lanes[i].finalizeAfterStream();
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.warn('[generate SSE] finalize after stream end (missing lane_done)', i, err);
+        }
+        lanes[i].callbacks.onError?.(
+          normalizeError(
+            err instanceof Error ? err : new Error('Stream ended before lane completed'),
+            'Generation stream ended unexpectedly',
+          ),
+        );
+      }
+    }
   }
 }

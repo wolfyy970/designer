@@ -1,4 +1,4 @@
-import { Loader2, Zap } from 'lucide-react';
+import { Hourglass, Loader2, Zap } from 'lucide-react';
 import type { GenerationProgress } from '../../../hooks/hypothesis-generate-flow';
 import type { StrategyStreamingSnapshot } from '../../../lib/strategy-streaming-snapshot';
 import { RF_INTERACTIVE } from '../../../constants/canvas';
@@ -13,6 +13,11 @@ type Props = {
   hint: string | null;
   isGenerating: boolean;
   canGenerate: boolean;
+  /** True when server slot cap is reached and this node is idle (another run may be using slots). */
+  serverAtCapacity: boolean;
+  /** In-flight GENERATING rows (matches server slots for hypothesis/design runs in this session). */
+  activeGenerationsCount: number;
+  maxConcurrentRuns: number;
   onGenerate: () => void;
   onStop: () => void;
   generationProgress: GenerationProgress | null;
@@ -23,19 +28,28 @@ export function HypothesisGenerateButton({
   hint,
   isGenerating,
   canGenerate,
+  serverAtCapacity,
+  activeGenerationsCount,
+  maxConcurrentRuns,
   onGenerate,
   onStop,
   generationProgress,
   streamingSnap,
 }: Props) {
+  const disabled = isGenerating || !canGenerate || serverAtCapacity;
   return (
     <div className={RF_INTERACTIVE}>
       {hint && <p className="mb-1.5 text-center text-nano text-fg-muted">{hint}</p>}
       <button
         type="button"
         onClick={onGenerate}
-        disabled={isGenerating || !canGenerate}
+        disabled={disabled}
         aria-busy={isGenerating}
+        title={
+          serverAtCapacity
+            ? `Server is at capacity (${activeGenerationsCount}/${maxConcurrentRuns} agentic runs). Wait for one to finish.`
+            : undefined
+        }
         className="flex w-full items-center justify-center gap-1.5 rounded-md bg-fg px-3 py-2 text-xs font-medium text-bg transition-colors hover:bg-fg-on-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isGenerating ? (
@@ -46,6 +60,11 @@ export function HypothesisGenerateButton({
                 ? `Designing ${smallNumberToWord(generationProgress.total)} previews…`
                 : `${generationProgress.completed} of ${generationProgress.total} ready…`
               : 'Designing…'}
+          </>
+        ) : serverAtCapacity ? (
+          <>
+            <Hourglass size={12} className="shrink-0 opacity-90" aria-hidden />
+            Server busy ({activeGenerationsCount}/{maxConcurrentRuns})
           </>
         ) : (
           <>

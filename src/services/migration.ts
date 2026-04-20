@@ -128,7 +128,6 @@ export async function migrateToIndexedDB(): Promise<void> {
     if (import.meta.env.DEV) {
       console.warn('[migration] Failed to migrate to IndexedDB:', err);
     }
-    // Set flag anyway to avoid retrying a broken migration
-    localStorage.setItem(MIGRATION_FLAG, '1');
+    // Do not set MIGRATION_FLAG — allow retry on next load if localStorage/IDB was inconsistent.
   }
 }

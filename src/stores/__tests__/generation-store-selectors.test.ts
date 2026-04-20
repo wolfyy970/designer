@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  countActiveGenerationSlots,
   getStack,
   getActiveResult,
   getBestCompleteResult,
@@ -8,6 +9,7 @@ import {
   nextRunNumber,
   type GenerationState,
 } from '../generation-store';
+import { GENERATION_STATUS } from '../../constants/generation';
 import type { GenerationResult } from '../../types/provider';
 
 function makeResult(
@@ -390,5 +392,30 @@ describe('nextRunNumber', () => {
       makeResult({ id: 'r2', runNumber: 5 }),
     ]);
     expect(nextRunNumber(state, 'vs-1')).toBe(6);
+  });
+});
+
+// ─── countActiveGenerationSlots ──────────────────────────────────────
+
+describe('countActiveGenerationSlots', () => {
+  it('returns 0 when no rows are generating', () => {
+    const state = mockState([
+      makeResult({ id: 'r1', status: GENERATION_STATUS.COMPLETE }),
+      makeResult({ id: 'r2', status: GENERATION_STATUS.ERROR }),
+    ]);
+    expect(countActiveGenerationSlots(state)).toBe(0);
+  });
+
+  it('counts only rows in GENERATING status across all hypotheses', () => {
+    const state = mockState([
+      makeResult({ id: 'r1', status: GENERATION_STATUS.GENERATING }),
+      makeResult({ id: 'r2', strategyId: 'vs-2', status: GENERATION_STATUS.GENERATING }),
+      makeResult({ id: 'r3', status: GENERATION_STATUS.COMPLETE }),
+    ]);
+    expect(countActiveGenerationSlots(state)).toBe(2);
+  });
+
+  it('returns 0 for empty results', () => {
+    expect(countActiveGenerationSlots(mockState([]))).toBe(0);
   });
 });

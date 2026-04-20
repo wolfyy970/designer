@@ -110,6 +110,11 @@ export function aggregateEvaluationReports(
     normalizedScores,
     hardFails,
     prioritizedFixes,
+    /**
+     * Always `false` here — revision is driven only by {@link enforceRevisionGate} rules
+     * (hard fails, tiered critical scores, low weighted average), not by LLM `shouldRevise`.
+     * @see isEvalSatisfied — with no `minOverallScore`, stopping uses `!aggregate.shouldRevise` after the gate.
+     */
     shouldRevise: false,
     revisionBrief,
     evaluatorTraces: Object.keys(evaluatorTraces).length > 0 ? evaluatorTraces : undefined,

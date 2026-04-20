@@ -3,12 +3,13 @@ import { type NodeProps, type Node, Handle, Position } from '@xyflow/react';
 import { FileText, Pencil, X } from 'lucide-react';
 import { useIncubatorStore, findStrategy } from '../../../stores/incubator-store';
 import { useCanvasStore } from '../../../stores/canvas-store';
-import { useGenerationStore } from '../../../stores/generation-store';
+import { countActiveGenerationSlots, useGenerationStore } from '../../../stores/generation-store';
 import { useSpecStore } from '../../../stores/spec-store';
 import { useWorkspaceDomainStore } from '../../../stores/workspace-domain-store';
 import { useEvaluatorDefaultsStore } from '../../../stores/evaluator-defaults-store';
 import type { HypothesisNodeData } from '../../../types/canvas-data';
 import { useHypothesisGeneration } from '../../../hooks/useHypothesisGeneration';
+import { useAppConfig } from '../../../hooks/useAppConfig';
 import { useHypothesisAutoGenerate } from '../../../hooks/useHypothesisAutoGenerate';
 import { consumePendingAutoGenerate } from '../../../lib/hypothesis-pending-generate';
 import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
@@ -91,6 +92,12 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
   const isGenerating = useGenerationStore((s) =>
     s.results.some((r) => r.strategyId === strategyId && r.status === GENERATION_STATUS.GENERATING),
   );
+
+  const activeGenerationsCount = useGenerationStore((s) => countActiveGenerationSlots(s));
+  const { data: appConfig } = useAppConfig();
+  const maxConcurrentRuns = appConfig?.maxConcurrentRuns ?? 5;
+  const serverAtCapacity =
+    activeGenerationsCount >= maxConcurrentRuns && !isGenerating;
 
   /** Stable string: best streaming lane (max streamed chars) for multi-model runs. */
   const strategyStreamingKey = useGenerationStore((s) => {
@@ -242,7 +249,9 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
       ? 'Connect a Model node'
       : !strategy.name.trim() || !strategy.hypothesis.trim()
         ? 'Add a name and hypothesis'
-        : null
+        : serverAtCapacity
+          ? 'Server is at capacity—wait for a run to finish.'
+          : null
     : null;
 
   return (
@@ -408,6 +417,9 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
           hint={hint}
           isGenerating={isGenerating}
           canGenerate={canGenerate}
+          serverAtCapacity={serverAtCapacity}
+          activeGenerationsCount={activeGenerationsCount}
+          maxConcurrentRuns={maxConcurrentRuns}
           onGenerate={handleGenerate}
           onStop={handleStopGeneration}
           generationProgress={generationProgress}

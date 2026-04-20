@@ -29,6 +29,7 @@ export function getPlaceholderAppConfig(): AppConfigResponse {
     agenticMaxRevisionRounds: DEFAULT_EVALUATOR_SETTINGS.maxRevisionRounds,
     agenticMinOverallScore: DEFAULT_EVALUATOR_SETTINGS.minOverallScore,
     defaultRubricWeights: { ...DEFAULT_RUBRIC_WEIGHTS },
+    maxConcurrentRuns: 5,
   };
 }
 

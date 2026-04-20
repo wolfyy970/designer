@@ -14,6 +14,8 @@ configRoute.get('/', (c) => {
     agenticMaxRevisionRounds: env.AGENTIC_MAX_REVISION_ROUNDS,
     agenticMinOverallScore: env.AGENTIC_MIN_OVERALL_SCORE ?? null,
     defaultRubricWeights: { ...DEFAULT_RUBRIC_WEIGHTS },
+    /** Matches `MAX_CONCURRENT_AGENTIC_RUNS` — cap on parallel agentic runs per server process. */
+    maxConcurrentRuns: env.MAX_CONCURRENT_AGENTIC_RUNS,
   };
   if (!env.LOCKDOWN) {
     return c.json({ lockdown: false, ...evaluator });

@@ -107,30 +107,110 @@ function persistedRowToGenerationResult(
   return out;
 }
 
-const generationPersistSliceSchema = z.object({
-  results: z.array(persistedGenerationResultSchema),
-  selectedVersions: z.record(z.string(), z.string()).optional(),
-  userBestOverrides: z.record(z.string(), z.string()).optional(),
-});
-
-/** @internal Exported for tests — validates persisted slice after version migrations. */
+/**
+ * Validates persisted generation rows one-by-one. Invalid rows are dropped; valid rows and
+ * references in `selectedVersions` / `userBestOverrides` are preserved so a single bad row
+ * does not wipe the entire generation history.
+ *
+ * @internal Exported for tests — validates persisted slice after version migrations.
+ */
 export function pickValidatedGenerationPersistSlice(state: Record<string, unknown>): {
   results: GenerationResult[];
   selectedVersions: Record<string, string>;
   userBestOverrides: Record<string, string>;
-} | null {
-  const parsed = generationPersistSliceSchema.safeParse({
-    results: state.results,
-    selectedVersions: state.selectedVersions,
-    userBestOverrides: state.userBestOverrides,
-  });
-  if (!parsed.success) return null;
-  const results = parsed.data.results.map(persistedRowToGenerationResult);
-  return {
-    results,
-    selectedVersions: parsed.data.selectedVersions ?? {},
-    userBestOverrides: parsed.data.userBestOverrides ?? {},
-  };
+} {
+  const rawResults = Array.isArray(state.results) ? state.results : [];
+  const results: GenerationResult[] = [];
+  const validIds = new Set<string>();
+  for (const row of rawResults) {
+    const parsed = persistedGenerationResultSchema.safeParse(row);
+    if (parsed.success) {
+      const gr = persistedRowToGenerationResult(parsed.data);
+      results.push(gr);
+      validIds.add(gr.id);
+    }
+  }
+
+  const selectedVersions: Record<string, string> = {};
+  const svRaw = state.selectedVersions;
+  if (svRaw && typeof svRaw === 'object' && !Array.isArray(svRaw)) {
+    for (const [k, v] of Object.entries(svRaw)) {
+      if (typeof v === 'string' && validIds.has(v)) {
+        selectedVersions[k] = v;
+      }
+    }
+  }
+
+  const userBestOverrides: Record<string, string> = {};
+  const uboRaw = state.userBestOverrides;
+  if (uboRaw && typeof uboRaw === 'object' && !Array.isArray(uboRaw)) {
+    for (const [k, v] of Object.entries(uboRaw)) {
+      if (typeof v === 'string' && validIds.has(v)) {
+        userBestOverrides[k] = v;
+      }
+    }
+  }
+
+  return { results, selectedVersions, userBestOverrides };
+}
+
+/**
+ * Zustand persist migration for the generation store. Kept in one place so tests can run the
+ * same ladder as production without duplicating logic.
+ *
+ * @internal Exported for migration integration tests.
+ */
+export function migrateGenerationPersistState(
+  persisted: unknown,
+  version: number,
+): Record<string, unknown> {
+  const state = persisted as Record<string, unknown>;
+  if (version < 2) {
+    const results = (state.results as GenerationResult[]) ?? [];
+    state.results = results.map((r) => ({
+      ...r,
+      runId: r.runId ?? 'legacy',
+      runNumber: r.runNumber ?? 1,
+    }));
+    state.selectedVersions = state.selectedVersions ?? {};
+  }
+  if (version < 3) {
+    const results = (state.results as GenerationResult[]) ?? [];
+    state.results = results.map((r) => {
+      const next = { ...r };
+      delete next.evaluationSummary;
+      delete next.evaluationRounds;
+      delete next.evaluationStatus;
+      return next;
+    });
+  }
+  if (version < 4) {
+    (state as Record<string, unknown>).userBestOverrides =
+      (state as Record<string, unknown>).userBestOverrides ?? {};
+  }
+  if (version < 5) {
+    const results = (state.results as Record<string, unknown>[]) ?? [];
+    state.results = results.map((r) => {
+      if ('variantStrategyId' in r && !('strategyId' in r)) {
+        const { variantStrategyId, ...rest } = r;
+        return { ...rest, strategyId: variantStrategyId };
+      }
+      return r;
+    });
+  }
+
+  const rawCount = Array.isArray(state.results) ? state.results.length : 0;
+  const validated = pickValidatedGenerationPersistSlice(state);
+  if (import.meta.env.DEV && rawCount > validated.results.length) {
+    console.warn('[generation-store] migrate: dropped invalid result rows', {
+      before: rawCount,
+      after: validated.results.length,
+    });
+  }
+  state.results = validated.results;
+  state.selectedVersions = validated.selectedVersions;
+  (state as Record<string, unknown>).userBestOverrides = validated.userBestOverrides;
+  return state;
 }
 
 interface GenerationStore {
@@ -322,58 +402,8 @@ export const useGenerationStore = create<GenerationStore>()(
         selectedVersions: state.selectedVersions,
         userBestOverrides: state.userBestOverrides,
       }),
-      migrate: (persisted, version) => {
-        const state = persisted as Record<string, unknown>;
-        if (version < 2) {
-          // v1 → v2: add runId and runNumber to existing results
-          const results = (state.results as GenerationResult[]) ?? [];
-          state.results = results.map((r) => ({
-            ...r,
-            runId: r.runId ?? 'legacy',
-            runNumber: r.runNumber ?? 1,
-          }));
-          state.selectedVersions = state.selectedVersions ?? {};
-        }
-        if (version < 3) {
-          const results = (state.results as GenerationResult[]) ?? [];
-          state.results = results.map((r) => {
-            const next = { ...r };
-            delete next.evaluationSummary;
-            delete next.evaluationRounds;
-            delete next.evaluationStatus;
-            return next;
-          });
-        }
-        if (version < 4) {
-          (state as Record<string, unknown>).userBestOverrides =
-            (state as Record<string, unknown>).userBestOverrides ?? {};
-        }
-        if (version < 5) {
-          const results = (state.results as Record<string, unknown>[]) ?? [];
-          state.results = results.map((r) => {
-            if ('variantStrategyId' in r && !('strategyId' in r)) {
-              const { variantStrategyId, ...rest } = r;
-              return { ...rest, strategyId: variantStrategyId };
-            }
-            return r;
-          });
-        }
-        const validated = pickValidatedGenerationPersistSlice(state);
-        if (!validated) {
-          if (import.meta.env.DEV) {
-            console.error('[generation-store] migrate: invalid persisted slice; resetting generation metadata');
-          }
-          state.results = [];
-          state.selectedVersions = {};
-          (state as Record<string, unknown>).userBestOverrides = {};
-        } else {
-          state.results = validated.results;
-          state.selectedVersions = validated.selectedVersions;
-          (state as Record<string, unknown>).userBestOverrides = validated.userBestOverrides;
-        }
-        // Zustand merges migrated state with initial state — partial is expected
-        return state as unknown as GenerationStore;
-      },
+      migrate: (persisted, version) =>
+        migrateGenerationPersistState(persisted, version) as unknown as GenerationStore,
     },
   ),
 );
@@ -385,6 +415,14 @@ export interface GenerationState {
   results: GenerationResult[];
   selectedVersions: Record<string, string>;
   userBestOverrides?: Record<string, string>;
+}
+
+/**
+ * Count of in-flight agentic runs reflected in the UI (each GENERATING row = one server slot).
+ * Multi-model hypothesis runs create one row per lane; parallel lanes each consume a slot.
+ */
+export function countActiveGenerationSlots(state: GenerationState): number {
+  return state.results.filter((r) => r.status === GENERATION_STATUS.GENERATING).length;
 }
 
 function getEvaluationRank(result: GenerationResult): number {

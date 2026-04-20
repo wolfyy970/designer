@@ -198,6 +198,7 @@ export default function VariantToolbar({
         </button>
       ) : null}
       <button
+        type="button"
         onPointerDown={(e) => {
           e.preventDefault();
           e.stopPropagation();

@@ -57,10 +57,26 @@ export default function VariantRunInspector() {
     [nodes, runInspectorPreviewNodeId],
   );
 
+  /**
+   * Close only when the graph is known to no longer contain this preview (or type is wrong).
+   * Do not close when `node` is missing but `nodes` is empty — that can happen transiently
+   * (rehydration / layout) and would immediately undo "Open workspace" right after open.
+   */
   useEffect(() => {
     if (!runInspectorPreviewNodeId) return;
-    if (!node || node.type !== 'preview') closeRunInspector();
-  }, [runInspectorPreviewNodeId, node, closeRunInspector]);
+    const matched = nodes.find((n) => n.id === runInspectorPreviewNodeId);
+    if (matched) {
+      if (matched.type !== 'preview') closeRunInspector();
+      return;
+    }
+    if (nodes.length > 0) closeRunInspector();
+  }, [runInspectorPreviewNodeId, nodes, closeRunInspector]);
+
+  /** If the canvas is cleared while an inspector id is still set, drop the stale selection. */
+  useEffect(() => {
+    if (nodes.length > 0 || !runInspectorPreviewNodeId) return;
+    closeRunInspector();
+  }, [nodes.length, runInspectorPreviewNodeId, closeRunInspector]);
 
   useEffect(() => {
     if (!runInspectorPreviewNodeId) return;

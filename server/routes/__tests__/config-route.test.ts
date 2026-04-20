@@ -20,6 +20,8 @@ describe('GET /api/config', () => {
         body.agenticMinOverallScore === null || typeof body.agenticMinOverallScore === 'number',
       ).toBe(true);
       expect(body.defaultRubricWeights).toEqual(DEFAULT_RUBRIC_WEIGHTS);
+      expect(typeof body.maxConcurrentRuns).toBe('number');
+      expect(body.maxConcurrentRuns).toBeGreaterThanOrEqual(1);
     } finally {
       if (prev === undefined) delete process.env.LOCKDOWN;
       else process.env.LOCKDOWN = prev;
@@ -40,6 +42,7 @@ describe('GET /api/config', () => {
           typeof (body as Record<string, unknown>).agenticMinOverallScore === 'number',
       ).toBe(true);
       expect(body.defaultRubricWeights).toEqual(DEFAULT_RUBRIC_WEIGHTS);
+      expect(typeof body.maxConcurrentRuns).toBe('number');
     } finally {
       if (prev === undefined) delete process.env.LOCKDOWN;
       else process.env.LOCKDOWN = prev;
