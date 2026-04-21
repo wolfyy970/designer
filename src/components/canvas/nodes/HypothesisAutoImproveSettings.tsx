@@ -67,7 +67,7 @@ export function HypothesisAutoImproveSettings({
                 max={EVALUATOR_MAX_REVISION_ROUNDS_MAX}
                 value={displayMaxRounds}
                 onChange={(e) => onMaxRoundsChange(Number(e.target.value))}
-                className="w-14 rounded border border-border bg-bg px-1.5 py-1 text-nano text-fg-secondary input-focus"
+                className="w-12 rounded border border-border bg-surface-raised px-1.5 py-0.5 text-center text-nano tabular-nums text-fg-secondary input-focus"
               />
             </div>
             <div className="space-y-1">

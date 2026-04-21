@@ -76,13 +76,13 @@ export default function CanvasHeader() {
               onBlur={handleSave}
               onKeyDown={handleKeyDown}
               aria-label="Canvas title"
-              className="min-w-[var(--width-canvas-title-min)] max-w-[var(--width-canvas-title)] rounded border border-border px-2 py-0.5 text-sm text-fg text-center input-focus"
+              className="min-w-[var(--width-canvas-title-min)] max-w-[var(--width-canvas-title)] rounded border border-border px-2 py-0.5 font-display text-sm italic text-fg text-center input-focus"
             />
           ) : (
             <button
               type="button"
               onClick={() => setIsEditing(true)}
-              className="flex max-w-[var(--width-canvas-title)] items-center gap-1.5 truncate text-sm text-fg-secondary hover:text-fg"
+              className="flex max-w-[var(--width-canvas-title)] items-center gap-1.5 truncate font-display text-sm italic text-fg-secondary hover:text-fg"
               aria-label={`Rename canvas: ${title || 'Untitled Canvas'}`}
             >
               <span className="truncate">{title || 'Untitled Canvas'}</span>

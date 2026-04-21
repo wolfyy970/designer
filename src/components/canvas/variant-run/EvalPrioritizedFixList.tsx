@@ -28,7 +28,9 @@ function EvalPrioritizedFixRow({ text, dense }: { text: string; dense: boolean }
   const preMax = dense ? 'max-h-28' : 'max-h-56';
 
   return (
-    <div className="rounded-md border border-border-subtle/90 bg-bg/50 px-2 py-1.5">
+    <div className="flex gap-1.5 rounded-md border border-border-subtle/90 bg-bg/50 px-2 py-1.5">
+      <span aria-hidden className="mt-[3px] inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-warning" />
+      <div className="min-w-0 flex-1">
       {chipLabel && (
         <span
           className={`inline-block rounded px-1 py-px text-badge font-medium uppercase tracking-wide ${evalTagChipClasses()}`}
@@ -48,10 +50,11 @@ function EvalPrioritizedFixRow({ text, dense }: { text: string; dense: boolean }
           </pre>
         </>
       ) : (
-        <p className="mt-1 text-nano leading-relaxed text-fg-muted whitespace-pre-wrap break-words">
+        <p className="mt-1 text-nano leading-relaxed text-fg-secondary whitespace-pre-wrap break-words">
           {trimmed}
         </p>
       )}
+      </div>
     </div>
   );
 }
@@ -74,6 +77,9 @@ export function EvalPrioritizedFixList({
 
   return (
     <div className={mode === 'panel' ? 'flex flex-col gap-2' : 'flex flex-col gap-1'}>
+      <p className="text-badge font-medium uppercase tracking-wider text-fg-muted">
+        Prioritized fixes
+      </p>
       {list.map((f, i) => (
         <EvalPrioritizedFixRow key={`${i}-${f.slice(0, 48)}`} text={f} dense={mode === 'compact'} />
       ))}

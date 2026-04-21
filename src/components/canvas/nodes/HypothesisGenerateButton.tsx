@@ -39,7 +39,13 @@ export function HypothesisGenerateButton({
   const disabled = isGenerating || !canGenerate || serverAtCapacity;
   return (
     <div className={RF_INTERACTIVE}>
-      {hint && <p className="mb-1.5 text-center text-nano text-fg-muted">{hint}</p>}
+      {hint && (
+        <div className="mb-1.5 flex justify-center">
+          <span className="inline-flex items-center rounded-full border border-warning-border bg-warning-subtle px-2 py-0.5 font-mono text-nano text-warning">
+            {hint}
+          </span>
+        </div>
+      )}
       <button
         type="button"
         onClick={onGenerate}
@@ -50,7 +56,7 @@ export function HypothesisGenerateButton({
             ? `Server is at capacity (${activeGenerationsCount}/${maxConcurrentRuns} agentic runs). Wait for one to finish.`
             : undefined
         }
-        className="flex w-full items-center justify-center gap-1.5 rounded-md bg-fg px-3 py-2 text-xs font-medium text-bg transition-colors hover:bg-fg-on-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex w-full items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isGenerating ? (
           <>

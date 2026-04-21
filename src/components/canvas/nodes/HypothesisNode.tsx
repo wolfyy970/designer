@@ -336,7 +336,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
 
       <div className="flex min-h-[var(--min-height-hypothesis-shell)] flex-col px-3 pb-2 pt-1">
         <div
-          className={`${RF_INTERACTIVE} mb-1.5 flex gap-0.5 rounded-md border border-border bg-surface-raised p-0.5`}
+          className={`${RF_INTERACTIVE} mb-1.5 flex gap-0.5 rounded-md border border-border bg-surface p-0.5`}
           role="tablist"
           aria-label="Hypothesis fields"
         >
@@ -350,7 +350,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
               className={`${RF_INTERACTIVE} min-w-0 flex-1 rounded px-2 py-1 text-center text-nano font-medium transition-colors ${
                 editorTab === id
                   ? 'bg-fg text-bg shadow-sm'
-                  : 'text-fg-muted hover:bg-surface hover:text-fg-secondary'
+                  : 'text-fg-muted hover:text-fg-secondary'
               }`}
             >
               {label}

@@ -34,7 +34,7 @@ flowchart TB
 
 ## Design system (frontend)
 
-UI color and typography tokens: **[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)** (Zinc neutrals, accent vs status, complementary info vs orange, file-role aliases). Implemented in `src/index.css` (`@theme`).
+UI color and typography tokens: **[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)** (Indigo brand + sage/amber status + pacific info; bone/ivory/white surface stack; Inter Tight + Fraunces + JetBrains Mono triad; light + dark themes via `html[data-theme]`, toggled by `src/hooks/useThemeEffect.ts`). Implemented in `src/index.css` (`@theme` + `html[data-theme="dark"]` overrides).
 
 ## Layered architecture (diagram)
 

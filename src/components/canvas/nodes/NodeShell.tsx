@@ -4,6 +4,7 @@ import { useLineageDim } from '../../../hooks/useLineageDim';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { isValidConnection } from '../../../lib/canvas-connections';
 import { type NodeStatus } from '../../../constants/canvas';
+import { railClassFor } from './node-shell-rail';
 
 export type NodeBorderStatus = NodeStatus;
 
@@ -28,6 +29,7 @@ interface NodeShellProps {
   handleColor?: 'amber' | 'green';
   targetShape?: 'circle' | 'diamond';
   targetPulse?: boolean;
+  leftRail?: 'success' | 'warning' | null;
   children: ReactNode;
 }
 
@@ -43,12 +45,14 @@ export default function NodeShell({
   handleColor = 'amber',
   targetShape = 'circle',
   targetPulse = false,
+  leftRail,
   children,
 }: NodeShellProps) {
   const lineageDim = useLineageDim(nodeId, selected);
   const connectingFrom = useCanvasStore((s) => s.connectingFrom);
 
   const borderClass = selected ? BORDER_CLASSES.selected : BORDER_CLASSES[status];
+  const railClass = railClassFor(leftRail);
 
   const isGreen = handleColor === 'green';
   const handleFill = isGreen ? '!bg-success' : '!bg-warning';
@@ -70,7 +74,7 @@ export default function NodeShell({
   const pulseClass = targetPulse && !targetGlow ? 'handle-pulse' : '';
 
   return (
-    <div className={`relative ${width} rounded-lg border bg-surface-raised shadow-sm ${borderClass} ${lineageDim} ${className ?? ''}`}>
+    <div className={`relative ${width} rounded-lg border bg-surface-raised shadow-sm ${borderClass} ${railClass} ${lineageDim} ${className ?? ''}`}>
       {hasTarget && (
         <Handle
           type="target"

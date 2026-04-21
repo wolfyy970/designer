@@ -4,7 +4,6 @@
 /* Streamdown (Vercel) — include utility classes used by bundled components */
 @source "../node_modules/streamdown/dist/**/*.js";
 @import "./fonts/latin-subsets.css";
-@import "@fontsource/orbitron/latin-500.css";
 
 /* ── Design System Tokens ────────────────────────────────────────────── */
 /*
@@ -15,30 +14,35 @@
  */
 
 @theme {
-  /* Fonts */
-  --font-sans: "Space Grotesk Variable", "Space Grotesk", system-ui, -apple-system, sans-serif;
+  /* ── Fonts — Indigo typography triad ─────────────────────────────── */
+  --font-sans: "Inter Tight Variable", "Inter Tight", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
-  --font-logo: "Orbitron", system-ui, sans-serif;
+  --font-logo: "Fraunces Variable", "Fraunces", Georgia, serif;
+  --font-display: "Fraunces Variable", "Fraunces", Georgia, serif;
 
-  /* Custom font sizes (eliminate magic numbers) */
+  /* ── Custom font sizes (unchanged) ─────────────────────────────────── */
   --text-micro: 0.6875rem;  /* 11px */
   --text-nano: 0.625rem;    /* 10px */
   --text-badge: 0.5625rem;  /* 9px */
-  --text-pico: 0.5rem;      /* 8px — dense labels only */
+  --text-pico: 0.5rem;      /* 8px */
 
-  /* Accent (brand anchor) */
-  --color-accent: #f97316;
-  --color-accent-hover: #d97706;
+  /* ──────────────────────────────────────────────────────────────────
+   * LIGHT THEME — default
+   * Canvas bone-white, ink near-black, indigo brand.
+   * ────────────────────────────────────────────────────────────────── */
 
-  /* Surfaces (zinc neutrals) */
-  --color-bg: #09090b;
-  --color-surface: #18181b;
-  --color-surface-raised: #27272a;
+  /* Accent (brand anchor) — Indigo */
+  --color-accent: #3a5a7d;          /* muted indigo — readable on light */
+  --color-accent-hover: #2d4864;    /* deeper on press/hover */
+
+  /* Surfaces (bone / ivory neutrals) */
+  --color-bg: #f4efe6;              /* canvas — warm bone */
+  --color-surface: #fbf8ef;         /* paper / sheets */
+  --color-surface-raised: #ffffff;  /* raised cards, inputs */
 
   /* Borders */
-  --color-border: #3f3f46;
-  --color-border-subtle: #27272a;
-  /** Translucent border stacks (avoid `border-border/NN` in JSX) */
+  --color-border: #cbc2ae;
+  --color-border-subtle: #e3dccb;
   --color-border-pulse-track: color-mix(in srgb, var(--color-border) 30%, transparent);
   --color-border-pulse-mid: color-mix(in srgb, var(--color-border) 40%, transparent);
   --color-border-pulse-heavy: color-mix(in srgb, var(--color-border) 60%, transparent);
@@ -47,114 +51,91 @@
   --color-border-dashed-ghost: color-mix(in srgb, var(--color-border) 80%, transparent);
 
   /* Foreground */
-  --color-fg: #fafafa;
-  --color-fg-secondary: #a1a1aa;
-  --color-fg-muted: #71717a;
-  --color-fg-faint: #52525b;
-  /** Solid primary (inverted) control — hover darken */
+  --color-fg: #1a1915;              /* near-black ink */
+  --color-fg-secondary: #4a4a42;
+  --color-fg-muted: #76736a;
+  --color-fg-faint: #a39f93;
   --color-fg-on-primary-hover: color-mix(in srgb, var(--color-fg) 88%, var(--color-bg) 12%);
-  /** Top header bar over canvas */
   --color-header-scrim: color-mix(in srgb, var(--color-bg) 90%, transparent);
-  /** Floating controls over timeline (surface + translucency) */
   --color-surface-floating-strong: color-mix(in srgb, var(--color-surface) 95%, transparent);
-  /** Neutral meta chip on dark chrome (version idle, etc.) */
-  --color-surface-meta-chip: color-mix(in srgb, var(--color-fg-faint) 11%, transparent);
+  --color-surface-meta-chip: color-mix(in srgb, var(--color-fg-faint) 18%, transparent);
 
-  /* Accent derived (from --color-accent) — No muddy washes! */
-  --color-accent-subtle: var(--color-surface-raised);
-  --color-accent-glow: color-mix(in srgb, var(--color-accent) 50%, transparent);
-  /** Focus outline + shared 1px hairline */
+  /* Accent derived */
+  --color-accent-subtle: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
+  --color-accent-glow: color-mix(in srgb, var(--color-accent) 35%, transparent);
   --color-accent-focus-hairline: var(--color-accent);
-  /** Inset ring: default / hover for primary-muted buttons */
   --color-accent-ring-muted: color-mix(in srgb, var(--color-accent) 30%, transparent);
   --color-accent-ring-muted-hover: var(--color-accent);
-  /** Selection / strong accent edge */
   --color-accent-edge-strong: var(--color-accent);
 
-  /* Neutral callout (replaces arbitrary bg-surface-raised/60 on modals) */
-  --color-surface-note: color-mix(in srgb, var(--color-surface-raised) 60%, transparent);
-  /** Section ghost node fill + floating tips (backdrop) */
-  --color-surface-ghost-backdrop: color-mix(in srgb, var(--color-surface-raised) 35%, transparent);
+  /* Neutral callouts / notes */
+  --color-surface-note: color-mix(in srgb, var(--color-surface-raised) 70%, transparent);
+  --color-surface-ghost-backdrop: color-mix(in srgb, var(--color-surface-raised) 45%, transparent);
   --color-surface-floating: color-mix(in srgb, var(--color-surface-raised) 95%, transparent);
 
-  /* Overlays — heavy scrim tracks app bg */
-  --color-overlay: rgba(0, 0, 0, 0.60);
-  --color-overlay-heavy: color-mix(in srgb, var(--color-bg) 96%, transparent);
+  /* Overlays */
+  --color-overlay: rgba(26, 25, 21, 0.45);
+  --color-overlay-heavy: color-mix(in srgb, var(--color-bg) 92%, transparent);
 
-  /* Status — harmonized brightness on dark surfaces; warning analogous to accent, info complement to orange */
-  --color-error: #ef6b73;
-  --color-error-subtle: #3f1418;
-  --color-warning: #e8a026;
-  --color-warning-subtle: #3d250c;
+  /* Status — secondary colors doing real work */
+  --color-error: #b8453e;                   /* rose for destructive */
+  --color-error-subtle: #f7e4e1;
+  --color-warning: #b58a3a;                 /* amber — empty / needs input */
+  --color-warning-subtle: #f4e9cf;
   --color-warning-border: color-mix(in srgb, var(--color-warning) 35%, transparent);
   --color-warning-text-soft: color-mix(in srgb, var(--color-warning) 85%, transparent);
-  --color-success: #36cfa3;
-  --color-success-subtle: #0f3d2e;
-  --color-info: #3eb0ea;
-  --color-info-subtle: #0e304b;
+  --color-success: #5e8472;                 /* sage — filled / OK */
+  --color-success-subtle: #d8e4dc;
+  --color-info: #3d6e8a;                    /* pacific — file-css, info rails */
+  --color-info-subtle: #dfe8ef;
 
-  /**
-   * Nested / inset surface — inspector rails, eval cards, timeline chrome.
-   * (Replaces ad hoc `surface-secondary`, which was never in @theme.)
-   */
-  --color-surface-nested: color-mix(in srgb, var(--color-surface) 52%, var(--color-surface-raised) 48%);
+  /* Nested / inset surface — inspector rails, eval cards, timeline chrome */
+  --color-surface-nested: color-mix(in srgb, var(--color-surface) 60%, var(--color-surface-raised) 40%);
 
-  /**
-   * Accent UI washes & borders — Pure Zinc elevations with high-opacity borders
-   */
-  --color-accent-highlight: var(--color-surface-raised);
-  --color-accent-surface: var(--color-surface-raised);
-  --color-accent-surface-hover: var(--color-border);
-  --color-accent-tonal-weak: var(--color-surface-raised);
+  /* Accent UI washes & borders */
+  --color-accent-highlight: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface-raised));
+  --color-accent-surface: color-mix(in srgb, var(--color-accent) 6%, var(--color-surface-raised));
+  --color-accent-surface-hover: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface-raised));
+  --color-accent-tonal-weak: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
   --color-accent-border-muted: color-mix(in srgb, var(--color-accent) 40%, transparent);
-  --color-accent-border-medium: color-mix(in srgb, var(--color-accent) 50%, transparent);
-  /** Inactive segment in accent sidebar */
+  --color-accent-border-medium: color-mix(in srgb, var(--color-accent) 55%, transparent);
   --color-accent-segment-idle: color-mix(in srgb, var(--color-accent) 75%, transparent);
-  /** Progress bar fill + pulse */
   --color-accent-progress-strong: color-mix(in srgb, var(--color-accent) 70%, transparent);
   --color-accent-progress-soft: color-mix(in srgb, var(--color-accent) 60%, transparent);
-  /** Muted accent foreground on hover */
   --color-accent-text-dim: color-mix(in srgb, var(--color-accent) 80%, transparent);
 
-  /** Error / success callouts — hand-tuned dark mode fills */
+  /* Error / success callouts */
   --color-error-border: color-mix(in srgb, var(--color-error) 35%, transparent);
   --color-error-border-soft: color-mix(in srgb, var(--color-error) 30%, transparent);
   --color-error-border-medium: color-mix(in srgb, var(--color-error) 50%, transparent);
-  --color-error-surface-hover: #5c1b22;
-  --color-error-surface: #3f1418;
-  --color-error-highlight: #3f1418;
+  --color-error-surface-hover: #f2d3ce;
+  --color-error-surface: #f7e4e1;
+  --color-error-highlight: #f7e4e1;
 
-  --color-success-highlight: #0f3d2e;
-  --color-success-surface: #0f3d2e;
+  --color-success-highlight: #d8e4dc;
+  --color-success-surface: #d8e4dc;
   --color-success-border-muted: color-mix(in srgb, var(--color-success) 40%, transparent);
 
-  /* File-type icons — alias semantic hues (explorer only) */
+  /* File-type icons */
   --color-file-html: var(--color-accent);
   --color-file-css: var(--color-info);
   --color-file-script: var(--color-warning);
   --color-file-data: var(--color-success);
 
-  /* Node widths */
+  /* Layout widths (unchanged) */
   --width-node: 320px;
   --width-node-variant: 480px;
-
-  /* Layout widths */
   --width-sidebar: 14rem;
   --width-palette: 13rem;
   --height-header: 3rem;
-  /** Canvas title cluster — centered header */
   --width-canvas-title: min(28rem, calc(100vw - 8rem));
   --width-canvas-title-min: 12rem;
-  /** Compact model / select triggers in inspector */
   --width-model-trigger: 220px;
-  /** Split-pane tab column inside inspector */
   --width-inspector-tab: min(40%, 11rem);
-  /** Kitchen sink pattern label column */
   --width-kitchen-sink-label: 8.5rem;
-  /** Variant run inspector drawer (matches node variant width cap) */
   --width-variant-inspector: min(100vw, var(--width-node-variant));
 
-  /* Layout heights — dense UI; change once, not per-node magic numbers */
+  /* Layout heights (unchanged) */
   --min-height-variant-node: 420px;
   --min-height-hypothesis-shell: 200px;
   --min-height-input-textarea: 240px;
@@ -166,23 +147,75 @@
   --max-height-modal: 85vh;
   --max-height-modal-tall: 92vh;
   --max-height-debug-export: 72vh;
-  /** Prompt editor split (modal chrome subtracted) */
   --height-prompt-editor-pane: calc(85vh - 7rem);
-  /** Eval timeline log block */
   --max-height-timeline-scroll: min(40vh, 320px);
-  /** HTML preview well inside inspector (light document) */
+
+  /* Preview canvas + media chrome */
   --color-preview-canvas: #ffffff;
-  /** Dark overlay / picture-in-picture chrome (translucent white on media) */
   --color-media-chrome-hover: color-mix(in srgb, #ffffff 10%, transparent);
   --color-media-chrome-rail: color-mix(in srgb, #ffffff 10%, transparent);
   --color-media-chrome-text-dim: color-mix(in srgb, #ffffff 50%, transparent);
-  /** Full-screen preview overlay (VariantPreviewOverlay) — borders & text on scrim */
   --color-preview-overlay-hairline: color-mix(in srgb, #ffffff 10%, transparent);
   --color-preview-overlay-control-border: color-mix(in srgb, #ffffff 20%, transparent);
   --color-preview-overlay-control-border-hover: color-mix(in srgb, #ffffff 40%, transparent);
   --color-preview-overlay-text-faint: color-mix(in srgb, #ffffff 40%, transparent);
   --color-preview-overlay-text-muted: color-mix(in srgb, #ffffff 60%, transparent);
   --color-preview-overlay-text-soft: color-mix(in srgb, #ffffff 70%, transparent);
+}
+
+/* ── Dark Theme ──────────────────────────────────────────────────────────
+ * Apply by setting data-theme="dark" on <html>.
+ * ───────────────────────────────────────────────────────────────────── */
+
+html[data-theme="dark"] {
+  /* Accent (brand anchor) — lighter indigo for dark surfaces */
+  --color-accent: #7aa3ce;
+  --color-accent-hover: #9dbede;
+
+  /* Surfaces (deep neutral — cooler than zinc to harmonize with indigo) */
+  --color-bg: #0f1114;
+  --color-surface: #1a1d22;
+  --color-surface-raised: #262a31;
+
+  /* Borders */
+  --color-border: #3f444d;
+  --color-border-subtle: #262a31;
+
+  /* Foreground */
+  --color-fg: #f2f0ea;
+  --color-fg-secondary: #b8b4a8;
+  --color-fg-muted: #7f7c73;
+  --color-fg-faint: #5a5851;
+
+  /* Overlays */
+  --color-overlay: rgba(0, 0, 0, 0.60);
+  --color-overlay-heavy: color-mix(in srgb, var(--color-bg) 96%, transparent);
+
+  /* Status — tuned brighter for dark surfaces */
+  --color-error: #e07971;
+  --color-error-subtle: #3a1818;
+  --color-warning: #d4a458;                 /* amber */
+  --color-warning-subtle: #3a2a10;
+  --color-success: #7fb39c;                 /* sage */
+  --color-success-subtle: #16332a;
+  --color-info: #6ea0c4;                    /* pacific */
+  --color-info-subtle: #12283a;
+
+  /* Error / success surfaces */
+  --color-error-surface-hover: #5a2322;
+  --color-error-surface: #3a1818;
+  --color-error-highlight: #3a1818;
+  --color-success-highlight: #16332a;
+  --color-success-surface: #16332a;
+
+  /* Accent UI — dark-surface variants */
+  --color-accent-highlight: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface-raised));
+  --color-accent-surface: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-raised));
+  --color-accent-surface-hover: color-mix(in srgb, var(--color-accent) 20%, var(--color-surface-raised));
+  --color-accent-tonal-weak: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+
+  /* Preview canvas stays white (HTML documents render on white paper) */
+  --color-preview-canvas: #ffffff;
 }
 
 /* ── Typography Tokens ───────────────────────────────────────────────── */

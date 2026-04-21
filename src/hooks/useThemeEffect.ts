@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 
-/** Ensures the .dark class is always present on <html>. */
+/** Applies the persisted theme (light/dark) via data-theme on <html>. Default: light. */
 export function useThemeEffect() {
   useEffect(() => {
-    document.documentElement.classList.add('dark');
+    const stored = (localStorage.getItem('theme') as 'light' | 'dark' | null) ?? 'light';
+    document.documentElement.dataset.theme = stored;
   }, []);
 }

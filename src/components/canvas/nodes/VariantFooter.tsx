@@ -7,7 +7,7 @@ interface VariantFooterProps {
 
 export default function VariantFooter({ result }: VariantFooterProps) {
   return (
-    <div className="flex items-center gap-1.5 border-t border-border-subtle px-2.5 py-1 text-badge text-fg-faint">
+    <div className="flex items-center gap-1.5 border-t border-border-subtle px-2.5 py-1 font-mono text-nano text-fg-muted">
       {result?.runNumber != null && (
         <span
           className={`rounded px-1 py-px font-bold leading-none ${badgeColor(result.runNumber).bg} ${badgeColor(result.runNumber).text}`}

@@ -130,7 +130,7 @@ export function DesignTokensKitchenSinkContent({ embedded = false }: { embedded?
         </p>
         <p className="text-micro text-fg-secondary">
           Runtime <span className="font-mono text-fg-muted">--color-success</span>:{' '}
-          <span className="font-mono text-success">{successComputed}</span> (expect <span className="font-mono">#36cfa3</span>)
+          <span className="font-mono text-success">{successComputed}</span> (expect <span className="font-mono">#5e8472</span>)
         </p>
         {!embedded && (
           <Link

@@ -76,6 +76,7 @@ function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
       status={status}
       hasTarget={false}
       handleColor={configured ? 'green' : 'amber'}
+      leftRail={configured ? 'success' : null}
     >
       <NodeHeader onRemove={onRemove} description={subtitle}>
         <h3 className="text-xs font-semibold text-fg">Model</h3>

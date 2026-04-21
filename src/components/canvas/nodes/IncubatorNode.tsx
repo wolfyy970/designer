@@ -252,7 +252,11 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
           </div>
 
           {hint && (
-            <p className="text-center text-nano text-fg-muted">{hint}</p>
+            <div className="flex justify-center">
+              <span className="inline-flex items-center rounded-full border border-warning-border bg-warning-subtle px-2 py-0.5 font-mono text-nano text-warning">
+                {hint}
+              </span>
+            </div>
           )}
 
           <button
@@ -262,7 +266,7 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
             aria-busy={isCompiling}
             aria-label={isCompiling ? 'Incubating…' : 'Generate hypotheses'}
             title={isCompiling ? 'Incubating…' : undefined}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-fg px-3 py-2 text-xs font-medium text-bg transition-colors hover:bg-fg-on-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isCompiling ? (
               <>

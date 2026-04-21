@@ -5,6 +5,7 @@ interface ProviderSelectorProps {
   selectedId: string;
   onChange: (id: string) => void;
   label?: string;
+  labelClassName?: string;
   disabled?: boolean;
 }
 
@@ -12,6 +13,7 @@ export default function ProviderSelector({
   selectedId,
   onChange,
   label = 'Generation Provider',
+  labelClassName,
   disabled = false,
 }: ProviderSelectorProps) {
   const { data: providers = [] } = useQuery({
@@ -22,7 +24,7 @@ export default function ProviderSelector({
 
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-fg-secondary">
+      <label className={`mb-1 block text-xs font-medium ${labelClassName ?? 'text-fg-secondary'}`}>
         {label}
       </label>
       <select
