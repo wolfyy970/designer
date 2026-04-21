@@ -8,6 +8,7 @@ import { extractDesignSystem } from '../../../api/client';
 import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { readFileAsReferenceImage } from '../../../lib/image-utils';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
+import { Button } from '@ds/components/ui/button';
 import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
 import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
 import { filledOrEmpty } from '../../../lib/node-status';
@@ -206,10 +207,12 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
             {!extracting && !modelId && (
               <p className="text-center text-nano text-fg-muted">Connect a Model node</p>
             )}
-            <button
+            <Button
+              variant="primary"
+              size="sm"
+              className="w-full"
               onClick={handleExtract}
               disabled={extracting || !modelId}
-              className="flex w-full items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
               {extracting ? (
                 <Loader2 size={12} className="animate-spin" />
@@ -217,7 +220,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
                 <Sparkles size={12} />
               )}
               {extracting ? 'Extracting...' : 'Extract from Images'}
-            </button>
+            </Button>
 
             {!supportsVision && modelId && (
               <p className="text-nano text-warning">

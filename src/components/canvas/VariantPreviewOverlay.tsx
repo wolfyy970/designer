@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, Columns2, ChevronLeft, ChevronRight, Loader2, AlertCircle, Star } from 'lucide-react';
+import { Badge } from '@ds/components/ui/badge';
 import { useIncubatorStore, findStrategy } from '../../stores/incubator-store';
 import { useCanvasStore } from '../../stores/canvas-store';
 import { useGenerationStore } from '../../stores/generation-store';
@@ -280,9 +281,7 @@ export default function VariantPreviewOverlay() {
             <h2 className="text-sm font-semibold text-white">
               {strategy?.name ?? 'Design Preview'}
               {!pinnedRunId && isActiveBest && (
-                <span className="ml-2 rounded bg-success-highlight px-1.5 py-px text-badge font-medium text-success">
-                  Best current
-                </span>
+                <Badge shape="tab" tone="success" className="ml-2">Best current</Badge>
               )}
               {pinnedRunId && (
                 <span className="ml-2 text-xs font-normal text-preview-overlay-text-faint">

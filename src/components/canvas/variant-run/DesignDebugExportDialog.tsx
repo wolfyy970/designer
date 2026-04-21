@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { RF_INTERACTIVE } from '../../../constants/canvas';
 import type { GenerationResult } from '../../../types/provider';
+import { Button } from '@ds/components/ui/button';
 import Modal from '../../shared/Modal';
 import {
   type DesignDebugExportOptions,
@@ -404,30 +405,33 @@ export function DesignDebugExportDialog({
         </div>
 
         <div className="mt-4 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border-subtle pt-4">
-          <button
-            type="button"
-            className="nodrag rounded-md px-3 py-1.5 text-xs font-medium text-fg-secondary hover:bg-surface-hover"
+          <Button
+            variant="ghost"
+            size="sm"
+            className="nodrag"
             disabled={busy}
             onClick={handleReset}
           >
             Use recommended defaults
-          </button>
-          <button
-            type="button"
-            className="nodrag rounded-md px-3 py-1.5 text-xs font-medium text-fg-secondary hover:bg-surface-hover"
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="nodrag"
             disabled={busy}
             onClick={onClose}
           >
             Cancel
-          </button>
-          <button
-            type="button"
-            className="nodrag rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            className="nodrag"
             disabled={busy}
             onClick={() => void handleConfirm()}
           >
             {busy ? 'Exporting…' : 'Export Markdown'}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

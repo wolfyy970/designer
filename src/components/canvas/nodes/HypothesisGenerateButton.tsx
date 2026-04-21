@@ -3,6 +3,8 @@ import type { GenerationProgress } from '../../../hooks/hypothesis-generate-flow
 import type { StrategyStreamingSnapshot } from '../../../lib/strategy-streaming-snapshot';
 import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { StreamingToolRow } from '../variant-run/StreamingToolRow';
+import { Button } from '@ds/components/ui/button';
+import { Badge } from '@ds/components/ui/badge';
 
 function smallNumberToWord(n: number): string {
   const words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
@@ -41,13 +43,13 @@ export function HypothesisGenerateButton({
     <div className={RF_INTERACTIVE}>
       {hint && (
         <div className="mb-1.5 flex justify-center">
-          <span className="inline-flex items-center rounded-full border border-warning-border bg-warning-subtle px-2 py-0.5 font-mono text-nano text-warning">
-            {hint}
-          </span>
+          <Badge shape="pill" tone="warning">{hint}</Badge>
         </div>
       )}
-      <button
-        type="button"
+      <Button
+        variant="primary"
+        size="md"
+        className="w-full"
         onClick={onGenerate}
         disabled={disabled}
         aria-busy={isGenerating}
@@ -56,7 +58,6 @@ export function HypothesisGenerateButton({
             ? `Server is at capacity (${activeGenerationsCount}/${maxConcurrentRuns} agentic runs). Wait for one to finish.`
             : undefined
         }
-        className="flex w-full items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isGenerating ? (
           <>
@@ -78,7 +79,7 @@ export function HypothesisGenerateButton({
             Design
           </>
         )}
-      </button>
+      </Button>
       {isGenerating && streamingSnap != null ? (
         <p className="mt-1.5 text-center text-nano leading-snug text-fg-secondary">
           <StreamingToolRow
@@ -95,14 +96,15 @@ export function HypothesisGenerateButton({
         </p>
       ) : null}
       {isGenerating ? (
-        <button
-          type="button"
+        <Button
+          variant="destructive"
+          size="md"
+          className="mt-2 w-full"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={onStop}
-          className="mt-2 w-full rounded-md border border-error-border bg-error-subtle px-3 py-2 text-xs font-semibold text-error transition-colors hover:bg-error-surface-hover"
         >
           Stop generation
-        </button>
+        </Button>
       ) : null}
     </div>
   );

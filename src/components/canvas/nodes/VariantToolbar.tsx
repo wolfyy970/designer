@@ -12,6 +12,8 @@ import {
   Star,
 } from 'lucide-react';
 import { ZOOM_MIN, ZOOM_MAX } from '../../../hooks/useVariantZoom';
+import { Button } from '@ds/components/ui/button';
+import { Badge } from '@ds/components/ui/badge';
 
 interface VariantToolbarProps {
   variantName: string;
@@ -81,28 +83,25 @@ export default function VariantToolbar({
         {variantName}
       </h4>
       {isArchived && (
-        <span className="shrink-0 rounded bg-surface-meta-chip px-1.5 py-px text-badge font-medium text-fg-muted">
-          Archived
-        </span>
+        <Badge shape="tab" tone="neutral">Archived</Badge>
       )}
       {!isArchived && isBestCurrent && (
-        <span className="shrink-0 rounded bg-success-surface px-1.5 py-px text-badge font-medium text-success">
-          Best
-        </span>
+        <Badge shape="tab" tone="success">Best</Badge>
       )}
       {showStopGeneration && onStopGeneration ? (
-        <button
-          type="button"
+        <Button
+          variant="destructive"
+          size="sm"
+          className="nodrag shrink-0"
           onPointerDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
             onStopGeneration();
           }}
-          className="nodrag shrink-0 rounded border border-error-border bg-error-subtle px-1.5 py-px text-badge font-semibold text-error transition-colors hover:bg-error-surface-hover"
           title="Stop generation (cancels the in-flight request)"
         >
           Stop
-        </button>
+        </Button>
       ) : null}
 
       {/* Stack navigation */}

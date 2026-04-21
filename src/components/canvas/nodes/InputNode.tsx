@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Badge } from '@ds/components/ui/badge';
 import { type NodeProps, type Node } from '@xyflow/react';
 import { Loader2, Wand2 } from 'lucide-react';
 import { useSpecStore } from '../../../stores/spec-store';
@@ -136,11 +137,11 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
       <NodeHeader onRemove={onRemove} description={meta.description}>
         <h3 className="text-xs font-semibold text-fg">{meta.title}</h3>
         {content.trim() ? (
-          <span className="inline-flex items-center rounded-full border border-success-border-muted bg-success-subtle px-2 py-0.5 font-mono text-nano text-success">filled</span>
+          <Badge shape="pill" tone="success">filled</Badge>
         ) : meta.required ? (
-          <span className="inline-flex items-center rounded-full border border-warning-border bg-warning-subtle px-2 py-0.5 font-mono text-nano text-warning">needs input</span>
+          <Badge shape="pill" tone="warning">needs input</Badge>
         ) : (
-          <span className="inline-flex items-center rounded-full border border-border-subtle bg-surface px-2 py-0.5 font-mono text-nano text-fg-muted">optional</span>
+          <Badge shape="pill" tone="neutral">optional</Badge>
         )}
       </NodeHeader>
 
@@ -173,7 +174,7 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
                 <span className="text-nano text-fg-muted">Add a Model node on the canvas</span>
               )}
               {!generating && hasModel && !designBriefContent.trim() && (
-                <span className="inline-flex items-center rounded-full border border-warning-border bg-warning-subtle px-2 py-0.5 font-mono text-nano text-warning">Fill Design Brief first</span>
+                <Badge shape="pill" tone="warning">Fill Design Brief first</Badge>
               )}
               <button
                 type="button"

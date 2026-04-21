@@ -1,10 +1,11 @@
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import tsconfigPaths from 'vite-tsconfig-paths';
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-8')) as {
@@ -43,11 +44,18 @@ export default defineConfig({
     exclude: [
       'node_modules/**',
       '.vendor/**',
+      // DS package has its own vitest config (jsdom env) — avoid double-running with wrong environment.
+      'packages/design-system/**',
       // Optional Playwright browser stack; keep unit tests hermetic.
       '**/browser-playwright-evaluator.test.ts',
     ],
   },
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), tsconfigPaths()],
+  resolve: {
+    alias: {
+      '@auto-designer/design-system': resolve(rootDir, 'packages/design-system'),
+    },
+  },
   server: {
     port: 5173,
     /** Same origin as `http://localhost:5173` so localStorage (active spec + canvas manager) stays stable. */

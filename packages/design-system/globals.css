@@ -1,0 +1,481 @@
+@import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
+@layer theme, base, components, utilities;
+
+@import "./_generated-tokens.css";
+
+/* ── Semantic aliases — what components reference ──────────────────── */
+:root {
+  /* Accent */
+  --color-accent: var(--color-accent-500);
+  --color-accent-hover: var(--color-accent-600);
+
+  /* Status */
+  --color-error: var(--color-error);
+  --color-warning: var(--color-warning);
+  --color-success: var(--color-success);
+  --color-info: var(--color-info);
+
+  /* Accent derived (color-mix based — not in tokens.json as they reference base) */
+  --color-accent-subtle: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
+  --color-accent-glow: color-mix(in srgb, var(--color-accent) 35%, transparent);
+  --color-accent-focus-hairline: var(--color-accent);
+  --color-accent-ring-muted: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  --color-accent-ring-muted-hover: var(--color-accent);
+  --color-accent-edge-strong: var(--color-accent);
+  --color-accent-highlight: color-mix(in srgb, var(--color-accent) 8%, #ffffff);
+  --color-accent-surface: color-mix(in srgb, var(--color-accent) 6%, #ffffff);
+  --color-accent-surface-hover: color-mix(in srgb, var(--color-accent) 14%, #ffffff);
+  --color-accent-tonal-weak: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
+  --color-accent-border-muted: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  --color-accent-border-medium: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  --color-accent-segment-idle: color-mix(in srgb, var(--color-accent) 75%, transparent);
+  --color-accent-progress-strong: color-mix(in srgb, var(--color-accent) 70%, transparent);
+  --color-accent-progress-soft: color-mix(in srgb, var(--color-accent) 60%, transparent);
+  --color-accent-text-dim: color-mix(in srgb, var(--color-accent) 80%, transparent);
+
+  /* Surface derived */
+  --color-surface-note: color-mix(in srgb, var(--color-surface-raised) 70%, transparent);
+  --color-surface-ghost-backdrop: color-mix(in srgb, var(--color-surface-raised) 45%, transparent);
+  --color-surface-floating: color-mix(in srgb, var(--color-surface-raised) 95%, transparent);
+  --color-surface-floating-strong: color-mix(in srgb, var(--color-surface) 95%, transparent);
+  --color-surface-meta-chip: color-mix(in srgb, var(--color-fg-faint) 18%, transparent);
+  --color-surface-nested: color-mix(in srgb, var(--color-surface) 60%, var(--color-surface-raised) 40%);
+
+  /* Border derived */
+  --color-border-pulse-track: color-mix(in srgb, var(--color-border) 30%, transparent);
+  --color-border-pulse-mid: color-mix(in srgb, var(--color-border) 40%, transparent);
+  --color-border-pulse-heavy: color-mix(in srgb, var(--color-border) 60%, transparent);
+  --color-border-section-divider: color-mix(in srgb, var(--color-border) 50%, transparent);
+  --color-border-inset-ring: color-mix(in srgb, var(--color-border) 20%, transparent);
+  --color-border-dashed-ghost: color-mix(in srgb, var(--color-border) 80%, transparent);
+
+  /* Foreground derived */
+  --color-fg-on-primary-hover: color-mix(in srgb, var(--color-fg) 88%, var(--color-bg) 12%);
+  --color-header-scrim: color-mix(in srgb, var(--color-bg) 90%, transparent);
+
+  /* Error derived */
+  --color-error-border: color-mix(in srgb, var(--color-error) 35%, transparent);
+  --color-error-border-soft: color-mix(in srgb, var(--color-error) 30%, transparent);
+  --color-error-border-medium: color-mix(in srgb, var(--color-error) 50%, transparent);
+  --color-error-surface-hover: #f2d3ce;
+  --color-error-surface: var(--color-error-subtle);
+  --color-error-highlight: var(--color-error-subtle);
+
+  /* Success derived */
+  --color-success-highlight: var(--color-success-subtle);
+  --color-success-surface: var(--color-success-subtle);
+  --color-success-border-muted: color-mix(in srgb, var(--color-success) 40%, transparent);
+
+  /* Warning derived */
+  --color-warning-border: color-mix(in srgb, var(--color-warning) 35%, transparent);
+  --color-warning-text-soft: color-mix(in srgb, var(--color-warning) 85%, transparent);
+
+  /* Layout heights not in tokens.json (dependent calcs) */
+  --height-header: 3rem;
+  --height-prompt-editor-pane: calc(85vh - 7rem);
+
+  /* File-type icons */
+  --color-file-html: var(--color-accent);
+  --color-file-css: var(--color-info);
+  --color-file-script: var(--color-warning);
+  --color-file-data: var(--color-success);
+
+  /* Overlays */
+  --color-overlay: rgba(26, 25, 21, 0.45);
+  --color-overlay-heavy: color-mix(in srgb, var(--color-bg) 92%, transparent);
+
+  /* Preview canvas + media chrome */
+  --color-preview-canvas: #ffffff;
+  --color-media-chrome-hover: color-mix(in srgb, #ffffff 10%, transparent);
+  --color-media-chrome-rail: color-mix(in srgb, #ffffff 10%, transparent);
+  --color-media-chrome-text-dim: color-mix(in srgb, #ffffff 50%, transparent);
+  --color-preview-overlay-hairline: color-mix(in srgb, #ffffff 10%, transparent);
+  --color-preview-overlay-control-border: color-mix(in srgb, #ffffff 20%, transparent);
+  --color-preview-overlay-control-border-hover: color-mix(in srgb, #ffffff 40%, transparent);
+  --color-preview-overlay-text-faint: color-mix(in srgb, #ffffff 40%, transparent);
+  --color-preview-overlay-text-muted: color-mix(in srgb, #ffffff 60%, transparent);
+  --color-preview-overlay-text-soft: color-mix(in srgb, #ffffff 70%, transparent);
+}
+
+/* ── @theme inline — Tailwind utilities from custom tokens ──────────
+ * Every token referenced by a Tailwind utility class (bg-*, text-*,
+ * border-*, ring-*, w-*, h-*, min-h-*, max-h-*, font-*) must appear
+ * here. Using `@theme inline` keeps the var() reference intact so
+ * `.dark` overrides in _generated-tokens.css flow through to the
+ * generated utilities at runtime.
+ */
+@theme inline {
+  /* Fonts */
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-logo: var(--font-logo);
+  --font-display: var(--font-display);
+
+  /* Text sizes */
+  --text-micro: var(--text-micro);
+  --text-nano: var(--text-nano);
+  --text-badge: var(--text-badge);
+  --text-pico: var(--text-pico);
+
+  /* Accent */
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-accent-subtle: var(--color-accent-subtle);
+  --color-accent-glow: var(--color-accent-glow);
+  --color-accent-focus-hairline: var(--color-accent-focus-hairline);
+  --color-accent-ring-muted: var(--color-accent-ring-muted);
+  --color-accent-ring-muted-hover: var(--color-accent-ring-muted-hover);
+  --color-accent-edge-strong: var(--color-accent-edge-strong);
+  --color-accent-highlight: var(--color-accent-highlight);
+  --color-accent-surface: var(--color-accent-surface);
+  --color-accent-surface-hover: var(--color-accent-surface-hover);
+  --color-accent-tonal-weak: var(--color-accent-tonal-weak);
+  --color-accent-border-muted: var(--color-accent-border-muted);
+  --color-accent-border-medium: var(--color-accent-border-medium);
+  --color-accent-segment-idle: var(--color-accent-segment-idle);
+  --color-accent-progress-strong: var(--color-accent-progress-strong);
+  --color-accent-progress-soft: var(--color-accent-progress-soft);
+  --color-accent-text-dim: var(--color-accent-text-dim);
+
+  /* Surfaces */
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-surface-raised: var(--color-surface-raised);
+  --color-surface-note: var(--color-surface-note);
+  --color-surface-ghost-backdrop: var(--color-surface-ghost-backdrop);
+  --color-surface-floating: var(--color-surface-floating);
+  --color-surface-floating-strong: var(--color-surface-floating-strong);
+  --color-surface-meta-chip: var(--color-surface-meta-chip);
+  --color-surface-nested: var(--color-surface-nested);
+
+  /* Borders */
+  --color-border: var(--color-border);
+  --color-border-subtle: var(--color-border-subtle);
+  --color-border-pulse-track: var(--color-border-pulse-track);
+  --color-border-pulse-mid: var(--color-border-pulse-mid);
+  --color-border-pulse-heavy: var(--color-border-pulse-heavy);
+  --color-border-section-divider: var(--color-border-section-divider);
+  --color-border-inset-ring: var(--color-border-inset-ring);
+  --color-border-dashed-ghost: var(--color-border-dashed-ghost);
+
+  /* Foreground */
+  --color-fg: var(--color-fg);
+  --color-fg-secondary: var(--color-fg-secondary);
+  --color-fg-muted: var(--color-fg-muted);
+  --color-fg-faint: var(--color-fg-faint);
+  --color-fg-on-primary-hover: var(--color-fg-on-primary-hover);
+  --color-header-scrim: var(--color-header-scrim);
+
+  /* Status */
+  --color-error: var(--color-error);
+  --color-error-subtle: var(--color-error-subtle);
+  --color-error-border: var(--color-error-border);
+  --color-error-border-soft: var(--color-error-border-soft);
+  --color-error-border-medium: var(--color-error-border-medium);
+  --color-error-surface: var(--color-error-surface);
+  --color-error-surface-hover: var(--color-error-surface-hover);
+  --color-error-highlight: var(--color-error-highlight);
+
+  --color-warning: var(--color-warning);
+  --color-warning-subtle: var(--color-warning-subtle);
+  --color-warning-border: var(--color-warning-border);
+  --color-warning-text-soft: var(--color-warning-text-soft);
+
+  --color-success: var(--color-success);
+  --color-success-subtle: var(--color-success-subtle);
+  --color-success-surface: var(--color-success-surface);
+  --color-success-highlight: var(--color-success-highlight);
+  --color-success-border-muted: var(--color-success-border-muted);
+
+  --color-info: var(--color-info);
+  --color-info-subtle: var(--color-info-subtle);
+
+  /* File-type icons */
+  --color-file-html: var(--color-file-html);
+  --color-file-css: var(--color-file-css);
+  --color-file-script: var(--color-file-script);
+  --color-file-data: var(--color-file-data);
+
+  /* Overlays */
+  --color-overlay: var(--color-overlay);
+  --color-overlay-heavy: var(--color-overlay-heavy);
+
+  /* Preview canvas + media chrome */
+  --color-preview-canvas: var(--color-preview-canvas);
+  --color-media-chrome-hover: var(--color-media-chrome-hover);
+  --color-media-chrome-rail: var(--color-media-chrome-rail);
+  --color-media-chrome-text-dim: var(--color-media-chrome-text-dim);
+  --color-preview-overlay-hairline: var(--color-preview-overlay-hairline);
+  --color-preview-overlay-control-border: var(--color-preview-overlay-control-border);
+  --color-preview-overlay-control-border-hover: var(--color-preview-overlay-control-border-hover);
+  --color-preview-overlay-text-faint: var(--color-preview-overlay-text-faint);
+  --color-preview-overlay-text-muted: var(--color-preview-overlay-text-muted);
+  --color-preview-overlay-text-soft: var(--color-preview-overlay-text-soft);
+
+  /* Widths */
+  --width-node: var(--width-node);
+  --width-node-variant: var(--width-node-variant);
+  --width-sidebar: var(--width-sidebar);
+  --width-palette: var(--width-palette);
+  --width-header: var(--width-header);
+  --width-canvas-title: var(--width-canvas-title);
+  --width-canvas-title-min: var(--width-canvas-title-min);
+  --width-model-trigger: var(--width-model-trigger);
+  --width-inspector-tab: var(--width-inspector-tab);
+  --width-kitchen-sink-label: var(--width-kitchen-sink-label);
+  --width-variant-inspector: var(--width-variant-inspector);
+
+  /* Heights */
+  --height-header: var(--height-header);
+  --height-prompt-editor-pane: var(--height-prompt-editor-pane);
+
+  /* Min/max heights */
+  --min-height-variant-node: var(--min-height-variant-node);
+  --min-height-hypothesis-shell: var(--min-height-hypothesis-shell);
+  --min-height-input-textarea: var(--min-height-input-textarea);
+  --min-height-prompt-textarea: var(--min-height-prompt-textarea);
+  --min-height-prompt-editor: var(--min-height-prompt-editor);
+  --min-height-hypothesis-textarea: var(--min-height-hypothesis-textarea);
+  --max-height-eval-scorecard: var(--max-height-eval-scorecard);
+  --max-height-section-ghost-preview: var(--max-height-section-ghost-preview);
+  --max-height-modal: var(--max-height-modal);
+  --max-height-modal-tall: var(--max-height-modal-tall);
+  --max-height-debug-export: var(--max-height-debug-export);
+  --max-height-timeline-scroll: var(--max-height-timeline-scroll);
+}
+
+/* ── Components + base ─────────────────────────────────────────────── */
+@layer components {
+  .h1 {
+    font-size: 1.5rem;
+    line-height: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    color: var(--color-fg);
+  }
+  .h2 {
+    font-size: 1.125rem;
+    line-height: 1.75rem;
+    font-weight: 600;
+    color: var(--color-fg);
+  }
+  .h3 {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 600;
+    color: var(--color-fg);
+  }
+  .h4 {
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 500;
+    color: var(--color-fg);
+  }
+  .body-text {
+    font-size: 0.875rem;
+    line-height: 1.5rem;
+    color: var(--color-fg-secondary);
+  }
+  .caption {
+    font-size: 0.75rem;
+    line-height: 1rem;
+    color: var(--color-fg-muted);
+  }
+  .label {
+    font-size: 0.625rem;
+    line-height: 0.875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-fg-muted);
+  }
+
+  .input-focus {
+    outline: none;
+  }
+  .input-focus:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 1px var(--color-accent);
+  }
+
+  .ds-callout-note {
+    border-radius: 0.375rem;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-surface-note);
+    padding: 0.5rem 0.75rem;
+    font-size: var(--text-nano);
+    line-height: 1.625;
+    color: var(--color-fg-secondary);
+  }
+
+  .ds-btn-primary-muted {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    border-radius: 0.375rem;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-surface-raised);
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 500;
+    color: var(--color-fg);
+    box-shadow: inset 0 0 0 1px var(--color-accent);
+  }
+  .ds-btn-primary-muted:hover {
+    box-shadow: inset 0 0 0 1px var(--color-accent-hover);
+  }
+
+  .ds-list-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 0.375rem;
+    border: 1px solid var(--color-border-subtle);
+    padding: 0.5rem 0.75rem;
+  }
+  .ds-list-row:hover {
+    background-color: var(--color-surface);
+  }
+
+  .ds-list-row-current {
+    border-color: var(--color-border);
+    border-left-width: 2px;
+    border-left-color: var(--color-accent);
+    background-color: var(--color-surface-raised);
+    box-shadow: none;
+  }
+  .ds-list-row-current:hover {
+    background-color: var(--color-surface-raised);
+  }
+
+  .ds-chip-current {
+    display: inline-block;
+    margin-left: 0.5rem;
+    border-radius: 0.25rem;
+    border: 1px solid var(--color-border-subtle);
+    background-color: var(--color-surface);
+    padding: 0.125rem 0.375rem;
+    font-size: var(--text-nano);
+    font-weight: 500;
+    color: var(--color-fg-secondary);
+    border: 1px solid var(--color-accent);
+    box-shadow: none;
+  }
+}
+
+@layer base {
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+}
+
+/* ── React Flow ─────────────────────────────────────────────────── */
+.react-flow {
+  --xy-node-boxshadow-selected: none;
+  --xy-selection-background-color: color-mix(in srgb, var(--color-accent) 6%, transparent);
+  --xy-selection-border: 1px solid var(--color-accent);
+  --xy-edge-stroke-selected: var(--color-accent);
+}
+
+/* ── Keyframes ──────────────────────────────────────────────────── */
+@keyframes dashmove {
+  to { stroke-dashoffset: -12; }
+}
+
+@keyframes handle-breathe {
+  0%, 100% { filter: drop-shadow(0 0 2px transparent); }
+  50% { filter: drop-shadow(0 0 6px var(--color-warning)); }
+}
+
+/* ── Handle Affordance System ───────────────────────────────────── */
+.handle-diamond {
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+}
+
+.handle-pulse {
+  animation: handle-breathe 2s ease-in-out infinite;
+}
+
+.handle-glow-valid {
+  filter: drop-shadow(0 0 6px var(--color-success)) !important;
+  animation: none !important;
+}
+
+.handle-glow-dim {
+  opacity: 0.25 !important;
+  animation: none !important;
+}
+
+/* ── Streamdown timeline ─────────────────────────────────────────── */
+.streamdown-timeline {
+  font-size: var(--text-nano);
+  line-height: 1.55;
+}
+.streamdown-timeline :where(p, ul, ol, li, blockquote, td, th, a) {
+  font-size: inherit;
+  line-height: inherit;
+}
+.streamdown-timeline :where(h1, h2, h3, h4, h5, h6) {
+  font-size: inherit;
+  line-height: 1.35;
+  font-weight: 600;
+  margin: 0.65em 0 0.35em;
+}
+.streamdown-timeline :where(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}
+.streamdown-timeline :where(code, kbd, samp) {
+  font-size: inherit !important;
+  line-height: inherit;
+  font-weight: inherit;
+  vertical-align: baseline;
+}
+.streamdown-timeline :where(pre) {
+  font-size: inherit !important;
+  line-height: inherit !important;
+  margin: 0.5em 0;
+}
+.streamdown-timeline [data-streamdown='code-block'] {
+  font-size: var(--text-nano);
+  line-height: 1.45;
+  margin-block: 0.5rem;
+}
+.streamdown-timeline [data-streamdown='code-block'] :where(pre, code) {
+  font-size: inherit !important;
+  line-height: inherit !important;
+}
+.streamdown-timeline [data-streamdown='code-block'] pre {
+  margin: 0;
+}
+.streamdown-timeline [data-streamdown='code-block'] span {
+  font-size: inherit !important;
+  line-height: inherit !important;
+}
+
+/* ── Variant Version Stack ───────────────────────────────────────── */
+.variant-stack {
+  box-shadow:
+    0 1px 2px 0 rgb(0 0 0 / 0.05),
+    3px 3px 0 -1px var(--color-surface-raised),
+    3px 3px 0 0 var(--color-border);
+}
+
+.variant-stack-deep {
+  box-shadow:
+    0 1px 2px 0 rgb(0 0 0 / 0.05),
+    3px 3px 0 -1px var(--color-surface-raised),
+    3px 3px 0 0 var(--color-border),
+    6px 6px 0 -1px var(--color-surface-raised),
+    6px 6px 0 0 var(--color-border);
+}

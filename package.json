@@ -1,14 +1,16 @@
 {
   "name": "auto-designer",
   "private": true,
-  "version": "0.3.37",
+  "version": "0.3.38",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "prebuild": "pnpm tokens:build",
+    "build": "pnpm tokens:build && tsc -b && vite build",
+    "tokens:build": "node packages/design-system/build-tokens.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run && pnpm -F @auto-designer/design-system test",
     "test:playwright-eval": "vitest run -c vitest.playwright.config.ts server/services/__tests__/browser-playwright-evaluator.test.ts",
     "test:watch": "vitest",
     "dev:server": "tsx watch server/dev.ts",
@@ -77,6 +79,7 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",
+    "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.0.18",
     "wait-on": "^9.0.4"
   }

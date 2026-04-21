@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
+import { Button } from '@ds/components/ui/button';
 import { EVALUATOR_RUBRIC_IDS, EVALUATOR_WORKER_COUNT } from '../../types/evaluation';
 import { storage } from '../../storage';
 import { useCanvasStore } from '../../stores/canvas-store';
@@ -254,23 +255,23 @@ export default function VariantRunInspector() {
           </h2>
           <div className="flex shrink-0 items-center gap-1">
             {isGenerating && laneStrategyIdForAbort ? (
-              <button
-                type="button"
+              <Button
+                variant="destructive"
+                size="sm"
                 onClick={() => abortGenerationForStrategy(laneStrategyIdForAbort)}
-                className="rounded border border-error-border bg-error-subtle px-2 py-0.5 text-nano font-semibold text-error transition-colors hover:bg-error-surface-hover"
                 title="Stop generation (cancels the in-flight request)"
               >
                 Stop
-              </button>
+              </Button>
             ) : null}
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="iconSm"
               onClick={closeRunInspector}
-              className="shrink-0 rounded p-0.5 text-fg-muted transition-colors hover:bg-surface-nested hover:text-fg"
               title="Close (Esc)"
             >
               <X size={14} />
-            </button>
+            </Button>
           </div>
         </div>
         <div className="mt-0.5 flex items-center gap-1.5 text-nano text-fg-muted">

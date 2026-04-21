@@ -2,6 +2,8 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import { useReactFlow, type NodeProps, type Node } from '@xyflow/react';
 import { ArrowRight, RefreshCw } from 'lucide-react';
 import { normalizeError } from '../../../lib/error-utils';
+import { Button } from '@ds/components/ui/button';
+import { Badge } from '@ds/components/ui/badge';
 import { useSpecStore } from '../../../stores/spec-store';
 import {
   useIncubatorStore,
@@ -253,20 +255,19 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
 
           {hint && (
             <div className="flex justify-center">
-              <span className="inline-flex items-center rounded-full border border-warning-border bg-warning-subtle px-2 py-0.5 font-mono text-nano text-warning">
-                {hint}
-              </span>
+              <Badge shape="pill" tone="warning">{hint}</Badge>
             </div>
           )}
 
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="md"
+            className="w-full"
             onClick={handleIncubate}
             disabled={isCompiling || !isReady}
             aria-busy={isCompiling}
             aria-label={isCompiling ? 'Incubating…' : 'Generate hypotheses'}
             title={isCompiling ? 'Incubating…' : undefined}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isCompiling ? (
               <>
@@ -279,7 +280,7 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
                 <ArrowRight size={12} aria-hidden />
               </>
             )}
-          </button>
+          </Button>
         </div>
 
         {totalHypotheses > 0 && !isCompiling && (

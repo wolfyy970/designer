@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { Button } from '@ds/components/ui/button';
 
 export interface PermanentDeleteConfirmDialogProps {
   open: boolean;
@@ -78,21 +79,21 @@ export function PermanentDeleteConfirmDialog({
           {description}
         </div>
         <div className="flex justify-end gap-2 border-t border-border-subtle px-4 py-3">
-          <button
+          <Button
             ref={cancelRef}
-            type="button"
+            variant="secondary"
+            size="sm"
             onClick={onCancel}
-            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-nano font-medium text-fg-secondary transition-colors hover:bg-surface-raised hover:text-fg"
           >
             {cancelLabel}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
             onClick={onConfirm}
-            className="rounded-lg border border-error-border bg-error-subtle px-3 py-1.5 text-nano font-semibold text-error transition-colors hover:bg-error-surface-hover"
           >
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

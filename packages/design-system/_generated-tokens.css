@@ -1,0 +1,101 @@
+/* AUTO-GENERATED — do not edit by hand. Source: tokens.json */
+
+:root {
+  /* color */
+  --color-accent-50: #e8eef4;
+  --color-accent-100: #c5d4e3;
+  --color-accent-200: #9fb8cc;
+  --color-accent-300: #799cb5;
+  --color-accent-400: #53819d;
+  --color-accent-500: #3a5a7d;
+  --color-accent-600: #2d4864;
+  --color-accent-700: #243752;
+  --color-accent-800: #1b2a3f;
+  --color-accent-900: #131d2b;
+  --color-accent-950: #0d1420;
+  --color-bg: #f4efe6;
+  --color-surface: #fbf8ef;
+  --color-surface-raised: #ffffff;
+  --color-border: #cbc2ae;
+  --color-border-subtle: #e3dccb;
+  --color-fg: #1a1915;
+  --color-fg-secondary: #4a4a42;
+  --color-fg-muted: #76736a;
+  --color-fg-faint: #a39f93;
+  --color-error: #b8453e;
+  --color-error-subtle: #f7e4e1;
+  --color-warning: #b58a3a;
+  --color-warning-subtle: #f4e9cf;
+  --color-success: #5e8472;
+  --color-success-subtle: #d8e4dc;
+  --color-info: #3d6e8a;
+  --color-info-subtle: #dfe8ef;
+  /* font */
+  --font-sans: 'Inter Tight Variable', 'Inter Tight', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace;
+  --font-logo: 'Fraunces Variable', 'Fraunces', Georgia, serif;
+  --font-display: 'Fraunces Variable', 'Fraunces', Georgia, serif;
+  /* text */
+  --text-micro: 0.6875rem;
+  --text-nano: 0.625rem;
+  --text-badge: 0.5625rem;
+  --text-pico: 0.5rem;
+  /* width */
+  --width-node: 320px;
+  --width-node-variant: 480px;
+  --width-sidebar: 14rem;
+  --width-palette: 13rem;
+  --width-header: 3rem;
+  --width-canvas-title: min(28rem, calc(100vw - 8rem));
+  --width-canvas-title-min: 12rem;
+  --width-model-trigger: 220px;
+  --width-inspector-tab: min(40%, 11rem);
+  --width-kitchen-sink-label: 8.5rem;
+  --width-variant-inspector: min(100vw, 480px);
+  /* min-height */
+  --min-height-variant-node: 420px;
+  --min-height-hypothesis-shell: 200px;
+  --min-height-input-textarea: 240px;
+  --min-height-prompt-textarea: 200px;
+  --min-height-prompt-editor: 420px;
+  --min-height-hypothesis-textarea: 176px;
+  /* max-height */
+  --max-height-eval-scorecard: 180px;
+  --max-height-section-ghost-preview: 72px;
+  --max-height-modal: 85vh;
+  --max-height-modal-tall: 92vh;
+  --max-height-debug-export: 72vh;
+  --max-height-timeline-scroll: min(40vh, 320px);
+}
+
+.dark {
+  /* color */
+  --color-accent-50: #1a2d3f;
+  --color-accent-100: #243a4d;
+  --color-accent-200: #2f4a5e;
+  --color-accent-300: #3a5b70;
+  --color-accent-400: #456d84;
+  --color-accent-500: #7aa3ce;
+  --color-accent-600: #9dbede;
+  --color-accent-700: #b5d0e8;
+  --color-accent-800: #cce2f2;
+  --color-accent-900: #e0eff9;
+  --color-accent-950: #f0f7fc;
+  --color-bg: #0f1114;
+  --color-surface: #1a1d22;
+  --color-surface-raised: #262a31;
+  --color-border: #3f444d;
+  --color-border-subtle: #262a31;
+  --color-fg: #f2f0ea;
+  --color-fg-secondary: #b8b4a8;
+  --color-fg-muted: #7f7c73;
+  --color-fg-faint: #5a5851;
+  --color-error: #e07971;
+  --color-error-subtle: #3a1818;
+  --color-warning: #d4a458;
+  --color-warning-subtle: #3a2a10;
+  --color-success: #7fb39c;
+  --color-success-subtle: #16332a;
+  --color-info: #6ea0c4;
+  --color-info-subtle: #12283a;
+}

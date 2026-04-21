@@ -11,33 +11,30 @@ function Probe() {
 describe('useThemeEffect', () => {
   afterEach(() => {
     localStorage.clear();
-    document.documentElement.removeAttribute('data-theme');
+    document.documentElement.classList.remove('dark');
     cleanup();
   });
 
   it('defaults to light when no localStorage theme is set', () => {
     render(<Probe />);
-    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 
   it('applies the stored dark theme', () => {
     localStorage.setItem('theme', 'dark');
     render(<Probe />);
-    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
   });
 
   it('applies the stored light theme', () => {
     localStorage.setItem('theme', 'light');
     render(<Probe />);
-    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 
   it('falls back to light when localStorage holds a garbage value', () => {
     localStorage.setItem('theme', 'neon' as never);
     render(<Probe />);
-    // hook's type narrowing coerces unknown → 'neon' string; we still expect
-    // the attribute to be set (data-theme="neon" resolves to light CSS since
-    // no matching selector exists). This documents the current contract.
-    expect(document.documentElement.dataset.theme).toBeDefined();
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 });
