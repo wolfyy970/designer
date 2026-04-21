@@ -11,19 +11,20 @@ const buildScript = resolve(rootDir, 'build-tokens.mjs');
 
 describe('build-tokens idempotency', () => {
   it('produces byte-identical _generated-tokens.css across two runs', () => {
+    // Snapshot before so we restore even if the expect throws — a failing
+    // idempotency test must not leave the working tree dirty.
     const before = readFileSync(tokensCssPath);
 
-    // Run once
-    execFileSync('node', [buildScript], { cwd: rootDir, encoding: 'utf8' });
-    const first = readFileSync(tokensCssPath);
+    try {
+      execFileSync('node', [buildScript], { cwd: rootDir, encoding: 'utf8' });
+      const first = readFileSync(tokensCssPath);
 
-    // Run again
-    execFileSync('node', [buildScript], { cwd: rootDir, encoding: 'utf8' });
-    const second = readFileSync(tokensCssPath);
+      execFileSync('node', [buildScript], { cwd: rootDir, encoding: 'utf8' });
+      const second = readFileSync(tokensCssPath);
 
-    // Restore original to avoid dirty working tree
-    writeFileSync(tokensCssPath, before);
-
-    expect(first.toString()).toBe(second.toString());
+      expect(first.toString()).toBe(second.toString());
+    } finally {
+      writeFileSync(tokensCssPath, before);
+    }
   });
 });

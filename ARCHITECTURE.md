@@ -34,7 +34,7 @@ flowchart TB
 
 ## Design system (frontend)
 
-UI color and typography tokens: **[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)** (Indigo brand + sage/amber status + pacific info; bone/ivory/white surface stack; Inter Tight + Fraunces + JetBrains Mono triad; light + dark themes via `html[data-theme]`, toggled by `src/hooks/useThemeEffect.ts`). Implemented in `src/index.css` (`@theme` + `html[data-theme="dark"]` overrides).
+UI color and typography tokens: **[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)** (Indigo brand + sage/amber status + pacific info; bone/ivory/white surface stack; Inter Tight + Fraunces + JetBrains Mono triad; light + dark themes via the `.dark` class on `<html>`, toggled by `src/hooks/useThemeEffect.ts`). Package shell at `packages/design-system/`: `tokens.json` → `build-tokens.mjs` (`pnpm tokens:build`, wired as `prebuild`) → `_generated-tokens.css` (`:root` + `.dark` base tokens) → `globals.css` (derived tokens, `@theme inline` utility registration, component layer). Atoms (`Button`, `Badge`) import via `@ds/components/ui/<name>`. Drift guards in `packages/design-system/__tests__/` chain into root `pnpm test`.
 
 ## Layered architecture (diagram)
 

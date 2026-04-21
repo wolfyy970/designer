@@ -6,81 +6,97 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..');
 const tokensCssPath = resolve(rootDir, '_generated-tokens.css');
+const globalsCssPath = resolve(rootDir, 'globals.css');
 
 /**
- * Extract all CSS custom property names declared under a given selector
- * block in a CSS file.
+ * Extract `name → value` for every CSS custom property declared under the
+ * given selector (supports repeated blocks; `[^}]+` is safe for the CSS we
+ * parse because no declaration body contains nested braces).
  */
-function extractVars(css: string, selector: string): Set<string> {
-  const vars = new Set<string>();
-  const regex = new RegExp(`${selector}\\s*\\{([^}]+)\\}`, 'g');
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(css)) !== null) {
-    const block = match[1];
-    const propRegex = /(--[\w-]+):/g;
-    let propMatch: RegExpExecArray | null;
-    while ((propMatch = propRegex.exec(block)) !== null) {
-      vars.add(propMatch[1]);
+function extractTokens(css: string, selector: string): Map<string, string> {
+  const tokens = new Map<string, string>();
+  const blockRe = new RegExp(`${selector}\\s*\\{([^}]+)\\}`, 'g');
+  let block: RegExpExecArray | null;
+  while ((block = blockRe.exec(css)) !== null) {
+    const propRe = /(--[\w-]+)\s*:\s*([^;]+);/g;
+    let prop: RegExpExecArray | null;
+    while ((prop = propRe.exec(block[1])) !== null) {
+      tokens.set(prop[1], prop[2].trim());
     }
   }
-  return vars;
+  return tokens;
 }
 
 /**
- * Tokens that are shared across light/dark themes by design (no dark override needed).
+ * A token is "theme-derived" when its right-hand side references another
+ * `--color-*` var **and** doesn't also hard-code a literal color. A
+ * color-mix between a theme var and a fixed hex is a bug class: the var
+ * side flips with theme but the hex side stays put, producing a wash that
+ * only looks right in one theme. Flagging those here forces the declaration
+ * to either use `var(--color-*)` for the mix partner or migrate to
+ * `tokens.json` with explicit light/dark values.
  */
-const SHARED_THEME_TOKENS = new Set([
-  // Typography
-  '--font-sans',
-  '--font-mono',
-  '--font-logo',
-  '--font-display',
-  // Text sizes
-  '--text-micro',
-  '--text-nano',
-  '--text-badge',
-  '--text-pico',
-  // Layout widths
-  '--width-node',
-  '--width-node-variant',
-  '--width-sidebar',
-  '--width-palette',
-  '--width-header',
-  '--width-canvas-title',
-  '--width-canvas-title-min',
-  '--width-model-trigger',
-  '--width-inspector-tab',
-  '--width-kitchen-sink-label',
-  '--width-variant-inspector',
-  // Layout heights
-  '--height-header',
-  '--height-prompt-editor-pane',
-  // Min heights
-  '--min-height-variant-node',
-  '--min-height-hypothesis-shell',
-  '--min-height-input-textarea',
-  '--min-height-prompt-textarea',
-  '--min-height-prompt-editor',
-  '--min-height-hypothesis-textarea',
-  // Max heights
-  '--max-height-eval-scorecard',
-  '--max-height-section-ghost-preview',
-  '--max-height-modal',
-  '--max-height-modal-tall',
-  '--max-height-debug-export',
-  '--max-height-timeline-scroll',
+function isThemeDerived(value: string): boolean {
+  const hasThemeVar = /var\(\s*--color-[\w-]+/.test(value);
+  const hasLiteralHex = /#[0-9a-fA-F]{3,8}\b/.test(value);
+  return hasThemeVar && !hasLiteralHex;
+}
+
+/**
+ * Color tokens whose light value is correct in both themes by design, so
+ * a `.dark` counterpart would be redundant. Each entry should be defended
+ * by a brief comment; if you're tempted to add a token here to make the
+ * test pass, first ask whether that token actually looks right in dark
+ * mode — usually the answer is "no" and it needs a real dark value in
+ * `tokens.json`.
+ */
+const SHARED_COLOR_TOKENS = new Set<string>([
+  // Dark semi-transparent scrim used by modal overlays; works on either
+  // theme because it's already dark-on-whatever.
+  '--color-overlay',
+  // The preview iframe renders user-generated output on a fixed-white
+  // canvas regardless of app theme — don't flip this.
+  '--color-preview-canvas',
+  // Media-chrome and preview-overlay stacks sit atop the (dark) preview
+  // frame chrome; fixed-white alphas are intentional.
+  '--color-media-chrome-hover',
+  '--color-media-chrome-rail',
+  '--color-media-chrome-text-dim',
+  '--color-preview-overlay-hairline',
+  '--color-preview-overlay-control-border',
+  '--color-preview-overlay-control-border-hover',
+  '--color-preview-overlay-text-faint',
+  '--color-preview-overlay-text-muted',
+  '--color-preview-overlay-text-soft',
 ]);
 
 describe('token parity between light (:root) and dark (.dark)', () => {
-  it('every :root --color-* has a .dark counterpart', () => {
-    const css = readFileSync(tokensCssPath, 'utf8');
-    const rootVars = extractVars(css, ':root');
-    const darkVars = extractVars(css, '\\.dark');
+  it('every fixed-value --color-* in :root has a .dark counterpart or is explicitly shared', () => {
+    const tokensCss = readFileSync(tokensCssPath, 'utf8');
+    const globalsCss = readFileSync(globalsCssPath, 'utf8');
 
-    const colorVars = Array.from(rootVars).filter((v) => v.startsWith('--color-'));
-    const missing = colorVars.filter(
-      (v) => !darkVars.has(v) && !SHARED_THEME_TOKENS.has(v),
+    // Union across both files so a token declared in globals.css :root with a
+    // dark override in _generated-tokens.css .dark (or vice versa) is treated
+    // as paired.
+    const rootTokens = new Map<string, string>([
+      ...extractTokens(tokensCss, ':root'),
+      ...extractTokens(globalsCss, ':root'),
+    ]);
+    const darkTokens = new Map<string, string>([
+      ...extractTokens(tokensCss, '\\.dark'),
+      ...extractTokens(globalsCss, '\\.dark'),
+    ]);
+
+    const needsParity = Array.from(rootTokens.entries()).filter(
+      ([name, value]) =>
+        name.startsWith('--color-') &&
+        !isThemeDerived(value) &&
+        !SHARED_COLOR_TOKENS.has(name),
     );
+
+    const missing = needsParity
+      .filter(([name]) => !darkTokens.has(name))
+      .map(([name]) => name);
 
     expect(missing).toEqual([]);
   });

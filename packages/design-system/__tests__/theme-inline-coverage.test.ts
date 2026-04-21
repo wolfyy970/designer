@@ -22,21 +22,52 @@ function extractAllVars(text: string): Set<string> {
 }
 
 /**
- * Extract the content of an @theme inline { ... } block from CSS.
+ * Extract every body of `<header-pattern> { ... }` in `css`, tracking brace
+ * depth so nested braces (at-rules, nested selectors) don't truncate the
+ * match early. Matches every occurrence, not just the first — a file with
+ * multiple `:root` scopes (e.g. `:root[data-density="compact"]`) parses
+ * correctly.
  */
-function extractThemeInlineVars(css: string): Set<string> {
-  const match = css.match(/@theme\s+inline\s*\{([^}]*)\}/s);
-  if (!match) throw new Error('No @theme inline block found in globals.css');
-  return extractAllVars(match[1]);
+function extractBlockBodies(css: string, header: RegExp): string[] {
+  const headerRe = new RegExp(header.source, 'g');
+  const bodies: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = headerRe.exec(css)) !== null) {
+    const open = css.indexOf('{', m.index);
+    if (open < 0) break;
+    let depth = 1;
+    let i = open + 1;
+    while (i < css.length && depth > 0) {
+      const ch = css[i];
+      if (ch === '{') depth++;
+      else if (ch === '}') depth--;
+      i++;
+    }
+    if (depth === 0) bodies.push(css.slice(open + 1, i - 1));
+    headerRe.lastIndex = i;
+  }
+  return bodies;
 }
 
-/**
- * Extract the content of a :root { ... } block from CSS.
- */
+function extractThemeInlineVars(css: string): Set<string> {
+  const bodies = extractBlockBodies(css, /@theme\s+inline\s*\{/);
+  if (bodies.length === 0) {
+    throw new Error('No @theme inline block found in globals.css');
+  }
+  const vars = new Set<string>();
+  for (const body of bodies) {
+    for (const v of extractAllVars(body)) vars.add(v);
+  }
+  return vars;
+}
+
 function extractRootBlockVars(css: string): Set<string> {
-  const match = css.match(/:root\s*\{([^}]*)\}/s);
-  if (!match) return new Set();
-  return extractAllVars(match[1]);
+  const bodies = extractBlockBodies(css, /:root\s*\{/);
+  const vars = new Set<string>();
+  for (const body of bodies) {
+    for (const v of extractAllVars(body)) vars.add(v);
+  }
+  return vars;
 }
 
 /**

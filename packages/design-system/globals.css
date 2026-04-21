@@ -23,9 +23,12 @@
   --color-accent-ring-muted: color-mix(in srgb, var(--color-accent) 30%, transparent);
   --color-accent-ring-muted-hover: var(--color-accent);
   --color-accent-edge-strong: var(--color-accent);
-  --color-accent-highlight: color-mix(in srgb, var(--color-accent) 8%, #ffffff);
-  --color-accent-surface: color-mix(in srgb, var(--color-accent) 6%, #ffffff);
-  --color-accent-surface-hover: color-mix(in srgb, var(--color-accent) 14%, #ffffff);
+  /* Mix partner is surface-raised (#ffffff in light, #262a31 in dark) so
+   * these washes track theme correctly — a hard-coded #ffffff here would
+   * break on dark mode surfaces. */
+  --color-accent-highlight: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface-raised));
+  --color-accent-surface: color-mix(in srgb, var(--color-accent) 6%, var(--color-surface-raised));
+  --color-accent-surface-hover: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface-raised));
   --color-accent-tonal-weak: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
   --color-accent-border-muted: color-mix(in srgb, var(--color-accent) 40%, transparent);
   --color-accent-border-medium: color-mix(in srgb, var(--color-accent) 55%, transparent);
@@ -54,11 +57,12 @@
   --color-fg-on-primary-hover: color-mix(in srgb, var(--color-fg) 88%, var(--color-bg) 12%);
   --color-header-scrim: color-mix(in srgb, var(--color-bg) 90%, transparent);
 
-  /* Error derived */
+  /* Error derived.
+   * --color-error-surface-hover lives in tokens.json (it's a fixed value
+   * with a separate dark counterpart) and flows through _generated-tokens.css. */
   --color-error-border: color-mix(in srgb, var(--color-error) 35%, transparent);
   --color-error-border-soft: color-mix(in srgb, var(--color-error) 30%, transparent);
   --color-error-border-medium: color-mix(in srgb, var(--color-error) 50%, transparent);
-  --color-error-surface-hover: #f2d3ce;
   --color-error-surface: var(--color-error-subtle);
   --color-error-highlight: var(--color-error-subtle);
 

@@ -24,6 +24,7 @@
   --color-fg-faint: #a39f93;
   --color-error: #b8453e;
   --color-error-subtle: #f7e4e1;
+  --color-error-surface-hover: #f2d3ce;
   --color-warning: #b58a3a;
   --color-warning-subtle: #f4e9cf;
   --color-success: #5e8472;
@@ -92,6 +93,7 @@
   --color-fg-faint: #5a5851;
   --color-error: #e07971;
   --color-error-subtle: #3a1818;
+  --color-error-surface-hover: #4d1f1f;
   --color-warning: #d4a458;
   --color-warning-subtle: #3a2a10;
   --color-success: #7fb39c;
