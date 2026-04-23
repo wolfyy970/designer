@@ -42,10 +42,6 @@ export interface HypothesisGenerationRunDeps {
   updateResult: (id: string, patch: Partial<GenerationResult>) => void;
   nextRunNumberForStrategy: (strategyId: string) => number;
   syncAfterGenerate: (results: GenerationResult[], hypothesisNodeId: string) => void;
-  getCanvasState: () => {
-    previewNodeIdMap: Map<string, string>;
-    setRunInspectorPreview: (id: string | null) => void;
-  };
   scheduleFitView: () => void;
   fetchBundle: (
     body: HypothesisGenerateApiPayload,
@@ -115,11 +111,6 @@ export async function executeHypothesisGenerationRun(
   }
 
   deps.syncAfterGenerate(placeholderResults, deps.nodeId);
-  {
-    const canvas = deps.getCanvasState();
-    const previewNodeId = canvas.previewNodeIdMap.get(prompt.strategyId);
-    if (previewNodeId) canvas.setRunInspectorPreview(previewNodeId);
-  }
   deps.scheduleFitView();
 
   deps.onLaneIdsReady(lanePlaceholderIds);

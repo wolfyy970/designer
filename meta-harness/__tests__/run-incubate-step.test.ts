@@ -52,7 +52,7 @@ describe('runIncubateStep (SSE)', () => {
       ),
     );
 
-    const plan = await runIncubateStep('http://localhost:3001/api', { foo: 1 }, {
+    const plan = await runIncubateStep('http://localhost:4731/api', { foo: 1 }, {
       onWireEvent: (ev) => {
         events.push(ev);
       },
@@ -64,7 +64,7 @@ describe('runIncubateStep (SSE)', () => {
     expect(events).toContain(SSE_EVENT_NAMES.incubate_result);
     expect(events).toContain(SSE_EVENT_NAMES.done);
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'http://localhost:3001/api/incubate',
+      'http://localhost:4731/api/incubate',
       expect.objectContaining({ method: 'POST' }),
     );
   });

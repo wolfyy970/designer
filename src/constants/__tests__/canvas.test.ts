@@ -16,7 +16,7 @@ describe('NODE_TYPES', () => {
     const expected = [
       'designBrief', 'existingDesign', 'researchContext',
       'objectivesMetrics', 'designConstraints', 'designSystem',
-      'incubator', 'hypothesis', 'hypothesisGhost', 'preview', 'model',
+      'incubator', 'hypothesis', 'preview', 'model',
     ];
     expect(Object.values(NODE_TYPES)).toEqual(expect.arrayContaining(expected));
     expect(Object.values(NODE_TYPES)).toHaveLength(expected.length);

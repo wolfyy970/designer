@@ -39,7 +39,7 @@ vi.mock('../candidate-eval.ts', async (importOriginal) => {
 import { runMetaHarnessEngine } from '../runner-core.ts';
 
 const baseCfg: MetaHarnessConfig = {
-  apiBaseUrl: 'http://127.0.0.1:3001/api',
+  apiBaseUrl: 'http://127.0.0.1:4731/api',
   iterations: 2,
   proposerModel: 'm',
   proposerMaxToolRounds: 3,

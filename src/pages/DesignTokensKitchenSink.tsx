@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { X } from 'lucide-react';
+import { Button } from '@ds/components/ui/button';
 
 type Swatch = {
   name: string;
@@ -253,8 +254,10 @@ export function DesignTokensKitchenSinkContent({ embedded = false }: { embedded?
 
         <Section title="Buttons">
           <p className="text-nano text-fg-secondary">
-            Product uses raw <code className="font-mono">button</code> + Tailwind recipes (no shared Button
-            component). Each row: label, default, disabled.
+            Several rows are legacy Tailwind <code className="font-mono">button</code> recipes.{' '}
+            <strong>Destructive</strong> uses{' '}
+            <code className="font-mono">@ds/components/ui/button</code> (<code className="font-mono">variant=&quot;destructive&quot;</code>
+            , same as hypothesis Stop and other canvas controls).
           </p>
           <div className="space-y-4 rounded-lg border border-border bg-surface p-4">
             <div className="flex flex-wrap items-center gap-3 border-b border-border-subtle pb-3">
@@ -320,20 +323,13 @@ export function DesignTokensKitchenSinkContent({ embedded = false }: { embedded?
             </div>
             <div className="flex flex-wrap items-center gap-3 border-b border-border-subtle pb-3">
               <span className="min-w-[var(--width-kitchen-sink-label)] text-nano font-medium text-fg-muted">Destructive</span>
-              <button
-                type="button"
-                className="rounded-lg border border-error-border bg-error-subtle px-3 py-1.5 text-nano font-semibold text-error hover:bg-error-surface-hover"
-              >
+              <Button type="button" variant="destructive" size="md">
                 Delete permanently
-              </button>
-              <button
-                type="button"
-                disabled
-                className="cursor-not-allowed rounded-lg border border-error-border bg-error-subtle px-3 py-1.5 text-nano font-semibold text-error opacity-50"
-              >
+              </Button>
+              <Button type="button" variant="destructive" size="md" disabled>
                 Disabled
-              </button>
-              <code className="text-pico text-fg-muted">error-subtle border</code>
+              </Button>
+              <code className="text-pico text-fg-muted">Button variant destructive (button-variants.ts)</code>
             </div>
             <div>
               <p className="mb-2 text-nano font-medium text-fg-muted">Icon-only</p>

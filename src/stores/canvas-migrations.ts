@@ -565,6 +565,22 @@ function migrateV25ToV26(s: Record<string, unknown>): Record<string, unknown> {
   return { ...s, edges: dedupeEdgesById(edges) };
 }
 
+/** v26 → v27: remove deprecated `hypothesisGhost` nodes and any edges touching them. */
+function migrateV26ToV27(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
+  const edges = (s.edges as Array<Record<string, unknown>>) ?? [];
+  const ghostIds = new Set(
+    nodes.filter((n) => n.type === 'hypothesisGhost').map((n) => String(n.id)),
+  );
+  return {
+    ...s,
+    nodes: nodes.filter((n) => n.type !== 'hypothesisGhost'),
+    edges: edges.filter(
+      (e) => !ghostIds.has(String(e.source)) && !ghostIds.has(String(e.target)),
+    ),
+  };
+}
+
 // ── Top-level migration runner ────────────────────────────────────────
 
 /**
@@ -605,6 +621,7 @@ export function migrateCanvasState(
   if (fromVersion < 24) s = migrateV23ToV24(s);
   if (fromVersion < 25) s = migrateV24ToV25(s);
   if (fromVersion < 26) s = migrateV25ToV26(s);
+  if (fromVersion < 27) s = migrateV26ToV27(s);
 
   return s;
 }

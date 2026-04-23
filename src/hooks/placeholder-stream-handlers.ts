@@ -199,6 +199,7 @@ export function createPlaceholderStreamCallbacks(options: {
       const tid = state.currentModelTurnId || 1;
       streamPlaceholderDevDebug(placeholderId, 'onActivity', { chars: entry.length, turnId: tid });
       state.activityText += entry;
+      state.streamedModelChars += entry.length;
       state.activityByTurn = {
         ...state.activityByTurn,
         [tid]: (state.activityByTurn[tid] ?? '') + entry,
@@ -220,6 +221,7 @@ export function createPlaceholderStreamCallbacks(options: {
       state.thinkingTurns = [...state.thinkingTurns.filter((t) => t.turnId !== turnId), next].sort(
         (a, b) => a.turnId - b.turnId,
       );
+      state.streamedModelChars += delta.length;
       raf.thinking.schedule();
     },
     onProgress: (status) => {

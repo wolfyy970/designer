@@ -20,7 +20,9 @@ describe('Badge', () => {
     const { container } = render(<Badge shape="pill" tone="warning">Warn</Badge>);
     const span = container.querySelector('span')!;
     expect(span.className).toContain('rounded-full');
-    expect(span.className).toContain('border-warning-border');
+    expect(span.className).toContain('text-nano');
+    expect(span.className).not.toContain('font-mono');
+    expect(span.className).not.toContain('border-warning');
     expect(span.className).toContain('bg-warning-subtle');
     expect(span.className).toContain('text-warning');
   });
@@ -28,7 +30,7 @@ describe('Badge', () => {
   it('renders pill success with correct classes', () => {
     const { container } = render(<Badge shape="pill" tone="success">OK</Badge>);
     const span = container.querySelector('span')!;
-    expect(span.className).toContain('border-success-border-muted');
+    expect(span.className).not.toContain('border-success');
     expect(span.className).toContain('bg-success-subtle');
     expect(span.className).toContain('text-success');
   });
@@ -36,7 +38,7 @@ describe('Badge', () => {
   it('renders pill accent with correct classes', () => {
     const { container } = render(<Badge shape="pill" tone="accent">Info</Badge>);
     const span = container.querySelector('span')!;
-    expect(span.className).toContain('border-accent-border-muted');
+    expect(span.className).not.toContain('border-accent');
     expect(span.className).toContain('bg-accent-subtle');
     expect(span.className).toContain('text-accent');
   });
@@ -44,8 +46,8 @@ describe('Badge', () => {
   it('renders pill neutral with correct classes', () => {
     const { container } = render(<Badge shape="pill" tone="neutral">Tag</Badge>);
     const span = container.querySelector('span')!;
-    expect(span.className).toContain('border-border');
-    expect(span.className).toContain('bg-surface');
+    expect(span.className).not.toContain('border-border');
+    expect(span.className).toContain('bg-surface-meta-chip');
     expect(span.className).toContain('text-fg-muted');
   });
 

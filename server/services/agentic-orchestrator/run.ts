@@ -9,12 +9,7 @@ import { isEvalSatisfied } from '../design-evaluation-service.ts';
 import { getPromptBody } from '../../lib/prompt-resolution.ts';
 import { debugAgentIngest } from '../../lib/debug-agent-ingest.ts';
 import { makeRunTraceEvent } from '../../lib/run-trace.ts';
-import {
-  buildEvaluatorTracesSection,
-  buildRevisionUserContext,
-  buildRoundHistorySection,
-  type EvaluationRoundHistoryEntry,
-} from '../../lib/agentic-revision-user.ts';
+import type { EvaluationRoundHistoryEntry } from '../../lib/agentic-revision-user.ts';
 import { normalizeError } from '../../../src/lib/error-utils.ts';
 import { env } from '../../env.ts';
 import { writeAgenticEvalRunLog } from '../../lib/eval-run-logger.ts';
@@ -30,6 +25,8 @@ import {
   appendEvaluationRoundHistory,
 } from './checkpoint.ts';
 import { runAgenticPiSessionRound } from './pi-session-round.ts';
+import { buildRevisionUserPrompt } from './revision-prompt.ts';
+import { decideStopReason } from './stop-reason.ts';
 
 export async function runAgenticWithEvaluation(
   options: AgenticOrchestratorOptions,
@@ -202,24 +199,13 @@ async function runAgenticWithEvaluationImpl(
         brief,
       });
 
-      const tracesSection = buildEvaluatorTracesSection(snapshot.aggregate.evaluatorTraces);
-      const revisionParts = [
-        buildRevisionUserContext(options.compiledPrompt, options.evaluationContext ?? undefined),
+      const revisionUser = buildRevisionUserPrompt({
+        compiledPrompt: options.compiledPrompt,
+        evaluationContext: options.evaluationContext,
         revisionUserInstructions,
-        '',
-        buildRoundHistorySection(roundHistory),
-        '## Revision brief',
-        brief,
-      ];
-      if (tracesSection.length > 0) {
-        revisionParts.push('', tracesSection);
-      }
-      revisionParts.push(
-        '',
-        '## Prioritized fixes',
-        ...snapshot.aggregate.prioritizedFixes.map((f, i) => `${i + 1}. ${f}`),
-      );
-      const revisionUser = revisionParts.join('\n');
+        roundHistory,
+        snapshot,
+      });
       revisionPromptByEvalRound.set(snapshot.round, revisionUser);
 
       debugAgentIngest({
@@ -279,12 +265,10 @@ async function runAgenticWithEvaluationImpl(
       }
     }
 
-    const satisfied = isEvalSatisfied(snapshot.aggregate, satisfactionOpts);
-    const stopReason: AgenticStopReason = effectiveSignal.aborted
-      ? 'aborted'
-      : satisfied
-        ? 'satisfied'
-        : 'max_revisions';
+    const stopReason = decideStopReason({
+      aborted: effectiveSignal.aborted,
+      satisfied: isEvalSatisfied(snapshot.aggregate, satisfactionOpts),
+    });
 
     await emitOrchestratorEvent(streamCtx, { type: 'phase', phase: 'complete' });
     return returnWithCheckpoint(snapshot, stopReason);

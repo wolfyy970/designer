@@ -15,8 +15,6 @@ export type CanvasNodeType =
   | 'designConstraints'
   /** UI-only placeholder; not persisted and not wired to the spec graph */
   | 'inputGhost'
-  /** UI-only “add hypothesis” card when an incubator exists; not persisted */
-  | 'hypothesisGhost'
   | 'designSystem'
   | 'incubator'
   | 'hypothesis'

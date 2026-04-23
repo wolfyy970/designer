@@ -72,7 +72,7 @@ describe('formatRubricWeightsContext', () => {
         ),
       ),
     );
-    const ctx = await formatRubricWeightsContext('http://127.0.0.1:3001/api');
+    const ctx = await formatRubricWeightsContext('http://127.0.0.1:4731/api');
     expect(ctx).toContain('## Current rubric weights');
     expect(ctx).toContain('"design": 0.5');
     expect(ctx).toContain('set_rubric_weights');
@@ -80,7 +80,7 @@ describe('formatRubricWeightsContext', () => {
 
   it('falls back to merged defaults when config fetch fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')));
-    const ctx = await formatRubricWeightsContext('http://127.0.0.1:3001/api');
+    const ctx = await formatRubricWeightsContext('http://127.0.0.1:4731/api');
     expect(ctx).toContain('## Current rubric weights');
     expect(ctx).toContain('"design": 0.4');
   });

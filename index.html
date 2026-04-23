@@ -4,6 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Auto Designer</title>
+    <script>
+      // Apply persisted theme before first paint so the canvas never flashes
+      // the wrong palette. Default: dark. Keep in sync with
+      // `packages/design-system/lib/theme.ts`.
+      (function () {
+        try {
+          var stored = localStorage.getItem('theme');
+          var theme = stored === 'light' || stored === 'dark' ? stored : 'dark';
+          if (theme === 'dark') document.documentElement.classList.add('dark');
+        } catch (_) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -21,6 +21,32 @@ function makeEdge(id: string, source: string, target: string, type = 'dataFlow')
   return { id, source, target, type };
 }
 
+// ── Corruption recovery — `{}` fallback in canvas-store migrate wrapper ──
+//
+// `canvas-store.ts:70–79` wraps `migrateCanvasState` in a try/catch and
+// falls back to `migrateCanvasState({}, version)` if the persisted blob
+// fails to parse. This test locks in that `{}` is a **safe** recovery input
+// at every version:
+//   • never throws,
+//   • always returns a non-null object (Zustand's `persist` middleware then
+//     merges with `initialCanvasState`, so missing `nodes` / `edges` / UI
+//     fields default to the fresh shape).
+// At early versions (<4) the migrator returns a full `FRESH_STATE`; at
+// later versions it returns `{}` and relies on the merge. Both are valid.
+
+describe('migrateCanvasState({}, version) — corruption recovery contract', () => {
+  for (const v of [0, 1, 5, 10, 15, 20, 24, 25, 26, 27]) {
+    it(`recovers safely at v${v} (never throws, returns an object)`, () => {
+      let result: Record<string, unknown> | undefined;
+      expect(() => {
+        result = migrateCanvasState({}, v);
+      }).not.toThrow();
+      expect(result).not.toBeNull();
+      expect(typeof result).toBe('object');
+    });
+  }
+});
+
 // ── v0/v1 → fresh reset ──────────────────────────────────────────────
 
 describe('v0/v1 → v4: complete reset', () => {
@@ -734,5 +760,28 @@ describe('v25 → v26: dedupe edges by id', () => {
     const edges = result.edges as Array<Record<string, unknown>>;
     expect(edges).toHaveLength(1);
     expect(edges[0].id).toBe('edge-incubator-a-to-hypothesis-b');
+  });
+});
+
+describe('v26 → v27: strip hypothesisGhost nodes', () => {
+  it('removes hypothesisGhost nodes and edges that reference them', () => {
+    const state = {
+      nodes: [
+        makeNode('ic', 'incubator'),
+        { id: 'ghost-hypothesis', type: 'hypothesisGhost', data: {}, position: { x: 0, y: 0 } },
+        makeNode('h1', 'hypothesis'),
+      ],
+      edges: [
+        makeEdge('e1', 'ic', 'h1'),
+        makeEdge('e2', 'ghost-hypothesis', 'h1'),
+      ],
+    };
+    const result = migrateCanvasState(state, 26);
+    const nodes = result.nodes as Array<Record<string, unknown>>;
+    const edges = result.edges as Array<Record<string, unknown>>;
+    expect(nodes.some((n) => n.type === 'hypothesisGhost')).toBe(false);
+    expect(nodes.map((n) => n.id)).toEqual(['ic', 'h1']);
+    expect(edges).toHaveLength(1);
+    expect(edges[0].id).toBe('e1');
   });
 });

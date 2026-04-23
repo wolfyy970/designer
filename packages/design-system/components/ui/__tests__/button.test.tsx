@@ -43,12 +43,13 @@ describe('Button', () => {
     expect(btn.className).toContain('bg-surface-raised');
   });
 
-  it('renders destructive variant with error classes', () => {
+  it('renders destructive variant as secondary shape with error text', () => {
     const { container } = render(<Button variant="destructive">Delete</Button>);
     const btn = container.querySelector('button')!;
-    expect(btn.className).toContain('border-error-border');
-    expect(btn.className).toContain('bg-error-subtle');
+    expect(btn.className).toContain('border-border');
+    expect(btn.className).toContain('bg-surface-raised');
     expect(btn.className).toContain('text-error');
+    expect(btn.className).toContain('hover:bg-error-subtle');
   });
 
   it('renders ghost variant', () => {

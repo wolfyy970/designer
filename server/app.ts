@@ -12,17 +12,26 @@ import configRoute from './routes/config.ts';
 import inputsGenerate from './routes/inputs-generate.ts';
 import { env } from './env.ts';
 import { apiJsonError } from './lib/api-json-error.ts';
+import { DEFAULT_DEV_CLIENT_PORT } from './dev-defaults.ts';
 
-const DEFAULT_DEV_CORS_ORIGINS = [
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:5175',
-  'http://localhost:4173',
-] as const;
+function defaultDevCorsOrigins(): string[] {
+  const origins: string[] = [];
+  const base = DEFAULT_DEV_CLIENT_PORT;
+  for (let i = 0; i <= 3; i += 1) {
+    const port = base + i;
+    origins.push(`http://localhost:${port}`, `http://127.0.0.1:${port}`);
+  }
+  for (const legacy of [5173, 5174, 5175, 4173] as const) {
+    origins.push(`http://localhost:${legacy}`);
+  }
+  return origins;
+}
+
+const DEFAULT_DEV_CORS_ORIGINS = defaultDevCorsOrigins();
 
 function effectiveCorsOrigins(): string[] {
   const extra = env.ALLOWED_ORIGINS;
-  if (extra.length === 0) return [...DEFAULT_DEV_CORS_ORIGINS];
+  if (extra.length === 0) return DEFAULT_DEV_CORS_ORIGINS;
   return extra;
 }
 

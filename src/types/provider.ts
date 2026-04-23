@@ -176,6 +176,12 @@ export interface GenerationResult {
     completedAt?: string;
     truncated?: boolean;
   };
+  /**
+   * Cumulative characters the model has streamed during the run (answer + thinking).
+   * Drives the live `~N tok` indicator in the preview-node generating state.
+   * In-memory only; stripped by generation-store `partialize`.
+   */
+  streamedModelChars?: number;
   progressMessage?: string;
   /** Unix ms when `onFile` last ran — for "no new file" stall hints */
   lastAgentFileAt?: number;

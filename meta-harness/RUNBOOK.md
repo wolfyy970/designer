@@ -14,7 +14,7 @@ This is **not** the main web app—it is a script that talks to `**pnpm dev:serv
 | Requirement                 | Why                                                                                                                                                                                                                                                                                                                                  |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Node / pnpm**             | Same as the rest of the repo.                                                                                                                                                                                                                                                                                                        |
-| **API up**                  | `pnpm dev:server` or `pnpm dev:all` so `http://127.0.0.1:3001/api/health` works (or change `apiBaseUrl` in `config.json`).                                                                                                                                                                                                           |
+| **API up**                  | `pnpm dev:server` or `pnpm dev:all` so `http://127.0.0.1:4731/api/health` works (or change `apiBaseUrl` in `config.json`).                                                                                                                                                                                                           |
 | `**OPENROUTER_API_KEY`**    | In `.env.local` or the environment. Used by **hypothesis generation** and by the **proposer** (separate OpenRouter calls).                                                                                                                                                                                                           |
 | `**eval-runs/` visibility** | After each agentic run, the server writes structured logs under `{log-base}/eval-runs/<run-id>/`. In **development**, if you do not set `OBSERVABILITY_LOG_DIR` / `LLM_LOG_DIR`, the server defaults to `**logs/observability`**. The runner resolves the same base dir unless you override it in `config.json` → `evalRunsBaseDir`. |
 
@@ -41,7 +41,7 @@ This is **not** the main web app—it is a script that talks to `**pnpm dev:serv
 | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `mode`                     | Default mode: `incubate`, `e2e`, `design`, or `inputs`. Overridden by `--mode` on the CLI. Falls back to `design` if omitted.                                                          |
 | `inputsGenerateTimeoutMs`  | Optional per-call timeout for `POST /api/inputs/generate` (default 120 000 ms).                                                                                                        |
-| `apiBaseUrl`               | Origin + `/api` prefix, e.g. `http://127.0.0.1:3001/api`.                                                                                                                              |
+| `apiBaseUrl`               | Origin + `/api` prefix, e.g. `http://127.0.0.1:4731/api`.                                                                                                                              |
 | `evalRunsBaseDir`          | Optional. Absolute path or path relative to repo root. If empty, the runner uses `OBSERVABILITY_LOG_DIR` → `LLM_LOG_DIR` → `logs/observability` (aligned with server defaults in dev). |
 | `iterations`               | How many **candidate** loops to run (each loop: optional proposer → evaluate all test cases). Overridden for that run if you pass `**--once`** (forces **1** iteration).               |
 | `proposerModel`            | OpenRouter model id for the proposer (tool-calling).                                                                                                                                   |
@@ -62,7 +62,7 @@ This is **not** the main web app—it is a script that talks to `**pnpm dev:serv
 ```json
 {
   "mode": "incubate",
-  "apiBaseUrl": "http://127.0.0.1:3001/api",
+  "apiBaseUrl": "http://127.0.0.1:4731/api",
   "evalRunsBaseDir": "",
   "iterations": 1,
   "proposerModel": "anthropic/claude-sonnet-4",
@@ -89,7 +89,7 @@ Key points about the defaults:
 ```json
 {
   "$comment": "overnight run — 10 candidates, fast evals",
-  "apiBaseUrl": "http://127.0.0.1:3001/api",
+  "apiBaseUrl": "http://127.0.0.1:4731/api",
   "evalRunsBaseDir": "",
   "iterations": 10,
   "proposerModel": "anthropic/claude-sonnet-4",
@@ -103,7 +103,7 @@ Key points about the defaults:
 
 ```json
 {
-  "apiBaseUrl": "http://127.0.0.1:3001/api",
+  "apiBaseUrl": "http://127.0.0.1:4731/api",
   "evalRunsBaseDir": "/tmp/auto-designer-observability",
   "iterations": 1,
   "proposerModel": "anthropic/claude-3.5-sonnet",

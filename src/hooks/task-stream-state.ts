@@ -36,6 +36,12 @@ export interface TaskStreamState {
   plannedFileCount?: number;
   /** Open todos from `todos` SSE. */
   liveTodosCount?: number;
+  /**
+   * Cumulative characters the model has streamed back (answer + thinking).
+   * Used for a live "~N tok" signal in the monitor; convert via
+   * `estimateTextTokens` or `Math.round(chars / 3.6)` for display.
+   */
+  streamedModelChars?: number;
 }
 
 /** In-memory buffers for RAF + trace ring (mirrors placeholder session, minus eval/design). */
@@ -47,6 +53,8 @@ export interface TaskStreamSessionState {
   streamingToolPending?: { toolName: string; streamedChars: number; toolPath?: string };
   pendingLiveCode: string;
   liveTrace: RunTraceEvent[];
+  /** Running sum of answer + thinking characters the model has streamed back. */
+  streamedModelChars: number;
 }
 
 export function createInitialTaskStreamSessionState(): TaskStreamSessionState {
@@ -57,6 +65,7 @@ export function createInitialTaskStreamSessionState(): TaskStreamSessionState {
     thinkingTurns: [],
     pendingLiveCode: '',
     liveTrace: [],
+    streamedModelChars: 0,
   };
 }
 
@@ -103,12 +112,14 @@ export function createTaskStreamRafBatchers(
         activityLog: [state.activityText],
         activityByTurn: { ...state.activityByTurn },
         lastActivityAt: Date.now(),
+        streamedModelChars: state.streamedModelChars,
       });
     }, activityStats),
     thinking: batchedRafUpdater(() => {
       onPatch({
         thinkingTurns: [...state.thinkingTurns],
         lastActivityAt: Date.now(),
+        streamedModelChars: state.streamedModelChars,
       });
     }, thinkingStats),
     code: batchedRafUpdater(() => {

@@ -32,10 +32,23 @@ function ApiServerBlocked({
         </span>
         <p className="text-base font-medium leading-snug text-fg sm:text-lg">API server not reachable</p>
         <p className="text-sm leading-relaxed text-fg-secondary">
-          This app needs the Hono API on port <span className="tabular-nums text-fg">3001</span>. In one
-          terminal run <code className="rounded bg-bg-elevated px-1.5 py-0.5 font-mono text-xs">pnpm dev:all</code>{' '}
-          (starts API then Vite), or run <code className="rounded bg-bg-elevated px-1.5 py-0.5 font-mono text-xs">pnpm dev:server</code> alongside{' '}
-          <code className="rounded bg-bg-elevated px-1.5 py-0.5 font-mono text-xs">pnpm dev</code>.
+          {import.meta.env.VITE_DEV_API_PORT ? (
+            <>
+              The dev proxy forwards{' '}
+              <code className="rounded bg-bg-elevated px-1.5 py-0.5 font-mono text-xs">/api</code> to Hono on port{' '}
+              <span className="tabular-nums text-fg">{import.meta.env.VITE_DEV_API_PORT}</span>. In one terminal run{' '}
+              <code className="rounded bg-bg-elevated px-1.5 py-0.5 font-mono text-xs">pnpm dev:all</code> (starts API
+              then Vite), or run{' '}
+              <code className="rounded bg-bg-elevated px-1.5 py-0.5 font-mono text-xs">pnpm dev:server</code> alongside{' '}
+              <code className="rounded bg-bg-elevated px-1.5 py-0.5 font-mono text-xs">pnpm dev</code>.
+            </>
+          ) : (
+            <>
+              The app could not reach the API. If you are running locally, start the API with{' '}
+              <code className="rounded bg-bg-elevated px-1.5 py-0.5 font-mono text-xs">pnpm dev:all</code> or{' '}
+              <code className="rounded bg-bg-elevated px-1.5 py-0.5 font-mono text-xs">pnpm dev:server</code>.
+            </>
+          )}
         </p>
         {import.meta.env.DEV ? (
           <p className="text-xs leading-relaxed text-fg-muted">{message}</p>

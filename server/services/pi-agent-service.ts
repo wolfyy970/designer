@@ -4,6 +4,7 @@
 import {
   AuthStorage,
   createAgentSession,
+  emitEvent,
   SessionManager,
   type CreateAgentSessionOptions,
   type ToolDefinition,
@@ -116,8 +117,9 @@ export async function runDesignAgentSession(
   const onDesignFile = (path: string, content: string) => {
     fileEventCount += 1;
     emittedFilePaths.add(path);
-    void onEvent({ type: 'file', path, content });
-    void onEvent(
+    emitEvent(onEvent, { type: 'file', path, content });
+    emitEvent(
+      onEvent,
       trace('file_written', `Saved ${path}`, {
         phase: 'building',
         path,
@@ -128,13 +130,13 @@ export async function runDesignAgentSession(
   const virtualPiTools = createVirtualPiCodingTools(bash, onDesignFile);
   const bashTool = createSandboxBashTool(bash, onDesignFile);
   const todoTool = createTodoWriteTool(todoState, (todos) => {
-    void onEvent({ type: 'todos', todos });
+    emitEvent(onEvent, { type: 'todos', todos });
   });
   const validateJsTool = createValidateJsTool(bash);
   const validateHtmlTool = createValidateHtmlTool(bash);
   const skillCatalog = params.skillCatalog ?? [];
   const useSkillTool = createUseSkillTool(skillCatalog, (payload) => {
-    void onEvent({
+    emitEvent(onEvent, {
       type: 'skill_activated',
       key: payload.key,
       name: payload.name,
@@ -210,7 +212,7 @@ export async function runDesignAgentSession(
     if (params.signal?.aborted) return;
     const gapSec = Math.floor((Date.now() - streamActivityAt.current) / 1000);
     if (gapSec < IDLE_PROGRESS_GAP_SEC) return;
-    void onEvent({
+    emitEvent(onEvent, {
       type: 'progress',
       payload: `Still working… ${gapSec}s since last streamed output`,
     });

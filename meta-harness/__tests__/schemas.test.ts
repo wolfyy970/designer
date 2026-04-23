@@ -16,7 +16,7 @@ import {
 describe('meta-harness schemas', () => {
   it('MetaHarnessConfigSchema accepts minimal valid config', () => {
     const r = MetaHarnessConfigSchema.safeParse({
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
+      apiBaseUrl: 'http://127.0.0.1:4731/api',
       iterations: 1,
       proposerModel: 'x',
       proposerMaxToolRounds: 3,

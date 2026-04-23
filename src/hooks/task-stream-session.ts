@@ -125,6 +125,7 @@ export function createTaskStreamSession(options: TaskStreamSessionOptions): {
       const tid = state.currentModelTurnId || 1;
       streamDevDebug(sessionId, 'onActivity', { chars: entry.length, turnId: tid });
       state.activityText += entry;
+      state.streamedModelChars += entry.length;
       state.activityByTurn = {
         ...state.activityByTurn,
         [tid]: (state.activityByTurn[tid] ?? '') + entry,
@@ -146,6 +147,7 @@ export function createTaskStreamSession(options: TaskStreamSessionOptions): {
       state.thinkingTurns = [...state.thinkingTurns.filter((row) => row.turnId !== turnId), next].sort(
         (a, b) => a.turnId - b.turnId,
       );
+      state.streamedModelChars += delta.length;
       raf.thinking.schedule();
     },
     onProgress: (status) => {

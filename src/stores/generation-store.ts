@@ -7,9 +7,16 @@ import { GENERATION_STATUS } from '../constants/generation';
 import { storage } from '../storage';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 
-/** Fire-and-forget cleanup — log in dev, silent in prod */
+/**
+ * Fire-and-forget IDB cleanup — never rethrows (quota / write failures
+ * must not crash the store update). Logs via `console.error` so the
+ * failure surfaces in production consoles; grep-stable `[idb]` prefix
+ * mirrors the `[write-gate]` / `[bridge]` / `[pi-emit]` convention.
+ */
 const idbCleanup = (p: Promise<void>) =>
-  p.catch((err) => { if (import.meta.env.DEV) console.warn('[idb] cleanup failed:', err); });
+  p.catch((err) => {
+    console.error('[idb] cleanup failed:', err);
+  });
 
 const generationStatusSchema = z.enum([
   GENERATION_STATUS.PENDING,
@@ -371,6 +378,7 @@ export const useGenerationStore = create<GenerationStore>()(
           delete persisted.streamingToolName;
           delete persisted.streamingToolPath;
           delete persisted.streamingToolChars;
+          delete persisted.streamedModelChars;
           delete persisted.liveEvalWorkers;
           if (persisted.evaluationSummary) {
             const es = { ...persisted.evaluationSummary };

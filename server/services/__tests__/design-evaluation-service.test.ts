@@ -442,9 +442,9 @@ describe('buildEvaluatorUserContent', () => {
       { 'index.html': '<html><body>x</body></html>' },
       'p',
       undefined,
-      'http://127.0.0.1:3001/api/preview/sessions/abc/index.html',
+      'http://127.0.0.1:4731/api/preview/sessions/abc/index.html',
     );
     expect(body).toContain('<preview_page_url>');
-    expect(body).toContain('http://127.0.0.1:3001/api/preview/sessions/abc/index.html');
+    expect(body).toContain('http://127.0.0.1:4731/api/preview/sessions/abc/index.html');
   });
 });

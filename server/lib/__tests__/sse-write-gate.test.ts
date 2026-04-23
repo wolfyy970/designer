@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createWriteGate } from '../sse-write-gate.ts';
 
 describe('createWriteGate', () => {
@@ -30,5 +30,41 @@ describe('createWriteGate', () => {
       log.push('after');
     });
     expect(log).toEqual(['first', 'after']);
+  });
+
+  it('logs rejected tasks to console.error for production visibility', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const gate = createWriteGate();
+      const err = new Error('write failed');
+      await expect(
+        gate.enqueue(async () => {
+          throw err;
+        }),
+      ).rejects.toThrow('write failed');
+      // Tail-catch runs after the rejected `next` settles — wait one microtask.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(errSpy).toHaveBeenCalledWith('[write-gate]', err);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('does not log when the rejection value is null (intentional silent skip)', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const gate = createWriteGate();
+      await expect(
+        gate.enqueue(async () => {
+          throw null;
+        }),
+      ).rejects.toBeNull();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(errSpy).not.toHaveBeenCalled();
+    } finally {
+      errSpy.mockRestore();
+    }
   });
 });

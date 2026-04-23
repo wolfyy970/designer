@@ -54,7 +54,7 @@ Tailwind v4 wires the class through `@custom-variant dark (&:is(.dark *))` in `g
 | **Handle** | ring `--color-success` (filled) or `--color-warning` (empty), inner `--color-surface-raised` | Circle (optional), diamond (required). `handle-pulse` keyframe in `globals.css` uses warning. |
 | **Badge** (`@ds/components/ui/badge`) | `shape="pill"` (rounded-full, border, `font-mono text-nano`) or `shape="tab"` (rounded, no border, `text-badge font-medium`) × `tone="warning|success|accent|neutral"` | Replaces the old inline chip pattern in node components. Migrated sites: InputNode status, HypothesisGenerateButton hint, IncubatorNode hint, VariantToolbar Archived/Best, VariantPreviewOverlay Best-current. cva variants + compoundVariants split to `badge-variants.ts`. Tests at `components/ui/__tests__/badge.test.tsx`. |
 | **Left-edge rail** | `border-l-2 border-l-success` or `border-l-2 border-l-warning` | Implemented as `leftRail?: 'success' \| 'warning' \| null` on `NodeShell` (`src/components/canvas/nodes/NodeShell.tsx`). Pure mapping covered by `__tests__/NodeShell-rail.test.ts`. Never combined with selected/error borders (those states own the full border). |
-| **Button** (`@ds/components/ui/button`) | `variant="primary|secondary|destructive|ghost|link"` × `size="sm|md|lg|icon|iconSm"` | `primary` = `bg-accent text-white` (Design/Generate/Extract CTAs). `destructive` = `bg-error-subtle text-error` (Stop, delete confirms). `ghost` + `iconSm` (size-5, p-0.5) for toolbar-chrome X-close. `asChild` via `@radix-ui/react-slot`. cva variants split to `button-variants.ts`. Tests at `components/ui/__tests__/button.test.tsx`. |
+| **Button** (`@ds/components/ui/button`) | `variant="primary|secondary|destructive|ghost|link"` × `size="sm|md|lg|icon|iconSm"` | `primary` = `bg-accent text-white` (Design/Generate/Extract CTAs). `destructive` = bordered raised surface + `text-error` + hover `border-error-border` / `bg-error-subtle` (see `button-variants.ts` — matches Stop on the hypothesis card and delete-style confirms). `ghost` + `iconSm` (size-5, p-0.5) for toolbar-chrome X-close. `asChild` via `@radix-ui/react-slot`. cva variants split to `button-variants.ts`. Tests at `components/ui/__tests__/button.test.tsx`. |
 | **Scorecard bar** | Track `--color-border-subtle`, fill `bg-success` / `bg-warning` based on threshold | `DimensionBar` in `EvaluationScorecard.tsx`. Threshold + clamp logic in `scorecard-threshold.ts`; covered by unit tests. |
 
 ---
@@ -64,8 +64,8 @@ Tailwind v4 wires the class through `@custom-variant dark (&:is(.dark *))` in `g
 | Role | CSS variables (base) | Typical utilities | Use for |
 |------|----------------------|-------------------|---------|
 | **Accent** | `--color-accent`, `--color-accent-hover`, `--color-accent-subtle`, `--color-accent-surface` | `bg-accent`, `text-accent`, `border-accent`, `ring-accent` | Brand, selection, focus, queued hypothesis border, React Flow edge-selected, primary button fill, progress. |
-| **Success (sage)** | `--color-success`, `--color-success-subtle`, `--color-success-border-muted` | `bg-success`, `text-success`, `border-l-success`, `border-success-border-muted` | Filled handles, sage left rail, "filled" chip, scorecard bars ≥ threshold (3.8), any "complete/ok" signal. |
-| **Warning (amber)** | `--color-warning`, `--color-warning-subtle`, `--color-warning-border` | `bg-warning`, `text-warning`, `border-l-warning`, `border-warning-border` | Empty-required handles (diamond + pulse), amber left rail, "needs input" chip, scorecard bars below threshold, fix-list bullets. |
+| **Success (sage)** | `--color-success`, `--color-success-subtle`, `--color-success-border-muted` | `bg-success`, `text-success`, `border-l-success`, `border-success-border-muted` | Filled handles, sage left rail, scorecard bars ≥ threshold (3.8), any "complete/ok" signal. (Input nodes do **not** show a success pill when complete — green handle + rail is enough.) |
+| **Warning (amber)** | `--color-warning`, `--color-warning-subtle`, `--color-warning-border` | `bg-warning`, `text-warning`, `border-l-warning`, `border-warning-border` | Empty-required handles (diamond + pulse), amber left rail, problem-only pills (e.g. `needs input`, incubator readiness), scorecard bars below threshold, fix-list bullets. |
 | **Error (rose)** | `--color-error`, `--color-error-subtle`, `--color-error-border*` | `text-error`, `bg-error-subtle`, `border-error-border-medium` | Destructive only — delete hover, error callouts (`NodeErrorBlock`), generation failures. Never for low scores (use warning). |
 | **Info (pacific)** | `--color-info`, `--color-info-subtle` | `text-file-css`, `bg-info-subtle` | CSS file icon, capture-screenshot indicator. **Nothing else.** |
 | **Surfaces / fg** | `--color-bg` (canvas), `--color-surface` (paper), `--color-surface-raised` (cards), `--color-fg*` | `bg-surface`, `bg-surface-raised`, `text-fg`, `text-fg-muted`, `border-border`, `border-border-subtle` | Three-layer paper stack: desk → sheets → raised cards. Text hierarchy four-step: `fg` → `fg-secondary` → `fg-muted` → `fg-faint`. |
@@ -78,7 +78,7 @@ Tailwind v4 wires the class through `@custom-variant dark (&:is(.dark *))` in `g
 
 **Scorecard threshold coloring.** `SCORECARD_PASS_THRESHOLD` (3.8) lives in `src/components/canvas/variant-run/scorecard-threshold.ts`. Overall score + every per-dimension bar + every per-dimension numeric all key off the same `thresholdTone(score)` helper — the eye reads the scorecard as one coherent signal rather than "numbers here, bars there." Override the threshold by reading `useEvaluatorDefaultsStore.getState().minOverallScore` if product logic requires it.
 
-**Version badges:** `badgeColor()` in `src/lib/badge-colors.ts` is **always accent** (`bg-accent-subtle text-accent`) for v1, v2, … — not per-run hue rotation, not eval severity.
+**Version badges:** Preview footers use **`Badge` `shape="tab"` `tone="accent"`** for v1, v2, … — not per-run hue rotation, not eval severity.
 
 ---
 
@@ -101,7 +101,7 @@ Larger copy uses `h1`–`h4` / `body-text` / `caption` / `label` component class
 
 **Full page (development only):** run the app and open **`/dev/design-tokens`** for the standalone route. Omitted from production builds.
 
-Both render token swatches, the dense type scale, `ds-*` compositions, and `.input-focus` — use them to catch token drift and confirm new chrome goes through `tokens.json` / `globals.css`, not one-off hexes.
+Both render token swatches, the dense type scale, `ds-*` compositions, `.input-focus`, and (for **destructive**) the real **`Button variant="destructive"`** — use them to catch token drift and confirm new chrome goes through `tokens.json` / `globals.css` / `button-variants.ts`, not one-off hexes.
 
 ---
 

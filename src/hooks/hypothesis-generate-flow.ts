@@ -5,7 +5,7 @@ import type { HypothesisStrategy } from '../types/incubator';
 import { useCanvasStore } from '../stores/canvas-store';
 import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
 import { useGenerationStore, nextRunNumber } from '../stores/generation-store';
-import { scheduleCanvasFitView } from '../lib/canvas-fit-view';
+import { scheduleCanvasFitViewToNodes } from '../lib/canvas-fit-view';
 import { DEFAULT_INCUBATOR_PROVIDER } from '../lib/constants';
 import { warnIfWorkspaceSnapshotInvalid } from '../lib/workspace-snapshot-warn';
 import { normalizeError } from '../lib/error-utils';
@@ -171,9 +171,11 @@ export async function runHypothesisGenerateFlow({
         nextRunNumberForStrategy: (strategyId) =>
           nextRunNumber(useGenerationStore.getState(), strategyId),
         syncAfterGenerate,
-        getCanvasState: () => useCanvasStore.getState(),
         scheduleFitView: () => {
-          scheduleCanvasFitView(fitView);
+          const { previewNodeIdMap } = useCanvasStore.getState();
+          const previewIds = [...new Set(previewNodeIdMap.values())];
+          const focusIds = [...new Set([nodeId, ...previewIds])];
+          scheduleCanvasFitViewToNodes(fitView, focusIds);
         },
         fetchBundle: fetchHypothesisPromptBundle,
         runStream: generateHypothesisStream,

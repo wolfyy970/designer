@@ -39,7 +39,7 @@
 
   /* Surface derived */
   --color-surface-note: color-mix(in srgb, var(--color-surface-raised) 70%, transparent);
-  --color-surface-ghost-backdrop: color-mix(in srgb, var(--color-surface-raised) 45%, transparent);
+  --color-surface-ghost-backdrop: color-mix(in srgb, var(--color-surface-raised) 80%, transparent);
   --color-surface-floating: color-mix(in srgb, var(--color-surface-raised) 95%, transparent);
   --color-surface-floating-strong: color-mix(in srgb, var(--color-surface) 95%, transparent);
   --color-surface-meta-chip: color-mix(in srgb, var(--color-fg-faint) 18%, transparent);
@@ -390,6 +390,27 @@
   --xy-selection-background-color: color-mix(in srgb, var(--color-accent) 6%, transparent);
   --xy-selection-border: 1px solid var(--color-accent);
   --xy-edge-stroke-selected: var(--color-accent);
+}
+
+/*
+ * XYFlow sets `.react-flow__node { user-select: none }` so dragging nodes does not select
+ * node chrome. That inheritance blocks selecting text inside inputs. Re-enable selection
+ * on real text fields and read-only copy blocks inside custom nodes.
+ */
+.react-flow__node :where(
+  textarea,
+  select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  [contenteditable="true"],
+  [role="textbox"]
+) {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.react-flow__node :where(pre, code) {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* ── Keyframes ──────────────────────────────────────────────────── */

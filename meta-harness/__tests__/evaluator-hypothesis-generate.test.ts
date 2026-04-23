@@ -44,7 +44,7 @@ describe('runHypothesisEvalFromMetaHarness', () => {
     );
 
     const r = await runHypothesisEvalFromMetaHarness({
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
+      apiBaseUrl: 'http://127.0.0.1:4731/api',
       body: minimalBody(),
       evalRunsBaseDir: tmpdir(),
     });
@@ -60,7 +60,7 @@ describe('runHypothesisEvalFromMetaHarness', () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
 
     const r = await runHypothesisEvalFromMetaHarness({
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
+      apiBaseUrl: 'http://127.0.0.1:4731/api',
       body: minimalBody(),
       evalRunsBaseDir: tmpdir(),
     });
@@ -76,7 +76,7 @@ describe('runHypothesisEvalFromMetaHarness', () => {
     );
 
     const r = await runHypothesisEvalFromMetaHarness({
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
+      apiBaseUrl: 'http://127.0.0.1:4731/api',
       body: minimalBody(),
       evalRunsBaseDir: tmpdir(),
       evalLogWaitMs: SHORT_META_WAIT_MS,
@@ -96,7 +96,7 @@ describe('runHypothesisEvalFromMetaHarness', () => {
     );
 
     const r = await runHypothesisEvalFromMetaHarness({
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
+      apiBaseUrl: 'http://127.0.0.1:4731/api',
       body: minimalBody(),
       evalRunsBaseDir: tmpdir(),
       evalLogWaitMs: SHORT_META_WAIT_MS,
@@ -118,7 +118,7 @@ describe('runHypothesisEvalFromMetaHarness', () => {
     );
 
     const r = await runHypothesisEvalFromMetaHarness({
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
+      apiBaseUrl: 'http://127.0.0.1:4731/api',
       body: minimalBody(),
       evalRunsBaseDir: tmpdir(),
       evalLogWaitMs: SHORT_META_WAIT_MS,
@@ -149,7 +149,7 @@ describe('runHypothesisEvalFromMetaHarness', () => {
     );
 
     const r = await runHypothesisEvalFromMetaHarness({
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
+      apiBaseUrl: 'http://127.0.0.1:4731/api',
       body: minimalBody(),
       evalRunsBaseDir: baseDir,
       evalLogWaitMs: SHORT_META_WAIT_MS,
@@ -180,7 +180,7 @@ describe('runHypothesisEvalFromMetaHarness', () => {
     );
 
     const r = await runHypothesisEvalFromMetaHarness({
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
+      apiBaseUrl: 'http://127.0.0.1:4731/api',
       body: minimalBody(),
       evalRunsBaseDir: baseDir,
       evalLogWaitMs: SHORT_META_WAIT_MS,
@@ -204,7 +204,7 @@ describe('runHypothesisEvalFromMetaHarness', () => {
     );
 
     const r = await runHypothesisEvalFromMetaHarness({
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
+      apiBaseUrl: 'http://127.0.0.1:4731/api',
       body: minimalBody(),
       evalRunsBaseDir: tmpdir(),
       evalLogWaitMs: SHORT_META_WAIT_MS,
@@ -228,7 +228,7 @@ describe('runHypothesisEvalFromMetaHarness', () => {
     );
     const onWire = vi.fn();
     await runHypothesisEvalFromMetaHarness({
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
+      apiBaseUrl: 'http://127.0.0.1:4731/api',
       body: minimalBody(),
       evalRunsBaseDir: tmpdir(),
       evalLogWaitMs: SHORT_META_WAIT_MS,
@@ -254,7 +254,7 @@ describe('runHypothesisEvalFromMetaHarness', () => {
     );
 
     await runHypothesisEvalFromMetaHarness({
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
+      apiBaseUrl: 'http://127.0.0.1:4731/api',
       body: minimalBody(),
       evalRunsBaseDir: tmpdir(),
       evalLogWaitMs: SHORT_META_WAIT_MS,

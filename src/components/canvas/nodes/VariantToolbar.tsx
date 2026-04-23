@@ -150,7 +150,7 @@ export default function VariantToolbar({
           </button>
           <span
             onClick={resetZoom}
-            className="cursor-pointer px-px text-badge font-light tabular-nums transition-colors hover:text-fg-muted"
+            className="cursor-pointer px-px text-badge tabular-nums transition-colors hover:text-fg-muted"
             title="Reset to auto-fit"
           >
             {Math.round(zoom * 100)}%

@@ -6,13 +6,10 @@ import {
   computeHypothesisPositions,
   computeAutoLayout,
   reconcileInputGhostNodes,
-  reconcileHypothesisGhostNode,
   reconcileEphemeralGhostNodes,
   layoutTypeOrder,
   isEphemeralInputGhostId,
-  isEphemeralHypothesisGhostId,
   INPUT_GHOST_ID_PREFIX,
-  HYPOTHESIS_GHOST_STABLE_ID,
   GRID_SIZE,
   DEFAULT_COL_GAP,
 } from '../canvas-layout';
@@ -369,37 +366,11 @@ describe('layoutTypeOrder', () => {
   });
 });
 
-describe('reconcileHypothesisGhostNode', () => {
-  it('adds singleton ghost when an incubator exists', () => {
-    const inc = makeNode('ic', 'incubator') as WorkspaceNode;
-    const out = reconcileHypothesisGhostNode([inc]);
-    const gh = out.find((n) => n.type === 'hypothesisGhost');
-    expect(gh?.id).toBe(HYPOTHESIS_GHOST_STABLE_ID);
-    expect(out).toHaveLength(2);
-  });
-
-  it('removes ghost when no incubator', () => {
-    const out = reconcileHypothesisGhostNode([
-      makeNode('b', 'designBrief') as WorkspaceNode,
-      {
-        id: HYPOTHESIS_GHOST_STABLE_ID,
-        type: 'hypothesisGhost' as const,
-        position: { x: 0, y: 0 },
-        data: {},
-      },
-    ]);
-    expect(out.some((n) => n.type === 'hypothesisGhost')).toBe(false);
-  });
-
-  it('reconcileEphemeralGhostNodes chains input + hypothesis ghosts', () => {
+describe('reconcileEphemeralGhostNodes', () => {
+  it('adds optional input ghosts only (no hypothesis ghost)', () => {
     const inc = makeNode('ic', 'incubator') as WorkspaceNode;
     const out = reconcileEphemeralGhostNodes([inc], []);
     expect(out.some((n) => n.type === 'inputGhost')).toBe(true);
-    expect(out.some((n) => n.type === 'hypothesisGhost')).toBe(true);
-  });
-
-  it('isEphemeralHypothesisGhostId matches stable id', () => {
-    expect(isEphemeralHypothesisGhostId(HYPOTHESIS_GHOST_STABLE_ID)).toBe(true);
-    expect(isEphemeralHypothesisGhostId('hypothesis-abc')).toBe(false);
+    expect(out.some((n) => n.type === 'hypothesisGhost')).toBe(false);
   });
 });

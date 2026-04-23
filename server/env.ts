@@ -1,6 +1,7 @@
 import { config as loadEnv } from 'dotenv';
 import path from 'node:path';
 import { parseLockdownEnvValue } from '../src/lib/lockdown-model.ts';
+import { DEFAULT_DEV_API_PORT } from './dev-defaults.ts';
 
 // Must run before `export const env` reads `process.env`. ESM hoists `import`s above the body of
 // `server/dev.ts`, so `config()` there ran too late — keys from `.env.local` were missed.
@@ -124,7 +125,7 @@ export const env = {
   get previewPublicBaseUrl(): string {
     const explicit = this.PREVIEW_PUBLIC_URL.trim();
     if (explicit) return explicit;
-    const port = (process.env.PORT ?? '3001').trim();
+    const port = (process.env.PORT ?? String(DEFAULT_DEV_API_PORT)).trim();
     return `http://127.0.0.1:${port}`;
   },
   /**

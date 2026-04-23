@@ -33,7 +33,7 @@ type ProposerResult = {
 
 export async function runMetaHarnessProposer(options: {
   apiKey: string;
-  /** Same base as meta-harness config (e.g. http://127.0.0.1:3001/api) — used to load live prompts. */
+  /** Same base as meta-harness config (e.g. http://127.0.0.1:4731/api) — used to load live prompts. */
   apiBaseUrl: string;
   model: string;
   mode: MetaHarnessMode;

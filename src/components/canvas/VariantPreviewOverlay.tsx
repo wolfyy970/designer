@@ -14,7 +14,6 @@ import { normalizeError } from '../../lib/error-utils';
 import { useResultCode } from '../../hooks/useResultCode';
 import { useResultFiles } from '../../hooks/useResultFiles';
 import { useVersionStack } from '../../hooks/useVersionStack';
-import { badgeColor } from '../../lib/badge-colors';
 import type { GenerationResult } from '../../types/provider';
 import { GENERATION_STATUS } from '../../constants/generation';
 import { ArtifactPreviewFrame } from './variant-run';
@@ -218,11 +217,9 @@ export default function VariantPreviewOverlay() {
             <span className="ml-2 text-xs font-medium text-white">
               {stratName}
               {r.runNumber != null && (
-                <span
-                  className={`ml-1.5 rounded px-1 py-px text-badge font-bold leading-none ${badgeColor(r.runNumber).bg} ${badgeColor(r.runNumber).text}`}
-                >
+                <Badge shape="tab" tone="accent" className="ml-1.5">
                   v{r.runNumber}
-                </span>
+                </Badge>
               )}
             </span>
           </div>

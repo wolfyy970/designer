@@ -1,8 +1,6 @@
-import { Hourglass, Loader2, Zap } from 'lucide-react';
+import { Hourglass, Loader2 } from 'lucide-react';
 import type { GenerationProgress } from '../../../hooks/hypothesis-generate-flow';
-import type { StrategyStreamingSnapshot } from '../../../lib/strategy-streaming-snapshot';
 import { RF_INTERACTIVE } from '../../../constants/canvas';
-import { StreamingToolRow } from '../variant-run/StreamingToolRow';
 import { Button } from '@ds/components/ui/button';
 import { Badge } from '@ds/components/ui/badge';
 
@@ -23,7 +21,6 @@ type Props = {
   onGenerate: () => void;
   onStop: () => void;
   generationProgress: GenerationProgress | null;
-  streamingSnap: StrategyStreamingSnapshot | null;
 };
 
 export function HypothesisGenerateButton({
@@ -36,7 +33,6 @@ export function HypothesisGenerateButton({
   onGenerate,
   onStop,
   generationProgress,
-  streamingSnap,
 }: Props) {
   const disabled = isGenerating || !canGenerate || serverAtCapacity;
   return (
@@ -74,27 +70,9 @@ export function HypothesisGenerateButton({
             Server busy ({activeGenerationsCount}/{maxConcurrentRuns})
           </>
         ) : (
-          <>
-            <Zap size={12} className="shrink-0 opacity-90" aria-hidden />
-            Design
-          </>
+          'Design'
         )}
       </Button>
-      {isGenerating && streamingSnap != null ? (
-        <p className="mt-1.5 text-center text-nano leading-snug text-fg-secondary">
-          <StreamingToolRow
-            toolName={streamingSnap.name}
-            toolPath={streamingSnap.path}
-            streamedChars={streamingSnap.chars}
-            className="inline-flex flex-wrap items-center justify-center gap-1.5 text-nano leading-snug text-fg-secondary"
-          />
-        </p>
-      ) : null}
-      {isGenerating ? (
-        <p className="mt-1.5 text-center text-nano leading-snug text-fg-muted">
-          Stopping ends the server request; partial output may remain on the card.
-        </p>
-      ) : null}
       {isGenerating ? (
         <Button
           variant="destructive"
@@ -103,7 +81,7 @@ export function HypothesisGenerateButton({
           onPointerDown={(e) => e.stopPropagation()}
           onClick={onStop}
         >
-          Stop generation
+          Stop
         </Button>
       ) : null}
     </div>

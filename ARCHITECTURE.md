@@ -30,7 +30,7 @@ flowchart TB
 
 **Server** — Hono app deployed as a Vercel serverless function. Handles all LLM orchestration: compilation, generation (agentic Pi pipeline + evaluation), model listing, design system extraction. Holds API keys server-side.
 
-**Local dev** — Two processes: Vite (SPA + HMR on 5173) and Hono (API on 3001 via `tsx watch`). Vite proxy forwards `/api/`* to Hono.
+**Local dev** — Two processes: Vite (SPA + HMR; default **4732**, `**VITE_PORT**`) and Hono (API; default **4731**, `**PORT**`, via `tsx watch`). Defaults: **`server/dev-defaults.ts`**. Vite `**loadEnv**` + proxy forwards `/api/`* to Hono. **`pnpm dev:all`** waits on `**/api/health**` at `**127.0.0.1:${PORT:-4731}**`.
 
 ## Design system (frontend)
 
@@ -278,7 +278,7 @@ POST endpoints validate bodies with Zod (typically via `**parse-request**` / `sa
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `app.ts`                                   | Hono app: mounts routes, CORS                                                                                                                                                                                                                           |
 | `env.ts`                                   | `process.env` config (replaces `import.meta.env`)                                                                                                                                                                                                       |
-| `dev.ts`                                   | Local dev entry (Hono + `@hono/node-server` on 3001)                                                                                                                                                                                                    |
+| `dev.ts`                                   | Local dev entry (Hono + `@hono/node-server`; default port from `**server/dev-defaults.ts**`, `**PORT**` override)                                                                                                                                         |
 | `log-store.ts`                             | In-memory LLM call ring (dev); **task** run/result rings (`task_run`, `task_result`); finalized rows + one-shots → `writeObservabilityLine` NDJSON via `server/lib/observability-sink.ts`                                                            |
 | `trace-log-store.ts`                       | Run-trace ring (dedupe by `event.id`); client POST `/api/logs/trace`; same NDJSON sink                                                                                                                                                                  |
 | `routes/config.ts`                         | GET /api/config — `env.LOCKDOWN`, lockdown model ids, `AGENTIC_MAX_REVISION_ROUNDS` / `AGENTIC_MIN_OVERALL_SCORE`, `defaultRubricWeights`, `MAX_CONCURRENT_AGENTIC_RUNS`                                                                                |
@@ -369,6 +369,10 @@ When a result has files (agentic output), the preview UI (`VariantNode` / canvas
 - **Generating state:** file explorer sidebar (planned + written files with status dots) + activity log (**Streamdown** markdown in `variant-run/StreamdownTimeline.tsx`; table copy/download/fullscreen controls off by default) + progress bar
 - **Complete state:** Preview/Code tab bar. **Preview** registers the file map with `**/api/preview/sessions`** and loads the default entry in a sandboxed iframe via `**src`** (real relative URLs between HTML/CSS/JS). If the API is unreachable, `**bundleVirtualFS()**` inlines linked assets into `**srcDoc**` as a fallback. Code tab shows the file explorer + raw file content.
 - **Download:** produces a `.zip` via `fflate`.
+
+### Preview run workspace (`VariantRunInspector`)
+
+`runInspectorPreviewNodeId` in `canvas-store` selects which preview’s workspace to show. `CanvasWorkspace` mounts `VariantRunInspector` as an **overlay** on the canvas column (not a layout sibling). A dim backdrop uses **`pointer-events-none`** so pan/zoom still hit React Flow. **`src/lib/canvas-fit-view.ts`** supplies debounced **`fitView`**: extra **right padding in px** when the dock opens (matches `--width-variant-inspector`), and **`scheduleCanvasFitViewToNodes`** after hypothesis **Design** syncs placeholders so the camera fits the **hypothesis + its preview node(s)** instead of the whole graph.
 
 ### Auto-Connection Logic (`canvas-connections.ts`)
 
@@ -555,7 +559,7 @@ During a meta-harness **run**, repo `**skills/`** is **restored** from per-sessi
 
 **Local dev:**
 
-- `pnpm dev` — Vite dev server (port 5173)
-- `pnpm dev:server` — Hono API server (port 3001)
+- `pnpm dev` — Vite dev server (default port 4732, `**VITE_PORT**`)
+- `pnpm dev:server` — Hono API server (default port 4731, `**PORT**`)
 - Vite proxy forwards `/api/`* to Hono
 

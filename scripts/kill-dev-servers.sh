@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Stop local Auto Designer dev processes listening on the default API and Vite ports.
+# Defaults must match server/dev-defaults.ts (PORT / VITE_PORT fallbacks).
 set -euo pipefail
 
 kill_port() {
@@ -22,9 +23,6 @@ kill_port() {
   fi
 }
 
-kill_port 3001
-# Vite default and common fallbacks when 5173 is busy
-for port in 5173 5174 5175 5176; do
-  kill_port "$port"
-done
+kill_port "${PORT:-4731}"
+kill_port "${VITE_PORT:-4732}"
 echo "Done."

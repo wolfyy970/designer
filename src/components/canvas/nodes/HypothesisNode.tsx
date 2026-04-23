@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { type NodeProps, type Node, Handle, Position } from '@xyflow/react';
 import { FileText, Pencil, X } from 'lucide-react';
 import { useIncubatorStore, findStrategy } from '../../../stores/incubator-store';
@@ -11,7 +11,6 @@ import type { HypothesisNodeData } from '../../../types/canvas-data';
 import { useHypothesisGeneration } from '../../../hooks/useHypothesisGeneration';
 import { useAppConfig } from '../../../hooks/useAppConfig';
 import { useHypothesisAutoGenerate } from '../../../hooks/useHypothesisAutoGenerate';
-import { consumePendingAutoGenerate } from '../../../lib/hypothesis-pending-generate';
 import { useNodeRemoval } from '../../../hooks/useNodeRemoval';
 import { useRequestPermanentDelete } from '../../../hooks/useRequestPermanentDelete';
 import { hypothesisDeleteCopy } from '../../../lib/canvas-permanent-delete-copy';
@@ -32,10 +31,6 @@ import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
 import GeneratingSkeleton from './GeneratingSkeleton';
 import { NodeErrorBlock } from './shared/NodeErrorBlock';
-import {
-  decodeStrategyStreamingSnapshot,
-  encodeStrategyStreamingSnapshot,
-} from '../../../lib/strategy-streaming-snapshot';
 import { HypothesisAutoImproveSettings } from './HypothesisAutoImproveSettings';
 import { HypothesisGenerateButton } from './HypothesisGenerateButton';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
@@ -99,48 +94,11 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
   const serverAtCapacity =
     activeGenerationsCount >= maxConcurrentRuns && !isGenerating;
 
-  /** Stable string: best streaming lane (max streamed chars) for multi-model runs. */
-  const strategyStreamingKey = useGenerationStore((s) => {
-    let bestChars = -1;
-    let name: string | undefined;
-    let path: string | undefined;
-    let chars = 0;
-    for (const r of s.results) {
-      if (r.strategyId !== strategyId || r.status !== GENERATION_STATUS.GENERATING) continue;
-      if (r.streamingToolName == null) continue;
-      const c = r.streamingToolChars ?? 0;
-      if (c > bestChars) {
-        bestChars = c;
-        name = r.streamingToolName;
-        path = r.streamingToolPath;
-        chars = c;
-      }
-    }
-    return name != null ? encodeStrategyStreamingSnapshot(name, chars, path ?? '') : '';
-  });
-
-  const strategyStreamingSnap = useMemo(
-    () => (strategyStreamingKey ? decodeStrategyStreamingSnapshot(strategyStreamingKey) : null),
-    [strategyStreamingKey],
-  );
-
   const { handleGenerate, generationProgress, generationError } =
     useHypothesisGeneration({ nodeId, strategyId });
 
   const hypoAutoGen = useHypothesisAutoGenerate({ nodeId, strategyId });
   const hypoAutoGenElapsed = useElapsedTimer(hypoAutoGen.isGenerating);
-
-  // Ref so pending-auto-generate runs the latest generate without depending on callback identity.
-  const generateRef = useRef(hypoAutoGen.generate);
-  useEffect(() => {
-    generateRef.current = hypoAutoGen.generate;
-  });
-
-  useEffect(() => {
-    if (consumePendingAutoGenerate(nodeId)) {
-      void generateRef.current();
-    }
-  }, [nodeId]);
 
   const handleStopGeneration = useCallback(() => {
     abortGenerationForStrategy(strategyId);
@@ -423,7 +381,6 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
           onGenerate={handleGenerate}
           onStop={handleStopGeneration}
           generationProgress={generationProgress}
-          streamingSnap={strategyStreamingSnap}
         />
       </div>
     </NodeShell>

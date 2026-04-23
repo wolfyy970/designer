@@ -67,7 +67,7 @@ describe('runInputsGeneratePipeline', () => {
 
     const result = await runInputsGeneratePipeline({
       testCase,
-      apiBaseUrl: 'http://localhost:3001/api',
+      apiBaseUrl: 'http://localhost:4731/api',
       inputsGenerateProviderId: 'openrouter',
       inputsGenerateModelId: 'test/model',
       inputsRubricApiKey: 'key',
@@ -83,7 +83,7 @@ describe('runInputsGeneratePipeline', () => {
     expect(result.perFacet[2]!.target).toBe('design-constraints');
     expect(result.overallMean).toBe(4.0);
     expect(result.generatedByFacet['research-context']).toBe('Generated input content');
-    expect(fetchSpy.mock.calls[0]![0]).toBe('http://localhost:3001/api/inputs/generate');
+    expect(fetchSpy.mock.calls[0]![0]).toBe('http://localhost:4731/api/inputs/generate');
   });
 
   it('passes cross-facet context from earlier generated inputs', async () => {
@@ -96,7 +96,7 @@ describe('runInputsGeneratePipeline', () => {
 
     await runInputsGeneratePipeline({
       testCase,
-      apiBaseUrl: 'http://localhost:3001/api',
+      apiBaseUrl: 'http://localhost:4731/api',
       inputsGenerateProviderId: 'openrouter',
       inputsGenerateModelId: 'test/model',
       inputsRubricApiKey: 'key',
@@ -121,7 +121,7 @@ describe('runInputsGeneratePipeline', () => {
 
     await runInputsGeneratePipeline({
       testCase,
-      apiBaseUrl: 'http://localhost:3001/api',
+      apiBaseUrl: 'http://localhost:4731/api',
       inputsGenerateProviderId: 'openrouter',
       inputsGenerateModelId: 'test/model',
       inputsRubricApiKey: 'key',
@@ -147,7 +147,7 @@ describe('runInputsGeneratePipeline', () => {
 
     const result = await runInputsGeneratePipeline({
       testCase,
-      apiBaseUrl: 'http://localhost:3001/api',
+      apiBaseUrl: 'http://localhost:4731/api',
       inputsGenerateProviderId: 'openrouter',
       inputsGenerateModelId: 'test/model',
       inputsRubricApiKey: 'key',
@@ -170,7 +170,7 @@ describe('runInputsGeneratePipeline', () => {
     await expect(
       runInputsGeneratePipeline({
         testCase: emptyBrief,
-        apiBaseUrl: 'http://localhost:3001/api',
+        apiBaseUrl: 'http://localhost:4731/api',
         inputsGenerateProviderId: 'openrouter',
         inputsGenerateModelId: 'test/model',
         inputsRubricApiKey: 'key',
@@ -189,7 +189,7 @@ describe('runInputsGeneratePipeline', () => {
 
     await runInputsGeneratePipeline({
       testCase,
-      apiBaseUrl: 'http://localhost:3001/api',
+      apiBaseUrl: 'http://localhost:4731/api',
       inputsGenerateProviderId: 'openrouter',
       inputsGenerateModelId: 'test/model',
       inputsRubricApiKey: 'key',

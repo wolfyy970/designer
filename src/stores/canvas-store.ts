@@ -66,7 +66,7 @@ export const useCanvasStore = create<CanvasStore>()(
     }),
     {
       name: STORAGE_KEYS.CANVAS,
-      version: 26,
+      version: 27,
       migrate: (persistedState: unknown, version: number) => {
         try {
           if (typeof persistedState === 'string') {
@@ -79,9 +79,7 @@ export const useCanvasStore = create<CanvasStore>()(
         }
       },
       partialize: (state) => ({
-        nodes: state.nodes.filter(
-          (n) => n.type !== 'inputGhost' && n.type !== 'hypothesisGhost',
-        ),
+        nodes: state.nodes.filter((n) => n.type !== 'inputGhost'),
         edges: state.edges,
         viewport: state.viewport,
         showMiniMap: state.showMiniMap,

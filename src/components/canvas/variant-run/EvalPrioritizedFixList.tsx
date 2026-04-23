@@ -1,3 +1,4 @@
+import { StatusDot } from '@ds/components/ui/status-dot';
 import { filterNoisePrioritizedFixes, tryPrettyJson } from './eval-prioritized-fix-utils';
 
 const HARD_FAIL_PREFIX = /^\[hard_fail:([^\]]+)\]\s*([\s\S]*)$/;
@@ -29,7 +30,7 @@ function EvalPrioritizedFixRow({ text, dense }: { text: string; dense: boolean }
 
   return (
     <div className="flex gap-1.5 rounded-md border border-border-subtle/90 bg-bg/50 px-2 py-1.5">
-      <span aria-hidden className="mt-[3px] inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-warning" />
+      <StatusDot tone="warning" className="mt-[3px]" aria-hidden />
       <div className="min-w-0 flex-1">
       {chipLabel && (
         <span

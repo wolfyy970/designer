@@ -17,7 +17,6 @@ import {
   computeDefaultPosition,
   reconcileEphemeralGhostNodes,
   OPTIONAL_INPUT_SLOTS,
-  isEphemeralHypothesisGhostId,
   isEphemeralInputGhostId,
   snap,
 } from '../../lib/canvas-layout';
@@ -73,7 +72,7 @@ export const createGraphSlice: StateCreator<
     const filtered = changes.filter((ch) => {
       if (ch.type !== 'remove') return true;
       const id = 'id' in ch ? (ch.id as string) : '';
-      return !isEphemeralInputGhostId(id) && !isEphemeralHypothesisGhostId(id);
+      return !isEphemeralInputGhostId(id);
     });
     set({ nodes: applyWorkspaceNodeChanges(filtered, get().nodes) });
     if (shouldScheduleAutoLayoutOnDimensionChange(get().autoLayout, filtered)) {
@@ -98,12 +97,7 @@ export const createGraphSlice: StateCreator<
     const sourceNode = nodes.find((n) => n.id === connection.source);
     const targetNode = nodes.find((n) => n.id === connection.target);
     if (!sourceNode || !targetNode) return false;
-    if (
-      sourceNode.type === 'inputGhost' ||
-      targetNode.type === 'inputGhost' ||
-      sourceNode.type === 'hypothesisGhost' ||
-      targetNode.type === 'hypothesisGhost'
-    ) {
+    if (sourceNode.type === 'inputGhost' || targetNode.type === 'inputGhost') {
       return false;
     }
     return checkValidConnection(sourceNode.type ?? '', targetNode.type ?? '');
@@ -228,7 +222,7 @@ export const createGraphSlice: StateCreator<
     const state = get();
     const node = state.nodes.find((n) => n.id === nodeId);
     if (!node) return;
-    if (node.type === 'inputGhost' || node.type === 'hypothesisGhost') return;
+    if (node.type === 'inputGhost') return;
 
     resetSpecSectionForRemovedNode(node);
 

@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import { useReactFlow, type NodeProps, type Node } from '@xyflow/react';
-import { ArrowRight, RefreshCw } from 'lucide-react';
+import { ArrowRight, Plus, RefreshCw } from 'lucide-react';
 import { normalizeError } from '../../../lib/error-utils';
 import { Button } from '@ds/components/ui/button';
 import { Badge } from '@ds/components/ui/badge';
@@ -10,11 +10,8 @@ import {
   findStrategy,
 } from '../../../stores/incubator-store';
 import { useGenerationStore } from '../../../stores/generation-store';
-import {
-  useCanvasStore,
-  INPUT_NODE_TYPES,
-  type CanvasNodeType,
-} from '../../../stores/canvas-store';
+import { useCanvasStore } from '../../../stores/canvas-store';
+import { countConnectedIncubatorInputs } from '../../../lib/incubator-input-count';
 import type { IncubatorNodeData } from '../../../types/canvas-data';
 import type { HypothesisStrategy } from '../../../types/incubator';
 import { incubateStream } from '../../../api/client';
@@ -23,7 +20,7 @@ import { useWorkspaceDomainStore } from '../../../stores/workspace-domain-store'
 import { scheduleCanvasFitView } from '../../../lib/canvas-fit-view';
 import { processingOrFilled } from '../../../lib/node-status';
 import { isPlaceholderHypothesis } from '../../../lib/hypothesis-node-utils';
-import { EDGE_STATUS, RF_INTERACTIVE } from '../../../constants/canvas';
+import { EDGE_STATUS, NODE_TYPES, RF_INTERACTIVE } from '../../../constants/canvas';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
 import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
 import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
@@ -46,6 +43,9 @@ type IncubatorNodeFlowType = Node<IncubatorNodeData, 'incubator'>;
 function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>) {
   const { fitView } = useReactFlow();
   const spec = useSpecStore((s) => s.spec);
+  const hasDesignBrief = useSpecStore((s) =>
+    Boolean(s.spec.sections['design-brief']?.content?.trim()),
+  );
 
   const isCompiling = useIncubatorStore((s) => s.isCompiling);
   const error = useIncubatorStore((s) => s.error);
@@ -70,26 +70,14 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
     createInitialTaskStreamState('idle'),
   );
 
-  // Count connected input nodes (spec inputs + reference previews)
-  const connectedInputCount = useMemo(() => {
-    if (
-      domainWiring &&
-      (domainWiring.inputNodeIds.length > 0 || domainWiring.previewNodeIds.length > 0)
-    ) {
-      return (
-        domainWiring.inputNodeIds.length +
-        domainWiring.previewNodeIds.length
-      );
-    }
-    const incomingEdges = edges.filter((e) => e.target === id);
-    return incomingEdges.filter((e) => {
-      const sourceNode = nodes.find((n) => n.id === e.source);
-      return sourceNode && (
-        INPUT_NODE_TYPES.has(sourceNode.type as CanvasNodeType) ||
-        sourceNode.type === 'preview'
-      );
-    }).length;
-  }, [domainWiring, edges, nodes, id]);
+  /**
+   * Count what will actually feed into `buildIncubateInputs` — stale domain
+   * wiring ids are filtered out so the card matches what the incubator sees.
+   */
+  const connectedInputCount = useMemo(
+    () => countConnectedIncubatorInputs(nodes, edges, id, domainWiring),
+    [domainWiring, edges, nodes, id],
+  );
 
   /** Hypothesis cards on the canvas wired to this incubator (not stale rows in persisted dimension map). */
   const totalHypotheses = useMemo(() => {
@@ -108,6 +96,16 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
       updateNodeData(id, { hypothesisCount: Number(e.target.value) });
     },
     [id, updateNodeData],
+  );
+
+  const handleAddBlank = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (isCompiling || !hasDesignBrief || !modelId) return;
+      useCanvasStore.getState().addNode(NODE_TYPES.HYPOTHESIS);
+    },
+    [hasDesignBrief, isCompiling, modelId],
   );
 
   const handleIncubate = useCallback(async () => {
@@ -190,16 +188,17 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
 
   const status = processingOrFilled(isCompiling);
 
-  const isReady = connectedInputCount > 0 && !!modelId;
+  const isReady = hasDesignBrief && !!modelId;
+
+  /** Lowercase copy to match input-node “needs input” pill convention. */
+  const readinessBlockReason = !modelId
+    ? 'connect a model node'
+    : !hasDesignBrief
+      ? 'add a design brief first'
+      : undefined;
 
   // Layer 2: inline readiness hint
-  const hint = !isCompiling
-    ? connectedInputCount === 0
-      ? 'Connect input nodes to begin'
-      : !modelId
-        ? 'Connect a Model node'
-        : null
-    : null;
+  const hint = !isCompiling ? readinessBlockReason ?? null : null;
 
   return (
     <NodeShell
@@ -240,7 +239,7 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
           </div>
           {/* Hypothesis count selector */}
           <div className="flex items-center justify-between">
-            <label className="text-nano text-fg-secondary">New hypotheses</label>
+            <label className="text-nano text-fg-secondary">new hypotheses</label>
             <select
               value={hypothesisCount}
               onChange={handleCountChange}
@@ -280,6 +279,20 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
                 <ArrowRight size={12} aria-hidden />
               </>
             )}
+          </Button>
+
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="w-full"
+            onClick={handleAddBlank}
+            disabled={isCompiling || !isReady}
+            aria-label="Add blank hypothesis card"
+            title={isCompiling ? 'incubating…' : readinessBlockReason}
+          >
+            <Plus size={12} strokeWidth={2} aria-hidden />
+            blank hypothesis
           </Button>
         </div>
 

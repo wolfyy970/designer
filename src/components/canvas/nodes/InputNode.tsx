@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@ds/components/ui/badge';
 import { type NodeProps, type Node } from '@xyflow/react';
-import { Loader2, Wand2 } from 'lucide-react';
+import { Loader2, Wand2, X } from 'lucide-react';
 import { useSpecStore } from '../../../stores/spec-store';
 import {
   NODE_TYPE_TO_SECTION,
@@ -136,13 +136,9 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
     >
       <NodeHeader onRemove={onRemove} description={meta.description}>
         <h3 className="text-xs font-semibold text-fg">{meta.title}</h3>
-        {content.trim() ? (
-          <Badge shape="pill" tone="success">filled</Badge>
-        ) : meta.required ? (
+        {!content.trim() && meta.required ? (
           <Badge shape="pill" tone="warning">needs input</Badge>
-        ) : (
-          <Badge shape="pill" tone="neutral">optional</Badge>
-        )}
+        ) : null}
       </NodeHeader>
 
       {/* Content — same textarea footprint across all spec input nodes */}
@@ -151,7 +147,7 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
           <TaskStreamMonitor
             state={taskStreamState}
             elapsed={elapsed}
-            fallbackLabel="Generating section…"
+            fallbackLabel="Agent working…"
           />
         ) : (
           <textarea
@@ -174,32 +170,34 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
                 <span className="text-nano text-fg-muted">Add a Model node on the canvas</span>
               )}
               {!generating && hasModel && !designBriefContent.trim() && (
-                <Badge shape="pill" tone="warning">Fill Design Brief first</Badge>
+                <Badge shape="pill" tone="warning">fill design brief first</Badge>
               )}
-              <button
-                type="button"
-                title={generating ? 'Generating…' : 'Generate from design brief'}
-                aria-label={
-                  generating ? 'Generating from design brief' : 'Generate from design brief'
-                }
-                aria-busy={generating}
-                disabled={generating || !hasModel || !designBriefContent.trim()}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={() => void handleGenerateFromBrief()}
-                className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-surface-raised px-2 py-1 text-micro font-medium text-fg-secondary transition-colors hover:border-accent hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {generating ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin text-accent" aria-hidden />
-                    Generating…
-                  </>
-                ) : (
-                  <>
-                    <Wand2 size={14} className="text-accent" aria-hidden />
-                    Generate
-                  </>
-                )}
-              </button>
+              {generating ? (
+                <button
+                  type="button"
+                  title="Cancel generation"
+                  aria-label="Cancel generation"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => abortGenRef.current?.abort()}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-surface-raised px-2 py-1 text-micro font-medium text-fg-secondary transition-colors hover:border-error-border-medium hover:text-error"
+                >
+                  <X size={14} aria-hidden />
+                  Cancel
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  title="Generate from design brief"
+                  aria-label="Generate from design brief"
+                  disabled={!hasModel || !designBriefContent.trim()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => void handleGenerateFromBrief()}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-surface-raised px-2 py-1 text-micro font-medium text-fg-secondary transition-colors hover:border-accent hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Wand2 size={14} className="text-accent" aria-hidden />
+                  Generate
+                </button>
+              )}
             </div>
             {generateError && <NodeErrorBlock message={generateError} />}
           </div>

@@ -1,5 +1,5 @@
 /**
- * Set META_HARNESS_LIVE=1 with API on 127.0.0.1:3001 and OPENROUTER_API_KEY for real HTTP.
+ * Set META_HARNESS_LIVE=1 with API on 127.0.0.1:4731 and OPENROUTER_API_KEY for real HTTP.
  */
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 describe.skipIf(!live)('meta-harness live API (META_HARNESS_LIVE=1)', () => {
   it('health responds', async () => {
-    const r = await fetch('http://127.0.0.1:3001/api/health');
+    const r = await fetch('http://127.0.0.1:4731/api/health');
     expect(r.ok).toBe(true);
   });
 
@@ -29,7 +29,7 @@ describe.skipIf(!live)('meta-harness live API (META_HARNESS_LIVE=1)', () => {
     });
     const evalBase = resolveEvalRunsBaseDir('');
     const result = await runHypothesisEvalFromMetaHarness({
-      apiBaseUrl: 'http://127.0.0.1:3001/api',
+      apiBaseUrl: 'http://127.0.0.1:4731/api',
       body,
       evalRunsBaseDir: evalBase,
       evalLogWaitMs: 600_000,

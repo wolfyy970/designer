@@ -17,7 +17,7 @@ export function useLineageDim(nodeId: string, isSelected: boolean): string {
 
   if (!lineageActive) return '';
   if (inLineage) {
-    return isSelected ? '' : 'ring-1 ring-indigo-300';
+    return isSelected ? '' : 'ring-1 ring-accent-ring-muted';
   }
   return 'opacity-40';
 }

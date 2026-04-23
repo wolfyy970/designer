@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { File, FileCode, Paintbrush, Braces, FileJson } from 'lucide-react';
+import { StatusDot } from '@ds/components/ui/status-dot';
 
 interface FileExplorerProps {
   files: Record<string, string>;
@@ -88,9 +89,7 @@ export default function FileExplorer({
               >
                 {fileIcon(path)}
                 <span className="truncate text-nano leading-tight flex-1">{filename}</span>
-                {isWriting && (
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent animate-pulse" />
-                )}
+                {isWriting && <StatusDot tone="accent" animated aria-label="Writing…" />}
               </button>
             );
           })}

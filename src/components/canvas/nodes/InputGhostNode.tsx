@@ -36,8 +36,8 @@ function InputGhostNode({ data }: NodeProps<InputGhostFlowNode>) {
     <div className={`${RF_INTERACTIVE} flex w-node flex-col rounded-lg border border-dashed border-border-dashed-ghost bg-surface-ghost-backdrop shadow-sm ring-1 ring-inset ring-border-inset-ring`}>
       <div className="relative border-b border-border-section-divider px-3 py-2">
         <div className="flex items-baseline justify-between gap-2 pr-6">
-          <h3 className="text-xs font-semibold text-fg-muted">{meta.title}</h3>
-          <span className="text-nano shrink-0 uppercase tracking-wide text-fg-faint">
+          <h3 className="text-xs font-semibold text-fg-secondary">{meta.title}</h3>
+          <span className="text-nano shrink-0 uppercase tracking-wide text-fg-muted">
             optional
           </span>
         </div>
@@ -62,7 +62,7 @@ function InputGhostNode({ data }: NodeProps<InputGhostFlowNode>) {
         >
           <Plus size={22} strokeWidth={2.25} aria-hidden />
         </button>
-        <span className="text-nano mt-2 text-center text-fg-faint">Add to workspace</span>
+        <span className="text-nano mt-2 text-center text-fg-muted">Add to workspace</span>
       </div>
     </div>
   );

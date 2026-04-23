@@ -37,7 +37,7 @@ const testCase: SimplifiedMetaHarnessTestCase = {
 };
 
 const cfg: MetaHarnessConfig = {
-  apiBaseUrl: 'http://127.0.0.1:3001',
+  apiBaseUrl: 'http://127.0.0.1:4731/api',
   iterations: 1,
   proposerModel: 'p/m',
   proposerMaxToolRounds: 3,

@@ -56,7 +56,7 @@ export default function OptionalInputsTip() {
       <div className={TIP_BAR_CLASS_NAME} role="status">
         <p className="min-w-0 flex-1 text-xs leading-snug text-fg-secondary">
           You hid a suggested card. Re-add any optional input anytime from the{' '}
-          <span className="font-medium text-fg">+</span> button in the toolbar (bottom-left).
+          <span className="font-medium text-accent">+</span> button in the toolbar (bottom-left).
         </p>
         <TipDismissButton onClick={dismissNudge} aria-label="Dismiss message" />
       </div>
@@ -68,7 +68,7 @@ export default function OptionalInputsTip() {
   return (
     <div className={TIP_BAR_CLASS_NAME} role="status">
       <p className="min-w-0 flex-1 text-xs leading-snug text-fg-secondary">
-        The dashed cards are <span className="font-medium text-fg">optional inputs</span>. You can run
+        The dashed cards are <span className="font-medium text-accent">optional inputs</span>. You can run
         with just your brief, model, and incubator — adding research, objectives, visuals, or
         constraints usually improves what the model produces.
       </p>

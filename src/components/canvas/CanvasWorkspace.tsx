@@ -6,6 +6,7 @@ import {
   BackgroundVariant,
   ReactFlowProvider,
   useReactFlow,
+  useStoreApi,
   type Viewport,
   type OnSelectionChangeParams,
 } from '@xyflow/react';
@@ -16,7 +17,11 @@ import { useGenerationStore } from '../../stores/generation-store';
 import { GENERATION_STATUS } from '../../constants/generation';
 import { PREVIEW_NODE_GENERATING_Z_INDEX } from '../../constants/canvas';
 import { getPreviewNodeData } from '../../lib/canvas-node-data';
-import { scheduleCanvasFitView } from '../../lib/canvas-fit-view';
+import {
+  scheduleCanvasFitView,
+  DEFAULT_FIT_VIEW_OPTIONS,
+  fitViewOptionsWithInspectorDock,
+} from '../../lib/canvas-fit-view';
 import type { WorkspaceNode } from '../../types/workspace-graph';
 import { toReactFlowEdges, toReactFlowNodes } from '../../workspace/reactflow-adapter';
 import { nodeTypes } from './nodes/node-types';
@@ -34,10 +39,13 @@ import { PermanentDeleteConfirmProvider } from '../../contexts/PermanentDeleteCo
 import { useAppConfig } from '../../hooks/useAppConfig';
 import { useSyncEvaluatorDefaultsFromConfig } from '../../hooks/useSyncEvaluatorDefaultsFromConfig';
 import { reconcileLockdownCanvasState } from '../../lib/lockdown-reconcile';
+import { useTheme } from '@ds/lib/use-theme';
 
 function CanvasInner() {
   useCanvasOrchestrator();
+  const theme = useTheme();
   const { setCenter, getNodes, getEdges, fitView } = useReactFlow();
+  const rfStore = useStoreApi();
   useNodeDeletion({ getNodes, getEdges });
   useSyncEvaluatorDefaultsFromConfig();
 
@@ -110,6 +118,7 @@ function CanvasInner() {
   const setConnectingFrom = useCanvasStore((s) => s.setConnectingFrom);
   const pendingFitViewAfterTemplate = useCanvasStore((s) => s.pendingFitViewAfterTemplate);
   const consumePendingFitView = useCanvasStore((s) => s.consumePendingFitView);
+  const runInspectorPreviewNodeId = useCanvasStore((s) => s.runInspectorPreviewNodeId);
 
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -125,6 +134,24 @@ function CanvasInner() {
     const id = scheduleCanvasFitView(fitView, consumePendingFitView);
     return () => window.clearTimeout(id);
   }, [pendingFitViewAfterTemplate, fitView, consumePendingFitView]);
+
+  const runInspectorFitPrevRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = runInspectorFitPrevRef.current;
+    const curr = runInspectorPreviewNodeId;
+    let tid: ReturnType<typeof setTimeout> | undefined;
+    if (prev === null && curr !== null) {
+      tid = scheduleCanvasFitView(fitView, undefined, () =>
+        fitViewOptionsWithInspectorDock(rfStore.getState().width || window.innerWidth),
+      );
+    } else if (prev !== null && curr === null) {
+      tid = scheduleCanvasFitView(fitView, undefined, { ...DEFAULT_FIT_VIEW_OPTIONS });
+    }
+    runInspectorFitPrevRef.current = curr;
+    return () => {
+      if (tid != null) window.clearTimeout(tid);
+    };
+  }, [runInspectorPreviewNodeId, fitView, rfStore]);
 
   const handleViewportChange = useCallback(
     (vp: Viewport) => setViewport(vp),
@@ -191,7 +218,7 @@ function CanvasInner() {
   const miniMapNodeColor = useCallback((node: { type?: string }) => {
     const t = node.type as CanvasNodeType | undefined;
     if (t && INPUT_NODE_TYPES.has(t)) return 'var(--color-fg-muted)'; // inputs
-    if (t === 'inputGhost' || t === 'hypothesisGhost') return 'var(--color-fg-faint)';
+    if (t === 'inputGhost') return 'var(--color-fg-faint)';
     switch (t) {
       case 'incubator':
       case 'designSystem':
@@ -212,7 +239,7 @@ function CanvasInner() {
         <div className="relative min-h-0 min-w-0 flex-1">
           <ReactFlow
             className="h-full w-full"
-            colorMode="dark"
+            colorMode={theme}
             nodes={rfNodes}
             edges={rfEdges}
             onNodesChange={onNodesChange}
@@ -266,8 +293,14 @@ function CanvasInner() {
             />
           )}
           <VariantPreviewOverlay />
+          {runInspectorPreviewNodeId != null ? (
+            <div
+              className="pointer-events-none absolute inset-0 z-40 bg-overlay"
+              aria-hidden
+            />
+          ) : null}
+          <VariantRunInspector />
         </div>
-        <VariantRunInspector />
       </div>
     </div>
   );

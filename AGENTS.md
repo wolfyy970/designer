@@ -26,11 +26,11 @@ The header's **date/time** comes from `**git log -1 --format=%cI`** (committer t
 
 ```bash
 # Development (API + Vite — avoids proxy ECONNREFUSED race)
-pnpm dev:all         # API first, then Vite after http://localhost:3001/api/health
-pnpm dev:kill        # Free ports 3001 and 5173 (stuck dev servers)
+pnpm dev:all         # API first, then Vite after http://127.0.0.1:${PORT:-4731}/api/health
+pnpm dev:kill        # Free default API (4731) and Vite (4732) ports — uses PORT / VITE_PORT when set
 # Or two terminals: pnpm dev:server  and  pnpm dev
-pnpm dev             # Vite frontend at http://localhost:5173 (strict port — localStorage origin)
-pnpm dev:server      # Hono API server at http://localhost:3001
+pnpm dev             # Vite frontend at http://localhost:${VITE_PORT:-4732} (strict port — localStorage origin)
+pnpm dev:server      # Hono API server at http://localhost:${PORT:-4731}
 
 # Build & lint
 pnpm build           # tsc -b && vite build
@@ -56,7 +56,7 @@ Vitest excludes `server/services/__tests__/browser-playwright-evaluator.test.ts`
 
 ### Two-process dev setup
 
-The frontend (Vite, port **5173** only — `strictPort`) proxies `/api/*` to the API server (Hono/Node.js, port 3001). **Both must run together in development.** Prefer `pnpm dev:all` so Vite starts only after `/api/health` responds; otherwise the UI's first `/api/*` calls may get `ECONNREFUSED` until the API is up (hard refresh fixes it). A different Vite port would be a **different browser origin** — saved canvas library / active spec localStorage would not carry over; free **5173** with `pnpm dev:kill` if Vite fails to bind. Avoid `pnpm dev:server & pnpm dev` unless you manage the background job: `**Ctrl+C` may not stop the background API**, leaving port **3001** in use (`EADDRINUSE` on the next start). Free it with `lsof -nP -iTCP:3001 -sTCP:LISTEN` / `kill`, or `jobs` → `fg` → `Ctrl+C`. API keys live on the server only — never exposed to the browser.
+The frontend (Vite, default port **4732** — `strictPort`; override **`VITE_PORT`**) proxies `/api/*` to the API server (Hono/Node.js, default **`PORT`** **4731**). **Both must run together in development.** Prefer `pnpm dev:all` so Vite starts only after `/api/health` responds; otherwise the UI's first `/api/*` calls may get `ECONNREFUSED` until the API is up (hard refresh fixes it). A different Vite port is a **different browser origin** — saved canvas library / active spec localStorage would not carry over; free the port with `pnpm dev:kill` if Vite fails to bind. Avoid `pnpm dev:server & pnpm dev` unless you manage the background job: `**Ctrl+C` may not stop the background API**, leaving **`PORT`** in use (`EADDRINUSE` on the next start). Free it with `lsof -nP -iTCP:$PORT -sTCP:LISTEN` / `kill`, or `jobs` → `fg` → `Ctrl+C`. Defaults live in **`server/dev-defaults.ts`** (keep shell fallbacks in `package.json` / `scripts/kill-dev-servers.sh` aligned). API keys live on the server only — never exposed to the browser.
 
 **Provider concurrency:** OpenRouter runs hypothesis lanes in parallel; LM Studio runs sequentially (returns 500 on concurrent requests).
 

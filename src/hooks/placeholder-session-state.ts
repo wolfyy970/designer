@@ -98,12 +98,14 @@ export function createPlaceholderRafBatchers(
         activityLog: [state.activityText],
         activityByTurn: { ...state.activityByTurn },
         lastActivityAt: Date.now(),
+        streamedModelChars: state.streamedModelChars,
       });
     }, activityStats),
     thinking: batchedRafUpdater(() => {
       updateResult(placeholderId, {
         thinkingTurns: [...state.thinkingTurns],
         lastActivityAt: Date.now(),
+        streamedModelChars: state.streamedModelChars,
       });
     }, thinkingStats),
     code: batchedRafUpdater(() => {
@@ -158,6 +160,8 @@ export interface PlaceholderGenerationSessionState {
   evalRoundLive: number;
   /** Partial rubric reports during in-flight evaluation rounds */
   liveEvalWorkers: Partial<Record<EvaluatorRubricId, EvaluatorWorkerReport>>;
+  /** Running sum of answer + thinking characters the model has streamed back. */
+  streamedModelChars: number;
 }
 
 export function createInitialPlaceholderSessionState(): PlaceholderGenerationSessionState {
@@ -174,6 +178,7 @@ export function createInitialPlaceholderSessionState(): PlaceholderGenerationSes
     agenticCheckpoint: undefined,
     evalRoundLive: 0,
     liveEvalWorkers: {},
+    streamedModelChars: 0,
   };
 }
 

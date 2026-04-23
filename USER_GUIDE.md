@@ -30,9 +30,9 @@ pnpm dev:all      # recommended: API then Vite (avoids early proxy errors)
 
 Both processes are needed for local development.
 
-**Only Vite running:** The UI blocks on `**GET /api/config`** until the API on port **3001** answers—use `**pnpm dev:all`** or run `**pnpm dev:server`** alongside `**pnpm dev`**. The dev design-token page `**/dev/design-tokens**` is the only route that skips that check.
+**Only Vite running:** The UI blocks on `**GET /api/config`** until the API (default **`PORT`** **4731**) answers—use `**pnpm dev:all`** or run `**pnpm dev:server`** alongside `**pnpm dev`**. The dev design-token page `**/dev/design-tokens**` is the only route that skips that check.
 
-**Saved canvases and browser storage:** The app keeps your **active spec** and **Canvas manager** library in **localStorage** for `**http://localhost:5173`** (not `127.0.0.1` — that is a separate origin to the browser). The URL includes the **port**: opening the app on a different port is a different site, so lists and the current canvas can look empty. The dev server **requires port 5173**; if Vite won’t start, run `pnpm dev:kill` and retry.
+**Saved canvases and browser storage:** The app keeps your **active spec** and **Canvas manager** library in **localStorage** for the origin you use (default dev: `**http://localhost:4732**`; not `127.0.0.1` — that is a separate origin to the browser). The URL includes the **port**: opening the app on a different port is a different site, so lists and the current canvas can look empty. Vite uses **`strictPort`** for the dev URL; if Vite won’t start, run `pnpm dev:kill` and retry. Override with **`VITE_PORT`** in `.env.local` (see `.env.example`).
 
 ## Dev logs
 
@@ -116,11 +116,9 @@ Add a **Model** node (Processing group) and connect it to the Incubator. Select 
 
 ### 3. Incubate
 
-Connect input nodes to the **Incubator** (edges auto-connect on add). With a Model node connected, click **Generate**. The Incubator sends your connected inputs to the LLM and produces hypothesis strategies.
+Connect input nodes to the **Incubator** (edges auto-connect on add). With a **Model** connected and at least a minimal **Design Brief** written, click **Generate** and choose how many new hypotheses to create. The Incubator sends your connected inputs to the LLM and produces that many hypothesis strategy cards. **blank hypothesis** does the same readiness check (brief + model) but adds a single empty strategy card without calling the LLM, for hand-editing.
 
 ### 4. Edit Hypotheses
-
-The **New hypothesis** placeholder (dashed card) offers **Blank** (empty card) or **Generate** (runs the same incubation LLM with **count = 1** to fill the new card from your **Design Brief** and sibling strategies — requires a connected **Model** and a non-empty brief).
 
 Hypothesis nodes appear to the right of the Incubator. Each represents a hypothesis strategy with:
 
@@ -149,15 +147,15 @@ Runs often take several minutes (shorter when Auto-improve is off). **Server at 
 
 Running generation again adds new versions — use the version navigation arrows on the preview card to browse previous results.
 
-**While a run is in flight:** Use **Stop** on the hypothesis or in the preview run workspace to abort the in-flight request for that strategy lane (same as ending the SSE stream).
+**While a run is in flight:** Use **Stop** on the **hypothesis** card to abort the in-flight request for that strategy lane (same as ending the SSE stream).
 
-**Progress and workspace:** The preview card footer summarizes live status (including streamed size while a tool argument is building). **Skills in use** and the full **Monitor** timeline—including tool traces—are in the **run workspace** side panel; keep the panel closed for a calmer card. The timeline’s **Tool use** block shows the active tool in the header when collapsed; when expanded, the header drops that label so it isn’t duplicated above the streaming line in the log.
+**Progress and workspace:** Starting **Design** does **not** auto-open the run workspace—the preview card shows progress first. Use **Watch agent** or the **panel** icon on the preview toolbar to open the **run workspace** (an overlay on the right); you can still **pan and zoom** the canvas while it is open. The preview card footer summarizes live status (including streamed size while a tool argument is building). **Skills in use** and the full **Monitor** timeline—including tool traces—live in that workspace. The timeline’s **Tool use** block shows the active tool in the header when collapsed; when expanded, the header drops that label so it isn’t duplicated above the streaming line in the log.
 
 **Removing nodes from the canvas:** Use **Backspace** or **Delete** with one or more nodes selected. A short confirmation appears for nodes that can be removed (input cards and structural nodes like the incubator stay protected). Removing a hypothesis also drops its preview nodes. **Selected connections** (edges) delete with the same keys and no extra dialog. The shared spec document is separate; text in section cards may still exist there until you edit it elsewhere.
 
 ### 7. Review Designs
 
-Preview nodes render the generated code in sandboxed iframes. Open the **run workspace** (panel icon on the toolbar) for the full timeline, tasks, **Design**/**Evaluation** tabs (when evaluation ran), and—when a run had several evaluator rounds—a shared **Eval round** control on Design and Evaluation to preview that round’s files and scores.
+Preview nodes render the generated code in sandboxed iframes. Open the **run workspace** (panel icon or **Watch agent** while generating) for the full timeline, tasks, **Design**/**Evaluation** tabs (when evaluation ran), and—when a run had several evaluator rounds—a shared **Eval round** control on Design and Evaluation to preview that round’s files and scores.
 
 **Best pick:** If you disagree with the evaluator’s ranking, use **Mark as best** (star on the preview toolbar or “Mark as best” in full-screen). **Clear best pick** restores score-based default for that strategy lane. Full-screen **prev/next design** moves between preview nodes **for the same hypothesis** when domain slots are present.
 

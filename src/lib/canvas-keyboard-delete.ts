@@ -5,7 +5,6 @@ import type { WorkspaceNode } from '../types/workspace-graph';
 export const KEYBOARD_DELETE_PROTECTED_NODE_TYPES = new Set<string>([
   'incubator',
   'inputGhost',
-  'hypothesisGhost',
   ...INPUT_NODE_TYPES,
 ]);
 

@@ -6,7 +6,7 @@ import { Script } from 'node:vm';
 import type { Bash } from 'just-bash';
 import type { ExtensionContext, ToolDefinition } from './pi-sdk/types.ts';
 import type { TodoItem } from '../../src/types/provider.ts';
-import { sandboxProjectAbsPath } from './agent-bash-sandbox.ts';
+import { sandboxProjectAbsPath } from './pi-sdk/index.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import { buildUseSkillToolDescription } from '../lib/skill-discovery.ts';
 import { validateHtmlWorkspaceContent } from './html-validation.ts';

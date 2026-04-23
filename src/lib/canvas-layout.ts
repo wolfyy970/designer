@@ -22,17 +22,9 @@ export const INPUT_GHOST_ID_PREFIX = 'ghost-input-' as const;
 
 const LEGACY_INPUT_GHOST_ID_PREFIX = 'ghost-section-' as const;
 
-/** Stable id for the singleton hypothesis ghost (keep in sync with remove guard). */
-export const HYPOTHESIS_GHOST_STABLE_ID = 'ghost-hypothesis' as const;
-
 /** True when `id` is an ephemeral input ghost (current or pre–v22 prefix). */
 export function isEphemeralInputGhostId(id: string): boolean {
   return id.startsWith(INPUT_GHOST_ID_PREFIX) || id.startsWith(LEGACY_INPUT_GHOST_ID_PREFIX);
-}
-
-/** True when `id` is the ephemeral hypothesis-add placeholder. */
-export function isEphemeralHypothesisGhostId(id: string): boolean {
-  return id === HYPOTHESIS_GHOST_STABLE_ID;
 }
 
 function inputGhostStableId(slot: InputGhostTargetType): string {
@@ -65,7 +57,6 @@ const NODE_SPACING = 60;
 const FALLBACK_H: Record<string, number> = {
   inputCard: 400,
   inputGhost: 272,
-  hypothesisGhost: 260,
   incubator: 220,
   designSystem: 300,
   hypothesis: 440,
@@ -85,7 +76,6 @@ function nodeH(node: CanvasNode): number {
   const measured = node.measured?.height as number | undefined;
   if (measured != null) return measured;
   if (node.type === 'inputGhost') return FALLBACK_H.inputGhost;
-  if (node.type === 'hypothesisGhost') return FALLBACK_H.hypothesisGhost;
   if (INPUT_NODE_TYPES.has(node.type as CanvasNodeType)) return FALLBACK_H.inputCard;
   return FALLBACK_H[node.type as string] ?? 200;
 }
@@ -108,7 +98,6 @@ export function layoutTypeOrder(n: CanvasNode): number {
     const t = (n.data as InputGhostData).targetType;
     return LAYER0_GHOST_BASE + optionalInputSlotIndex(t ?? '');
   }
-  if (n.type === 'hypothesisGhost') return 8.5;
   if (n.type === 'model') return LAYER0_MODEL;
   if (
     n.type === 'researchContext' ||
@@ -146,31 +135,12 @@ export function reconcileInputGhostNodes(
   return [...base, ...ghosts];
 }
 
-/**
- * Ensure a singleton `hypothesisGhost` exists whenever at least one incubator is on the canvas.
- * Strip duplicates; positions are placeholders until auto-layout runs.
- */
-export function reconcileHypothesisGhostNode(nodes: WorkspaceNode[]): WorkspaceNode[] {
-  const base = nodes.filter((n) => n.type !== 'hypothesisGhost');
-  const hasIncubator = base.some((n) => n.type === 'incubator');
-  if (!hasIncubator) return base;
-  return [
-    ...base,
-    {
-      id: HYPOTHESIS_GHOST_STABLE_ID,
-      type: 'hypothesisGhost',
-      position: { x: 0, y: 0 },
-      data: {},
-    },
-  ];
-}
-
-/** Reconcile input ghosts, then hypothesis ghost (order matters for stable layout). */
+/** Reconcile optional-input placeholder ghosts (not persisted). */
 export function reconcileEphemeralGhostNodes(
   nodes: WorkspaceNode[],
   dismissedInputGhostSlots: readonly InputGhostTargetType[] = [],
 ): WorkspaceNode[] {
-  return reconcileHypothesisGhostNode(reconcileInputGhostNodes(nodes, dismissedInputGhostSlots));
+  return reconcileInputGhostNodes(nodes, dismissedInputGhostSlots);
 }
 
 function nodeWidth(node: CanvasNode): number {
@@ -349,25 +319,6 @@ export function computeAutoLayout(
       if (n.type === 'preview' && (parents.get(n.id)?.length ?? 0) === 0) {
         rank.set(n.id, previewRank);
       }
-    }
-  }
-
-  // 2e. Hypothesis ghost has no edges — align it with the hypothesis column.
-  const hypothesisRanks = nodes
-    .filter((n) => n.type === 'hypothesis')
-    .map((n) => rank.get(n.id) ?? 0);
-  const ghostHypothesisRank =
-    hypothesisRanks.length > 0
-      ? Math.max(...hypothesisRanks)
-      : Math.max(
-          0,
-          ...nodes
-            .filter((n) => n.type === 'incubator')
-            .map((n) => (rank.get(n.id) ?? 0) + 1),
-        );
-  for (const n of nodes) {
-    if (n.type === 'hypothesisGhost') {
-      rank.set(n.id, ghostHypothesisRank);
     }
   }
 

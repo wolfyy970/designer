@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Settings, FolderOpen, Pencil, RotateCcw } from 'lucide-react';
+import { ThemeToggle } from '@ds/components/ui/theme-toggle';
 import { useSpecStore } from '../../stores/spec-store';
 import { useCanvasStore } from '../../stores/canvas-store';
 import SpecManager from '../shared/SpecManager';
@@ -85,7 +86,7 @@ export default function CanvasHeader() {
               className="flex max-w-[var(--width-canvas-title)] items-center gap-1.5 truncate font-display text-sm italic text-fg-secondary hover:text-fg"
               aria-label={`Rename canvas: ${title || 'Untitled Canvas'}`}
             >
-              <span className="truncate">{title || 'Untitled Canvas'}</span>
+              <span className="truncate pr-0.5">{title || 'Untitled Canvas'}</span>
               <Pencil size={12} className="shrink-0 text-fg-muted" aria-hidden />
             </button>
           )}
@@ -111,6 +112,7 @@ export default function CanvasHeader() {
             <FolderOpen size={14} />
             Canvas Manager
           </button>
+          <ThemeToggle />
           <button
             onClick={() => setShowSettings(true)}
             className="rounded-md p-1.5 text-fg-secondary hover:bg-surface-raised"

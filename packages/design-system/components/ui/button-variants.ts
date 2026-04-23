@@ -13,7 +13,7 @@ export const buttonVariants = cva(
         secondary:
           'rounded-md border border-border bg-surface-raised text-fg-secondary hover:border-accent',
         destructive:
-          'rounded-md border border-error-border bg-error-subtle text-error hover:bg-error-surface-hover',
+          'rounded-md border border-border bg-surface-raised text-error hover:border-error-border hover:bg-error-subtle',
         ghost: 'text-fg-secondary hover:bg-surface',
         link: 'text-accent underline-offset-4 hover:underline',
       },

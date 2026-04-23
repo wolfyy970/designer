@@ -17,11 +17,11 @@ pnpm dev:all                 # recommended: API + Vite (API waits until /api/hea
 # Or two terminals: pnpm dev:server  then  pnpm dev
 ```
 
-Both processes are required for local development. The Vite dev server proxies `/api/*` to the Hono server on port **3001**. If only Vite is up, the app stays on a full-screen **API server not reachable** gate (with retry) until **`GET /api/config`** succeeds—start the API with **`pnpm dev:all`** or **`pnpm dev:server`**, or hard-refresh after the API is listening.
+Both processes are required for local development. The Vite dev server proxies `/api/*` to the Hono server (default port **4731**; override with **`PORT`**). If only Vite is up, the app stays on a full-screen **API server not reachable** gate (with retry) until **`GET /api/config`** succeeds—start the API with **`pnpm dev:all`** or **`pnpm dev:server`**, or hard-refresh after the API is listening.
 
 **Screen width:** The canvas workspace needs a **desktop-class** layout. Browser viewports **narrower than 1024px** (typical phones and many tablets) show a full-screen message asking you to open the app on a laptop or desktop instead.
 
-**`EADDRINUSE` on port 3001:** Something is still bound to the API port — often a **background** `pnpm dev:server` left over from `pnpm dev:server & pnpm dev` after `Ctrl+C` (check `jobs` / `fg`; or free the port: `lsof -nP -iTCP:3001 -sTCP:LISTEN` then `kill <pid>`). Prefer **`pnpm dev:all`** or **two terminals** so you don't stack servers.
+**`EADDRINUSE` on the API port:** Something is still bound to **`PORT`** (default **4731**) — often a **background** `pnpm dev:server` left over from `pnpm dev:server & pnpm dev` after `Ctrl+C` (check `jobs` / `fg`; or free the port: `lsof -nP -iTCP:4731 -sTCP:LISTEN` then `kill <pid>`). Prefer **`pnpm dev:all`** or **two terminals** so you don't stack servers.
 
 ### API Configuration
 
@@ -45,7 +45,7 @@ The primary interface is a visual node-graph canvas (`/canvas`, the default rout
 3. **Incubator** — Connect input nodes and a Model node, then click Generate to produce hypothesis strategies
 4. **Hypotheses** — Editable strategy cards. Connect a Model node and use **Design** to run the **agentic** Pi build (**Auto-improve** off = one build with no evaluator; **on** = evaluation + optional revision rounds)
 5. **Design System** (optional) — Connect to hypotheses to inject design tokens into generation
-6. **Previews** — Rendered design previews with zoom, version navigation, full-screen (hypothesis-scoped design stepping when domain preview slots exist), and optional **mark as best** vs evaluator ranking. Agentic results include a file explorer, zip download, run workspace with multi-round eval preview when applicable, and (when the run finishes) an evaluation scorecard plus optional headless-browser thumbnail.
+6. **Previews** — Rendered design previews with zoom, version navigation, full-screen (hypothesis-scoped design stepping when domain preview slots exist), and optional **mark as best** vs evaluator ranking. Agentic results include a file explorer, zip download, **run workspace** overlay (timeline, tasks, tabs) with multi-round eval preview when applicable, and (when the run finishes) an evaluation scorecard plus optional headless-browser thumbnail.
 
 Nodes connect left-to-right. Auto-layout arranges everything based on connections. Previews can connect back to Existing Design for iterative feedback loops.
 
@@ -56,10 +56,10 @@ The header also opens **Settings** (General preferences). In **development**, a 
 
 | Command             | What it does                                                                                                                                                                             |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`          | Start Vite SPA dev server (port 5173)                                                                                                                                                    |
-| `pnpm dev:server`   | Start Hono API server (port 3001)                                                                                                                                                        |
+| `pnpm dev`          | Start Vite SPA dev server (default port **4732**; override with **`VITE_PORT`**)                                                                                                                                         |
+| `pnpm dev:server`   | Start Hono API server (default port **4731**; override with **`PORT`**)                                                                                                                                                  |
 | `pnpm dev:all`      | Start API then Vite (waits for `/api/health` — avoids proxy race)                                                                                                                        |
-| `pnpm dev:kill`     | Stop processes listening on ports 3001 (API) and 5173 (Vite)                                                                                                                             |
+| `pnpm dev:kill`     | Stop processes listening on default API (**4731**) and Vite (**4732**) ports (`PORT` / `VITE_PORT` when set)                                                                                                           |
 | `pnpm build`        | Type-check and production build                                                                                                                                                          |
 | `pnpm test`         | Vitest unit tests (Playwright merge test excluded in config; **`pnpm test:playwright-eval`** runs it — see [AGENTS.md](AGENTS.md))                                                       |
 | `pnpm lint`         | Run ESLint                                                                                                                                                                               |

@@ -1,7 +1,7 @@
 /**
  * Shared context + safe SSE emission for Pi session bridge modules.
  */
-import { normalizeError } from '../../src/lib/error-utils.ts';
+import { emitEvent } from './pi-sdk/index.ts';
 import type { AgentRunEvent } from './pi-agent-run-types.ts';
 import type { RunTraceEvent } from '../../src/types/provider.ts';
 
@@ -27,10 +27,13 @@ export interface PiSessionBridgeContext {
   onStreamDeliveryFailure?: (err: unknown) => void;
 }
 
-/** Fire-and-forget async `onEvent` without unhandled rejections (e.g. SSE write failures). */
+/**
+ * Fire-and-forget async `onEvent` without unhandled rejections (e.g. SSE write failures).
+ * Delegates to `emitEvent` so the emission protocol is unified across the Pi boundary.
+ */
 export function safeBridgeEmit(ctx: PiSessionBridgeContext, event: AgentRunEvent): void {
-  void Promise.resolve(ctx.onEvent(event)).catch((e) => {
-    console.error('[bridge] onEvent failed', normalizeError(e), e);
-    ctx.onStreamDeliveryFailure?.(e);
+  emitEvent(ctx.onEvent, event, {
+    label: '[bridge]',
+    onFail: ctx.onStreamDeliveryFailure,
   });
 }

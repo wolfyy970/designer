@@ -85,10 +85,6 @@ describe('executeHypothesisGenerationRun', () => {
         updateResult: vi.fn(),
         nextRunNumberForStrategy: () => 1,
         syncAfterGenerate: vi.fn(),
-        getCanvasState: () => ({
-          previewNodeIdMap: new Map<string, string>(),
-          setRunInspectorPreview: vi.fn(),
-        }),
         scheduleFitView: vi.fn(),
         fetchBundle: vi.fn().mockResolvedValue({
           prompts: [],
@@ -104,6 +100,63 @@ describe('executeHypothesisGenerationRun', () => {
     expect(result).toEqual({ ok: false, reason: 'no_prompt' });
     expect(setCompiledPrompts).toHaveBeenCalledWith([]);
     expect(result.ok === false || result.ok).toBe(true);
+  });
+
+  it('rethrows runStream failure after lane ids are registered so the caller can roll back lanes', async () => {
+    const prompt = {
+      id: 'cp1',
+      strategyId: 'vs-1',
+      specId: 's1',
+      prompt: 'p',
+      images: [],
+      compiledAt: 't',
+    };
+    const onLaneIdsReady = vi.fn();
+    const addResult = vi.fn();
+    const lanePlaceholderIdsSeen: string[] = [];
+
+    const boom = new Error('stream boom');
+    await expect(
+      executeHypothesisGenerationRun(
+        {
+          workspacePayload: {} as HypothesisGenerateApiPayload,
+          genCtx: minimalGenCtx,
+          nodeId: 'hyp-1',
+          runId: 'run-1',
+          signal: new AbortController().signal,
+          setCompiledPrompts: vi.fn(),
+          addResult: (r) => {
+            addResult(r);
+            lanePlaceholderIdsSeen.push(r.id);
+          },
+          updateResult: vi.fn(),
+          nextRunNumberForStrategy: () => 1,
+          syncAfterGenerate: vi.fn(),
+          scheduleFitView: vi.fn(),
+          fetchBundle: vi.fn().mockResolvedValue({
+            prompts: [prompt],
+            evaluationContext: null,
+            provenance: { strategies: {}, designSystemSnapshot: undefined },
+            generationContext: {
+              modelCredentials: [
+                { providerId: 'a', modelId: '1', thinkingLevel: 'minimal' },
+                { providerId: 'b', modelId: '2', thinkingLevel: 'minimal' },
+              ],
+            },
+          }),
+          runStream: vi.fn().mockRejectedValue(boom),
+          onLaneIdsReady,
+        },
+        vi.fn(),
+      ),
+    ).rejects.toBe(boom);
+
+    // Lane ids were registered BEFORE the stream failure, so caller catch
+    // can call applyGenerationFailureToLanes and mark every lane as ERROR.
+    expect(onLaneIdsReady).toHaveBeenCalledTimes(1);
+    const registeredIds = onLaneIdsReady.mock.calls[0][0] as readonly string[];
+    expect(registeredIds).toEqual(lanePlaceholderIdsSeen);
+    expect(registeredIds).toHaveLength(2);
   });
 
   it('reports modelCredentialCount from bundle generationContext (lane source of truth)', async () => {
@@ -130,10 +183,6 @@ describe('executeHypothesisGenerationRun', () => {
         updateResult: vi.fn(),
         nextRunNumberForStrategy: () => 1,
         syncAfterGenerate: vi.fn(),
-        getCanvasState: () => ({
-          previewNodeIdMap: new Map<string, string>(),
-          setRunInspectorPreview: vi.fn(),
-        }),
         scheduleFitView: vi.fn(),
         fetchBundle: vi.fn().mockResolvedValue({
           prompts: [prompt],

@@ -15,9 +15,9 @@ describe('useThemeEffect', () => {
     cleanup();
   });
 
-  it('defaults to light when no localStorage theme is set', () => {
+  it('defaults to dark when no localStorage theme is set', () => {
     render(<Probe />);
-    expect(document.documentElement.classList.contains('dark')).toBe(false);
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
   });
 
   it('applies the stored dark theme', () => {
@@ -32,9 +32,9 @@ describe('useThemeEffect', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 
-  it('falls back to light when localStorage holds a garbage value', () => {
+  it('falls back to dark when localStorage holds a garbage value', () => {
     localStorage.setItem('theme', 'neon' as never);
     render(<Probe />);
-    expect(document.documentElement.classList.contains('dark')).toBe(false);
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
   });
 });

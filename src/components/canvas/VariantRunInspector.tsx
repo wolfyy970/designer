@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { Button } from '@ds/components/ui/button';
+import { StatusDot } from '@ds/components/ui/status-dot';
+import type { StatusDotVariantProps } from '@ds/components/ui/status-dot-variants';
 import { EVALUATOR_RUBRIC_IDS, EVALUATOR_WORKER_COUNT } from '../../types/evaluation';
 import { storage } from '../../storage';
 import { useCanvasStore } from '../../stores/canvas-store';
@@ -12,7 +14,6 @@ import { useResultFiles } from '../../hooks/useResultFiles';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
 import { RF_INTERACTIVE } from '../../constants/canvas';
 import { GENERATION_STATUS } from '../../constants/generation';
-import { abortGenerationForStrategy } from '../../lib/generation-abort-registry';
 import { prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
 import { preferredArtifactFileOrder } from '../../lib/preview-entry';
 import { normalizeError } from '../../lib/error-utils';
@@ -36,13 +37,14 @@ const TAB_DEFS: { id: TabId; label: string }[] = [
   { id: 'evaluation', label: 'Evaluation' },
 ];
 
-function StatusDot({ status }: { status: string }) {
-  const color =
-    status === GENERATION_STATUS.COMPLETE ? 'bg-success' :
-    status === GENERATION_STATUS.GENERATING ? 'bg-accent animate-pulse' :
-    status === GENERATION_STATUS.ERROR ? 'bg-error' :
-    'bg-fg-faint';
-  return <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${color}`} />;
+function statusDotProps(status: string): StatusDotVariantProps {
+  if (status === GENERATION_STATUS.COMPLETE) return { tone: 'success' };
+  if (status === GENERATION_STATUS.GENERATING) return { tone: 'accent', animated: true };
+  if (status === GENERATION_STATUS.ERROR) return { tone: 'error' };
+  return { tone: 'neutral' };
+}
+function RunStatusDot({ status }: { status: string }) {
+  return <StatusDot {...statusDotProps(status)} aria-hidden />;
 }
 
 export default function VariantRunInspector() {
@@ -107,7 +109,6 @@ export default function VariantRunInspector() {
       ? results.find((r) => r.id === data.refId)
       : undefined;
   const result = activeResult ?? legacyResult;
-  const laneStrategyIdForAbort = strategyId ?? result?.strategyId;
 
   const strategy = useIncubatorStore((s) => {
     const vsId = strategyId ?? result?.strategyId;
@@ -244,7 +245,7 @@ export default function VariantRunInspector() {
 
   return (
     <aside
-      className="flex min-h-0 w-[var(--width-variant-inspector)] shrink-0 flex-col border-l border-border-subtle bg-surface pt-[var(--height-header)]"
+      className="absolute inset-y-0 right-0 z-[41] flex h-full min-h-0 w-[var(--width-variant-inspector)] flex-col border-l border-border-subtle bg-surface shadow-lg"
       aria-label="Preview run workspace"
     >
       {/* ── Identity header ──────────────────────────────────── */}
@@ -254,16 +255,6 @@ export default function VariantRunInspector() {
             {variantName}
           </h2>
           <div className="flex shrink-0 items-center gap-1">
-            {isGenerating && laneStrategyIdForAbort ? (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => abortGenerationForStrategy(laneStrategyIdForAbort)}
-                title="Stop generation (cancels the in-flight request)"
-              >
-                Stop
-              </Button>
-            ) : null}
             <Button
               variant="ghost"
               size="iconSm"
@@ -292,7 +283,7 @@ export default function VariantRunInspector() {
           )}
           <span className="text-border">&middot;</span>
           <span className="flex items-center gap-1 capitalize">
-            <StatusDot status={statusLabel} />
+            <RunStatusDot status={statusLabel} />
             {statusLabel}
           </span>
         </div>
@@ -314,8 +305,10 @@ export default function VariantRunInspector() {
             {label}
             {id === 'evaluation' && showEvaluationTabBadge ? (
               <>
-                <span
-                  className="ml-1 inline-flex h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent"
+                <StatusDot
+                  tone="accent"
+                  animated
+                  className="ml-1"
                   aria-hidden
                 />
                 <span className="ml-0.5 shrink-0 tabular-nums text-fg-faint">

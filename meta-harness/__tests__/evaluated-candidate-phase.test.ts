@@ -38,7 +38,7 @@ function stubCallbacks(partial: Partial<RunnerCallbacks> = {}): RunnerCallbacks 
 }
 
 const baseCfg: MetaHarnessConfig = {
-  apiBaseUrl: 'http://127.0.0.1:3001/api',
+  apiBaseUrl: 'http://127.0.0.1:4731/api',
   iterations: 2,
   proposerModel: 'test/model',
   proposerMaxToolRounds: 3,
