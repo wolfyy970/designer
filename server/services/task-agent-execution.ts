@@ -9,6 +9,7 @@
  */
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
+import type { ThinkingConfig } from '../../src/lib/thinking-defaults.ts';
 import { agenticOrchestratorEventToSse } from '../lib/agentic-sse-map.ts';
 import { buildAgenticSystemContext } from '../lib/build-agentic-system-context.ts';
 import type { SessionType } from '../lib/skill-discovery.ts';
@@ -28,7 +29,11 @@ export interface TaskAgentInput {
   providerId: string;
   modelId: string;
   sessionType: SessionType;
-  thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high';
+  /**
+   * Resolved thinking config (from `resolveThinkingConfig`). `thinking.level` is
+   * forwarded to Pi; the full object is logged for observability.
+   */
+  thinking?: ThinkingConfig;
   signal?: AbortSignal;
   correlationId?: string;
   /** File path in the sandbox to extract as the task result (default: 'result.json'). */
@@ -92,6 +97,7 @@ function emitTaskRunLine(input: {
   resultFile?: string;
   sandboxFileCount: number;
   errorMessage?: string;
+  thinking?: ThinkingConfig;
 }): void {
   const ts = new Date().toISOString();
   writeObservabilityLine({
@@ -108,6 +114,7 @@ function emitTaskRunLine(input: {
       resultFile: input.resultFile,
       sandboxFileCount: input.sandboxFileCount,
       errorMessage: input.errorMessage,
+      thinking: input.thinking,
     },
   });
   appendTaskRunLogEntry({
@@ -120,6 +127,7 @@ function emitTaskRunLine(input: {
     resultFile: input.resultFile,
     sandboxFileCount: input.sandboxFileCount,
     errorMessage: input.errorMessage,
+    thinking: input.thinking,
   });
   if (env.isDev) {
     console.debug('[task-agent] task_run summary', {
@@ -177,6 +185,7 @@ export async function executeTaskAgentStream(
       outcome: 'error',
       sandboxFileCount: 0,
       errorMessage,
+      thinking: input.thinking,
     });
     return null;
   }
@@ -196,7 +205,7 @@ export async function executeTaskAgentStream(
         userPrompt: input.userPrompt,
         providerId: input.providerId,
         modelId: input.modelId,
-        thinkingLevel: input.thinkingLevel,
+        thinkingLevel: input.thinking?.level,
         signal: input.signal,
         correlationId,
         sessionType: input.sessionType,
@@ -316,6 +325,7 @@ export async function executeTaskAgentStream(
       resultFile: resultFileUsed,
       sandboxFileCount,
       errorMessage: outcome !== 'success' ? errorMessage : undefined,
+      thinking: input.thinking,
     });
     releaseAgenticSlot();
   }

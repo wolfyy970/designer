@@ -1,4 +1,5 @@
 import { Loader2 } from 'lucide-react';
+import { formatElapsedCompact } from '../../../lib/stream-display-format';
 
 interface GeneratingSkeletonProps {
   label?: string;
@@ -32,7 +33,7 @@ export default function GeneratingSkeleton({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">{pulseBars}</div>
           {elapsed != null ? (
-            <span className="shrink-0 tabular-nums text-nano text-fg-muted">{elapsed}s</span>
+            <span className="shrink-0 tabular-nums text-nano text-fg-muted">{formatElapsedCompact(elapsed)}</span>
           ) : null}
         </div>
         {detail ? (
@@ -55,7 +56,7 @@ export default function GeneratingSkeleton({
             {label}
           </span>
           {elapsed != null && (
-            <span className="tabular-nums text-nano text-fg-muted">{elapsed}s</span>
+            <span className="tabular-nums text-nano text-fg-muted">{formatElapsedCompact(elapsed)}</span>
           )}
         </div>
         {detail ? (

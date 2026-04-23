@@ -9,6 +9,8 @@ import {
   buildInputsGenerateUserMessage,
 } from '../../src/lib/prompts/inputs-generate.ts';
 import { executeTaskAgentStream } from '../services/task-agent-execution.ts';
+import { resolveThinkingConfig } from '../../src/lib/thinking-defaults.ts';
+import { ThinkingOverrideSchema } from '../lib/hypothesis-schemas.ts';
 import { env } from '../env.ts';
 
 const InputsGenerateTargetSchema = z.enum([
@@ -26,6 +28,7 @@ const InputsGenerateRequestSchema = z.object({
   designConstraints: z.string().optional(),
   providerId: z.string().min(1),
   modelId: z.string().min(1),
+  thinking: ThinkingOverrideSchema.optional(),
 });
 
 const inputsGenerate = new Hono();
@@ -76,6 +79,7 @@ ${contextMessage}`;
       });
     }
     await runTaskAgentSseBody(stream, async ({ write, allocId, gate }) => {
+      const thinking = resolveThinkingConfig('inputs', body.modelId, body.thinking);
       const taskResult = await executeTaskAgentStream(
         stream,
         {
@@ -83,6 +87,7 @@ ${contextMessage}`;
           providerId: body.providerId,
           modelId: body.modelId,
           sessionType: 'inputs-gen',
+          thinking,
           signal: abortSignal,
           correlationId,
           resultFile: 'result.txt',

@@ -41,6 +41,13 @@ export interface ProviderOptions {
    * @see server/lib/completion-budget.ts
    */
   completionPurpose?: 'incubate' | 'compaction' | 'agent_turn' | 'default';
+  /**
+   * Server: resolved reasoning config for this call (level + token budget).
+   * Obtain via `resolveThinkingConfig(task, modelId, override?)` — providers
+   * forward this to their OpenRouter / OpenAI-compatible reasoning fields.
+   * @see src/lib/thinking-defaults.ts, src/lib/provider-thinking-params.ts
+   */
+  thinking?: import('../lib/thinking-defaults').ThinkingConfig;
 }
 
 export interface Provenance {
@@ -96,6 +103,7 @@ export interface LivenessSlice {
   streamingToolName?: string;
   streamingToolPath?: string;
   streamingToolChars?: number;
+  streamedModelChars?: number;
   agenticPhase?: AgenticPhase;
   evaluationStatus?: string;
   /** startedAt of the most recent open thinking turn (endedAt == null), if any. */
@@ -113,6 +121,7 @@ const LIVENESS_SLICE_KEYS = [
   'streamingToolName',
   'streamingToolPath',
   'streamingToolChars',
+  'streamedModelChars',
   'agenticPhase',
   'evaluationStatus',
 ] as const satisfies readonly (keyof Omit<LivenessSlice, 'activeThinkingStartedAt'>)[];

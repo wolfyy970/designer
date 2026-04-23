@@ -27,6 +27,7 @@ function resultToMonitorState(result: GenerationResult): TaskStreamState {
     progressMessage: result.progressMessage,
     activityLog: result.activityLog,
     streamedModelChars: result.streamedModelChars,
+    thinkingTurns: result.thinkingTurns,
   };
 }
 
@@ -80,13 +81,15 @@ export function VariantNodeGenerating({
           </Button>
         ) : null}
       </div>
-      <div className="border-t border-border-subtle p-3">
-        <TaskStreamMonitor
-          state={resultToMonitorState(result)}
-          elapsed={elapsed}
-          fallbackLabel={isRevising ? 'Revising…' : 'Agent working…'}
-        />
-      </div>
+      {!isWorkspaceOpen && (
+        <div className="border-t border-border-subtle p-3">
+          <TaskStreamMonitor
+            state={resultToMonitorState(result)}
+            elapsed={elapsed}
+            fallbackLabel={isRevising ? 'Revising…' : 'Agent working…'}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Brain, Loader2 } from 'lucide-react';
 import type { LivenessSlice, SkillInfo, TodoItem } from '../../../types/provider';
 import { buildGeneratingPrimaryLine, buildNoPlanBuildingLine } from '../../../lib/generating-footer-primary';
 import { useGenerationStallHints } from '../../../hooks/use-generation-stall-hints';
-import { StreamingToolRow } from './StreamingToolRow';
+import { formatElapsedCompact, formatTokEstimate } from '../../../lib/stream-display-format';
 
 export function GeneratingFooter({
   plan,
@@ -31,9 +31,7 @@ export function GeneratingFooter({
     progressMessage,
     activeToolName,
     activeToolPath,
-    streamingToolName,
-    streamingToolPath,
-    streamingToolChars,
+    streamedModelChars,
     agenticPhase,
     evaluationStatus,
   } = liveness;
@@ -138,14 +136,6 @@ export function GeneratingFooter({
             <Loader2 size={10} className="shrink-0 animate-spin text-accent" />
             <span className="truncate">{primaryLine}</span>
           </span>
-          {isStreamingToolArgs && streamingToolName != null && (
-            <StreamingToolRow
-              toolName={streamingToolName}
-              toolPath={streamingToolPath}
-              streamedChars={streamingToolChars ?? 0}
-              className="flex items-center gap-1.5 pl-[18px] text-nano leading-snug text-fg-secondary"
-            />
-          )}
           {!compact ? (
             <>
               {(isEvaluating || isRevising) && hasPlan && (
@@ -211,14 +201,32 @@ export function GeneratingFooter({
               {(showFileStall || firstFileWait) && (
                 <span className="pl-[18px] text-nano leading-snug text-warning">
                   {firstFileWait
-                    ? `Also: No files saved yet after ${elapsed}s — planning or drafting first write may be slow on this model.`
+                    ? `Also: No files saved yet after ${formatElapsedCompact(elapsed)} — planning or drafting first write may be slow on this model.`
                     : `Also: No new file saved for ${fileStallSec}s — the model may still be streaming a large write or edit argument (typical for big CSS/HTML). Check the activity log; use Stop if it is clearly stuck.`}
                 </span>
               )}
             </>
           ) : null}
         </div>
-        <span className="shrink-0 tabular-nums text-nano leading-tight text-fg-muted">{elapsed}s</span>
+        <div className="flex shrink-0 items-center gap-1.5 font-mono tabular-nums text-nano text-fg-muted" aria-live="polite">
+          <span>{formatElapsedCompact(elapsed)}</span>
+          {formatTokEstimate(streamedModelChars) ? (
+            <>
+              <span aria-hidden>·</span>
+              <span
+                title={`${streamedModelChars} streamed characters${isActivelyThinking ? ' (reasoning)' : ''}`}
+                className="inline-flex items-center gap-1"
+              >
+                {isActivelyThinking ? (
+                  <Brain size={10} className="shrink-0 text-accent" aria-label="thinking" />
+                ) : (
+                  <span aria-hidden>↓</span>
+                )}
+                {formatTokEstimate(streamedModelChars)} tokens
+              </span>
+            </>
+          ) : null}
+        </div>
       </div>
     </div>
   );

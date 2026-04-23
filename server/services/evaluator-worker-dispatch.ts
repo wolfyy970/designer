@@ -19,6 +19,7 @@ import { createPreviewSession, deletePreviewSession } from './preview-session-st
 import { encodeVirtualPathForUrl, resolvePreviewEntryPath } from '../../src/lib/preview-entry.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import { extractLlmJsonObjectSegment } from '../lib/extract-llm-json.ts';
+import { resolveThinkingConfig } from '../../src/lib/thinking-defaults.ts';
 import { EVAL_DEGRADED_MSG_MAX } from '../lib/content-limits.ts';
 import { buildEvaluatorUserContent } from './evaluator-prompt-assembly.ts';
 
@@ -179,6 +180,7 @@ async function runOneEvaluator(
 ): Promise<EvaluatorWorkerReport> {
   const provider = getProvider(providerId);
   if (!provider) throw new Error(`Unknown provider: ${providerId}`);
+  const evaluatorThinking = resolveThinkingConfig('evaluator', modelId);
   const response = await loggedGenerateChat(
     provider,
     providerId,
@@ -186,7 +188,7 @@ async function runOneEvaluator(
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent },
     ],
-    { model: modelId, signal: logCtx.signal },
+    { model: modelId, signal: logCtx.signal, thinking: evaluatorThinking },
     {
       source: 'evaluator',
       phase: `Rubric: ${rubric}`,

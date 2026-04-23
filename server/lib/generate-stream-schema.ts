@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { GENERATION_MODE } from '../../src/constants/generation.ts';
-import { ThinkingLevelSchema } from './hypothesis-schemas.ts';
+import { ThinkingLevelSchema, ThinkingOverrideSchema } from './hypothesis-schemas.ts';
 
 const EvaluationContextObjectSchema = z.object({
   strategyName: z.string().optional(),
@@ -44,7 +44,10 @@ export const GenerateStreamBodySchema = z.object({
   correlationId: z.string().min(1).max(200).optional(),
   supportsVision: z.boolean().optional(),
   mode: GenerateModeSchema,
+  /** Legacy field — still accepted for back-compat; prefer `thinking`. */
   thinkingLevel: ThinkingLevelSchema.optional(),
+  /** Per-request thinking override (level + budget). Server merges with task defaults. */
+  thinking: ThinkingOverrideSchema.optional(),
   evaluationContext: EvaluationContextSchema,
   evaluatorProviderId: z.string().optional(),
   evaluatorModelId: z.string().optional(),

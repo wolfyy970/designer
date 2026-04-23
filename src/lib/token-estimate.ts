@@ -23,7 +23,7 @@
  */
 import type { ChatMessage, ContentPart } from '../types/provider';
 
-const CHARS_PER_TOKEN = 3.6;
+export const CHARS_PER_TOKEN = 3.6;
 /** Per-message role/format overhead in estimated tokens. */
 const MESSAGE_OVERHEAD = 6;
 

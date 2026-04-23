@@ -9,6 +9,7 @@ import type { ProvenanceContext } from '../types/provenance-context';
 import type { ProviderModel } from '../types/provider';
 import type { EvaluationContextPayload } from '../types/evaluation';
 import type { WorkspaceSnapshotWire } from '../lib/workspace-snapshot-schema';
+import type { ThinkingOverride } from '../lib/thinking-defaults';
 
 // ── Incubate (spec → incubation plan) ────────────────────────────────
 
@@ -22,6 +23,8 @@ export interface IncubateRequest {
     count?: number;
     existingStrategies?: HypothesisStrategy[];
   };
+  /** Optional per-request thinking override; server merges with task defaults + capability gate. */
+  thinking?: ThinkingOverride;
 }
 
 export type IncubateResponse = IncubationPlan;
@@ -83,6 +86,7 @@ export interface DesignSystemExtractRequest {
   images: ReferenceImage[];
   providerId: string;
   modelId: string;
+  thinking?: ThinkingOverride;
 }
 
 export interface DesignSystemExtractResponse {
@@ -105,6 +109,7 @@ export interface InputsGenerateRequest {
   designConstraints?: string;
   providerId: string;
   modelId: string;
+  thinking?: ThinkingOverride;
 }
 
 export interface InputsGenerateResponse {

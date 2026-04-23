@@ -34,6 +34,7 @@ import {
   type TaskStreamState,
 } from '../../../hooks/task-stream-state';
 import { NodeErrorBlock } from './shared/NodeErrorBlock';
+import { useThinkingDefaultsStore } from '../../../stores/thinking-defaults-store';
 
 const COUNT_OPTIONS = [1, 2, 3, 5];
 const DEFAULT_COUNT = 3;
@@ -140,6 +141,7 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
         onPatch: (patch) => setTaskStreamState((prev) => ({ ...prev, ...patch })),
       });
       session = taskSession;
+      const thinkingOverride = useThinkingDefaultsStore.getState().overrides.incubate;
       const map = await incubateStream(
         {
           spec: partialSpec,
@@ -148,6 +150,7 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
           referenceDesigns,
           supportsVision,
           promptOptions: { count: hypothesisCount, existingStrategies },
+          thinking: thinkingOverride,
         },
         { agentic: taskSession.callbacks },
       );

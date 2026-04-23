@@ -10,32 +10,84 @@ const base: TaskStreamState = { status: 'streaming' };
 afterEach(() => cleanup());
 
 describe('TaskStreamMonitor — status row', () => {
-  it('hides the tok chip when streamedModelChars is 0 / unset', () => {
+  it('hides the token chip when streamedModelChars is 0 / unset', () => {
     render(<TaskStreamMonitor state={{ ...base, streamedModelChars: 0 }} elapsed={3} />);
-    expect(screen.queryByText(/tok/)).toBeNull();
+    expect(screen.queryByText(/tokens/)).toBeNull();
   });
 
-  it('renders "~N tok" under 1k with integer count', () => {
-    // 1800 chars / 3.6 = 500 tok
-    render(<TaskStreamMonitor state={{ ...base, streamedModelChars: 1800 }} elapsed={3} />);
-    expect(screen.queryByText('~500 tok')).not.toBeNull();
+  it('renders "N tokens" with ↓ arrow under 1k with integer count', () => {
+    // 1800 chars / 3.6 = 500 tokens
+    const { container } = render(
+      <TaskStreamMonitor state={{ ...base, streamedModelChars: 1800 }} elapsed={3} />,
+    );
+    expect(container.textContent).toContain('500 tokens');
+    expect(container.textContent).toContain('↓');
   });
 
-  it('renders "~Nk tok" above 1000 with integer formatting', () => {
-    // 36_000 / 3.6 = 10_000 tok → "10k"
-    render(<TaskStreamMonitor state={{ ...base, streamedModelChars: 36_000 }} elapsed={10} />);
-    expect(screen.queryByText('~10k tok')).not.toBeNull();
+  it('renders "Nk tokens" above 1000 with integer formatting', () => {
+    // 36_000 / 3.6 = 10_000 tokens → "10k"
+    const { container } = render(
+      <TaskStreamMonitor state={{ ...base, streamedModelChars: 36_000 }} elapsed={10} />,
+    );
+    expect(container.textContent).toContain('10k tokens');
   });
 
-  it('renders "~N.Nk tok" for mid-thousand counts', () => {
-    // 4200 / 3.6 ≈ 1167 tok → "1.2k"
-    render(<TaskStreamMonitor state={{ ...base, streamedModelChars: 4200 }} elapsed={10} />);
-    expect(screen.queryByText('~1.2k tok')).not.toBeNull();
+  it('renders "N.Nk tokens" for mid-thousand counts', () => {
+    // 4200 / 3.6 ≈ 1167 tokens → "1.2k"
+    const { container } = render(
+      <TaskStreamMonitor state={{ ...base, streamedModelChars: 4200 }} elapsed={10} />,
+    );
+    expect(container.textContent).toContain('1.2k tokens');
   });
 
-  it('renders elapsed seconds when provided', () => {
+  it('renders elapsed seconds under one minute', () => {
     render(<TaskStreamMonitor state={base} elapsed={42} />);
     expect(screen.queryByText('42s')).not.toBeNull();
+  });
+
+  it('renders elapsed as "Nm Ns" at one minute or more', () => {
+    render(<TaskStreamMonitor state={base} elapsed={87} />);
+    expect(screen.queryByText('1m 27s')).not.toBeNull();
+  });
+
+  it('shows the ↓ arrow when no thinking turn is open', () => {
+    const { container } = render(
+      <TaskStreamMonitor state={{ ...base, streamedModelChars: 1800 }} elapsed={3} />,
+    );
+    expect(container.textContent).toContain('↓');
+    expect(container.querySelector('[aria-label="thinking"]')).toBeNull();
+    expect(container.textContent).toContain('tokens');
+  });
+
+  it('shows the Brain icon and keeps "tokens" label when a thinking turn is open', () => {
+    const { container } = render(
+      <TaskStreamMonitor
+        state={{
+          ...base,
+          streamedModelChars: 1800,
+          thinkingTurns: [{ turnId: 0, startedAt: Date.now(), text: 'reasoning…' }],
+        }}
+        elapsed={3}
+      />,
+    );
+    expect(container.querySelector('[aria-label="thinking"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('↓');
+    expect(container.textContent).toContain('tokens');
+  });
+
+  it('reverts to the ↓ arrow once every thinking turn has endedAt', () => {
+    const { container } = render(
+      <TaskStreamMonitor
+        state={{
+          ...base,
+          streamedModelChars: 1800,
+          thinkingTurns: [{ turnId: 0, startedAt: 1, endedAt: 2, text: 'done' }],
+        }}
+        elapsed={3}
+      />,
+    );
+    expect(container.querySelector('[aria-label="thinking"]')).toBeNull();
+    expect(container.textContent).toContain('↓');
   });
 
   it('falls back to the provided label when no progressMessage is set', () => {

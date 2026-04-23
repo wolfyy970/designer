@@ -2,6 +2,7 @@ import { normalizeError } from '../../src/lib/error-utils.ts';
 import { env } from '../env.ts';
 import { runAgenticWithEvaluation } from './agentic-orchestrator.ts';
 import type { GenerateStreamBody } from '../lib/generate-stream-schema.ts';
+import { resolveThinkingConfig } from '../../src/lib/thinking-defaults.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { agenticOrchestratorEventToSse } from '../lib/agentic-sse-map.ts';
 import type { WriteGate } from '../lib/sse-write-gate.ts';
@@ -62,12 +63,14 @@ async function executeGenerateStream(
   };
 
   const runAgentic = async () => {
+    const thinkingOverride = body.thinking ?? (body.thinkingLevel ? { level: body.thinkingLevel } : undefined);
+    const designThinking = resolveThinkingConfig('design', body.modelId, thinkingOverride);
     const agenticResult = await runAgenticWithEvaluation({
       build: {
         userPrompt: body.prompt,
         providerId: body.providerId,
         modelId: body.modelId,
-        thinkingLevel: body.thinkingLevel,
+        thinkingLevel: designThinking.level,
         signal: abortSignal,
         ...(correlationId ? { correlationId } : {}),
       },

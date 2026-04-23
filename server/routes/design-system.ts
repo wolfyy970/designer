@@ -6,6 +6,8 @@ import { parseRequestJson } from '../lib/parse-request.ts';
 import { runTaskAgentSseBody } from '../lib/sse-task-route.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { executeTaskAgentStream } from '../services/task-agent-execution.ts';
+import { resolveThinkingConfig } from '../../src/lib/thinking-defaults.ts';
+import { ThinkingOverrideSchema } from '../lib/hypothesis-schemas.ts';
 import { env } from '../env.ts';
 
 const designSystem = new Hono();
@@ -18,6 +20,7 @@ const ExtractRequestSchema = z.object({
   }).passthrough()),
   providerId: z.string().min(1),
   modelId: z.string().min(1),
+  thinking: ThinkingOverrideSchema.optional(),
 });
 
 designSystem.post('/extract', async (c) => {
@@ -57,6 +60,7 @@ Extract the design system from these screenshots.`;
       });
     }
     await runTaskAgentSseBody(stream, async ({ write, allocId, gate }) => {
+      const thinking = resolveThinkingConfig('design-system', body.modelId, body.thinking);
       const taskResult = await executeTaskAgentStream(
         stream,
         {
@@ -64,6 +68,7 @@ Extract the design system from these screenshots.`;
           providerId: body.providerId,
           modelId: body.modelId,
           sessionType: 'design-system',
+          thinking,
           signal: abortSignal,
           correlationId,
           resultFile: 'result.json',

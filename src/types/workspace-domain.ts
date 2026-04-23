@@ -3,8 +3,9 @@
  * Canvas nodes/edges are a projection; semantic relations live here.
  */
 import type { ReferenceImage } from './spec';
+import type { ThinkingLevel } from '../lib/thinking-defaults';
 
-export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high';
+export type { ThinkingLevel };
 
 /** Wired inputs for incubate: input + preview node ids feeding an incubator. */
 export interface DomainIncubatorWiring {

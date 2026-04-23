@@ -16,6 +16,7 @@ import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
 import { NodeErrorBlock } from './shared/NodeErrorBlock';
 import type { ReferenceImage } from '../../../types/spec';
+import { useThinkingDefaultsStore } from '../../../stores/thinking-defaults-store';
 
 type DesignSystemNodeType = Node<DesignSystemNodeData, 'designSystem'>;
 
@@ -85,11 +86,13 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
     setExtracting(true);
     setExtractError(null);
     try {
+      const thinkingOverride = useThinkingDefaultsStore.getState().overrides['design-system'];
       const response = await extractDesignSystem(
         {
           images,
           providerId: providerId!,
           modelId: modelId!,
+          thinking: thinkingOverride,
         },
         { signal: ac.signal },
       );

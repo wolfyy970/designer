@@ -5,8 +5,13 @@ import { z } from 'zod';
 import { DesignSpecSchema } from '../../src/types/spec.ts';
 import { DomainDesignSystemContentSchema } from '../../src/lib/domain-design-system-schema.ts';
 import { WorkspaceSnapshotSchema } from '../../src/lib/workspace-snapshot-schema.ts';
+import {
+  ThinkingLevelSchema,
+  ThinkingOverrideSchema,
+} from '../../src/lib/thinking-defaults.ts';
 
-export const ThinkingLevelSchema = z.enum(['off', 'minimal', 'low', 'medium', 'high']);
+// Re-exported so other server schemas / tests that `import { ThinkingLevelSchema } from './hypothesis-schemas'` keep working.
+export { ThinkingLevelSchema, ThinkingOverrideSchema };
 
 export const DomainHypothesisSchema = z.object({
   id: z.string(),
@@ -26,6 +31,8 @@ export const DomainModelProfileSchema = z.object({
   modelId: z.string(),
   title: z.string().optional(),
   thinkingLevel: ThinkingLevelSchema.optional(),
+  /** Optional per-request thinking override that rides alongside the model profile. */
+  thinking: ThinkingOverrideSchema.optional(),
 });
 
 export const HypothesisStrategySchema = z.object({

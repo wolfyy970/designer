@@ -11,6 +11,7 @@ export const STORAGE_KEYS = {
   GENERATION: 'auto-designer-generation',
   PROMPTS: 'auto-designer-prompts',
   EVALUATOR_DEFAULTS: 'auto-designer-evaluator-defaults',
+  THINKING_DEFAULTS: 'auto-designer-thinking-defaults',
 
   // localStorage (manual)
   /** User dismissed the optional-input tip on the canvas (string value is legacy; stable across renames). */
@@ -36,6 +37,7 @@ export const PERSISTED_LOCAL_STORAGE_KEY_NAMES = [
   'GENERATION',
   'PROMPTS',
   'EVALUATOR_DEFAULTS',
+  'THINKING_DEFAULTS',
   'CANVASES',
   'MIGRATION_FLAG',
 ] as const satisfies ReadonlyArray<keyof typeof STORAGE_KEYS>;

@@ -15,6 +15,7 @@ import {
 } from '../../lib/provider-helpers.ts';
 import { streamOpenAICompatibleChat } from '../../lib/openai-chat-stream.ts';
 import { supportsReasoningModel } from '../../../src/lib/model-capabilities.ts';
+import { openRouterThinkingFields } from '../../../src/lib/provider-thinking-params.ts';
 
 function authHeaders(): Record<string, string> {
   return {
@@ -51,7 +52,8 @@ export class OpenRouterGenerationProvider implements GenerationProvider {
     const model = options.model || 'anthropic/claude-sonnet-4.5';
     const purpose = options.completionPurpose ?? 'default';
     const maxTok = await completionMaxTokensForChat('openrouter', model, messages, purpose);
-    const requestBody = buildChatRequestFromMessages(model, messages, undefined, maxTok);
+    const thinkingExtras = openRouterThinkingFields(options.thinking);
+    const requestBody = buildChatRequestFromMessages(model, messages, thinkingExtras, maxTok);
 
     const data = await fetchChatCompletion(
       `${env.OPENROUTER_BASE_URL}/api/v1/chat/completions`,
@@ -75,7 +77,13 @@ export class OpenRouterGenerationProvider implements GenerationProvider {
     const model = options.model || 'anthropic/claude-sonnet-4.5';
     const purpose = options.completionPurpose ?? 'default';
     const maxTok = await completionMaxTokensForChat('openrouter', model, messages, purpose);
-    const requestBody = buildChatRequestFromMessages(model, messages, { stream: true }, maxTok);
+    const thinkingExtras = openRouterThinkingFields(options.thinking);
+    const requestBody = buildChatRequestFromMessages(
+      model,
+      messages,
+      { stream: true, ...thinkingExtras },
+      maxTok,
+    );
     return streamOpenAICompatibleChat(
       `${env.OPENROUTER_BASE_URL}/api/v1/chat/completions`,
       requestBody,

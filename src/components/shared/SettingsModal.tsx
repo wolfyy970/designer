@@ -5,6 +5,7 @@ import { PartitionSlider } from './PartitionSlider';
 import { floatWeightsToPercents, percentsToFloatWeights } from '../../lib/partition-slider-utils';
 import { useCanvasStore } from '../../stores/canvas-store';
 import { useEvaluatorDefaultsStore } from '../../stores/evaluator-defaults-store';
+import { useThinkingDefaultsStore } from '../../stores/thinking-defaults-store';
 import {
   EVALUATOR_MAX_REVISION_ROUNDS_MAX,
   EVALUATOR_MAX_REVISION_ROUNDS_MIN,
@@ -12,6 +13,24 @@ import {
   EVALUATOR_MIN_SCORE,
 } from '../../types/evaluator-settings';
 import { EVALUATOR_RUBRIC_IDS, type EvaluatorRubricId } from '../../types/evaluation';
+import {
+  THINKING_BUDGET_BY_LEVEL,
+  THINKING_BUDGET_MAX_TOKENS,
+  THINKING_BUDGET_MIN_TOKENS,
+  THINKING_CONFIG_DEFAULTS,
+  THINKING_LEVELS,
+  THINKING_TASKS,
+  type ThinkingLevel,
+  type ThinkingTask,
+} from '../../lib/thinking-defaults';
+
+const THINKING_TASK_LABELS: Record<ThinkingTask, string> = {
+  design: 'Design (agent build)',
+  incubate: 'Incubator / hypothesis auto-generate',
+  inputs: 'Input auto-generate',
+  'design-system': 'Design system extract',
+  evaluator: 'Evaluator',
+};
 
 const RUBRIC_LABELS: Record<EvaluatorRubricId, string> = {
   design: 'Design quality',
@@ -144,6 +163,7 @@ export default function SettingsModal({
               </span>
             </label>
           </div>
+          <ReasoningSection />
           {import.meta.env.DEV ? (
             <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">
               <span className="block text-sm font-medium text-fg">Design system</span>
@@ -249,6 +269,78 @@ function EvaluatorSettingsTab() {
         rubricWeights={rubricWeights}
         setRubricWeights={setRubricWeights}
       />
+    </div>
+  );
+}
+
+function ReasoningSection() {
+  const overrides = useThinkingDefaultsStore((s) => s.overrides);
+  const setLevel = useThinkingDefaultsStore((s) => s.setLevel);
+  const setBudgetTokens = useThinkingDefaultsStore((s) => s.setBudgetTokens);
+  const resetTask = useThinkingDefaultsStore((s) => s.resetTask);
+
+  return (
+    <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">
+      <span className="block text-sm font-medium text-fg">Reasoning (thinking)</span>
+      <p className="mt-1 text-xs text-fg-secondary">
+        Per-task reasoning effort + token budget for models that support extended thinking.
+        Ignored on models without reasoning support (chip shows the ↓ arrow instead of the Brain icon).
+      </p>
+      <div className="mt-3 space-y-1.5">
+        {THINKING_TASKS.map((task) => {
+          const defaults = THINKING_CONFIG_DEFAULTS[task];
+          const override = overrides[task] ?? {};
+          const effectiveLevel = override.level ?? defaults.level;
+          const budgetPlaceholder = THINKING_BUDGET_BY_LEVEL[effectiveLevel];
+          const isCustomized = override.level !== undefined || override.budgetTokens !== undefined;
+          return (
+            <div key={task} className="flex items-center gap-2">
+              <span className="min-w-[9rem] text-nano text-fg-secondary">
+                {THINKING_TASK_LABELS[task]}
+              </span>
+              <select
+                value={override.level ?? defaults.level}
+                onChange={(e) => {
+                  const v = e.target.value as ThinkingLevel;
+                  setLevel(task, v === defaults.level ? undefined : v);
+                }}
+                className="rounded-md border border-border bg-bg px-2 py-1 text-nano text-fg-secondary input-focus"
+                aria-label={`${THINKING_TASK_LABELS[task]} level`}
+              >
+                {THINKING_LEVELS.map((lvl) => (
+                  <option key={lvl} value={lvl}>
+                    {lvl}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min={THINKING_BUDGET_MIN_TOKENS}
+                max={THINKING_BUDGET_MAX_TOKENS}
+                step={256}
+                value={override.budgetTokens ?? ''}
+                placeholder={String(budgetPlaceholder)}
+                onChange={(e) => {
+                  const raw = e.target.value.trim();
+                  if (raw === '') setBudgetTokens(task, undefined);
+                  else setBudgetTokens(task, Number(raw));
+                }}
+                className="w-24 rounded-md border border-border bg-bg px-2 py-1 text-nano tabular-nums text-fg-secondary input-focus"
+                aria-label={`${THINKING_TASK_LABELS[task]} budget in tokens`}
+              />
+              <span className="text-nano text-fg-faint">tok</span>
+              <button
+                type="button"
+                onClick={() => resetTask(task)}
+                disabled={!isCustomized}
+                className="ml-auto text-nano text-fg-faint disabled:opacity-40 hover:text-fg-secondary"
+              >
+                Reset
+              </button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

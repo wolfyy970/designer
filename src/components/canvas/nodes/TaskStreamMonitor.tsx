@@ -1,6 +1,7 @@
-import { Loader2 } from 'lucide-react';
+import { Brain, Loader2 } from 'lucide-react';
 import type { TaskStreamState } from '../../../hooks/task-stream-state';
 import { RF_INTERACTIVE } from '../../../constants/canvas';
+import { formatElapsedCompact, formatTokEstimate } from '../../../lib/stream-display-format';
 
 type Props = {
   state: TaskStreamState;
@@ -10,16 +11,14 @@ type Props = {
   fallbackLabel?: string;
 };
 
-/** Loose chars-per-token approximation; matches `src/lib/token-estimate.ts`. */
-const CHARS_PER_TOKEN = 3.6;
-
-/** Compact display: `432` or `1.2k`. Empty string when estimate is zero. */
-function formatTokEstimate(chars: number | undefined): string {
-  if (!chars || chars < 1) return '';
-  const toks = Math.round(chars / CHARS_PER_TOKEN);
-  if (toks < 1000) return String(toks);
-  const k = toks / 1000;
-  return `${k >= 10 ? k.toFixed(0) : k.toFixed(1)}k`;
+/** A thinking turn is "active" when its endedAt is not set. */
+function hasOpenThinkingTurn(state: TaskStreamState): boolean {
+  const turns = state.thinkingTurns;
+  if (!turns || turns.length === 0) return false;
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (turns[i]!.endedAt == null) return true;
+  }
+  return false;
 }
 
 /**
@@ -49,6 +48,7 @@ export default function TaskStreamMonitor({
       ? state.activityLog[state.activityLog.length - 1]?.trim()
       : undefined;
   const tokChip = formatTokEstimate(state.streamedModelChars);
+  const isActivelyThinking = hasOpenThinkingTurn(state);
 
   return (
     <div
@@ -61,16 +61,24 @@ export default function TaskStreamMonitor({
         </div>
         {(tokChip || elapsed != null) && (
           <div
-            className="flex shrink-0 items-center gap-2 font-mono tabular-nums text-fg-faint"
+            className="flex shrink-0 items-center gap-1.5 font-mono tabular-nums text-fg-faint"
             aria-live="polite"
           >
+            {elapsed != null ? <span>{formatElapsedCompact(elapsed)}</span> : null}
+            {tokChip && elapsed != null ? <span aria-hidden>·</span> : null}
             {tokChip ? (
-              <span title={`${state.streamedModelChars} streamed characters (≈ ${tokChip} tokens)`}>
-                ~{tokChip} tok
+              <span
+                title={`${state.streamedModelChars} streamed characters (≈ ${tokChip} tokens${isActivelyThinking ? ', reasoning' : ''})`}
+                className="inline-flex items-center gap-1"
+              >
+                {isActivelyThinking ? (
+                  <Brain size={10} className="shrink-0 text-accent" aria-label="thinking" />
+                ) : (
+                  <span aria-hidden>↓</span>
+                )}
+                {tokChip} tokens
               </span>
             ) : null}
-            {tokChip && elapsed != null ? <span aria-hidden>·</span> : null}
-            {elapsed != null ? <span>{elapsed}s</span> : null}
           </div>
         )}
       </div>

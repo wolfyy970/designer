@@ -15,6 +15,7 @@ import {
 } from '../../lib/provider-helpers.ts';
 import { streamOpenAICompatibleChat } from '../../lib/openai-chat-stream.ts';
 import { supportsReasoningModel } from '../../../src/lib/model-capabilities.ts';
+import { lmStudioThinkingFields } from '../../../src/lib/provider-thinking-params.ts';
 
 const DEFAULT_MODEL = 'qwen/qwen3-coder-next';
 
@@ -41,7 +42,13 @@ export class LMStudioProvider implements GenerationProvider {
     const model = options.model || DEFAULT_MODEL;
     const purpose = options.completionPurpose ?? 'default';
     const maxTok = await completionMaxTokensForChat('lmstudio', model, messages, purpose);
-    const requestBody = buildChatRequestFromMessages(model, messages, { stream: false }, maxTok);
+    const thinkingExtras = lmStudioThinkingFields(options.thinking);
+    const requestBody = buildChatRequestFromMessages(
+      model,
+      messages,
+      { stream: false, ...thinkingExtras },
+      maxTok,
+    );
 
     const data = await fetchChatCompletion(
       `${env.LMSTUDIO_URL}/v1/chat/completions`,
@@ -62,7 +69,13 @@ export class LMStudioProvider implements GenerationProvider {
     const model = options.model || DEFAULT_MODEL;
     const purpose = options.completionPurpose ?? 'default';
     const maxTok = await completionMaxTokensForChat('lmstudio', model, messages, purpose);
-    const requestBody = buildChatRequestFromMessages(model, messages, { stream: true }, maxTok);
+    const thinkingExtras = lmStudioThinkingFields(options.thinking);
+    const requestBody = buildChatRequestFromMessages(
+      model,
+      messages,
+      { stream: true, ...thinkingExtras },
+      maxTok,
+    );
     return streamOpenAICompatibleChat(
       `${env.LMSTUDIO_URL}/v1/chat/completions`,
       requestBody,

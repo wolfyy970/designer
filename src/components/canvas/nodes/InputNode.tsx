@@ -24,6 +24,7 @@ import TaskStreamMonitor from './TaskStreamMonitor';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
 import { NodeErrorBlock } from './shared/NodeErrorBlock';
+import { useThinkingDefaultsStore } from '../../../stores/thinking-defaults-store';
 
 const GENERATE_INPUT_API_ID: Partial<
   Record<CanvasNodeType, InputsGenerateTargetApiId>
@@ -91,6 +92,7 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
         onPatch: (patch) => setTaskStreamState((prev) => ({ ...prev, ...patch })),
       });
       session = taskSession;
+      const thinkingOverride = useThinkingDefaultsStore.getState().overrides.inputs;
       const response = await generateInputContent(
         {
           inputId: apiId,
@@ -101,6 +103,7 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
           designConstraints: spec['design-constraints']?.content,
           providerId,
           modelId,
+          thinking: thinkingOverride,
         },
         { agentic: taskSession.callbacks, signal: ac.signal },
       );

@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { DesignSpecSchema } from '../../src/types/spec.ts';
 import type { IncubatorPromptOptions } from '../../src/lib/prompts/incubator-user.ts';
 import { buildIncubatorUserPrompt } from '../../src/lib/prompts/incubator-user.ts';
-import { HypothesisStrategySchema } from '../lib/hypothesis-schemas.ts';
+import { HypothesisStrategySchema, ThinkingOverrideSchema } from '../lib/hypothesis-schemas.ts';
+import { resolveThinkingConfig } from '../../src/lib/thinking-defaults.ts';
 import { getPromptBody } from '../lib/prompt-resolution.ts';
 import { clampProviderModel } from '../lib/lockdown-model.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
@@ -42,6 +43,8 @@ const IncubateRequestSchema = z.object({
     .optional(),
   supportsVision: z.boolean().optional(),
   promptOptions: IncubatorPromptOptionsSchema.optional(),
+  /** Optional per-request thinking override. Missing → server falls back to the 'incubate' task default. */
+  thinking: ThinkingOverrideSchema.optional(),
 });
 
 /** LLMs often emit `range` as a string or as an array of discrete values — normalize to string. */
@@ -136,6 +139,7 @@ ${assembledSpec}`;
       });
     }
     await runTaskAgentSseBody(stream, async ({ write, allocId, gate }) => {
+      const thinking = resolveThinkingConfig('incubate', body.modelId, body.thinking);
       const taskResult = await executeTaskAgentStream(
         stream,
         {
@@ -143,6 +147,7 @@ ${assembledSpec}`;
           providerId: body.providerId,
           modelId: body.modelId,
           sessionType: 'incubation',
+          thinking,
           signal: abortSignal,
           correlationId,
           resultFile: 'result.json',

@@ -3,6 +3,7 @@ import { flushAgentLogSnapshotNow, scheduleAgentLogSnapshot } from './lib/agent-
 import { OBSERVABILITY_SCHEMA_VERSION } from './lib/observability-line.ts';
 import { writeObservabilityLine } from './lib/observability-sink.ts';
 import type { SessionType } from './lib/skill-discovery.ts';
+import type { ThinkingConfig } from '../src/lib/thinking-defaults.ts';
 import { clearTraceLogEntries } from './trace-log-store.ts';
 
 export type LlmLogStatus = 'in_progress' | 'complete' | 'error';
@@ -73,6 +74,8 @@ export interface TaskLogEntryTaskRun {
   resultFile?: string;
   sandboxFileCount: number;
   errorMessage?: string;
+  /** Resolved reasoning config actually sent to the LLM for this run. */
+  thinking?: ThinkingConfig;
 }
 
 export interface TaskLogEntryIncubateParsed {
@@ -135,6 +138,7 @@ export function appendTaskRunLogEntry(input: {
   resultFile?: string;
   sandboxFileCount: number;
   errorMessage?: string;
+  thinking?: ThinkingConfig;
 }): void {
   const row: TaskLogEntryTaskRun = {
     id: crypto.randomUUID(),
@@ -149,6 +153,7 @@ export function appendTaskRunLogEntry(input: {
     resultFile: input.resultFile,
     sandboxFileCount: input.sandboxFileCount,
     errorMessage: input.errorMessage,
+    thinking: input.thinking,
   };
   taskLogEntries.push(row);
   trimTaskLogToCap();
