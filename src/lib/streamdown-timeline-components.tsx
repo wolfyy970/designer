@@ -236,4 +236,15 @@ export const streamdownTimelineComponents: Partial<Components> = {
   li: (props) => emojiAwarePlainBlock('li', props),
   td: (props) => emojiAwarePlainBlock('td', props),
   th: (props) => emojiAwarePlainBlock('th', props),
+  // Render code fences inline — no download/copy chrome in the activity monitor.
+  pre: ({ children }) => (
+    <pre className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded bg-surface-nested px-2 py-1.5 font-mono text-badge leading-snug text-fg-muted">
+      {children}
+    </pre>
+  ),
+  code: ({ children, className }) => (
+    <code className={`font-mono text-badge text-fg-secondary${className ? ` ${className}` : ''}`}>
+      {children}
+    </code>
+  ),
 };

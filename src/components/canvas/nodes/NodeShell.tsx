@@ -10,7 +10,7 @@ export type NodeBorderStatus = NodeStatus;
 
 const BORDER_CLASSES: Record<NodeBorderStatus, string> = {
   selected: 'border-accent',
-  processing: 'border-accent-border-medium animate-pulse',
+  processing: 'border-accent-border-medium',
   error: 'border-error-border-medium',
   dimmed: 'border-border-section-divider',
   filled: 'border-border',
@@ -75,6 +75,12 @@ export default function NodeShell({
 
   return (
     <div className={`relative ${width} rounded-lg border bg-surface-raised shadow-sm ${borderClass} ${railClass} ${lineageDim} ${className ?? ''}`}>
+      {status === 'processing' && !selected && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 rounded-lg border-2 border-accent-border-medium animate-pulse"
+        />
+      )}
       {hasTarget && (
         <Handle
           type="target"

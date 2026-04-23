@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { createElement } from 'react';
+import { createElement, isValidElement } from 'react';
 import {
   stripLeadingEmojiClusters,
   stripAllEmojiFrom,
   sanitizeEmojiInChildren,
+  streamdownTimelineComponents,
 } from '../streamdown-timeline-components';
 
 // ── stripLeadingEmojiClusters (existing + regression) ────────────────────
@@ -167,5 +168,44 @@ describe('sanitizeEmojiInChildren', () => {
     const emChildren = (result.props as { children: React.ReactElement }).children;
     const codeChildren = (emChildren.props as { children: string }).children;
     expect(codeChildren).toBe('fast');
+  });
+});
+
+// ── streamdownTimelineComponents — pre / code overrides ───────────────────
+
+describe('streamdownTimelineComponents code-fence overrides', () => {
+  it('exports a pre override', () => {
+    expect(typeof streamdownTimelineComponents.pre).toBe('function');
+  });
+
+  it('exports a code override', () => {
+    expect(typeof streamdownTimelineComponents.code).toBe('function');
+  });
+
+  it('pre override returns a <pre> React element', () => {
+    const PreComp = streamdownTimelineComponents.pre!;
+    const el = PreComp({ children: 'hello' });
+    expect(isValidElement(el)).toBe(true);
+    expect((el as React.ReactElement).type).toBe('pre');
+  });
+
+  it('code override returns a <code> React element', () => {
+    const CodeComp = streamdownTimelineComponents.code!;
+    const el = CodeComp({ children: 'const x = 1' });
+    expect(isValidElement(el)).toBe(true);
+    expect((el as React.ReactElement).type).toBe('code');
+  });
+
+  it('code override forwards className when provided', () => {
+    const CodeComp = streamdownTimelineComponents.code!;
+    const el = CodeComp({ children: 'x', className: 'language-js' });
+    const props = (el as React.ReactElement).props as { className: string };
+    expect(props.className).toContain('language-js');
+  });
+
+  it('code override works without a className', () => {
+    const CodeComp = streamdownTimelineComponents.code!;
+    const el = CodeComp({ children: 'x' });
+    expect(isValidElement(el)).toBe(true);
   });
 });

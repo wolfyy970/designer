@@ -88,7 +88,7 @@ export default function FileExplorer({
                 }`}
               >
                 {fileIcon(path)}
-                <span className="truncate text-nano leading-tight flex-1">{filename}</span>
+                <span className="truncate text-micro leading-tight flex-1">{filename}</span>
                 {isWriting && <StatusDot tone="accent" animated aria-label="Writing…" />}
               </button>
             );
