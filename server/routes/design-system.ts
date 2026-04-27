@@ -43,15 +43,9 @@ designSystem.post('/extract', async (c) => {
   const agentUserPrompt = `<task>
 Create a Google DESIGN.md document from the provided design-system source material.
 
-Analyze the written source material and any UI screenshots. Convert them into a standards-compliant DESIGN.md document using the exact Google DESIGN.md contract:
-- YAML front matter may contain only: version, name, description, colors, typography, rounded, spacing, components.
-- Include every official YAML token group: colors, typography, rounded, spacing, and components.
-- Use \`rounded\`, not \`radius\`; do not add non-spec YAML groups such as motion, elevation, shadows, or accessibility.
-- Include every official Markdown section in this order: Overview, Colors, Typography, Layout, Elevation & Depth, Shapes, Components, Do's and Don'ts.
-- If the source is incomplete, infer a complete, coherent design system by best estimation. Inferred values must still be valid DESIGN.md YAML values; document uncertainty in the relevant Markdown section, not in invalid token values.
-Write the complete Markdown document to \`DESIGN.md\` in the workspace root.
+Use the \`use_skill\` tool to load the relevant DESIGN.md extraction skill before beginning. Treat that skill as the authoritative contract for the Google/Stitch DESIGN.md schema, section order, inference policy, and lint-friendly output.
 
-Use the \`use_skill\` tool to load relevant skills before beginning extraction.
+Analyze the written source material and any UI screenshots, then write the complete Markdown document to \`DESIGN.md\` in the workspace root.
 </task>
 
 <design_system_title>

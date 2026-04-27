@@ -82,7 +82,7 @@ describe('POST /api/design-system/extract', () => {
     expect(res.status).toBe(200);
   });
 
-  it('prompts the agent with the exact Google DESIGN.md contract', async () => {
+  it('prompts the agent to load the authoritative DESIGN.md extraction skill', async () => {
     const res = await app.request('http://localhost/api/design-system/extract', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -95,15 +95,12 @@ describe('POST /api/design-system/extract', () => {
     });
     expect(res.status).toBe(200);
     const taskOptions = vi.mocked(executeTaskAgentStream).mock.calls.at(-1)?.[1];
-    expect(taskOptions?.userPrompt).toContain(
+    expect(taskOptions?.userPrompt).toContain('use_skill');
+    expect(taskOptions?.userPrompt).toContain('authoritative contract');
+    expect(taskOptions?.userPrompt).toContain('Google/Stitch DESIGN.md schema');
+    expect(taskOptions?.userPrompt).toContain('write the complete Markdown document to `DESIGN.md`');
+    expect(taskOptions?.userPrompt).not.toContain(
       'version, name, description, colors, typography, rounded, spacing, components',
-    );
-    expect(taskOptions?.userPrompt).toContain('Use `rounded`, not `radius`');
-    expect(taskOptions?.userPrompt).toContain('Include every official YAML token group');
-    expect(taskOptions?.userPrompt).toContain('Include every official Markdown section');
-    expect(taskOptions?.userPrompt).toContain('infer a complete, coherent design system');
-    expect(taskOptions?.userPrompt).toContain(
-      "Overview, Colors, Typography, Layout, Elevation & Depth, Shapes, Components, Do's and Don'ts",
     );
   });
 
