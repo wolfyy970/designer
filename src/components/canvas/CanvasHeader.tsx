@@ -55,13 +55,10 @@ export default function CanvasHeader() {
     <>
       <div className="absolute top-0 left-0 right-0 z-10 flex h-header items-center justify-between border-b border-border bg-header-scrim px-4 backdrop-blur-sm">
         {/* Left: App identity */}
-        <div className="flex w-0 min-w-0 flex-1 items-center gap-2 sm:gap-3">
-          <div className="shrink-0 text-left leading-none">
-            <span className="block font-logo text-lg font-medium leading-none tracking-wide text-fg">
-              Auto Designer
-            </span>
-            <span className="mt-0.5 block font-sans text-pico font-medium uppercase leading-none tracking-[0.18em] text-fg-muted">
-              UX Harness
+        <div className="flex w-0 min-w-0 flex-1 items-baseline gap-3">
+          <div className="shrink-0 leading-none">
+            <span className="block font-logo text-2xl font-medium leading-none tracking-wide text-fg">
+              Designer
             </span>
           </div>
           <span
@@ -82,13 +79,13 @@ export default function CanvasHeader() {
               onBlur={handleSave}
               onKeyDown={handleKeyDown}
               aria-label="Canvas title"
-              className="min-w-[var(--width-canvas-title-min)] max-w-[var(--width-canvas-title)] rounded border border-border px-2 py-0.5 font-display text-sm italic text-fg text-center input-focus"
+              className="min-w-[var(--width-canvas-title-min)] max-w-[var(--width-canvas-title)] rounded border border-border px-2 py-0.5 text-center font-sans text-xs font-medium text-fg input-focus"
             />
           ) : (
             <button
               type="button"
               onClick={() => setIsEditing(true)}
-              className="flex max-w-[var(--width-canvas-title)] items-center gap-1.5 truncate font-display text-sm italic text-fg-secondary hover:text-fg"
+              className="flex max-w-[var(--width-canvas-title)] items-center gap-1.5 truncate font-sans text-xs font-medium text-fg-secondary hover:text-fg"
               aria-label={`Rename canvas: ${title || 'Untitled Canvas'}`}
             >
               <span className="truncate pr-0.5">{title || 'Untitled Canvas'}</span>
