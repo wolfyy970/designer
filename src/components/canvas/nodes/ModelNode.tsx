@@ -5,8 +5,6 @@ import { LOCKDOWN_MODEL_LABEL } from '../../../lib/lockdown-model';
 import { useAppConfig } from '../../../hooks/useAppConfig';
 import { filledOrEmpty } from '../../../lib/node-status';
 import { useNodeProviderModel } from '../../../hooks/useNodeProviderModel';
-import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
-import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
 import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { getModelNodeData } from '../../../lib/canvas-node-data';
@@ -21,7 +19,6 @@ type ModelNodeType = Node<ModelNodeData, 'model'>;
 function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
   const { data: appConfig } = useAppConfig();
   const lockdown = appConfig?.lockdown === true;
-  const onRemove = useCanvasNodePermanentRemove(id, STATIC_NODE_DELETE_COPY.model);
 
   const thinkingLevel = useCanvasStore(
     (s) =>
@@ -78,7 +75,7 @@ function ModelNode({ id, selected }: NodeProps<ModelNodeType>) {
       handleColor={configured ? 'green' : 'amber'}
       leftRail={configured ? 'success' : null}
     >
-      <NodeHeader onRemove={onRemove} description={subtitle}>
+      <NodeHeader description={subtitle}>
         <h3 className="text-xs font-semibold text-fg">Model</h3>
       </NodeHeader>
 

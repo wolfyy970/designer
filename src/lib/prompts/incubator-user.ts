@@ -56,6 +56,8 @@ export function formatIncubatorHypothesisCountLine(count: number | undefined): s
 export interface IncubatorPromptOptions {
   count?: number;
   existingStrategies?: HypothesisStrategy[];
+  internalContextDocument?: string;
+  designSystemDocuments?: { nodeId: string; title: string; content: string }[];
 }
 
 export function buildIncubatorUserPrompt(
@@ -72,8 +74,30 @@ export function buildIncubatorUserPrompt(
     OBJECTIVES_METRICS: getSectionContent(spec, 'objectives-metrics'),
     DESIGN_CONSTRAINTS: getSectionContent(spec, 'design-constraints'),
     IMAGE_BLOCK: imageBlock(spec),
+    INTERNAL_CONTEXT_DOCUMENT_BLOCK: formatInternalContextDocumentBlock(options?.internalContextDocument),
+    DESIGN_SYSTEM_DOCUMENTS_BLOCK: formatDesignSystemDocumentsBlock(options?.designSystemDocuments),
     REFERENCE_DESIGNS_BLOCK: formatReferenceDesignsBlock(referenceDesigns),
     EXISTING_HYPOTHESES_BLOCK: formatExistingHypothesesBlock(options?.existingStrategies),
     INCUBATOR_HYPOTHESIS_COUNT_LINE: formatIncubatorHypothesisCountLine(options?.count),
   });
+}
+
+export function formatDesignSystemDocumentsBlock(
+  documents?: { nodeId: string; title: string; content: string }[],
+): string {
+  const docs = documents?.filter((doc) => doc.content.trim());
+  if (!docs || docs.length === 0) return '';
+  let block = '\n\n## DESIGN.md Documents (optional visual-system context)\n';
+  block +=
+    'Use these generated DESIGN.md documents as optional visual-system context while forming hypotheses. Respect their tokens, component guidance, and documented uncertainty when present; do not assume a DESIGN.md exists when this block is absent.\n\n';
+  for (const doc of docs) {
+    block += `### Source: ${doc.title || 'Design System'} (${doc.nodeId})\n\n${doc.content.trim()}\n\n`;
+  }
+  return block;
+}
+
+export function formatInternalContextDocumentBlock(document?: string): string {
+  const body = document?.trim();
+  if (!body) return '';
+  return `\n\n## Internal Context Document (system-generated synthesis)\nUse this derived context as an interpretation aid for hypothesis generation. It is grounded in the user inputs but may contain labeled inferences; keep final hypotheses anchored to the specification.\n\n${body}\n`;
 }

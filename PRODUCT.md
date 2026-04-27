@@ -36,8 +36,8 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 | Objectives & Metrics | Input      | Success criteria and evaluation measures                                                                                                                                                                                                                                                                                                                       |
 | Design Constraints   | Input      | Non-negotiable boundaries + exploration ranges                                                                                                                                                                                                                                                                                                                 |
 | Model                | Processing | Centralizes provider + model selection. Connect to **Incubator**, **Hypothesis**, or **Design System** nodes to configure which LLM they use.                                                                                                                                                                                                                  |
-| Design System        | Processing | Self-contained design token definitions. Supports multiple instances (e.g., Material Design vs custom tokens). Content stored in node data, not spec store. Optional vision-based extraction from uploaded images.                                                                                                                                             |
-| Incubator            | Processing | **Incubates** connected inputs into hypothesis strategies via LLM. **Generate** (batch count) and **blank hypothesis** both require a connected **Model** and non-empty **Design Brief**; blank adds an empty strategy card without calling the LLM.                                                                                                                                                                            |
+| Design System        | Processing | Self-contained design-system source. Supports multiple instances (e.g., Material Design vs custom tokens). Text/images stay in node data; **Generate DESIGN.md** creates a linted Google DESIGN.md document for downstream prompts.                                                                                                                             |
+| Incubator            | Processing | **Incubates** connected inputs into hypothesis strategies via LLM. It can synthesize a design specification from connected inputs and refresh connected DESIGN.md docs before generation. **Generate** (batch count) and **blank hypothesis** both require a connected **Model** and non-empty **Design Brief**; blank adds an empty strategy card without calling the LLM. |
 | Hypothesis           | Processing | Editable strategy card with **Design** (always **agentic** Pi). **Auto-improve** off: single build, no evaluator. **On:** rubric + browser evaluation and optional revision rounds. Connect a Model node.                                                                                                                                                                                                                    |
 | Preview              | Output     | Rendered design preview. Single-file results show an HTML iframe. Multi-file (agentic) results show a file explorer + preview/code tabs + zip download. Completed agentic runs show an **evaluation scorecard** (aggregate score, prioritized fixes, runtime QA) and, when available, a **headless browser thumbnail**. Version navigation across all results. |
 
@@ -45,21 +45,19 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 ### Canvas Features
 
 - **Desktop viewport gate** — Viewports under **1024px** width show a full-screen fallback (design-system styled) explaining the canvas workspace requires a larger display.
-- **Auto-layout** — Edge-driven Sugiyama-style layout. Toggleable checkbox in header. Positions all nodes based on connections, prevents overlap, centers layers vertically.
-- **Auto-connect** — Adding a node auto-connects structural edges (inputs→incubator, design systems→hypotheses). Model connections are scoped: when hypotheses are generated from an Incubator, they inherit that Incubator's model — not every model on the canvas.
-- **Context menu** — Right-click canvas to add nodes at click position
-- **Node palette** — Grouped picker (input/processing/output) in toolbar
+- **Auto-layout** — Edge-driven Sugiyama-style layout runs as implicit canvas behavior. Column spacing remains adjustable; layout itself is no longer a persisted toggle.
+- **Auto-connect** — Fresh canvases start from the core pipeline, and graph/domain rules keep structural edges consistent (inputs/design systems/previews→incubator, design systems→hypotheses, scoped model wiring).
 - **Lineage highlighting** — Select a node to highlight its full connected component (siblings, ancestors, descendants). Unconnected nodes dim to 40% opacity.
 - **Edge animations** — Custom DataFlowEdge with status indicators (idle/processing/complete/error)
 - **Full-screen preview** — Expand any preview to full-screen overlay: primary arrows step **other preview nodes on the same hypothesis** (domain `previewSlots`; falls back to canvas-wide if no slot). Inner control steps **version stack** (v1, v2, …) for that hypothesis strategy. **Mark as best** / **Clear best pick** lets the user override evaluator-ranked “best” for that lane (persisted in `generation-store`).
 - **Reset canvas** — Reset button in header clears all nodes and re-initializes with the default template (Design Brief + Model + Incubator)
 - **Stop generation** — Aborts the active SSE / agent session for a hypothesis strategy lane (**Stop** on the hypothesis card while a run is in flight).
-- **Permanent node delete** — Backspace/Delete with confirmation removes selected nodes from the canvas graph and keeps domain/incubator state consistent; not an “undo” stack.
+- **Permanent node delete** — Backspace/Delete with confirmation removes selected removable nodes from the canvas graph and keeps domain/incubator state consistent. Design Brief, Model, Incubator, and input ghost nodes are protected.
 - **Screenshot capture** — Connect a preview to Existing Design to automatically capture a screenshot as a reference image for the next iteration
 - **Version stacking** — Results accumulate across generation runs. Each preview shows version badges (v1, v2, ...) with ChevronLeft/Right navigation to browse previous versions.
 - **Agentic eval rounds (workspace)** — When a run has multiple evaluation rounds (build + revisions), the **preview run workspace** (overlay dock) can show **Eval round** on **Design** and **Evaluation** tabs; per-round file trees are stored in IndexedDB (`{resultId}:round:{n}`) so earlier revisions remain viewable without bloating localStorage metadata.
 - **Inputs auto-generate** — On **Research Context**, **Objectives & Metrics**, and **Design Constraints**, optional **LLM-assisted drafting** from the Design Brief (and other filled **spec** facets) via **`POST /api/inputs/generate`**, using credentials from the **first Model** node when lockdown is off.
-- **Optional input slots** — Fresh canvases can show **ghost** placeholders for inputs not in the minimal default. Loading a **Canvas Manager** entry **materializes** optional **input nodes** when the persisted spec has non-empty text or images for those facets (see `src/lib/spec-materialize-sections.ts`).
+- **Optional input slots** — Fresh canvases can show **ghost** placeholders for inputs not in the minimal default. Ghosts are persistent affordances, not dismissible state. Loading a **Canvas Manager** entry **materializes** optional **input nodes** when the persisted spec has non-empty text or images for those facets (see `src/lib/spec-materialize-sections.ts`).
 - **Design tokens kitchen sink** (development only) — Settings → General opens a modal reference for `@theme` tokens and patterns; full-page route `/dev/design-tokens`. Documented in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 
 ### Iteration Loop
@@ -122,7 +120,7 @@ Do not duplicate the full prompt catalog here — keys and labels live in **`src
 | LM Studio  | Yes         | Yes        | Configurable via `VITE_LMSTUDIO_VISION_MODELS` env var |
 
 
-- Both stages (compilation and generation) support independent provider + model selection via connected Model nodes **when server lockdown is off** (`LOCKDOWN=false` or equivalent). Default / locked deployments pin **OpenRouter + MiniMax M2.5** for all LLM calls and disable changing provider/model in the UI.
+- Both stages (compilation and generation) support independent provider + model selection via connected Model nodes **when lockdown is off** in `config/feature-flags.json`. Default / locked deployments pin **OpenRouter + MiniMax M2.5** for all LLM calls and disable changing provider/model in the UI.
 - Models fetched dynamically via each provider's API
 - Vision-capable models show an eye icon in the model selector
 - When vision is available, reference images are sent as multimodal content alongside text
@@ -137,6 +135,4 @@ Do not duplicate the full prompt catalog here — keys and labels live in **`src
 - Canvas Manager: save, load, duplicate, delete, export/import JSON
 - Canvas state persists across sessions (nodes, edges, viewport, layout preferences)
 - Automatic garbage collection removes orphaned IndexedDB entries (code, provenance, and files stores) on app startup
-
-
 

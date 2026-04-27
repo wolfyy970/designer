@@ -9,14 +9,24 @@ import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { readFileAsReferenceImage } from '../../../lib/image-utils';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
 import { Button } from '@ds/components/ui/button';
+import { DocumentViewer } from '@ds/components/ui/document-viewer';
+import { StatusPanel, type StatusPanelTone } from '@ds/components/ui/status-panel';
 import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
 import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
 import { filledOrEmpty } from '../../../lib/node-status';
+import {
+  computeDesignMdSourceHash,
+  designMdSourceHasInput,
+  designSystemSourceFromNodeData,
+  getDesignMdStatus,
+  isDesignMdDocumentStale,
+} from '../../../lib/design-md';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
 import { NodeErrorBlock } from './shared/NodeErrorBlock';
 import type { ReferenceImage } from '../../../types/spec';
 import { useThinkingDefaultsStore } from '../../../stores/thinking-defaults-store';
+import Modal from '../../shared/Modal';
 
 type DesignSystemNodeType = Node<DesignSystemNodeData, 'designSystem'>;
 
@@ -27,11 +37,14 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
   const title = data.title || 'Design System';
   const content = data.content || '';
   const images = useMemo(() => data.images ?? [], [data.images]);
+  const designMdDocument = data.designMdDocument;
+  const designMdSource = useMemo(() => designSystemSourceFromNodeData(data), [data]);
 
   const { providerId, modelId, supportsVision } = useConnectedModel(id);
 
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
+  const [documentModalOpen, setDocumentModalOpen] = useState(false);
   const abortExtractRef = useRef<AbortController | null>(null);
   useEffect(() => {
     return () => {
@@ -79,17 +92,24 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
   );
 
   const handleExtract = useCallback(async () => {
-    if (images.length === 0 || !modelId) return;
+    const currentNode = useCanvasStore.getState().nodes.find((n) => n.id === id);
+    const currentData = (currentNode?.data ?? data) as DesignSystemNodeData;
+    const source = designSystemSourceFromNodeData(currentData);
+    if (!designMdSourceHasInput(source) || !modelId) return;
     const ac = new AbortController();
     abortExtractRef.current?.abort();
     abortExtractRef.current = ac;
     setExtracting(true);
     setExtractError(null);
+    const sourceHash = computeDesignMdSourceHash(source);
     try {
       const thinkingOverride = useThinkingDefaultsStore.getState().overrides['design-system'];
       const response = await extractDesignSystem(
         {
-          images,
+          title: source.title,
+          content: source.content,
+          images: [...(source.images ?? [])],
+          sourceHash,
           providerId: providerId!,
           modelId: modelId!,
           thinking: thinkingOverride,
@@ -97,27 +117,52 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
         { signal: ac.signal },
       );
       if (!response || ac.signal.aborted) return;
-      const result = response.result;
-      if (content.trim()) {
-        update('content', content + '\n\n---\n\n' + result);
-      } else {
-        update('content', result);
-      }
+      update('designMdDocument', {
+        content: response.result,
+        sourceHash,
+        generatedAt: new Date().toISOString(),
+        providerId: providerId!,
+        modelId: modelId!,
+        lint: response.lint,
+      });
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       if (err instanceof Error && err.name === 'AbortError') return;
-      setExtractError(err instanceof Error ? err.message : 'Extraction failed');
+      const message = err instanceof Error ? err.message : 'DESIGN.md generation failed';
+      setExtractError(message);
+      update('designMdDocument', {
+        content: designMdDocument?.content ?? '',
+        sourceHash,
+        generatedAt: designMdDocument?.generatedAt ?? new Date().toISOString(),
+        providerId: providerId!,
+        modelId: modelId!,
+        lint: designMdDocument?.lint,
+        error: message,
+      });
     } finally {
       setExtracting(false);
     }
-  }, [images, modelId, providerId, content, update]);
+  }, [data, designMdDocument, id, modelId, providerId, update]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp'] },
   });
 
-  const status = filledOrEmpty(!!content.trim());
+  const designMdStatus = getDesignMdStatus(designMdSource, extracting, designMdDocument);
+  const designMdStatusLabel = designMdStatus === 'generating' ? 'generating…' : designMdStatus;
+  const designMdStatusTone: StatusPanelTone =
+    designMdStatus === 'ready'
+      ? 'success'
+      : designMdStatus === 'error'
+        ? 'error'
+        : designMdStatus === 'generating'
+          ? 'accent'
+          : 'warning';
+  const designMdStale = isDesignMdDocumentStale(designMdSource, designMdDocument);
+  const hasSourceInput = designMdSourceHasInput(designMdSource);
+
+  const status = filledOrEmpty(hasSourceInput || Boolean(designMdDocument?.content?.trim()));
 
   return (
     <NodeShell
@@ -126,7 +171,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
       selected={!!selected}
       width="w-node"
       status={status}
-      handleColor={content.trim() ? 'green' : 'amber'}
+      handleColor={hasSourceInput || designMdDocument?.content?.trim() ? 'green' : 'amber'}
     >
       <NodeHeader
         onRemove={onRemove}
@@ -145,7 +190,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
         <textarea
           value={content}
           onChange={(e) => update('content', e.target.value)}
-          placeholder="Paste design system tokens, or drop images below and click Extract..."
+          placeholder="Preferred format: DESIGN.md. Paste DESIGN.md, tokens, style-guide prose, or brand notes..."
           rows={4}
           className={`${RF_INTERACTIVE} w-full resize-none rounded border border-border px-2.5 py-2 text-xs text-fg-secondary placeholder:text-fg-faint outline-none input-focus`}
         />
@@ -204,37 +249,92 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
           </div>
         </div>
 
-        {/* Extraction controls */}
-        {images.length > 0 && (
-          <div className={`${RF_INTERACTIVE} mt-2.5 space-y-2 border-t border-border-subtle pt-2.5`}>
-            {!extracting && !modelId && (
-              <p className="text-center text-nano text-fg-muted">Connect a Model node</p>
+        {/* DESIGN.md controls */}
+        <div className={`${RF_INTERACTIVE} mt-2.5 space-y-2 border-t border-border-subtle pt-2.5`}>
+          {!extracting && !modelId && (
+            <p className="text-center text-nano text-fg-muted">Connect a Model node</p>
+          )}
+          <StatusPanel
+            title="DESIGN.md"
+            status={designMdStatusLabel}
+            tone={designMdStatusTone}
+            animated={designMdStatus === 'generating'}
+            actions={(
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={!designMdDocument?.content}
+                  onClick={() => setDocumentModalOpen(true)}
+                >
+                  View
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={extracting || !modelId || !hasSourceInput}
+                  onClick={handleExtract}
+                >
+                  Refresh
+                </Button>
+              </>
             )}
-            <Button
-              variant="primary"
-              size="sm"
-              className="w-full"
-              onClick={handleExtract}
-              disabled={extracting || !modelId}
-            >
-              {extracting ? (
-                <Loader2 size={12} className="animate-spin" />
-              ) : (
-                <Sparkles size={12} />
-              )}
-              {extracting ? 'Extracting...' : 'Extract from Images'}
-            </Button>
-
-            {!supportsVision && modelId && (
-              <p className="text-nano text-warning">
-                Model may not support vision.
-              </p>
+          >
+            {designMdDocument?.error && !extracting ? (
+              <span className="text-error">{designMdDocument.error}</span>
+            ) : null}
+          </StatusPanel>
+          <Button
+            variant="primary"
+            size="sm"
+            className="w-full"
+            onClick={handleExtract}
+            disabled={extracting || !modelId || !hasSourceInput}
+          >
+            {extracting ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <Sparkles size={12} />
             )}
+            {extracting ? 'Generating...' : 'Generate DESIGN.md'}
+          </Button>
 
-            {extractError && <NodeErrorBlock message={extractError} />}
-          </div>
-        )}
+          {!supportsVision && images.length > 0 && modelId && (
+            <p className="text-nano text-warning">
+              Model may not support vision.
+            </p>
+          )}
+
+          {extractError && <NodeErrorBlock message={extractError} />}
+        </div>
       </div>
+      <Modal
+        open={documentModalOpen}
+        onClose={() => setDocumentModalOpen(false)}
+        title="DESIGN.md"
+        size="lg"
+      >
+        <DocumentViewer
+          content={designMdDocument?.content}
+          emptyMessage="No DESIGN.md document has been generated yet."
+          metadata={
+            designMdDocument ? (
+              <>
+                <div>Generated: {designMdDocument.generatedAt}</div>
+                <div>Model: {designMdDocument.providerId} / {designMdDocument.modelId}</div>
+                <div>Source: {designMdStale ? 'stale' : 'current'}</div>
+                {designMdDocument.lint ? (
+                  <div>
+                    Lint: {designMdDocument.lint.errors} errors, {designMdDocument.lint.warnings} warnings, {designMdDocument.lint.infos} info
+                  </div>
+                ) : null}
+              </>
+            ) : null
+          }
+        />
+      </Modal>
     </NodeShell>
   );
 }

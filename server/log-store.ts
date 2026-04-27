@@ -21,6 +21,7 @@ export interface LlmLogEntry {
     | 'builder'
     | 'designSystem'
     | 'inputsGen'
+    | 'internalContext'
     | 'evaluator'
     | 'agentCompaction'
     | 'other';

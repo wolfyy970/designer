@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { DesignSpec, ReferenceImage, SpecSection, SpecSectionId } from '../types/spec';
+import type {
+  DesignSpec,
+  InternalContextDocument,
+  ReferenceImage,
+  SpecSection,
+  SpecSectionId,
+} from '../types/spec';
 import { createEmptySections } from '../lib/constants';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 import { generateId, now } from '../lib/utils';
@@ -13,6 +19,7 @@ interface SpecStore {
   createNewCanvas: (title?: string) => void;
   setTitle: (title: string) => void;
   updateSection: (sectionId: SpecSectionId, content: string) => void;
+  setInternalContextDocument: (doc: InternalContextDocument | undefined) => void;
   /** Clears body and images for one section; other sections unchanged. */
   resetSectionContent: (sectionId: SpecSectionId) => void;
   addImage: (sectionId: SpecSectionId, image: ReferenceImage) => void;
@@ -65,6 +72,15 @@ export const useSpecStore = create<SpecStore>()(
             },
           };
         }),
+
+      setInternalContextDocument: (doc) =>
+        set((state) => ({
+          spec: {
+            ...state.spec,
+            internalContextDocument: doc,
+            lastModified: now(),
+          },
+        })),
 
       resetSectionContent: (sectionId) =>
         set((state) => {

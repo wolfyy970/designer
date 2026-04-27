@@ -75,7 +75,7 @@ export const createSyncSlice: StateCreator<
     }
 
     set({ nodes: newNodes, edges: dedupeEdgesById(newEdges) });
-    if (get().autoLayout) get().applyAutoLayout();
+    get().applyAutoLayout();
     return ids;
   },
 
@@ -181,7 +181,7 @@ export const createSyncSlice: StateCreator<
 
     syncVariantSlotsAfterGenerate(hypothesisNodeId, results, nodeIdMap);
 
-    if (get().autoLayout) get().applyAutoLayout();
+    get().applyAutoLayout();
   },
 
   forkHypothesisPreviews: (hypothesisNodeId) => {

@@ -9,7 +9,6 @@ describe('canvas-store addNode (hypothesis)', () => {
     useWorkspaceDomainStore.getState().reset();
     useIncubatorStore.getState().reset();
     useCanvasStore.getState().reset();
-    useCanvasStore.setState({ autoLayout: false });
   });
 
   it('wires a new hypothesis to the sole incubator via an edge', () => {
@@ -18,7 +17,6 @@ describe('canvas-store addNode (hypothesis)', () => {
         { id: 'c1', type: NODE_TYPES.INCUBATOR, position: { x: 0, y: 0 }, data: {} },
       ],
       edges: [],
-      autoLayout: false,
     });
     const newId = useCanvasStore.getState().addNode(NODE_TYPES.HYPOTHESIS);
     expect(newId).toBeDefined();

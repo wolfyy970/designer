@@ -1,9 +1,11 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import { useReactFlow, type NodeProps, type Node } from '@xyflow/react';
-import { ArrowRight, Plus, RefreshCw } from 'lucide-react';
+import { ArrowRight, Eye, Plus, RefreshCw } from 'lucide-react';
 import { normalizeError } from '../../../lib/error-utils';
 import { Button } from '@ds/components/ui/button';
 import { Badge } from '@ds/components/ui/badge';
+import { DocumentViewer } from '@ds/components/ui/document-viewer';
+import { StatusPanel, type StatusPanelTone } from '@ds/components/ui/status-panel';
 import { useSpecStore } from '../../../stores/spec-store';
 import {
   useIncubatorStore,
@@ -13,21 +15,36 @@ import { useGenerationStore } from '../../../stores/generation-store';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { countConnectedIncubatorInputs } from '../../../lib/incubator-input-count';
 import type { IncubatorNodeData } from '../../../types/canvas-data';
+import type { DesignSystemNodeData } from '../../../types/canvas-data';
+import type { WorkspaceNode } from '../../../types/workspace-graph';
 import type { HypothesisStrategy } from '../../../types/incubator';
 import { incubateStream } from '../../../api/client';
+import { extractDesignSystem, generateInternalContext } from '../../../api/client';
 import { buildIncubateInputs } from '../../../lib/canvas-graph';
+import { getDesignSystemNodeData } from '../../../lib/canvas-node-data';
+import {
+  computeDesignMdSourceHash,
+  designMdSourceHasInput,
+  designSystemSourceFromNodeData,
+  type DesignMdStatus,
+  getDesignMdStatus,
+  isDesignMdDocumentStale,
+} from '../../../lib/design-md';
+import {
+  computeInternalContextSourceHash,
+  isInternalContextDocumentStale,
+} from '../../../lib/internal-context';
 import { useWorkspaceDomainStore } from '../../../stores/workspace-domain-store';
 import { scheduleCanvasFitView } from '../../../lib/canvas-fit-view';
 import { processingOrFilled } from '../../../lib/node-status';
 import { isPlaceholderHypothesis } from '../../../lib/hypothesis-node-utils';
 import { EDGE_STATUS, NODE_TYPES, RF_INTERACTIVE } from '../../../constants/canvas';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
-import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
-import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
 import TaskStreamMonitor from './TaskStreamMonitor';
+import Modal from '../../shared/Modal';
 import { createTaskStreamSession } from '../../../hooks/task-stream-session';
 import {
   createInitialTaskStreamState,
@@ -40,6 +57,25 @@ const COUNT_OPTIONS = [1, 2, 3, 5];
 const DEFAULT_COUNT = 3;
 
 type IncubatorNodeFlowType = Node<IncubatorNodeData, 'incubator'>;
+
+function designMdStatusLabel(status: DesignMdStatus): string {
+  if (status === 'missing') return 'needs generation';
+  if (status === 'generating') return 'generating...';
+  return status;
+}
+
+function documentStatusLabel(status: string): string | undefined {
+  if (status === 'ready') return undefined;
+  if (status === 'generating') return 'generating...';
+  return status;
+}
+
+function designMdStatusTone(status: DesignMdStatus): StatusPanelTone {
+  if (status === 'ready') return 'success';
+  if (status === 'error') return 'error';
+  if (status === 'generating') return 'accent';
+  return 'warning';
+}
 
 function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>) {
   const { fitView } = useReactFlow();
@@ -54,7 +90,6 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
   const setCompiling = useIncubatorStore((s) => s.setCompiling);
   const setError = useIncubatorStore((s) => s.setError);
 
-  const onRemove = useCanvasNodePermanentRemove(id, STATIC_NODE_DELETE_COPY.incubator);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const syncAfterIncubate = useCanvasStore((s) => s.syncAfterIncubate);
   const addPlaceholderHypotheses = useCanvasStore((s) => s.addPlaceholderHypotheses);
@@ -70,6 +105,44 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
   const [taskStreamState, setTaskStreamState] = useState<TaskStreamState>(() =>
     createInitialTaskStreamState('idle'),
   );
+  const [contextGenerating, setContextGenerating] = useState(false);
+  const [contextModalOpen, setContextModalOpen] = useState(false);
+  const [designMdGeneratingNodeId, setDesignMdGeneratingNodeId] = useState<string | null>(null);
+  const [designMdModalNodeId, setDesignMdModalNodeId] = useState<string | null>(null);
+  const internalContextDoc = spec.internalContextDocument;
+  const internalContextStale = isInternalContextDocumentStale(spec, internalContextDoc);
+  const internalContextStatus = contextGenerating
+    ? 'generating'
+    : internalContextDoc?.error
+      ? 'error'
+      : !internalContextDoc
+        ? 'missing'
+        : internalContextStale
+          ? 'stale'
+          : 'ready';
+  const internalContextStatusLabel = documentStatusLabel(internalContextStatus);
+  const internalContextStatusTone: StatusPanelTone =
+    internalContextStatus === 'ready'
+      ? 'success'
+      : internalContextStatus === 'stale' || internalContextStatus === 'missing'
+        ? 'warning'
+        : internalContextStatus === 'error'
+          ? 'error'
+          : 'accent';
+
+  const scopedDesignSystemNodes = useMemo((): WorkspaceNode[] => {
+    const nodeById = new Map(nodes.map((n) => [n.id, n] as const));
+    const ids = domainWiring?.designSystemNodeIds ?? [];
+    if (ids.length > 0) {
+      return ids
+        .map((nodeId) => nodeById.get(nodeId))
+        .filter((n): n is WorkspaceNode => Boolean(n) && n!.type === NODE_TYPES.DESIGN_SYSTEM);
+    }
+    return edges
+      .filter((e) => e.target === id)
+      .map((e) => nodeById.get(e.source))
+      .filter((n): n is WorkspaceNode => Boolean(n) && n!.type === NODE_TYPES.DESIGN_SYSTEM);
+  }, [domainWiring, edges, nodes, id]);
 
   /**
    * Count what will actually feed into `buildIncubateInputs` — stale domain
@@ -109,13 +182,170 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
     [hasDesignBrief, isCompiling, modelId],
   );
 
+  const refreshInternalContext = useCallback(async (): Promise<string> => {
+    if (!providerId || !modelId) throw new Error('Connect a Model node first');
+    const currentSpec = useSpecStore.getState().spec;
+    const sourceHash = computeInternalContextSourceHash(currentSpec);
+    setContextGenerating(true);
+    setTaskStreamState({ ...createInitialTaskStreamState(), status: 'streaming' });
+    let session: ReturnType<typeof createTaskStreamSession> | undefined;
+    try {
+      const taskSession = createTaskStreamSession({
+        sessionId: `internal-context-${id}-${Date.now()}`,
+        correlationId: crypto.randomUUID(),
+        onPatch: (patch) => setTaskStreamState((prev) => ({ ...prev, ...patch })),
+      });
+      session = taskSession;
+      const thinkingOverride = useThinkingDefaultsStore.getState().overrides['internal-context'];
+      const response = await generateInternalContext(
+        {
+          spec: currentSpec,
+          sourceHash,
+          providerId,
+          modelId,
+          thinking: thinkingOverride,
+        },
+        { agentic: taskSession.callbacks },
+      );
+      const doc = {
+        content: response.result,
+        sourceHash,
+        generatedAt: new Date().toISOString(),
+        providerId,
+        modelId,
+      };
+      useSpecStore.getState().setInternalContextDocument(doc);
+      return response.result;
+    } catch (err) {
+      const message = normalizeError(err, 'Internal context generation failed');
+      const existing = useSpecStore.getState().spec.internalContextDocument;
+      useSpecStore.getState().setInternalContextDocument({
+        content: existing?.content ?? '',
+        sourceHash,
+        generatedAt: existing?.generatedAt ?? new Date().toISOString(),
+        providerId,
+        modelId,
+        error: message,
+      });
+      throw err;
+    } finally {
+      void session?.finalize();
+      setTaskStreamState(createInitialTaskStreamState('idle'));
+      setContextGenerating(false);
+    }
+  }, [id, modelId, providerId]);
+
+  const handleRefreshInternalContext = useCallback(() => {
+    void refreshInternalContext().catch((err) => {
+      setError(normalizeError(err, 'Internal context generation failed'));
+    });
+  }, [refreshInternalContext, setError]);
+
+  const refreshDesignMdDocument = useCallback(async (nodeId: string): Promise<string> => {
+    if (!providerId || !modelId) throw new Error('Connect a Model node first');
+    const currentNode = useCanvasStore.getState().nodes.find((n) => n.id === nodeId);
+    if (!currentNode || currentNode.type !== NODE_TYPES.DESIGN_SYSTEM) {
+      throw new Error('Design System node is no longer available');
+    }
+    const data = (currentNode.data ?? {}) as DesignSystemNodeData;
+    const source = designSystemSourceFromNodeData(data);
+    if (!designMdSourceHasInput(source)) throw new Error('Design System node has no source content');
+    const sourceHash = computeDesignMdSourceHash(source);
+    setDesignMdGeneratingNodeId(nodeId);
+    setTaskStreamState({ ...createInitialTaskStreamState(), status: 'streaming' });
+    let session: ReturnType<typeof createTaskStreamSession> | undefined;
+    try {
+      const taskSession = createTaskStreamSession({
+        sessionId: `design-md-${nodeId}-${Date.now()}`,
+        correlationId: crypto.randomUUID(),
+        onPatch: (patch) => setTaskStreamState((prev) => ({ ...prev, ...patch })),
+      });
+      session = taskSession;
+      const thinkingOverride = useThinkingDefaultsStore.getState().overrides['design-system'];
+      const response = await extractDesignSystem(
+        {
+          title: source.title,
+          content: source.content,
+          images: [...(source.images ?? [])],
+          sourceHash,
+          providerId,
+          modelId,
+          thinking: thinkingOverride,
+        },
+        { agentic: taskSession.callbacks },
+      );
+      const document = {
+        content: response.result,
+        sourceHash,
+        generatedAt: new Date().toISOString(),
+        providerId,
+        modelId,
+        lint: response.lint,
+      };
+      useCanvasStore.getState().updateNodeData(nodeId, { designMdDocument: document });
+      return response.result;
+    } catch (err) {
+      const message = normalizeError(err, 'DESIGN.md generation failed');
+      const existing = ((useCanvasStore.getState().nodes.find((n) => n.id === nodeId)?.data ?? {}) as DesignSystemNodeData).designMdDocument;
+      useCanvasStore.getState().updateNodeData(nodeId, {
+        designMdDocument: {
+          content: existing?.content ?? '',
+          sourceHash,
+          generatedAt: existing?.generatedAt ?? new Date().toISOString(),
+          providerId,
+          modelId,
+          lint: existing?.lint,
+          error: message,
+        },
+      });
+      throw err;
+    } finally {
+      void session?.finalize();
+      setTaskStreamState(createInitialTaskStreamState('idle'));
+      setDesignMdGeneratingNodeId(null);
+    }
+  }, [modelId, providerId]);
+
+  const handleRefreshDesignMdDocument = useCallback((nodeId: string) => {
+    void refreshDesignMdDocument(nodeId).catch((err) => {
+      setError(normalizeError(err, 'DESIGN.md generation failed'));
+    });
+  }, [refreshDesignMdDocument, setError]);
+
+  const ensureDesignSystemDocuments = useCallback(async (): Promise<{ nodeId: string; title: string; content: string }[]> => {
+    const out: { nodeId: string; title: string; content: string }[] = [];
+    const currentNodes = useCanvasStore.getState().nodes;
+    const currentDomainWiring = useWorkspaceDomainStore.getState().incubatorWirings[id];
+    const nodeById = new Map(currentNodes.map((n) => [n.id, n] as const));
+    const scopedIds = currentDomainWiring?.designSystemNodeIds ?? [];
+    const candidates = scopedIds.length > 0
+      ? scopedIds.map((nodeId) => nodeById.get(nodeId))
+      : currentNodes.filter((node) =>
+          node.type === NODE_TYPES.DESIGN_SYSTEM &&
+          useCanvasStore.getState().edges.some((edge) => edge.source === node.id && edge.target === id),
+        );
+    for (const node of candidates) {
+      if (!node || node.type !== NODE_TYPES.DESIGN_SYSTEM) continue;
+      let data = (node.data ?? {}) as DesignSystemNodeData;
+      const source = designSystemSourceFromNodeData(data);
+      if (!designMdSourceHasInput(source)) continue;
+      if (!data.designMdDocument?.content || data.designMdDocument.error || isDesignMdDocumentStale(source, data.designMdDocument)) {
+        await refreshDesignMdDocument(node.id);
+        data = ((useCanvasStore.getState().nodes.find((n) => n.id === node.id)?.data ?? {}) as DesignSystemNodeData);
+      }
+      const content = data.designMdDocument?.content?.trim();
+      if (content) {
+        out.push({ nodeId: node.id, title: data.title || 'Design System', content });
+      }
+    }
+    return out;
+  }, [id, refreshDesignMdDocument]);
+
   const handleIncubate = useCallback(async () => {
-    if (useIncubatorStore.getState().isCompiling) return;
+    if (useIncubatorStore.getState().isCompiling || contextGenerating || designMdGeneratingNodeId) return;
 
     const results = useGenerationStore.getState().results;
     const wiring = useWorkspaceDomainStore.getState().incubatorWirings[id];
-    const { partialSpec, referenceDesigns } =
-      await buildIncubateInputs(nodes, edges, spec, id, results, wiring);
 
     const incubationPlans = useIncubatorStore.getState().incubationPlans;
     const existingStrategies: HypothesisStrategy[] = [];
@@ -135,6 +365,18 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
 
     let session: ReturnType<typeof createTaskStreamSession> | undefined;
     try {
+      const currentSpec = useSpecStore.getState().spec;
+      let internalContextDocument = currentSpec.internalContextDocument?.content ?? '';
+      const currentDoc = currentSpec.internalContextDocument;
+      if (!currentDoc?.content || currentDoc.error || isInternalContextDocumentStale(currentSpec, currentDoc)) {
+        internalContextDocument = await refreshInternalContext();
+      }
+      const designSystemDocumentsForPrompt = await ensureDesignSystemDocuments();
+
+      const freshSpec = useSpecStore.getState().spec;
+      const { partialSpec, referenceDesigns } =
+        await buildIncubateInputs(nodes, edges, freshSpec, id, results, wiring);
+
       const taskSession = createTaskStreamSession({
         sessionId: `incubate-${id}-${Date.now()}`,
         correlationId: crypto.randomUUID(),
@@ -149,6 +391,8 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
           modelId: modelId!,
           referenceDesigns,
           supportsVision,
+          internalContextDocument,
+          designSystemDocuments: designSystemDocumentsForPrompt,
           promptOptions: { count: hypothesisCount, existingStrategies },
           thinking: thinkingOverride,
         },
@@ -169,7 +413,6 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
       setCompiling(false);
     }
   }, [
-    spec,
     edges,
     nodes,
     id,
@@ -185,11 +428,15 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
     removePlaceholders,
     setEdgeStatusBySource,
     fitView,
+    contextGenerating,
+    designMdGeneratingNodeId,
+    refreshInternalContext,
+    ensureDesignSystemDocuments,
   ]);
 
-  const elapsed = useElapsedTimer(isCompiling);
+  const elapsed = useElapsedTimer(isCompiling || contextGenerating || Boolean(designMdGeneratingNodeId));
 
-  const status = processingOrFilled(isCompiling);
+  const status = processingOrFilled(isCompiling || contextGenerating || Boolean(designMdGeneratingNodeId));
 
   const isReady = hasDesignBrief && !!modelId;
 
@@ -201,7 +448,20 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
       : undefined;
 
   // Layer 2: inline readiness hint
-  const hint = !isCompiling ? readinessBlockReason ?? null : null;
+  const hint = !isCompiling && !contextGenerating && !designMdGeneratingNodeId ? readinessBlockReason ?? null : null;
+  const activeDesignMdModalNode = designMdModalNodeId
+    ? scopedDesignSystemNodes.find((node) => node.id === designMdModalNodeId)
+    : undefined;
+  const activeDesignMdModalData = activeDesignMdModalNode
+    ? getDesignSystemNodeData(activeDesignMdModalNode)
+    : undefined;
+  const canRunDocumentTask = Boolean(providerId && modelId);
+  const internalContextCanView = Boolean(internalContextDoc?.content?.trim());
+  const internalContextCanRefresh =
+    canRunDocumentTask &&
+    (internalContextStatus === 'stale' ||
+      internalContextStatus === 'error' ||
+      internalContextStatus === 'generating');
 
   return (
     <NodeShell
@@ -215,18 +475,23 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
       targetPulse={!isReady}
     >
       <NodeHeader
-        onRemove={onRemove}
         description="Synthesizes your inputs into differentiated hypothesis strategies to explore."
       >
         <h3 className="text-xs font-semibold text-fg">Incubator</h3>
       </NodeHeader>
 
-      {/* Skeleton overlay while incubating */}
-      {isCompiling && (
+      {/* Skeleton overlay while incubating or refreshing generated documents */}
+      {(isCompiling || contextGenerating || designMdGeneratingNodeId) && (
         <TaskStreamMonitor
           state={taskStreamState}
           elapsed={elapsed}
-          fallbackLabel="Incubating…"
+          fallbackLabel={
+            designMdGeneratingNodeId
+              ? 'Generating DESIGN.md…'
+              : contextGenerating
+                ? 'Synthesizing context…'
+                : 'Incubating…'
+          }
         />
       )}
 
@@ -235,76 +500,241 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
         {error && !isCompiling && <NodeErrorBlock variant="plain" message={error} />}
 
         <div className={`${RF_INTERACTIVE} space-y-2`}>
-          <div className="flex items-center justify-between">
-            <span className="text-nano text-fg-muted">
-              {connectedInputCount} input{connectedInputCount !== 1 ? 's' : ''} connected
-            </span>
-          </div>
-          {/* Hypothesis count selector */}
-          <div className="flex items-center justify-between">
-            <label className="text-nano text-fg-secondary">new hypotheses</label>
-            <select
-              value={hypothesisCount}
-              onChange={handleCountChange}
-              disabled={isCompiling}
-              className="rounded border border-border bg-surface px-1.5 py-0.5 text-nano text-fg"
+          <div className="space-y-1.5">
+            <StatusPanel
+              title="Design specification"
+              status={internalContextStatusLabel}
+              tone={internalContextStatusTone}
+              animated={internalContextStatus === 'generating'}
+              density="compact"
+              actions={internalContextCanView || internalContextCanRefresh ? (
+                <>
+                  {internalContextCanView ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="iconSm"
+                      aria-label="View design specification"
+                      title="View design specification"
+                      onClick={() => setContextModalOpen(true)}
+                    >
+                      <Eye size={11} aria-hidden />
+                    </Button>
+                  ) : null}
+                  {internalContextCanRefresh ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="iconSm"
+                      disabled={isCompiling || contextGenerating}
+                      aria-label="Refresh design specification"
+                      title="Refresh design specification"
+                      onClick={handleRefreshInternalContext}
+                    >
+                      <RefreshCw size={11} aria-hidden />
+                    </Button>
+                  ) : null}
+                </>
+              ) : undefined}
             >
-              {COUNT_OPTIONS.map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
+              {internalContextDoc?.error && !contextGenerating ? (
+                <span className="text-error">{internalContextDoc.error}</span>
+              ) : null}
+            </StatusPanel>
+
+            {scopedDesignSystemNodes.length === 0 ? (
+              <StatusPanel
+                title="DESIGN.md"
+                status="optional"
+                tone="neutral"
+                density="compact"
+              />
+            ) : scopedDesignSystemNodes.map((node) => {
+              const ds = getDesignSystemNodeData(node);
+              const source = ds ? designSystemSourceFromNodeData(ds) : {};
+              const doc = ds?.designMdDocument;
+              const hasSourceInput = designMdSourceHasInput(source);
+              const dsStatus = getDesignMdStatus(source, designMdGeneratingNodeId === node.id, doc);
+              const optional = !hasSourceInput && !doc?.content && dsStatus !== 'generating' && dsStatus !== 'error';
+              const docHasContent = Boolean(doc?.content?.trim());
+              const canRefreshDesignMd =
+                canRunDocumentTask &&
+                !optional &&
+                hasSourceInput &&
+                (dsStatus === 'missing' ||
+                  dsStatus === 'stale' ||
+                  dsStatus === 'error' ||
+                  dsStatus === 'generating');
+              return (
+                <StatusPanel
+                  key={node.id}
+                  title={`${ds?.title || 'Design System'} DESIGN.md`}
+                  status={optional ? 'optional' : documentStatusLabel(designMdStatusLabel(dsStatus))}
+                  tone={optional ? 'neutral' : designMdStatusTone(dsStatus)}
+                  animated={dsStatus === 'generating'}
+                  density="compact"
+                  actions={docHasContent || canRefreshDesignMd ? (
+                    <>
+                      {docHasContent ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="iconSm"
+                          aria-label={`View ${ds?.title || 'Design System'} DESIGN.md`}
+                          title={`View ${ds?.title || 'Design System'} DESIGN.md`}
+                          onClick={() => setDesignMdModalNodeId(node.id)}
+                        >
+                          <Eye size={11} aria-hidden />
+                        </Button>
+                      ) : null}
+                      {canRefreshDesignMd ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="iconSm"
+                          disabled={isCompiling || contextGenerating || Boolean(designMdGeneratingNodeId)}
+                          aria-label={`Refresh ${ds?.title || 'Design System'} DESIGN.md`}
+                          title={`Refresh ${ds?.title || 'Design System'} DESIGN.md`}
+                          onClick={() => handleRefreshDesignMdDocument(node.id)}
+                        >
+                          <RefreshCw size={11} aria-hidden />
+                        </Button>
+                      ) : null}
+                    </>
+                  ) : undefined}
+                >
+                  {doc?.error && dsStatus !== 'generating' ? (
+                    <span className="text-error">{doc.error}</span>
+                  ) : null}
+                </StatusPanel>
+              );
+            })}
           </div>
 
-          {hint && (
-            <div className="flex justify-center">
-              <Badge shape="pill" tone="warning">{hint}</Badge>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-nano text-fg-muted">
+                {connectedInputCount} input{connectedInputCount !== 1 ? 's' : ''} connected
+              </span>
             </div>
-          )}
+            {/* Hypothesis count selector */}
+            <div className="flex items-center justify-between">
+              <label className="text-nano text-fg-secondary">New hypotheses</label>
+              <select
+                value={hypothesisCount}
+                onChange={handleCountChange}
+                disabled={isCompiling}
+                className="rounded border border-border bg-surface px-1.5 py-0.5 text-nano text-fg"
+              >
+                {COUNT_OPTIONS.map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
 
-          <Button
-            variant="primary"
-            size="md"
-            className="w-full"
-            onClick={handleIncubate}
-            disabled={isCompiling || !isReady}
-            aria-busy={isCompiling}
-            aria-label={isCompiling ? 'Incubating…' : 'Generate hypotheses'}
-            title={isCompiling ? 'Incubating…' : undefined}
-          >
-            {isCompiling ? (
-              <>
-                <RefreshCw size={12} className="animate-spin" aria-hidden />
-                Incubating…
-              </>
-            ) : (
-              <>
-                Generate
-                <ArrowRight size={12} aria-hidden />
-              </>
+            {hint && (
+              <div className="flex justify-center">
+                <Badge shape="pill" tone="warning">{hint}</Badge>
+              </div>
             )}
-          </Button>
 
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="w-full"
-            onClick={handleAddBlank}
-            disabled={isCompiling || !isReady}
-            aria-label="Add blank hypothesis card"
-            title={isCompiling ? 'incubating…' : readinessBlockReason}
-          >
-            <Plus size={12} strokeWidth={2} aria-hidden />
-            blank hypothesis
-          </Button>
+            <Button
+              variant="primary"
+              size="md"
+              className="w-full"
+              onClick={handleIncubate}
+              disabled={isCompiling || contextGenerating || Boolean(designMdGeneratingNodeId) || !isReady}
+              aria-busy={isCompiling || contextGenerating || Boolean(designMdGeneratingNodeId)}
+              aria-label={isCompiling || contextGenerating || designMdGeneratingNodeId ? 'Incubating…' : 'Generate hypotheses'}
+              title={isCompiling || contextGenerating || designMdGeneratingNodeId ? 'Incubating…' : undefined}
+            >
+              {isCompiling ? (
+                <>
+                  <RefreshCw size={12} className="animate-spin" aria-hidden />
+                  Incubating…
+                </>
+              ) : (
+                <>
+                  Generate
+                  <ArrowRight size={12} aria-hidden />
+                </>
+              )}
+            </Button>
+
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="w-full"
+              onClick={handleAddBlank}
+              disabled={isCompiling || contextGenerating || Boolean(designMdGeneratingNodeId) || !isReady}
+              aria-label="Add blank hypothesis card"
+              title={isCompiling || contextGenerating || designMdGeneratingNodeId ? 'Incubating…' : readinessBlockReason}
+            >
+              <Plus size={12} strokeWidth={2} aria-hidden />
+              Blank hypothesis
+            </Button>
+          </div>
         </div>
 
-        {totalHypotheses > 0 && !isCompiling && (
+        {totalHypotheses > 0 && !isCompiling && !contextGenerating && !designMdGeneratingNodeId && (
           <p className="text-nano text-fg-secondary">
             {totalHypotheses} {totalHypotheses === 1 ? 'hypothesis' : 'hypotheses'} total
           </p>
         )}
       </div>
+
+      <Modal
+        open={contextModalOpen}
+        onClose={() => setContextModalOpen(false)}
+        title="Design specification"
+        size="lg"
+      >
+        <DocumentViewer
+          content={internalContextDoc?.content}
+          emptyMessage="No design specification has been generated yet."
+          metadata={
+            internalContextDoc ? (
+              <>
+                <div>Generated: {internalContextDoc.generatedAt}</div>
+                <div>Model: {internalContextDoc.providerId} / {internalContextDoc.modelId}</div>
+                <div>Source: {internalContextStale ? 'stale' : 'current'}</div>
+              </>
+            ) : null
+          }
+        />
+      </Modal>
+
+      <Modal
+        open={Boolean(designMdModalNodeId)}
+        onClose={() => setDesignMdModalNodeId(null)}
+        title={activeDesignMdModalData?.title ? `${activeDesignMdModalData.title} DESIGN.md` : 'DESIGN.md'}
+        size="lg"
+      >
+        <DocumentViewer
+          content={activeDesignMdModalData?.designMdDocument?.content}
+          emptyMessage="No DESIGN.md document has been generated yet."
+          metadata={
+            activeDesignMdModalData?.designMdDocument ? (
+              <>
+                <div>Generated: {activeDesignMdModalData.designMdDocument.generatedAt}</div>
+                <div>Model: {activeDesignMdModalData.designMdDocument.providerId} / {activeDesignMdModalData.designMdDocument.modelId}</div>
+                <div>
+                  Source: {isDesignMdDocumentStale(
+                    designSystemSourceFromNodeData(activeDesignMdModalData),
+                    activeDesignMdModalData.designMdDocument,
+                  ) ? 'stale' : 'current'}
+                </div>
+                {activeDesignMdModalData.designMdDocument.lint ? (
+                  <div>
+                    Lint: {activeDesignMdModalData.designMdDocument.lint.errors} errors, {activeDesignMdModalData.designMdDocument.lint.warnings} warnings, {activeDesignMdModalData.designMdDocument.lint.infos} info
+                  </div>
+                ) : null}
+              </>
+            ) : null
+          }
+        />
+      </Modal>
     </NodeShell>
   );
 }

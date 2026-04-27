@@ -93,6 +93,14 @@ export const INCREMENTAL_NEW_EDGE_RULES: readonly IncrementalNewEdgeRule[] = [
     },
   },
   {
+    id: 'designSystem-compiler',
+    match: (s, t) => s === NODE_TYPES.DESIGN_SYSTEM && t === NODE_TYPES.INCUBATOR,
+    apply: ({ d, src, tgt }) => {
+      d.ensureIncubatorWiring(tgt.id);
+      d.attachIncubatorInput(tgt.id, src.id, NODE_TYPES.DESIGN_SYSTEM);
+    },
+  },
+  {
     id: 'designSystem-hypothesis',
     match: (s, t) => s === NODE_TYPES.DESIGN_SYSTEM && t === NODE_TYPES.HYPOTHESIS,
     apply: ({ d, src, tgt, nodes, allEdges }) => {
@@ -146,6 +154,13 @@ export const INCREMENTAL_REMOVED_EDGE_RULES: readonly IncrementalRemovedEdgeRule
     match: (s, t) => s === NODE_TYPES.PREVIEW && t === NODE_TYPES.INCUBATOR,
     apply: ({ d, src, tgt }) => {
       d.detachIncubatorInput(tgt.id, src.id, NODE_TYPES.PREVIEW);
+    },
+  },
+  {
+    id: 'designSystem-compiler',
+    match: (s, t) => s === NODE_TYPES.DESIGN_SYSTEM && t === NODE_TYPES.INCUBATOR,
+    apply: ({ d, src, tgt }) => {
+      d.detachIncubatorInput(tgt.id, src.id, NODE_TYPES.DESIGN_SYSTEM);
     },
   },
   {
@@ -222,6 +237,14 @@ export const HYDRATE_EDGE_RULES: readonly HydrateEdgeRule[] = [
     apply: ({ store, src, tgt }) => {
       store.ensureIncubatorWiring(tgt.id);
       store.attachIncubatorInput(tgt.id, src.id, NODE_TYPES.PREVIEW);
+    },
+  },
+  {
+    id: 'designSystem-compiler',
+    match: (s, t) => s === NODE_TYPES.DESIGN_SYSTEM && t === NODE_TYPES.INCUBATOR,
+    apply: ({ store, src, tgt }) => {
+      store.ensureIncubatorWiring(tgt.id);
+      store.attachIncubatorInput(tgt.id, src.id, NODE_TYPES.DESIGN_SYSTEM);
     },
   },
   {

@@ -12,6 +12,6 @@ export const workspaceDomainPersistOptions = {
     designSystems: state.designSystems,
     previewSlots: state.previewSlots,
   }),
-  version: 9,
+  version: 10,
   migrate: migrateWorkspaceDomainPersist,
 };

@@ -67,7 +67,7 @@ function ApiServerBlocked({
 }
 
 /**
- * Blocks the workspace until GET /api/config succeeds so the canvas never mounts against a dead proxy
+ * Blocks the canvas until GET /api/config succeeds so it never mounts against a dead proxy
  * (avoids noisy failed /api/* calls and confusing placeholder lockdown state).
  */
 export function ApiServerGate({ children }: { children: React.ReactNode }) {

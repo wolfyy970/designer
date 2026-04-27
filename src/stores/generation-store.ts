@@ -379,6 +379,7 @@ export const useGenerationStore = create<GenerationStore>()(
           delete persisted.streamingToolPath;
           delete persisted.streamingToolChars;
           delete persisted.streamedModelChars;
+          delete persisted.streamMode;
           delete persisted.liveEvalWorkers;
           if (persisted.evaluationSummary) {
             const es = { ...persisted.evaluationSummary };

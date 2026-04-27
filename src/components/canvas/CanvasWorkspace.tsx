@@ -28,7 +28,6 @@ import { nodeTypes } from './nodes/node-types';
 import { edgeTypes } from './edges/edge-types';
 import CanvasHeader from './CanvasHeader';
 import CanvasToolbar from './CanvasToolbar';
-import CanvasContextMenu from './CanvasContextMenu';
 import VariantPreviewOverlay from './VariantPreviewOverlay';
 import VariantRunInspector from './VariantRunInspector';
 import OptionalInputsTip from './OptionalInputsTip';
@@ -113,17 +112,11 @@ function CanvasInner() {
   const setViewport = useCanvasStore((s) => s.setViewport);
   const initializeCanvas = useCanvasStore((s) => s.initializeCanvas);
   const showMiniMap = useCanvasStore((s) => s.showMiniMap);
-  const autoLayout = useCanvasStore((s) => s.autoLayout);
   const computeLineage = useCanvasStore((s) => s.computeLineage);
   const setConnectingFrom = useCanvasStore((s) => s.setConnectingFrom);
   const pendingFitViewAfterTemplate = useCanvasStore((s) => s.pendingFitViewAfterTemplate);
   const consumePendingFitView = useCanvasStore((s) => s.consumePendingFitView);
   const runInspectorPreviewNodeId = useCanvasStore((s) => s.runInspectorPreviewNodeId);
-
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
 
   useEffect(() => {
     initializeCanvas();
@@ -157,18 +150,6 @@ function CanvasInner() {
     (vp: Viewport) => setViewport(vp),
     [setViewport]
   );
-
-  const handlePaneContextMenu = useCallback(
-    (e: MouseEvent | React.MouseEvent) => {
-      e.preventDefault();
-      setContextMenu({ x: e.clientX, y: e.clientY });
-    },
-    []
-  );
-
-  const handlePaneClick = useCallback(() => {
-    setContextMenu(null);
-  }, []);
 
   const handleSelectionChange = useCallback(
     ({ nodes: selected }: OnSelectionChangeParams) => {
@@ -252,11 +233,9 @@ function CanvasInner() {
             edgeTypes={edgeTypes}
             defaultViewport={viewport}
             onViewportChange={handleViewportChange}
-            onPaneContextMenu={handlePaneContextMenu}
             onNodeClick={handleNodeClick}
-            onPaneClick={handlePaneClick}
             onSelectionChange={handleSelectionChange}
-            nodesDraggable={!autoLayout}
+            nodesDraggable={false}
             snapToGrid={true}
             snapGrid={[GRID_SIZE, GRID_SIZE]}
             fitViewOptions={{ padding: 0.15 }}
@@ -285,13 +264,6 @@ function CanvasInner() {
             <CanvasToolbar />
             <OptionalInputsTip />
           </ReactFlow>
-          {contextMenu && (
-            <CanvasContextMenu
-              screenX={contextMenu.x}
-              screenY={contextMenu.y}
-              onClose={() => setContextMenu(null)}
-            />
-          )}
           <VariantPreviewOverlay />
           {runInspectorPreviewNodeId != null ? (
             <div

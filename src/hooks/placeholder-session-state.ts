@@ -164,6 +164,22 @@ export interface PlaceholderGenerationSessionState {
   streamedModelChars: number;
 }
 
+/**
+ * Mark every currently-open thinking turn as closed. Called from `onActivity` /
+ * `onStreamingTool` so the Brain icon stops lying once the model moves on.
+ * Returns true if anything changed (so callers can decide whether to flush).
+ */
+export function closeOpenThinkingTurns(
+  state: Pick<PlaceholderGenerationSessionState, 'thinkingTurns'>,
+): boolean {
+  if (!state.thinkingTurns.some((t) => t.endedAt == null)) return false;
+  const now = Date.now();
+  state.thinkingTurns = state.thinkingTurns.map((t) =>
+    t.endedAt == null ? { ...t, endedAt: now } : t,
+  );
+  return true;
+}
+
 export function createInitialPlaceholderSessionState(): PlaceholderGenerationSessionState {
   return {
     activityText: '',

@@ -7,7 +7,6 @@ import { useWorkspaceDomainStore } from '../workspace-domain-store';
 import type { HypothesisStrategy } from '../../types/incubator';
 import type { GenerationResult } from '../../types/provider';
 import type { WorkspaceNode } from '../../types/workspace-graph';
-import { HYPOTHESIS_STACK_GAP } from '../canvas/hypothesis-layout-constants';
 
 function strategy(id: string): HypothesisStrategy {
   return {
@@ -25,7 +24,6 @@ describe('canvas-store syncAfterIncubate', () => {
     useWorkspaceDomainStore.getState().reset();
     useIncubatorStore.getState().reset();
     useCanvasStore.getState().reset();
-    useCanvasStore.setState({ autoLayout: false });
   });
 
   it('is a no-op for an empty strategy list', () => {
@@ -67,7 +65,7 @@ describe('canvas-store syncAfterIncubate', () => {
 
     expect(new Set(edges.map((e) => e.id)).size).toBe(edges.length);
 
-    expect(byRef.get('st-a')!.position.y).toBeGreaterThan(incubatorY + HYPOTHESIS_STACK_GAP - 1);
+    expect(byRef.get('st-a')!.position.y).toBeLessThan(byRef.get('st-b')!.position.y);
 
     const domain = useWorkspaceDomainStore.getState();
     expect(domain.hypotheses['hypothesis-st-a']?.incubatorId).toBe('inc1');
@@ -161,7 +159,6 @@ describe('canvas-store syncAfterGenerate', () => {
     useWorkspaceDomainStore.getState().reset();
     useIncubatorStore.getState().reset();
     useCanvasStore.getState().reset();
-    useCanvasStore.setState({ autoLayout: false });
   });
 
   it('dedupes duplicate edge ids in state before adding preview edges', () => {

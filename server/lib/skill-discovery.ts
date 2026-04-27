@@ -14,11 +14,18 @@ export type { SkillCatalogEntry };
 
 export const SKILL_FILENAME = 'SKILL.md';
 
-export type SessionType = 'design' | 'incubation' | 'evaluation' | 'inputs-gen' | 'design-system';
+export type SessionType =
+  | 'design'
+  | 'incubation'
+  | 'internal-context'
+  | 'evaluation'
+  | 'inputs-gen'
+  | 'design-system';
 
 const SESSION_TAGS: Record<SessionType, string[]> = {
   design: ['design'],
   incubation: ['incubation'],
+  'internal-context': ['internal-context'],
   evaluation: ['evaluation'],
   'inputs-gen': ['inputs-gen'],
   'design-system': ['design-system'],

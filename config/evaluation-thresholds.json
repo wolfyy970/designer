@@ -1,0 +1,8 @@
+{
+  "revisionGate": {
+    "criticalScoreMax":     2,
+    "implCriticalScoreMax": 1,
+    "lowAverageThreshold":  3.5
+  },
+  "maxRevisionRoundsCap": 20
+}

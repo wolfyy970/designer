@@ -1,0 +1,25 @@
+{
+  "sandbox": {
+    "grepMaxLineLength":      500,
+    "lsMaxEntries":           500,
+    "findMaxResults":        1000,
+    "grepDefaultMatchLimit":  100,
+    "bashToolMaxChars":     51200
+  },
+  "evaluator": {
+    "fileMaxChars":              48000,
+    "bundleMaxChars":            64000,
+    "degradedMsgMax":              500,
+    "revisionCompiledPromptMax":  4000
+  },
+  "trace": {
+    "toolArgsMaxChars":  2048,
+    "toolResultMaxChars": 800,
+    "labelMax":          4000,
+    "toolFieldMax":      4000
+  },
+  "log": {
+    "previewSnippetMax":  120,
+    "commandPreviewMax":  160
+  }
+}

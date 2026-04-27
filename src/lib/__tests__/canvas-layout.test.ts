@@ -293,27 +293,19 @@ describe('computeAutoLayout', () => {
 // ─── reconcileInputGhostNodes / layoutTypeOrder ─────────────────────
 
 describe('reconcileInputGhostNodes', () => {
-  it('adds four ghosts when optional input slots are absent', () => {
+  it('adds ghosts when optional node slots are absent', () => {
     const nodes = [makeNode('b', 'designBrief')];
     const out = reconcileInputGhostNodes(nodes as WorkspaceNode[]);
-    expect(out).toHaveLength(5);
+    expect(out).toHaveLength(6);
     const ghosts = out.filter((n) => n.type === 'inputGhost');
-    expect(ghosts).toHaveLength(4);
+    expect(ghosts).toHaveLength(5);
     expect(ghosts.map((g) => (g.data as { targetType: string }).targetType)).toEqual([
       'researchContext',
       'objectivesMetrics',
       'designConstraints',
       'existingDesign',
+      'designSystem',
     ]);
-  });
-
-  it('skips slots listed in dismissedSlots', () => {
-    const nodes = [makeNode('b', 'designBrief')] as WorkspaceNode[];
-    const out = reconcileInputGhostNodes(nodes, ['researchContext', 'existingDesign']);
-    const targets = out
-      .filter((n) => n.type === 'inputGhost')
-      .map((g) => (g.data as { targetType: string }).targetType);
-    expect(targets).toEqual(['objectivesMetrics', 'designConstraints']);
   });
 
   it('drops stale ghosts and skips slots with a real node', () => {
@@ -329,7 +321,7 @@ describe('reconcileInputGhostNodes', () => {
     ] as WorkspaceNode[];
     const out = reconcileInputGhostNodes(nodes);
     expect(out.some((n) => n.id === 'ghost-input-existingDesign')).toBe(false);
-    expect(out.filter((n) => n.type === 'inputGhost')).toHaveLength(3);
+    expect(out.filter((n) => n.type === 'inputGhost')).toHaveLength(4);
   });
 });
 
@@ -348,6 +340,22 @@ describe('layoutTypeOrder', () => {
       data: { targetType: 'existingDesign' },
     };
     expect(layoutTypeOrder(ghostResearch)).toBeLessThan(layoutTypeOrder(ghostExisting));
+  });
+
+  it('orders the design-system ghost after existing design', () => {
+    const ghostExisting: WorkspaceNode = {
+      id: 'g1',
+      type: 'inputGhost',
+      position: { x: 0, y: 0 },
+      data: { targetType: 'existingDesign' },
+    };
+    const ghostDesignSystem: WorkspaceNode = {
+      id: 'g2',
+      type: 'inputGhost',
+      position: { x: 0, y: 0 },
+      data: { targetType: 'designSystem' },
+    };
+    expect(layoutTypeOrder(ghostExisting)).toBeLessThan(layoutTypeOrder(ghostDesignSystem));
   });
 
   it('places real optional inputs before ghosts and model last in layer 0', () => {
@@ -369,7 +377,7 @@ describe('layoutTypeOrder', () => {
 describe('reconcileEphemeralGhostNodes', () => {
   it('adds optional input ghosts only (no hypothesis ghost)', () => {
     const inc = makeNode('ic', 'incubator') as WorkspaceNode;
-    const out = reconcileEphemeralGhostNodes([inc], []);
+    const out = reconcileEphemeralGhostNodes([inc]);
     expect(out.some((n) => n.type === 'inputGhost')).toBe(true);
     expect(out.some((n) => n.type === 'hypothesisGhost')).toBe(false);
   });

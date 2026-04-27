@@ -12,7 +12,6 @@ export const createUiSlice: StateCreator<
     | 'setViewport'
     | 'toggleMiniMap'
     | 'setColGap'
-    | 'toggleAutoLayout'
     | 'setExpandedPreview'
     | 'setRunInspectorPreview'
     | 'closeRunInspector'
@@ -22,12 +21,9 @@ export const createUiSlice: StateCreator<
     | 'setEdgeStatusByTarget'
     | 'clearPreviewNodeIdMap'
     | 'consumePendingFitView'
-    | 'clearInputGhostToolbarNudge'
   >
 > = (set, get) => ({
   consumePendingFitView: () => set({ pendingFitViewAfterTemplate: false }),
-
-  clearInputGhostToolbarNudge: () => set({ inputGhostToolbarNudge: false }),
 
   setViewport: (viewport) => set({ viewport }),
 
@@ -36,11 +32,6 @@ export const createUiSlice: StateCreator<
     const clamped = Math.max(MIN_COL_GAP, Math.min(MAX_COL_GAP, gap));
     set({ colGap: clamped });
     get().applyAutoLayout();
-  },
-  toggleAutoLayout: () => {
-    const next = !get().autoLayout;
-    set({ autoLayout: next });
-    if (next) get().applyAutoLayout();
   },
 
   setExpandedPreview: (id) => set({ expandedPreviewId: id }),

@@ -5,8 +5,8 @@ import type { TaskStreamState } from '../task-stream-state';
 
 /**
  * `streamedModelChars` is the data behind the `~N tok` live counter in
- * `TaskStreamMonitor`. Accumulates answer + thinking deltas (tool-arg
- * streaming is transient and intentionally excluded).
+ * `TaskStreamMonitor`. Accumulates answer, thinking, AND tool-arg deltas
+ * so the counter keeps ticking through every phase of a run.
  *
  * The RAF-batched patches flush inside `finalize()`, so each test ends
  * with finalize and asserts against the last patch received.
@@ -68,21 +68,34 @@ describe('task-stream-session streamedModelChars accumulation', () => {
     expect(lastPatchWithField(onPatch, 'streamedModelChars')).toBe(10);
   });
 
-  it('ignores tool-arg streaming (onStreamingTool) — those chars are transient', async () => {
+  it('counts tool-arg streaming (onStreamingTool) as delta-based tokens', async () => {
     const onPatch = vi.fn();
     const { callbacks, finalize } = createTaskStreamSession({
       sessionId: 'sess-test-4',
       onPatch,
     });
 
-    callbacks.onStreamingTool?.('write', 500, false, '/tmp/x');
-    callbacks.onStreamingTool?.('write', 1200, true, '/tmp/x');
+    callbacks.onStreamingTool?.('write', 500, false, '/tmp/x');   // +500
+    callbacks.onStreamingTool?.('write', 1200, false, '/tmp/x');  // +700
+    callbacks.onStreamingTool?.('write', 1200, true, '/tmp/x');   // done: no increment
     await finalize();
 
-    // streamedModelChars never moved because onStreamingTool does not contribute.
-    // Either it was never patched at all, or it stayed at 0.
-    const val = lastPatchWithField(onPatch, 'streamedModelChars');
-    expect(val == null || val === 0).toBe(true);
+    expect(lastPatchWithField(onPatch, 'streamedModelChars')).toBe(1200);
+  });
+
+  it('delta-tracks per tool name (switching tools does not re-count the previous tool)', async () => {
+    const onPatch = vi.fn();
+    const { callbacks, finalize } = createTaskStreamSession({
+      sessionId: 'sess-test-multi-tool',
+      onPatch,
+    });
+
+    callbacks.onStreamingTool?.('write', 800, false, '/a'); // +800
+    callbacks.onStreamingTool?.('write', 800, true, '/a');  // done
+    callbacks.onStreamingTool?.('read', 100, false, '/b');  // +100 (fresh tool; prev=0)
+    await finalize();
+
+    expect(lastPatchWithField(onPatch, 'streamedModelChars')).toBe(900);
   });
 
   it('never patches a negative or NaN token count', async () => {

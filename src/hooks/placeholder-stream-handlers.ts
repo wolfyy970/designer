@@ -5,6 +5,7 @@ import type { GenerationResult, RunTraceEvent, SkillInfo, ThinkingTurnSlice } fr
 import type { GenerateStreamCallbacks } from '../api/client';
 import {
   clearTransientResultFields,
+  closeOpenThinkingTurns,
   normalizeEvalSnapshot,
   type PlaceholderGenerationSessionState,
   type PlaceholderRafBatchers,
@@ -204,6 +205,11 @@ export function createPlaceholderStreamCallbacks(options: {
         ...state.activityByTurn,
         [tid]: (state.activityByTurn[tid] ?? '') + entry,
       };
+      const closed = closeOpenThinkingTurns(state);
+      updateResult(placeholderId, {
+        streamMode: 'narrating',
+        ...(closed ? { thinkingTurns: [...state.thinkingTurns] } : {}),
+      });
       raf.activity.schedule();
     },
     onTrace: onTraceWithTurnHandling,
@@ -222,6 +228,7 @@ export function createPlaceholderStreamCallbacks(options: {
         (a, b) => a.turnId - b.turnId,
       );
       state.streamedModelChars += delta.length;
+      updateResult(placeholderId, { streamMode: 'thinking' });
       raf.thinking.schedule();
     },
     onProgress: (status) => {
@@ -243,7 +250,19 @@ export function createPlaceholderStreamCallbacks(options: {
         });
         return;
       }
+      const prev =
+        state.streamingToolPending?.toolName === toolName
+          ? state.streamingToolPending.streamedChars ?? 0
+          : 0;
+      const delta = Math.max(0, streamedChars - prev);
+      if (delta > 0) state.streamedModelChars += delta;
       state.streamingToolPending = { toolName, streamedChars, toolPath };
+      const closed = closeOpenThinkingTurns(state);
+      updateResult(placeholderId, {
+        streamMode: 'tool',
+        ...(closed ? { thinkingTurns: [...state.thinkingTurns] } : {}),
+        ...(delta > 0 ? { streamedModelChars: state.streamedModelChars } : {}),
+      });
       raf.streamingTool.schedule();
     },
     onCode: (code) => {

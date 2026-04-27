@@ -13,7 +13,6 @@ import type {
   WorkspaceViewport,
 } from '../../types/workspace-graph';
 import type { EdgeStatus } from '../../constants/canvas';
-import type { InputGhostTargetType } from '../../types/canvas-data';
 import type { DesignSpec } from '../../types/spec';
 
 /** Full canvas Zustand store shape — slices compose into this in `canvas-store.ts`. */
@@ -24,7 +23,6 @@ export interface CanvasStore {
 
   showMiniMap: boolean;
   colGap: number;
-  autoLayout: boolean;
   expandedPreviewId: string | null;
   runInspectorPreviewNodeId: string | null;
   lineageNodeIds: Set<string>;
@@ -32,10 +30,6 @@ export interface CanvasStore {
   previewNodeIdMap: Map<string, string>;
   connectingFrom: { nodeType: CanvasNodeType; handleType: 'source' | 'target' } | null;
   pendingFitViewAfterTemplate: boolean;
-  /** Persisted: optional input-ghost slots the user hid (re-add from + menu). */
-  dismissedInputGhostSlots: InputGhostTargetType[];
-  /** Session-only: show tip to use toolbar after hiding a ghost. Omitted from persist partialize. */
-  inputGhostToolbarNudge: boolean;
   consumePendingFitView: () => void;
 
   onNodesChange: (changes: Parameters<typeof applyWorkspaceNodeChanges>[0]) => void;
@@ -44,14 +38,11 @@ export interface CanvasStore {
 
   toggleMiniMap: () => void;
   setColGap: (gap: number) => void;
-  toggleAutoLayout: () => void;
 
   /** Returns the new node's ID, or undefined when the node was not created (e.g. duplicate input type). */
   addNode: (type: CanvasNodeType, position?: { x: number; y: number }) => string | undefined;
   /** After loading a spec from the library/import, add optional input nodes that have spec content (avoids bogus ghosts). */
   materializeOptionalInputNodesFromSpec: (spec: DesignSpec) => void;
-  dismissInputGhostSlot: (targetType: InputGhostTargetType) => void;
-  clearInputGhostToolbarNudge: () => void;
   removeNode: (nodeId: string) => void;
   removeEdge: (edgeId: string) => void;
   updateNodeData: (nodeId: string, data: Partial<CanvasNodeData>) => void;

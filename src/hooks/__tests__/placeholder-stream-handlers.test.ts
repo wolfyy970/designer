@@ -41,7 +41,7 @@ describe('createPlaceholderStreamCallbacks', () => {
     );
   });
 
-  it('onActivity + onThinking accumulate streamedModelChars on session state', () => {
+  it('onActivity + onThinking + onStreamingTool all accumulate streamedModelChars', () => {
     const state = createInitialPlaceholderSessionState();
     const updateResult = vi.fn();
     const cbs = createPlaceholderStreamCallbacks({
@@ -53,14 +53,78 @@ describe('createPlaceholderStreamCallbacks', () => {
       raf: makeRaf(),
     });
 
-    cbs.onActivity?.('Hello ');   // 6
-    cbs.onActivity?.('world!');   // 6
-    cbs.onThinking?.(1, 'ABC');   // 3
-    cbs.onThinking?.(1, '');      // ignored (empty)
-    cbs.onThinking?.(2, 'DE');    // 2
-    cbs.onStreamingTool?.('write', 9999, false, '/x'); // tool args → NOT counted
+    cbs.onActivity?.('Hello ');                        // 6
+    cbs.onActivity?.('world!');                        // 6
+    cbs.onThinking?.(1, 'ABC');                        // 3
+    cbs.onThinking?.(1, '');                           // ignored (empty)
+    cbs.onThinking?.(2, 'DE');                         // 2
+    cbs.onStreamingTool?.('write', 100, false, '/x');  // delta 100
+    cbs.onStreamingTool?.('write', 250, false, '/x');  // delta 150
+    cbs.onStreamingTool?.('write', 250, false, '/x');  // delta 0 (no change)
 
-    expect(state.streamedModelChars).toBe(17);
+    expect(state.streamedModelChars).toBe(6 + 6 + 3 + 2 + 100 + 150);
+  });
+
+  it('onStreamingTool delta-tracks per tool (switching tools starts from zero)', () => {
+    const state = createInitialPlaceholderSessionState();
+    const cbs = createPlaceholderStreamCallbacks({
+      placeholderId: 'ph-multi',
+      traceLimit: 50,
+      updateResult: vi.fn(),
+      scheduleTraceServerForward: vi.fn(),
+      state,
+      raf: makeRaf(),
+    });
+
+    cbs.onStreamingTool?.('write', 400, false, '/a'); // +400
+    cbs.onStreamingTool?.('write', 400, true, '/a');  // done — no increment
+    cbs.onStreamingTool?.('read', 200, false, '/b');  // +200 (prev from other tool is ignored)
+
+    expect(state.streamedModelChars).toBe(600);
+  });
+
+  it('onActivity closes any open thinking turn and sets streamMode to narrating', () => {
+    const state = createInitialPlaceholderSessionState();
+    const updateResult = vi.fn();
+    const cbs = createPlaceholderStreamCallbacks({
+      placeholderId: 'ph-close',
+      traceLimit: 50,
+      updateResult,
+      scheduleTraceServerForward: vi.fn(),
+      state,
+      raf: makeRaf(),
+    });
+
+    cbs.onThinking?.(1, 'reasoning…');
+    expect(state.thinkingTurns.find((t) => t.turnId === 1)?.endedAt).toBeUndefined();
+
+    cbs.onActivity?.('visible text');
+    expect(state.thinkingTurns.find((t) => t.turnId === 1)?.endedAt).toBeDefined();
+    expect(updateResult).toHaveBeenCalledWith(
+      'ph-close',
+      expect.objectContaining({ streamMode: 'narrating' }),
+    );
+  });
+
+  it('onStreamingTool closes any open thinking turn and sets streamMode to tool', () => {
+    const state = createInitialPlaceholderSessionState();
+    const updateResult = vi.fn();
+    const cbs = createPlaceholderStreamCallbacks({
+      placeholderId: 'ph-tool',
+      traceLimit: 50,
+      updateResult,
+      scheduleTraceServerForward: vi.fn(),
+      state,
+      raf: makeRaf(),
+    });
+
+    cbs.onThinking?.(1, 'reasoning…');
+    cbs.onStreamingTool?.('write', 50, false, '/x');
+    expect(state.thinkingTurns.find((t) => t.turnId === 1)?.endedAt).toBeDefined();
+    expect(updateResult).toHaveBeenCalledWith(
+      'ph-tool',
+      expect.objectContaining({ streamMode: 'tool' }),
+    );
   });
 
   it('onError marks generation error on the result', () => {

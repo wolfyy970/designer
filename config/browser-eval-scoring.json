@@ -1,0 +1,49 @@
+{
+  "playwright": {
+    "consoleErrors": {
+      "score5":      0,
+      "score3":      1,
+      "score2":      2,
+      "bulkPenalty": 4
+    },
+    "pageErrorMultiplier": 2,
+    "visibleText": {
+      "excellent": 80,
+      "good":      30,
+      "minimal":   10
+    },
+    "bodyLayout": {
+      "minWidthStrong":  100,
+      "minHeightStrong":  40
+    },
+    "screenshotJpegQuality": 85
+  },
+  "qa": {
+    "interactive": {
+      "score2MinTotal":   1,
+      "score3MinTotal":   3,
+      "score3MinAnchors": 2,
+      "score3MinButtons": 1,
+      "score4MinTotal":   6,
+      "score4MinButtons": 2,
+      "score4MinAnchors": 3,
+      "score4MinNavs":    1,
+      "score5MinTotal":   10,
+      "score5MinButtons": 2,
+      "score5MinForms":   1
+    },
+    "content": {
+      "wordsT2":            20,
+      "wordsT3":            60,
+      "wordsT4":           120,
+      "wordsT5":           200,
+      "score3MinHeadings":   1,
+      "score3MinParagraphs": 1,
+      "score4MinHeadings":   2,
+      "score4MinSections":   2,
+      "score5MinHeadings":   2,
+      "score5MinParagraphs": 3,
+      "score5MinSections":   3
+    }
+  }
+}

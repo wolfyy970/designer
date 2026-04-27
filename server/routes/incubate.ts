@@ -27,6 +27,10 @@ const incubate = new Hono();
 const IncubatorPromptOptionsSchema = z.object({
   count: z.number().int().positive().optional(),
   existingStrategies: z.array(HypothesisStrategySchema).optional(),
+  internalContextDocument: z.string().optional(),
+  designSystemDocuments: z
+    .array(z.object({ nodeId: z.string(), title: z.string(), content: z.string() }))
+    .optional(),
 }) satisfies z.ZodType<IncubatorPromptOptions>;
 
 const IncubateRequestSchema = z.object({
@@ -42,6 +46,10 @@ const IncubateRequestSchema = z.object({
     )
     .optional(),
   supportsVision: z.boolean().optional(),
+  internalContextDocument: z.string().optional(),
+  designSystemDocuments: z
+    .array(z.object({ nodeId: z.string(), title: z.string(), content: z.string() }))
+    .optional(),
   promptOptions: IncubatorPromptOptionsSchema.optional(),
   /** Optional per-request thinking override. Missing → server falls back to the 'incubate' task default. */
   thinking: ThinkingOverrideSchema.optional(),
@@ -111,7 +119,13 @@ incubate.post('/', async (c) => {
     body.spec,
     userPromptTemplate,
     body.referenceDesigns,
-    body.promptOptions,
+    {
+      ...body.promptOptions,
+      internalContextDocument:
+        body.promptOptions?.internalContextDocument ?? body.internalContextDocument,
+      designSystemDocuments:
+        body.promptOptions?.designSystemDocuments ?? body.designSystemDocuments,
+    },
   );
 
   const agentUserPrompt = `<task>

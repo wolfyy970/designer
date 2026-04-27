@@ -144,7 +144,7 @@ async function toolWriteSkill(ctx: ProposerContext, args: { key: string; content
     relPath: relSkill,
     source: 'meta-harness:proposer:write_skill',
   });
-  if (!snap.ok) return `Error: version snapshot failed: ${snap.error}`;
+  if (!snap.ok) return `Error: snapshot failed: ${snap.error}`;
   await writeFile(skillPath, args.content, 'utf8');
   ctx.skillsMutated = true;
   return `Wrote ${path.relative(ctx.root, skillPath)}`;
@@ -161,7 +161,7 @@ async function toolDeleteSkill(ctx: ProposerContext, args: { key: string }): Pro
     source: 'meta-harness:proposer:delete_skill',
     action: 'delete',
   });
-  if (!snapDel.ok) return `Error: version snapshot failed: ${snapDel.error}`;
+  if (!snapDel.ok) return `Error: snapshot failed: ${snapDel.error}`;
   try {
     await rm(dir, { recursive: true, force: true });
     ctx.skillsMutated = true;
@@ -208,7 +208,7 @@ async function toolWriteSystemPrompt(ctx: ProposerContext, args: { body: string 
     relPath: 'prompts/designer-agentic-system/PROMPT.md',
     source: 'meta-harness:proposer:write_system_prompt',
   });
-  if (!snapP.ok) return `Error: version snapshot failed: ${snapP.error}`;
+  if (!snapP.ok) return `Error: snapshot failed: ${snapP.error}`;
   await writeFile(absFile, out, 'utf8');
   ctx.skillsMutated = true;
   return `Wrote body of ${path.relative(ctx.root, absFile)} (${newBody.length} chars); frontmatter preserved`;

@@ -1,9 +1,9 @@
-import { env } from '../env.ts';
+import { FEATURE_LOCKDOWN } from '../../src/lib/feature-flags.ts';
 import { LOCKDOWN_MODEL_ID, LOCKDOWN_PROVIDER_ID } from '../../src/lib/lockdown-model.ts';
 import type { HypothesisGenerationContext } from '../../src/workspace/hypothesis-generation-pure.ts';
 
 export function isLockdownEnabled(): boolean {
-  return env.LOCKDOWN;
+  return FEATURE_LOCKDOWN;
 }
 
 export function clampProviderModel(

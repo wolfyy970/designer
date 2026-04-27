@@ -6,10 +6,10 @@ import {
   useState,
 } from 'react';
 import { Brain, Wrench } from 'lucide-react';
-import { RF_INTERACTIVE } from '../../../constants/canvas';
+import { RF_INTERACTIVE, TIMELINE_DOT } from '../../../constants/canvas';
 import type { RunTraceEvent, StreamingToolLiveness, ThinkingTurnSlice } from '../../../types/provider';
 import { StreamdownTimeline } from './StreamdownTimeline.tsx';
-import { TIMELINE_DOT } from './StreamingToolRow';
+import { formatTokEstimate } from '../../../lib/stream-display-format';
 import {
   TimelineAccordionChrome,
   TimelineEmptyStateSkeleton,
@@ -189,6 +189,7 @@ function ToolUseBlock({
   onToggle,
   streamingToolName,
   streamingToolPath,
+  streamingToolChars,
 }: {
   traces: RunTraceEvent[];
   isStreaming: boolean;
@@ -197,6 +198,7 @@ function ToolUseBlock({
   onToggle: () => void;
   streamingToolName?: string;
   streamingToolPath?: string;
+  streamingToolChars?: number;
 }) {
   const isStreamingArgs =
     isStreaming && isActiveTurn && streamingToolName != null;
@@ -244,10 +246,15 @@ function ToolUseBlock({
           {isStreamingArgs && (
             <div className="flex items-center gap-1.5 font-mono text-badge leading-snug text-fg-secondary">
               <span className={TIMELINE_DOT} />
-              <span>
-                Streaming <code>{streamingToolName}</code>
+              <span className="min-w-0 truncate">
+                <code>{streamingToolName}</code>
                 {streamingToolPath ? ` → ${streamingToolPath}` : ''}
-                <StreamingEllipsis />
+                {formatTokEstimate(streamingToolChars) ? (
+                  <span className="text-fg-muted">
+                    {' · '}
+                    {formatTokEstimate(streamingToolChars)} tok
+                  </span>
+                ) : null}
               </span>
             </div>
           )}
@@ -277,6 +284,7 @@ export function Timeline({
 }) {
   const streamingToolName = streamingLiveness?.streamingToolName;
   const streamingToolPath = streamingLiveness?.streamingToolPath;
+  const streamingToolChars = streamingLiveness?.streamingToolChars;
   const scrollRef = useRef<HTMLDivElement>(null);
   const followLatestRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
@@ -497,6 +505,7 @@ export function Timeline({
                     onToggle={() => toggleToolUse(seg.turnId)}
                     streamingToolName={isActive ? streamingToolName : undefined}
                     streamingToolPath={isActive ? streamingToolPath : undefined}
+                    streamingToolChars={isActive ? streamingToolChars : undefined}
                   />
 
                   {otherTraces.length > 0 && (

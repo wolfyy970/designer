@@ -100,6 +100,7 @@ export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: n
       incubatorWirings[k] = {
         inputNodeIds: (w.sectionNodeIds as string[] | undefined) ?? (w.inputNodeIds as string[] | undefined) ?? [],
         previewNodeIds: (w.previewNodeIds as string[] | undefined) ?? (w.variantNodeIds as string[] | undefined) ?? [],
+        designSystemNodeIds: (w.designSystemNodeIds as string[] | undefined) ?? [],
       };
     }
     p = { ...rest, incubatorWirings };
@@ -138,6 +139,7 @@ export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: n
       incubatorWirings[k] = {
         inputNodeIds: (w.sectionNodeIds as string[] | undefined) ?? (w.inputNodeIds as string[] | undefined) ?? [],
         previewNodeIds: (w.previewNodeIds as string[] | undefined) ?? (w.variantNodeIds as string[] | undefined) ?? [],
+        designSystemNodeIds: (w.designSystemNodeIds as string[] | undefined) ?? [],
       };
     }
     p = { ...p, incubatorWirings };
@@ -151,6 +153,7 @@ export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: n
       incubatorWirings[k] = {
         inputNodeIds,
         previewNodeIds: (w.previewNodeIds as string[] | undefined) ?? [],
+        designSystemNodeIds: (w.designSystemNodeIds as string[] | undefined) ?? [],
       };
     }
     p = { ...p, incubatorWirings };
@@ -182,6 +185,18 @@ export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: n
       };
     }
     p = { ...p, hypotheses };
+  }
+  if (fromVersion < 10) {
+    const rawW = (p.incubatorWirings as Record<string, Record<string, unknown>>) ?? {};
+    const incubatorWirings: Record<string, DomainIncubatorWiring> = {};
+    for (const [k, w] of Object.entries(rawW)) {
+      incubatorWirings[k] = {
+        inputNodeIds: (w.inputNodeIds as string[] | undefined) ?? [],
+        previewNodeIds: (w.previewNodeIds as string[] | undefined) ?? [],
+        designSystemNodeIds: (w.designSystemNodeIds as string[] | undefined) ?? [],
+      };
+    }
+    p = { ...p, incubatorWirings };
   }
   return p;
 }

@@ -27,9 +27,9 @@ export const createLayoutSlice: StateCreator<
         edges: state.edges,
       });
       set({
-        nodes: reconcileEphemeralGhostNodes(get().nodes, get().dismissedInputGhostSlots),
+        nodes: reconcileEphemeralGhostNodes(get().nodes),
       });
-      if (get().autoLayout) get().applyAutoLayout();
+      get().applyAutoLayout();
       return;
     }
 
@@ -59,7 +59,7 @@ export const createLayoutSlice: StateCreator<
       },
     ];
     set({
-      nodes: reconcileEphemeralGhostNodes(coreNodes, get().dismissedInputGhostSlots),
+      nodes: reconcileEphemeralGhostNodes(coreNodes),
       edges: [
         {
           id: buildEdgeId(briefId, incubatorId),
@@ -82,7 +82,7 @@ export const createLayoutSlice: StateCreator<
       nodes: get().nodes as { id: string; type: CanvasNodeType; data: Record<string, unknown> }[],
       edges: get().edges,
     });
-    if (get().autoLayout) get().applyAutoLayout();
+    get().applyAutoLayout();
   },
 
   resetCanvas: () => {
@@ -95,8 +95,6 @@ export const createLayoutSlice: StateCreator<
       lineageNodeIds: new Set(),
       lineageEdgeIds: new Set(),
       pendingFitViewAfterTemplate: false,
-      dismissedInputGhostSlots: [],
-      inputGhostToolbarNudge: false,
     });
     get().initializeCanvas();
   },
@@ -111,7 +109,5 @@ export const createLayoutSlice: StateCreator<
       lineageNodeIds: new Set(),
       lineageEdgeIds: new Set(),
       pendingFitViewAfterTemplate: false,
-      dismissedInputGhostSlots: [],
-      inputGhostToolbarNudge: false,
     }),
 });

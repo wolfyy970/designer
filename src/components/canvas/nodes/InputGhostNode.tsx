@@ -1,6 +1,6 @@
 import { memo, useCallback } from 'react';
 import { type Node, type NodeProps } from '@xyflow/react';
-import { Plus, X } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { SPEC_SECTIONS } from '../../../lib/constants';
@@ -11,7 +11,7 @@ type InputGhostFlowNode = Node<InputGhostData, 'inputGhost'>;
 
 function InputGhostNode({ data }: NodeProps<InputGhostFlowNode>) {
   const { targetType } = data;
-  const sectionId = NODE_TYPE_TO_SECTION[targetType]!;
+  const sectionId = targetType === 'designSystem' ? 'design-system' : NODE_TYPE_TO_SECTION[targetType]!;
   const meta = SPEC_SECTIONS.find((s) => s.id === sectionId)!;
 
   const onAdd = useCallback(
@@ -23,35 +23,18 @@ function InputGhostNode({ data }: NodeProps<InputGhostFlowNode>) {
     [targetType],
   );
 
-  const onDismiss = useCallback(
-    (e: React.PointerEvent) => {
-      e.stopPropagation();
-      e.preventDefault();
-      useCanvasStore.getState().dismissInputGhostSlot(targetType);
-    },
-    [targetType],
-  );
-
   return (
     <div className={`${RF_INTERACTIVE} flex w-node flex-col rounded-lg border border-dashed border-border-dashed-ghost bg-surface-ghost-backdrop shadow-sm ring-1 ring-inset ring-border-inset-ring`}>
       <div className="relative border-b border-border-section-divider px-3 py-2">
-        <div className="flex items-baseline justify-between gap-2 pr-6">
+        <div className="flex items-baseline justify-between gap-2">
           <h3 className="text-xs font-semibold text-fg-secondary">{meta.title}</h3>
           <span className="text-nano shrink-0 uppercase tracking-wide text-fg-muted">
             optional
           </span>
         </div>
-        <button
-          type="button"
-          onPointerDown={onDismiss}
-          className={`${RF_INTERACTIVE} absolute right-2 top-2 rounded p-0.5 text-fg-faint transition-colors hover:bg-surface hover:text-fg`}
-          aria-label={`Hide suggested card: ${meta.title}`}
-        >
-          <X size={14} aria-hidden />
-        </button>
       </div>
       <div className="flex flex-1 flex-col items-center px-3 pt-2 pb-3">
-        <p className="text-micro mb-3 max-h-[var(--max-height-section-ghost-preview)] overflow-hidden text-pretty leading-relaxed text-fg-secondary">
+        <p className="text-micro mb-3 max-h-[var(--max-height-section-ghost-preview)] self-stretch overflow-hidden text-left text-pretty leading-relaxed text-fg-secondary">
           {meta.description}
         </p>
         <button
@@ -62,7 +45,7 @@ function InputGhostNode({ data }: NodeProps<InputGhostFlowNode>) {
         >
           <Plus size={22} strokeWidth={2.25} aria-hidden />
         </button>
-        <span className="text-nano mt-2 text-center text-fg-muted">Add to workspace</span>
+        <span className="text-nano mt-2 text-center text-fg-muted">Add to canvas</span>
       </div>
     </div>
   );

@@ -39,13 +39,13 @@ type InputNodeFlowType = Node<InputNodeData, CanvasNodeType>;
 function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
   const sectionId = NODE_TYPE_TO_SECTION[type as CanvasNodeType]!;
   const meta = SPEC_SECTIONS.find((s) => s.id === sectionId)!;
-  const deleteCopy = useMemo(() => inputCardDeleteCopy(meta.title), [meta.title]);
-  const onRemove = useCanvasNodePermanentRemove(id, deleteCopy);
   const section = useSpecStore((s) => s.spec.sections[sectionId]);
   const updateSection = useSpecStore((s) => s.updateSection);
   const capturingImage = useSpecStore((s) => s.capturingImage);
   const content = section?.content ?? '';
   const isDesignBrief = type === 'designBrief';
+  const deleteCopy = useMemo(() => inputCardDeleteCopy(meta.title), [meta.title]);
+  const onRemove = useCanvasNodePermanentRemove(id, deleteCopy);
   const isExistingDesign = type === 'existingDesign';
   const hasImages = isExistingDesign;
   const isCapturing = isExistingDesign && capturingImage === sectionId;
@@ -137,7 +137,7 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
       handleColor={content.trim() ? 'green' : 'amber'}
       leftRail={content.trim() ? 'success' : (meta.required ? 'warning' : null)}
     >
-      <NodeHeader onRemove={onRemove} description={meta.description}>
+      <NodeHeader onRemove={isDesignBrief ? undefined : onRemove} description={meta.description}>
         <h3 className="text-xs font-semibold text-fg">{meta.title}</h3>
         {!content.trim() && meta.required ? (
           <Badge shape="pill" tone="warning">needs input</Badge>

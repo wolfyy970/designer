@@ -208,7 +208,7 @@ export default function VariantToolbar({
             ? 'text-accent hover:text-accent-text-dim'
             : 'text-fg-faint hover:text-fg-muted'
         }`}
-        title={isWorkspaceOpen ? 'Close run workspace' : 'Open run workspace'}
+        title={isWorkspaceOpen ? 'Close run panel' : 'Open run panel'}
       >
         <PanelRight size={10} />
       </button>

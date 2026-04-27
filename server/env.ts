@@ -1,6 +1,5 @@
 import { config as loadEnv } from 'dotenv';
 import path from 'node:path';
-import { parseLockdownEnvValue } from '../src/lib/lockdown-model.ts';
 import { DEFAULT_DEV_API_PORT } from './dev-defaults.ts';
 
 // Must run before `export const env` reads `process.env`. ESM hoists `import`s above the body of
@@ -127,12 +126,5 @@ export const env = {
     if (explicit) return explicit;
     const port = (process.env.PORT ?? String(DEFAULT_DEV_API_PORT)).trim();
     return `http://127.0.0.1:${port}`;
-  },
-  /**
-   * When true (default when unset), all LLM routes clamp to OpenRouter + MiniMax M2.5.
-   * Set LOCKDOWN=false (or 0/no/off) to allow arbitrary provider/model from the client.
-   */
-  get LOCKDOWN(): boolean {
-    return parseLockdownEnvValue(process.env.LOCKDOWN);
   },
 };

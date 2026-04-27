@@ -75,6 +75,25 @@ body`,
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
+
+  it('all checked-in skills have loadable frontmatter', async () => {
+    const skillsRoot = path.resolve(process.cwd(), 'skills');
+    const names = await fs.readdir(skillsRoot);
+    const expected: string[] = [];
+    for (const name of names) {
+      if (name.startsWith('_') || name.startsWith('.')) continue;
+      try {
+        const stat = await fs.stat(path.join(skillsRoot, name, 'SKILL.md'));
+        if (stat.isFile()) expected.push(name);
+      } catch {
+        // Non-skill files such as README.md are expected in this directory.
+      }
+    }
+
+    const out = await discoverSkills(skillsRoot);
+    expect(out.map((s) => s.key)).toEqual(expected.sort());
+    expect(out.every((s) => s.bodyMarkdown.trim().startsWith('# '))).toBe(true);
+  });
 });
 
 describe('formatSkillsCatalogXml', () => {
@@ -133,6 +152,15 @@ describe('skillFrontmatterSchema', () => {
 
   it('rejects missing description', () => {
     expect(skillFrontmatterSchema.safeParse({ name: 'X' }).success).toBe(false);
+  });
+
+  it('rejects descriptions over Codex loader limits', () => {
+    expect(
+      skillFrontmatterSchema.safeParse({
+        name: 'X',
+        description: 'x'.repeat(1025),
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects invalid when value', () => {

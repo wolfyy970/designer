@@ -37,7 +37,7 @@ export function ViewportGate({ children }: { children: React.ReactNode }) {
         </span>
         <p className="text-base font-medium leading-snug text-fg sm:text-lg">Desktop only.</p>
         <p className="text-sm leading-relaxed text-fg-secondary">
-          This is a canvas workspace that requires at least{' '}
+          This canvas requires at least{' '}
           <span className="tabular-nums text-fg">{VIEWPORT_DESKTOP_MIN_WIDTH_PX}px</span> of
           viewport width.
         </p>

@@ -14,6 +14,11 @@ export function ensureWiring(
   wirings: Record<string, DomainIncubatorWiring>,
   incubatorId: string,
 ): DomainIncubatorWiring {
-  return wirings[incubatorId] ?? defaultIncubatorWiring();
+  const w = wirings[incubatorId];
+  if (!w) return defaultIncubatorWiring();
+  return {
+    inputNodeIds: w.inputNodeIds ?? [],
+    previewNodeIds: w.previewNodeIds ?? [],
+    designSystemNodeIds: w.designSystemNodeIds ?? [],
+  };
 }
-

@@ -15,6 +15,7 @@ const DOMAIN_EDGE_EXAMPLES: Record<string, [CanvasNodeType, CanvasNodeType]> = {
   'compiler-hypothesis': [NODE_TYPES.INCUBATOR, NODE_TYPES.HYPOTHESIS],
   'section-compiler': [NODE_TYPES.DESIGN_BRIEF, NODE_TYPES.INCUBATOR],
   'variant-compiler': [NODE_TYPES.PREVIEW, NODE_TYPES.INCUBATOR],
+  'designSystem-compiler': [NODE_TYPES.DESIGN_SYSTEM, NODE_TYPES.INCUBATOR],
   'designSystem-hypothesis': [NODE_TYPES.DESIGN_SYSTEM, NODE_TYPES.HYPOTHESIS],
 };
 

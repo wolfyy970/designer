@@ -2,14 +2,13 @@ import { AUTO_LAYOUT_DEBOUNCE_MS } from '../../lib/constants';
 
 let dimensionLayoutTimer: ReturnType<typeof setTimeout> | null = null;
 
-type CanvasGetter = () => { autoLayout: boolean; applyAutoLayout: () => void };
+type CanvasGetter = () => { applyAutoLayout: () => void };
 
-/** True when React Flow reported a dimensions change and auto-layout is on. */
+/** True when React Flow reported a dimensions change. */
 export function shouldScheduleAutoLayoutOnDimensionChange(
-  autoLayout: boolean,
   changes: Array<{ type?: string }>,
 ): boolean {
-  return autoLayout && changes.some((c) => c.type === 'dimensions');
+  return changes.some((c) => c.type === 'dimensions');
 }
 
 /** Debounced full auto-layout after node size changes (avoids feedback loops). */
@@ -17,6 +16,6 @@ export function scheduleDebouncedAutoLayout(get: CanvasGetter): void {
   if (dimensionLayoutTimer) clearTimeout(dimensionLayoutTimer);
   dimensionLayoutTimer = setTimeout(() => {
     dimensionLayoutTimer = null;
-    if (get().autoLayout) get().applyAutoLayout();
+    get().applyAutoLayout();
   }, AUTO_LAYOUT_DEBOUNCE_MS);
 }

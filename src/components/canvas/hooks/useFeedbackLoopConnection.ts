@@ -73,9 +73,7 @@ export function useFeedbackLoopConnection() {
         capturePreviewIntoExistingDesign(connection.source);
       }
 
-      // Re-layout after new edge
-      const cs = useCanvasStore.getState();
-      if (cs.autoLayout) cs.applyAutoLayout();
+      useCanvasStore.getState().applyAutoLayout();
     },
     [storeOnConnect]
   );

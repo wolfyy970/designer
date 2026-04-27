@@ -46,8 +46,8 @@ describe('Button', () => {
   it('renders destructive variant as secondary shape with error text', () => {
     const { container } = render(<Button variant="destructive">Delete</Button>);
     const btn = container.querySelector('button')!;
-    expect(btn.className).toContain('border-border');
-    expect(btn.className).toContain('bg-surface-raised');
+    expect(btn.className).toContain('border-error-border-soft');
+    expect(btn.className).toContain('bg-transparent');
     expect(btn.className).toContain('text-error');
     expect(btn.className).toContain('hover:bg-error-subtle');
   });
@@ -105,6 +105,9 @@ describe('Button', () => {
     render(<Button disabled onClick={onClick}>Cannot click</Button>);
     const btn = screen.getByRole('button', { name: 'Cannot click' });
     expect((btn as HTMLButtonElement).disabled).toBe(true);
+    expect(btn.className).toContain('disabled:bg-surface');
+    expect(btn.className).toContain('disabled:text-fg-faint');
+    expect(btn.className).toContain('disabled:shadow-none');
     await user.click(btn);
     expect(onClick).not.toHaveBeenCalled();
   });

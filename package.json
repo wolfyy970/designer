@@ -1,7 +1,7 @@
 {
   "name": "auto-designer",
   "private": true,
-  "version": "0.3.42",
+  "version": "0.3.43",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,7 +19,6 @@
     "knip": "knip --include files,dependencies",
     "meta-harness": "tsx --tsconfig meta-harness/tsconfig.json meta-harness/runner.tsx",
     "snap": "tsx scripts/snap.ts",
-    "version-snapshot": "tsx scripts/version-snapshot.ts",
     "prepare": "husky"
   },
   "dependencies": {
@@ -28,6 +27,7 @@
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@fontsource-variable/space-grotesk": "^5.2.10",
     "@fontsource/orbitron": "^5.2.8",
+    "@google/design.md": "0.1.1",
     "@hono/node-server": "^1.19.9",
     "@inkjs/ui": "^2.0.0",
     "@mariozechner/pi-ai": "^0.64.0",

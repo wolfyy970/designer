@@ -523,33 +523,36 @@ describe('v16 → v17: strip ghost placeholder nodes', () => {
   });
 });
 
-describe('v17 → v18: dismissedSectionGhostSlots default', () => {
-  it('adds empty dismissedInputGhostSlots when missing (after full migrate chain)', () => {
-    const state = { nodes: [makeNode('b', 'designBrief')], edges: [] };
+describe('v17 → v18: remove ghost-dismiss persistence', () => {
+  it('drops dismissedSectionGhostSlots', () => {
+    const state = { nodes: [makeNode('b', 'designBrief')], edges: [], dismissedSectionGhostSlots: ['researchContext'] };
     const result = migrateCanvasState(state, 17);
-    expect(result.dismissedInputGhostSlots).toEqual([]);
+    expect(result).not.toHaveProperty('dismissedSectionGhostSlots');
+    expect(result).not.toHaveProperty('dismissedInputGhostSlots');
   });
 });
 
-describe('v18 → v19: sanitize dismissedSectionGhostSlots', () => {
-  it('strips junk strings from dismissed slots (normalized to dismissedInputGhostSlots)', () => {
+describe('v18 → v19: remove legacy ghost-dismiss persistence', () => {
+  it('drops dismissedSectionGhostSlots arrays', () => {
     const state = {
       nodes: [makeNode('b', 'designBrief')],
       edges: [],
       dismissedSectionGhostSlots: ['researchContext', 'not-a-slot', 'existingDesign', ''],
     };
     const result = migrateCanvasState(state, 18);
-    expect(result.dismissedInputGhostSlots).toEqual(['researchContext', 'existingDesign']);
+    expect(result).not.toHaveProperty('dismissedSectionGhostSlots');
+    expect(result).not.toHaveProperty('dismissedInputGhostSlots');
   });
 
-  it('replaces non-array dismissedSectionGhostSlots with empty array', () => {
+  it('drops non-array dismissedSectionGhostSlots', () => {
     const state = {
       nodes: [],
       edges: [],
       dismissedSectionGhostSlots: 'invalid',
     };
     const result = migrateCanvasState(state, 18);
-    expect(result.dismissedInputGhostSlots).toEqual([]);
+    expect(result).not.toHaveProperty('dismissedSectionGhostSlots');
+    expect(result).not.toHaveProperty('dismissedInputGhostSlots');
   });
 });
 
@@ -666,8 +669,8 @@ describe('v21 → v22: input ghost ids, node type, and dismissed-slot keys', () 
     const nodes = result.nodes as Array<Record<string, unknown>>;
     expect(nodes.find((n) => n.id === 'ghost-input-researchContext')?.type).toBe('inputGhost');
     expect(nodes.some((n) => n.id === 'ghost-section-researchContext')).toBe(false);
-    expect(result.dismissedInputGhostSlots).toEqual(['objectivesMetrics']);
-    expect(result.inputGhostToolbarNudge).toBe(true);
+    expect(result).not.toHaveProperty('dismissedInputGhostSlots');
+    expect(result).not.toHaveProperty('inputGhostToolbarNudge');
     expect(result).not.toHaveProperty('dismissedSectionGhostSlots');
     expect(result).not.toHaveProperty('sectionGhostToolbarNudge');
   });
@@ -783,5 +786,35 @@ describe('v26 → v27: strip hypothesisGhost nodes', () => {
     expect(nodes.map((n) => n.id)).toEqual(['ic', 'h1']);
     expect(edges).toHaveLength(1);
     expect(edges[0].id).toBe('e1');
+  });
+});
+
+describe('v27 → v28: make auto layout implicit', () => {
+  it('drops persisted autoLayout state', () => {
+    const result = migrateCanvasState(
+      {
+        nodes: [],
+        edges: [],
+        autoLayout: false,
+      },
+      27,
+    );
+    expect(result).not.toHaveProperty('autoLayout');
+  });
+});
+
+describe('v28 → v29: remove ghost-dismiss state', () => {
+  it('drops dismissed input ghost persistence', () => {
+    const result = migrateCanvasState(
+      {
+        nodes: [],
+        edges: [],
+        dismissedInputGhostSlots: ['researchContext'],
+        dismissedSectionGhostSlots: ['existingDesign'],
+      },
+      28,
+    );
+    expect(result).not.toHaveProperty('dismissedInputGhostSlots');
+    expect(result).not.toHaveProperty('dismissedSectionGhostSlots');
   });
 });

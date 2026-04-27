@@ -1,5 +1,8 @@
 /**
- * Set META_HARNESS_LIVE=1 with API on 127.0.0.1:4731 and OPENROUTER_API_KEY for real HTTP.
+ * Live end-to-end integration: drives the meta-harness evaluator against a running
+ * local API. Opt in with RUN_META_HARNESS_LIVE_TESTS=1 (legacy:
+ * META_HARNESS_LIVE=1); requires a dev server on `127.0.0.1:4731`
+ * and `OPENROUTER_API_KEY` in `.env.local`.
  */
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -9,10 +12,13 @@ import { runHypothesisEvalFromMetaHarness } from '../evaluator.ts';
 import { resolveEvalRunsBaseDir } from '../paths.ts';
 import { hydrateMetaHarnessTestCase } from '../test-case-hydrator.ts';
 
-const live = process.env.META_HARNESS_LIVE === '1';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-describe.skipIf(!live)('meta-harness live API (META_HARNESS_LIVE=1)', () => {
+const live =
+  process.env.RUN_META_HARNESS_LIVE_TESTS === '1' || process.env.META_HARNESS_LIVE === '1';
+const describeLive = live ? describe : describe.skip;
+
+describeLive('meta-harness live API', () => {
   it('health responds', async () => {
     const r = await fetch('http://127.0.0.1:4731/api/health');
     expect(r.ok).toBe(true);

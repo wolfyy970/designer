@@ -12,8 +12,7 @@ import type { AgentRunEvent, AgentSessionParams } from '../pi-agent-run-types.ts
 
 export type AgenticOrchestratorBuildInput = Omit<AgentSessionParams, 'systemPrompt'>;
 
-/** Server-side cap for revision rounds (aligned with client evaluator settings). */
-export const MAX_REVISION_ROUNDS_CAP = 20;
+export { MAX_REVISION_ROUNDS_CAP } from '../../lib/evaluation-revision-gate.ts';
 
 /** Max design-finding summaries folded into checkpoint todos line. */
 export const CHECKPOINT_TODO_SUMMARY_MAX = 5;

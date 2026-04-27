@@ -75,3 +75,7 @@ export const RF_INTERACTIVE = 'nodrag nowheel';
 export const RF_INTERACTIVE_NOPAN = 'nodrag nowheel nopan';
 /** Edge delete / small controls: block node drag and canvas pan */
 export const RF_NODRAG_NOPAN = 'nodrag nopan';
+
+/** Pulse dot used next to streaming-tool rows in the Timeline. */
+export const TIMELINE_DOT =
+  'inline-flex h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent';

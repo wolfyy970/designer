@@ -92,6 +92,14 @@ export interface ThinkingTurnSlice {
   endedAt?: number;
 }
 
+/**
+ * What the model is currently doing, set by the last-firing stream handler.
+ * - 'thinking'   — extended reasoning (`thinking_delta`, Layer 1)
+ * - 'narrating'  — visible output text between tool calls (`text_delta`, Layer 2)
+ * - 'tool'       — a tool-call argument stream is active
+ */
+export type StreamMode = 'thinking' | 'narrating' | 'tool';
+
 /** Transient UI fields for generation liveness (footer, idle detection). In-memory only. */
 export interface LivenessSlice {
   progressMessage?: string;
@@ -108,6 +116,7 @@ export interface LivenessSlice {
   evaluationStatus?: string;
   /** startedAt of the most recent open thinking turn (endedAt == null), if any. */
   activeThinkingStartedAt?: number;
+  streamMode?: StreamMode;
 }
 
 /** Copied from {@link GenerationResult} into {@link LivenessSlice} (excludes computed `activeThinkingStartedAt`). */
@@ -124,6 +133,7 @@ const LIVENESS_SLICE_KEYS = [
   'streamedModelChars',
   'agenticPhase',
   'evaluationStatus',
+  'streamMode',
 ] as const satisfies readonly (keyof Omit<LivenessSlice, 'activeThinkingStartedAt'>)[];
 
 export function pickLivenessSlice(result: GenerationResult): LivenessSlice {
@@ -207,6 +217,12 @@ export interface GenerationResult {
   streamingToolPath?: string;
   /** In-memory only — accumulated size of streamed tool-call arguments. */
   streamingToolChars?: number;
+  /**
+   * In-memory only — what the model's stream is currently emitting. Set by the last-firing
+   * stream handler (`onThinking`, `onActivity`, `onStreamingTool`). Drives the chip icon
+   * (Brain / MessageSquare / Wrench). Never persisted.
+   */
+  streamMode?: StreamMode;
   activityLog?: string[];
   /** Assistant text output per PI turn (for timeline). In-memory only. */
   activityByTurn?: Record<number, string>;

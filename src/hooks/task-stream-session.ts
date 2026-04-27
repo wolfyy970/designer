@@ -18,6 +18,18 @@ function streamDevDebug(sessionId: string, message: string, data?: Record<string
   console.debug(`(task-stream:${sessionId.slice(0, 8)})`, message, data ?? '');
 }
 
+/** Mark open thinking turns closed so the chip icon stops lying when the model moves on. */
+function closeOpenThinkingTurnsOnTaskStream(
+  state: Pick<TaskStreamSessionState, 'thinkingTurns'>,
+): boolean {
+  if (!state.thinkingTurns.some((t) => t.endedAt == null)) return false;
+  const now = Date.now();
+  state.thinkingTurns = state.thinkingTurns.map((t) =>
+    t.endedAt == null ? { ...t, endedAt: now } : t,
+  );
+  return true;
+}
+
 export interface TaskStreamSessionOptions {
   /** Stable id for trace forwarding + RAF debug labels */
   sessionId: string;
@@ -130,6 +142,11 @@ export function createTaskStreamSession(options: TaskStreamSessionOptions): {
         ...state.activityByTurn,
         [tid]: (state.activityByTurn[tid] ?? '') + entry,
       };
+      const closed = closeOpenThinkingTurnsOnTaskStream(state);
+      onPatch({
+        streamMode: 'narrating',
+        ...(closed ? { thinkingTurns: [...state.thinkingTurns] } : {}),
+      });
       raf.activity.schedule();
     },
     onTrace: onTraceWithTurnHandling,
@@ -148,6 +165,7 @@ export function createTaskStreamSession(options: TaskStreamSessionOptions): {
         (a, b) => a.turnId - b.turnId,
       );
       state.streamedModelChars += delta.length;
+      onPatch({ streamMode: 'thinking' });
       raf.thinking.schedule();
     },
     onProgress: (status) => {
@@ -169,7 +187,19 @@ export function createTaskStreamSession(options: TaskStreamSessionOptions): {
         });
         return;
       }
+      const prev =
+        state.streamingToolPending?.toolName === toolName
+          ? state.streamingToolPending.streamedChars ?? 0
+          : 0;
+      const delta = Math.max(0, streamedChars - prev);
+      if (delta > 0) state.streamedModelChars += delta;
       state.streamingToolPending = { toolName, streamedChars, toolPath };
+      const closed = closeOpenThinkingTurnsOnTaskStream(state);
+      onPatch({
+        streamMode: 'tool',
+        ...(closed ? { thinkingTurns: [...state.thinkingTurns] } : {}),
+        ...(delta > 0 ? { streamedModelChars: state.streamedModelChars } : {}),
+      });
       raf.streamingTool.schedule();
     },
     onCode: (code) => {

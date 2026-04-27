@@ -7,14 +7,15 @@ type CanvasNode = WorkspaceNode;
 export { INPUT_NODE_TYPES };
 
 /**
- * Canonical vertical order for optional input nodes (ghosts + real nodes in layer 0).
- * Research → objectives → constraints → existing design.
+ * Canonical vertical order for optional nodes (ghosts + real input nodes in layer 0).
+ * Research → objectives → constraints → existing design → design system.
  */
 export const OPTIONAL_INPUT_SLOTS: readonly InputGhostTargetType[] = [
   'researchContext',
   'objectivesMetrics',
   'designConstraints',
   'existingDesign',
+  'designSystem',
 ];
 
 /** Prefix for stable input-ghost node ids; keep in sync with onNodesChange remove guard. */
@@ -116,15 +117,12 @@ export function layoutTypeOrder(n: CanvasNode): number {
  */
 export function reconcileInputGhostNodes(
   nodes: WorkspaceNode[],
-  dismissedSlots: readonly InputGhostTargetType[] = [],
 ): WorkspaceNode[] {
-  const dismissed = new Set<string>(dismissedSlots);
   const base = nodes.filter((n) => n.type !== 'inputGhost');
   const have = new Set(base.map((n) => n.type));
   const ghosts: WorkspaceNode[] = [];
   for (const slot of OPTIONAL_INPUT_SLOTS) {
     if (have.has(slot)) continue;
-    if (dismissed.has(slot)) continue;
     ghosts.push({
       id: inputGhostStableId(slot),
       type: 'inputGhost',
@@ -138,9 +136,8 @@ export function reconcileInputGhostNodes(
 /** Reconcile optional-input placeholder ghosts (not persisted). */
 export function reconcileEphemeralGhostNodes(
   nodes: WorkspaceNode[],
-  dismissedInputGhostSlots: readonly InputGhostTargetType[] = [],
 ): WorkspaceNode[] {
-  return reconcileInputGhostNodes(nodes, dismissedInputGhostSlots);
+  return reconcileInputGhostNodes(nodes);
 }
 
 function nodeWidth(node: CanvasNode): number {

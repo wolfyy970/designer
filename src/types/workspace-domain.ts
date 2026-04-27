@@ -11,6 +11,7 @@ export type { ThinkingLevel };
 export interface DomainIncubatorWiring {
   readonly inputNodeIds: string[];
   readonly previewNodeIds: string[];
+  readonly designSystemNodeIds: string[];
 }
 
 /** Hypothesis runtime settings and bindings (not graph topology). */
@@ -40,11 +41,34 @@ export interface DomainModelProfile {
   thinkingLevel?: ThinkingLevel;
 }
 
+export interface DesignMdLintFinding {
+  severity: 'error' | 'warning' | 'info';
+  message: string;
+}
+
+export interface DesignMdLintSummary {
+  errors: number;
+  warnings: number;
+  infos: number;
+  findings?: DesignMdLintFinding[];
+}
+
+export interface DesignMdDocument {
+  content: string;
+  sourceHash: string;
+  generatedAt: string;
+  providerId: string;
+  modelId: string;
+  lint?: DesignMdLintSummary;
+  error?: string;
+}
+
 export interface DomainDesignSystemContent {
   readonly nodeId: string;
   title: string;
   content: string;
   images: ReferenceImage[];
+  designMdDocument?: DesignMdDocument;
   providerMigration?: string;
   modelMigration?: string;
 }
@@ -70,7 +94,7 @@ export interface WorkspaceDomainStateV1 {
 }
 
 export function defaultIncubatorWiring(): DomainIncubatorWiring {
-  return { inputNodeIds: [], previewNodeIds: [] };
+  return { inputNodeIds: [], previewNodeIds: [], designSystemNodeIds: [] };
 }
 
 /** Slot key used in previewSlots map */

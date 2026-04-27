@@ -4,11 +4,14 @@
  * **Prompt size** here mostly comes from `estimateChatMessagesTokens` (heuristic). OpenRouter
  * reports exact `usage.prompt_tokens` only **after** `chat/completions` returns; there is no
  * documented universal “preflight count” for all routed models. To tighten budgets in the future,
- * thread the last response’s `metadata.promptTokens` into this layer (or max with the heuristic)
+ * thread the last response's `metadata.promptTokens` into this layer (or max with the heuristic)
  * for sequential calls where the prompt grows monotonically (typical agent loops).
  *
  * Pi agent per-turn streaming uses `server/services/pi-sdk/stream-budget.ts` (imports this module).
+ * Numeric knobs live in config/completion-budget.json.
  */
+import { z } from 'zod';
+import rawBudget from '../../config/completion-budget.json';
 import { env } from '../env.ts';
 import {
   estimateChatMessagesTokens,
@@ -18,19 +21,32 @@ import { getProviderModelContextWindow } from '../services/provider-model-contex
 
 export type CompletionPurpose = 'incubate' | 'compaction' | 'agent_turn' | 'default';
 
-const MIN_COMPLETION = 256;
-const ABSOLUTE_CEILING = 2_097_152;
+export const CompletionBudgetFileSchema = z
+  .object({
+    minCompletion:   z.number().int().min(1),
+    absoluteCeiling: z.number().int().min(1),
+    margins: z
+      .object({
+        incubate:   z.number().int().min(0),
+        compaction: z.number().int().min(0),
+        agentTurn:  z.number().int().min(0),
+        default:    z.number().int().min(0),
+      })
+      .strict(),
+  })
+  .strict();
+
+const _budget = CompletionBudgetFileSchema.parse(rawBudget);
+
+const MIN_COMPLETION = _budget.minCompletion;
+const ABSOLUTE_CEILING = _budget.absoluteCeiling;
 
 /** Reserved tokens: formatting, tool defs growth, reasoning, safety. */
 const MARGIN: Record<CompletionPurpose, number> = {
-  /** Single structured JSON; smaller reserve. */
-  incubate: 1_536,
-  /** Summaries; moderate user blob. */
-  compaction: 2_048,
-  /** Long transcript + tools in context. */
-  agent_turn: 6_144,
-  /** Generic chat completion. */
-  default: 4_096,
+  incubate:   _budget.margins.incubate,
+  compaction: _budget.margins.compaction,
+  agent_turn: _budget.margins.agentTurn,
+  default:    _budget.margins.default,
 };
 
 function contextFallback(providerId: string): number {

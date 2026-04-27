@@ -27,7 +27,6 @@ const initialCanvasState: Pick<
   | 'viewport'
   | 'showMiniMap'
   | 'colGap'
-  | 'autoLayout'
   | 'expandedPreviewId'
   | 'runInspectorPreviewNodeId'
   | 'lineageNodeIds'
@@ -35,15 +34,12 @@ const initialCanvasState: Pick<
   | 'previewNodeIdMap'
   | 'connectingFrom'
   | 'pendingFitViewAfterTemplate'
-  | 'dismissedInputGhostSlots'
-  | 'inputGhostToolbarNudge'
 > = {
   nodes: [],
   edges: [],
   viewport: { x: 0, y: 0, zoom: 0.85 },
   showMiniMap: true,
   colGap: DEFAULT_COL_GAP,
-  autoLayout: true,
   expandedPreviewId: null,
   runInspectorPreviewNodeId: null,
   lineageNodeIds: new Set<string>(),
@@ -51,8 +47,6 @@ const initialCanvasState: Pick<
   previewNodeIdMap: new Map<string, string>(),
   connectingFrom: null,
   pendingFitViewAfterTemplate: false,
-  dismissedInputGhostSlots: [],
-  inputGhostToolbarNudge: false,
 };
 
 export const useCanvasStore = create<CanvasStore>()(
@@ -66,7 +60,7 @@ export const useCanvasStore = create<CanvasStore>()(
     }),
     {
       name: STORAGE_KEYS.CANVAS,
-      version: 27,
+      version: 29,
       migrate: (persistedState: unknown, version: number) => {
         try {
           if (typeof persistedState === 'string') {
@@ -84,8 +78,6 @@ export const useCanvasStore = create<CanvasStore>()(
         viewport: state.viewport,
         showMiniMap: state.showMiniMap,
         colGap: state.colGap,
-        autoLayout: state.autoLayout,
-        dismissedInputGhostSlots: state.dismissedInputGhostSlots,
       }),
     },
   ),

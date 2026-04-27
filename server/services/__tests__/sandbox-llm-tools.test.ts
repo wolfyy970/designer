@@ -1,13 +1,14 @@
 /**
- * Opt-in integration tests: set SANDBOX_LLM_TEST=1 and OPENROUTER_API_KEY_TESTS
- * (dedicated test key — not OPENROUTER_API_KEY). Model id: MODEL_SELECTOR, else SANDBOX_LLM_MODEL, else gpt-4o-mini.
+ * Live integration tests against OpenRouter. Opt in with
+ * RUN_SANDBOX_LLM_TESTS=1 (legacy: SANDBOX_LLM_TEST=1) and
+ * OPENROUTER_API_KEY_TESTS in `.env.local` (a dedicated test key, not
+ * the prod/project `OPENROUTER_API_KEY`).
+ * Model id: `MODEL_SELECTOR`, else `SANDBOX_LLM_MODEL`, else `openai/gpt-4o-mini`.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import { discoverSkills, resolveSkillsRoot } from '../../lib/skill-discovery.ts';
 import type { SkillCatalogEntry } from '../../lib/skill-schema.ts';
 import { SANDBOX_LLM_SYSTEM_PREFIX, runSandboxToolConversation } from './sandbox-llm-harness.ts';
-
-const live = process.env.SANDBOX_LLM_TEST === '1';
 
 /** OpenRouter model id for sandbox LLM tests; SANDBOX_LLM_MODEL remains a legacy alias. */
 function sandboxLlmModel(): string {
@@ -18,7 +19,11 @@ function sandboxLlmModel(): string {
   return 'openai/gpt-4o-mini';
 }
 
-describe.skipIf(!live)('sandbox LLM tool scenarios (OpenRouter)', () => {
+const live =
+  process.env.RUN_SANDBOX_LLM_TESTS === '1' || process.env.SANDBOX_LLM_TEST === '1';
+const describeLive = live ? describe : describe.skip;
+
+describeLive('sandbox LLM tool scenarios (OpenRouter)', () => {
   let repoSkills: SkillCatalogEntry[] = [];
 
   beforeAll(async () => {

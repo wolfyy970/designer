@@ -18,30 +18,11 @@ export function inputCardDeleteCopy(inputTitle: string): PermanentDeleteCopy {
   };
 }
 
-/** Tier T — structural incubator. */
-function incubatorDeleteCopy(): PermanentDeleteCopy {
-  return {
-    title: 'Remove incubator?',
-    description:
-      'Inputs stay on the canvas; hypotheses that depend only on this incubator may be affected. This cannot be undone on the canvas.',
-    confirmLabel: 'Remove',
-  };
-}
-
-/** Tier T — structural model node. */
-function modelNodeDeleteCopy(): PermanentDeleteCopy {
-  return {
-    title: 'Remove model node?',
-    description: 'It will be disconnected from incubators and hypotheses. This cannot be undone on the canvas.',
-    confirmLabel: 'Remove',
-  };
-}
-
 /** Tier G — design system processing node. */
 function designSystemNodeDeleteCopy(): PermanentDeleteCopy {
   return {
     title: 'Remove design system?',
-    description: 'Hypotheses lose this connection. You can add a design system node again from the toolbar.',
+    description: 'Hypotheses lose this connection. You can add a design system node again from the canvas flow.',
     confirmLabel: 'Remove',
   };
 }
@@ -75,20 +56,18 @@ export function hypothesisDeleteCopy(previewCount: number): PermanentDeleteCopy 
   }
   return {
     title: 'Remove hypothesis?',
-    description: 'You can add one again from the toolbar.',
+    description: 'You can create a blank hypothesis again from the incubator.',
     confirmLabel: 'Remove',
   };
 }
 
 /** Stable copy objects for hooks that must not see a new object every render. */
 export const STATIC_NODE_DELETE_COPY = {
-  incubator: incubatorDeleteCopy(),
-  model: modelNodeDeleteCopy(),
   designSystem: designSystemNodeDeleteCopy(),
 } as const;
 
 /**
- * Keyboard-driven multi-delete: one warning for the current selection (Tier G/T only; input cards are protected).
+ * Keyboard-driven multi-delete: one warning for the current removable selection.
  */
 export function keyboardMultiDeleteCopy(
   removable: readonly WorkspaceNode[],
@@ -106,7 +85,6 @@ export function keyboardMultiDeleteCopy(
     if (t === NODE_TYPES.PREVIEW) {
       return previewNodeDeleteCopy('Preview');
     }
-    if (t === NODE_TYPES.MODEL) return modelNodeDeleteCopy();
     if (t === NODE_TYPES.DESIGN_SYSTEM) return designSystemNodeDeleteCopy();
   }
 

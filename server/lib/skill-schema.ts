@@ -7,7 +7,7 @@ const skillWhenSchema = z.enum(['auto', 'always', 'manual']);
 
 export const skillFrontmatterSchema = z.object({
   name: z.string().min(1),
-  description: z.string().min(1),
+  description: z.string().min(1).max(1024),
   tags: z.array(z.string()).optional().default([]),
   when: skillWhenSchema.optional().default('auto'),
 });

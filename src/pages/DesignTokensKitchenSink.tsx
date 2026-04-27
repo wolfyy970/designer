@@ -2,6 +2,8 @@ import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { Button } from '@ds/components/ui/button';
+import { DocumentViewer } from '@ds/components/ui/document-viewer';
+import { StatusPanel } from '@ds/components/ui/status-panel';
 
 type Swatch = {
   name: string;
@@ -519,6 +521,40 @@ export function DesignTokensKitchenSinkContent({ embedded = false }: { embedded?
             <span className="inline-flex items-center gap-2 text-micro text-fg-secondary">
               <span className="inline-block size-2 rounded-full bg-accent animate-pulse" /> bg-accent pulse (in progress)
             </span>
+          </div>
+        </Section>
+
+        <Section title="Status panels and documents">
+          <div className="space-y-4 rounded-lg border border-border bg-surface p-4">
+            <StatusPanel
+              title="Design specification"
+              tone="success"
+              actions={(
+                <>
+                  <Button type="button" variant="secondary" size="sm">View</Button>
+                  <Button type="button" variant="secondary" size="sm">Refresh</Button>
+                </>
+              )}
+            />
+            <StatusPanel title="Design specification" status="generating..." tone="accent" animated>
+              Generated artifacts use the same compact row instead of local one-off chrome.
+            </StatusPanel>
+            <StatusPanel
+              title="DESIGN.md"
+              status="optional"
+              tone="neutral"
+              density="compact"
+            />
+            <DocumentViewer
+              metadata={(
+                <>
+                  <div>Generated: 2026-04-26T12:00:00.000Z</div>
+                  <div>Model: openrouter / example-model</div>
+                  <div>Source: current</div>
+                </>
+              )}
+              content={'# Internal Context\n\n- Audience: operators reviewing generated hypotheses.\n- Open question: which workflow should be optimized first?'}
+            />
           </div>
         </Section>
     </div>

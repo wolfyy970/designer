@@ -18,6 +18,7 @@ const validConfigJson = {
     browser: 0.1,
   },
   maxConcurrentRuns: 5,
+  autoImprove: true,
 };
 
 function renderGate(initialPath: string, ui: ReactNode, queryClient?: QueryClient) {
@@ -55,7 +56,7 @@ describe('ApiServerGate', () => {
   });
 
   it('shows blocking UI when GET /api/config fails', async () => {
-    renderGate('/canvas', <div data-testid="inside">workspace</div>);
+    renderGate('/canvas', <div data-testid="inside">canvas</div>);
 
     await waitFor(() => {
       expect(screen.queryByText('API server not reachable')).not.toBeNull();
@@ -75,7 +76,7 @@ describe('ApiServerGate', () => {
       ),
     );
 
-    renderGate('/canvas', <div data-testid="inside">workspace</div>);
+    renderGate('/canvas', <div data-testid="inside">canvas</div>);
 
     await waitFor(() => {
       expect(screen.queryByTestId('inside')).not.toBeNull();

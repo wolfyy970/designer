@@ -33,10 +33,20 @@ export const SpecSectionSchema = z.object({
   lastModified: z.string(),
 });
 
+export const InternalContextDocumentSchema = z.object({
+  content: z.string(),
+  sourceHash: z.string(),
+  generatedAt: z.string(),
+  providerId: z.string(),
+  modelId: z.string(),
+  error: z.string().optional(),
+});
+
 export const DesignSpecSchema = z.object({
   id: z.string(),
   title: z.string(),
   sections: z.record(z.string(), SpecSectionSchema),
+  internalContextDocument: InternalContextDocumentSchema.optional(),
   createdAt: z.string(),
   lastModified: z.string(),
   version: z.number(),
@@ -51,4 +61,5 @@ export interface SpecSectionMeta {
 
 export type ReferenceImage = z.infer<typeof ReferenceImageSchema>;
 export type SpecSection = z.infer<typeof SpecSectionSchema>;
+export type InternalContextDocument = z.infer<typeof InternalContextDocumentSchema>;
 export type DesignSpec = z.infer<typeof DesignSpecSchema>;

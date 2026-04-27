@@ -1,4 +1,5 @@
-import { Brain, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Brain, Loader2, MessageSquare, Wrench } from 'lucide-react';
 import type { TaskStreamState } from '../../../hooks/task-stream-state';
 import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { formatElapsedCompact, formatTokEstimate } from '../../../lib/stream-display-format';
@@ -19,6 +20,17 @@ function hasOpenThinkingTurn(state: TaskStreamState): boolean {
     if (turns[i]!.endedAt == null) return true;
   }
   return false;
+}
+
+/** Duration in whole seconds of the most recently closed thinking turn, or null. */
+function lastClosedThinkingDuration(state: TaskStreamState): number | null {
+  const turns = state.thinkingTurns;
+  if (!turns) return null;
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const t = turns[i]!;
+    if (t.endedAt != null) return Math.max(1, Math.round((t.endedAt - t.startedAt) / 1000));
+  }
+  return null;
 }
 
 /**
@@ -49,6 +61,23 @@ export default function TaskStreamMonitor({
       : undefined;
   const tokChip = formatTokEstimate(state.streamedModelChars);
   const isActivelyThinking = hasOpenThinkingTurn(state);
+  const streamMode = state.streamMode;
+
+  // Show a transient "🧠 Xs" badge for 3.5s after a thinking turn closes.
+  const wasThinkingRef = useRef(false);
+  const [lastThoughtSec, setLastThoughtSec] = useState<number | null>(null);
+  useEffect(() => {
+    if (wasThinkingRef.current && !isActivelyThinking) {
+      const dur = lastClosedThinkingDuration(state);
+      if (dur != null && dur > 0) {
+        setLastThoughtSec(dur);
+        const id = window.setTimeout(() => setLastThoughtSec(null), 3500);
+        wasThinkingRef.current = false;
+        return () => window.clearTimeout(id);
+      }
+    }
+    wasThinkingRef.current = isActivelyThinking;
+  }, [isActivelyThinking, state]);
 
   return (
     <div
@@ -68,16 +97,33 @@ export default function TaskStreamMonitor({
             {tokChip && elapsed != null ? <span aria-hidden>·</span> : null}
             {tokChip ? (
               <span
-                title={`${state.streamedModelChars} streamed characters (≈ ${tokChip} tokens${isActivelyThinking ? ', reasoning' : ''})`}
+                title={`${state.streamedModelChars} streamed characters (≈ ${tokChip} tokens, ${streamMode ?? 'working'})`}
                 className="inline-flex items-center gap-1"
               >
-                {isActivelyThinking ? (
+                {streamMode === 'thinking' ? (
                   <Brain size={10} className="shrink-0 text-accent" aria-label="thinking" />
+                ) : streamMode === 'tool' ? (
+                  <Wrench size={10} className="shrink-0 text-accent" aria-label="tool" />
+                ) : streamMode === 'narrating' ? (
+                  <MessageSquare size={10} className="shrink-0 text-accent" aria-label="narrating" />
                 ) : (
                   <span aria-hidden>↓</span>
                 )}
                 {tokChip} tokens
               </span>
+            ) : null}
+            {lastThoughtSec != null && !isActivelyThinking ? (
+              <>
+                <span aria-hidden>·</span>
+                <span
+                  className="inline-flex items-center gap-0.5 text-fg-faint"
+                  title={`Reasoned for ${lastThoughtSec}s`}
+                  aria-label={`thought for ${lastThoughtSec} seconds`}
+                >
+                  <Brain size={9} className="shrink-0 text-accent" aria-hidden />
+                  {lastThoughtSec}s
+                </span>
+              </>
             ) : null}
           </div>
         )}

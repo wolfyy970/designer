@@ -3,7 +3,6 @@ import Modal from './Modal';
 import { DesignTokensModal } from './DesignTokensModal';
 import { PartitionSlider } from './PartitionSlider';
 import { floatWeightsToPercents, percentsToFloatWeights } from '../../lib/partition-slider-utils';
-import { useCanvasStore } from '../../stores/canvas-store';
 import { useEvaluatorDefaultsStore } from '../../stores/evaluator-defaults-store';
 import { useThinkingDefaultsStore } from '../../stores/thinking-defaults-store';
 import {
@@ -27,6 +26,7 @@ import {
 const THINKING_TASK_LABELS: Record<ThinkingTask, string> = {
   design: 'Design (agent build)',
   incubate: 'Incubator / hypothesis auto-generate',
+  'internal-context': 'Design specification',
   inputs: 'Input auto-generate',
   'design-system': 'Design system extract',
   evaluator: 'Evaluator',
@@ -100,8 +100,6 @@ export default function SettingsModal({
 }: SettingsModalProps) {
   const [tab, setTab] = useState<Tab>('general');
   const [designTokensOpen, setDesignTokensOpen] = useState(false);
-  const autoLayout = useCanvasStore((s) => s.autoLayout);
-  const toggleAutoLayout = useCanvasStore((s) => s.toggleAutoLayout);
   const wasOpenRef = useRef(false);
 
   useEffect(() => {
@@ -146,23 +144,6 @@ export default function SettingsModal({
 
       {tab === 'general' && (
         <div className="space-y-4">
-          <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">
-            <label className="flex cursor-pointer items-start gap-2.5 select-none">
-              <input
-                type="checkbox"
-                checked={autoLayout}
-                onChange={toggleAutoLayout}
-                className="accent-accent mt-0.5 shrink-0"
-              />
-              <span>
-                <span className="block text-sm font-medium text-fg">Auto layout</span>
-                <span className="mt-0.5 block text-xs text-fg-secondary">
-                  When on, nodes follow the graph layout automatically and are not draggable.
-                  Updates after compile, generate, and connection changes.
-                </span>
-              </span>
-            </label>
-          </div>
           <ReasoningSection />
           {import.meta.env.DEV ? (
             <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">

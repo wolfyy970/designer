@@ -31,7 +31,6 @@ describe('canvas-store removeNode (hypothesis)', () => {
     useWorkspaceDomainStore.getState().reset();
     useIncubatorStore.getState().reset();
     useCanvasStore.getState().reset();
-    useCanvasStore.setState({ autoLayout: false });
   });
 
   it('removes strategy from compiler store and clears domain hypothesis', () => {
@@ -61,7 +60,7 @@ describe('canvas-store removeNode (hypothesis)', () => {
       },
     });
     useIncubatorStore.setState({ incubationPlans: { c1: minimalPlan('vs1') } });
-    useCanvasStore.setState({ nodes: [compiler, hypothesis], edges: [], autoLayout: false });
+    useCanvasStore.setState({ nodes: [compiler, hypothesis], edges: [] });
 
     useCanvasStore.getState().removeNode('h1');
 

@@ -31,7 +31,6 @@ describe('canvas-store removeNode (preview)', () => {
     useWorkspaceDomainStore.getState().reset();
     useIncubatorStore.getState().reset();
     useCanvasStore.getState().reset();
-    useCanvasStore.setState({ autoLayout: false });
   });
 
   it('clears domain preview slot and UI pointers so the node does not stay wired', () => {

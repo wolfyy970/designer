@@ -1,7 +1,14 @@
 /**
  * Task routes that share agentic SSE framing (design-system extract, inputs generate).
  */
-import type { DesignSystemExtractRequest, DesignSystemExtractResponse, InputsGenerateRequest, InputsGenerateResponse } from './types';
+import type {
+  DesignSystemExtractRequest,
+  DesignSystemExtractResponse,
+  InputsGenerateRequest,
+  InputsGenerateResponse,
+  InternalContextGenerateRequest,
+  InternalContextGenerateResponse,
+} from './types';
 import { parseApiErrorBody } from '../lib/error-utils';
 import { SSE_EVENT_NAMES } from '../constants/sse-events';
 import { readSseEventStream } from '../lib/sse-reader';
@@ -21,7 +28,7 @@ async function postTaskStream(
   path: string,
   body: unknown,
   options?: PostTaskStreamOptions,
-): Promise<{ result: string }> {
+): Promise<{ result: string } & Record<string, unknown>> {
   const response = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -36,6 +43,7 @@ async function postTaskStream(
   if (!reader) throw new Error('No response stream');
 
   let result: string | null = null;
+  let taskPayload: ({ result: string } & Record<string, unknown>) | null = null;
   let errorMsg: string | null = null;
 
   const diag = createSseStreamDiagnostics();
@@ -47,6 +55,7 @@ async function postTaskStream(
         const data = JSON.parse(dataLine) as Record<string, unknown>;
         if (eventName === SSE_EVENT_NAMES.task_result && typeof data.result === 'string') {
           result = data.result;
+          taskPayload = { ...data, result: data.result };
         } else if (eventName === SSE_EVENT_NAMES.error && typeof data.error === 'string') {
           errorMsg = data.error;
           options?.agentic?.onError?.(data.error);
@@ -70,14 +79,14 @@ async function postTaskStream(
 
   if (errorMsg && !result) throw new Error(errorMsg);
   if (!result) throw new Error('Task completed without result');
-  return { result };
+  return taskPayload ?? { result };
 }
 
 export async function extractDesignSystem(
   req: DesignSystemExtractRequest,
   options?: PostTaskStreamOptions,
 ): Promise<DesignSystemExtractResponse> {
-  return postTaskStream('/design-system/extract', req, options);
+  return postTaskStream('/design-system/extract', req, options) as Promise<DesignSystemExtractResponse>;
 }
 
 export async function generateInputContent(
@@ -85,4 +94,11 @@ export async function generateInputContent(
   options?: PostTaskStreamOptions,
 ): Promise<InputsGenerateResponse> {
   return postTaskStream('/inputs/generate', req, options);
+}
+
+export async function generateInternalContext(
+  req: InternalContextGenerateRequest,
+  options?: PostTaskStreamOptions,
+): Promise<InternalContextGenerateResponse> {
+  return postTaskStream('/internal-context/generate', req, options);
 }

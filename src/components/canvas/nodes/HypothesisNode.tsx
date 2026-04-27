@@ -91,6 +91,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
   const activeGenerationsCount = useGenerationStore((s) => countActiveGenerationSlots(s));
   const { data: appConfig } = useAppConfig();
   const maxConcurrentRuns = appConfig?.maxConcurrentRuns ?? 5;
+  const autoImproveEnabled = appConfig?.autoImprove ?? true;
   const serverAtCapacity =
     activeGenerationsCount >= maxConcurrentRuns && !isGenerating;
 
@@ -172,7 +173,7 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
         handleColor="amber"
         targetShape="diamond"
       >
-        <NodeHeader onRemove={() => {}}>
+        <NodeHeader>
           <h3 className="text-xs font-semibold text-fg-secondary">New Hypothesis</h3>
         </NodeHeader>
         <GeneratingSkeleton label="Incubating…" />
@@ -349,27 +350,29 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
       <div className="border-t border-border-subtle px-3 py-2.5">
         {generationError && <NodeErrorBlock message={generationError} />}
 
-        <HypothesisAutoImproveSettings
-          nodeId={nodeId}
-          revisionEnabled={revisionEnabled}
-          onRevisionEnabledChange={setRevisionEnabled}
-          displayMaxRounds={displayMaxRounds}
-          onMaxRoundsChange={(value) =>
-            setHypothesisGenerationSettings(nodeId, { maxRevisionRounds: value })
-          }
-          targetScoreChecked={targetScoreChecked}
-          effectiveMinScore={effectiveMinScore}
-          onTargetScoreToggle={(checked) => {
-            if (checked) {
-              setHypothesisGenerationSettings(nodeId, { minOverallScore: globalMinScore ?? 4 });
-            } else {
-              setHypothesisGenerationSettings(nodeId, { minOverallScore: null });
+        {autoImproveEnabled && (
+          <HypothesisAutoImproveSettings
+            nodeId={nodeId}
+            revisionEnabled={revisionEnabled}
+            onRevisionEnabledChange={setRevisionEnabled}
+            displayMaxRounds={displayMaxRounds}
+            onMaxRoundsChange={(value) =>
+              setHypothesisGenerationSettings(nodeId, { maxRevisionRounds: value })
             }
-          }}
-          onMinScoreChange={(value) =>
-            setHypothesisGenerationSettings(nodeId, { minOverallScore: value })
-          }
-        />
+            targetScoreChecked={targetScoreChecked}
+            effectiveMinScore={effectiveMinScore}
+            onTargetScoreToggle={(checked) => {
+              if (checked) {
+                setHypothesisGenerationSettings(nodeId, { minOverallScore: globalMinScore ?? 4 });
+              } else {
+                setHypothesisGenerationSettings(nodeId, { minOverallScore: null });
+              }
+            }}
+            onMinScoreChange={(value) =>
+              setHypothesisGenerationSettings(nodeId, { minOverallScore: value })
+            }
+          />
+        )}
 
         <HypothesisGenerateButton
           hint={hint}

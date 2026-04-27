@@ -5,17 +5,20 @@ import { cva, type VariantProps } from 'class-variance-authority';
  * stays green — the component file can export only the component.
  */
 export const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+  'inline-flex items-center justify-center gap-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-100 disabled:shadow-none',
   {
     variants: {
       variant: {
-        primary: 'rounded-md bg-accent text-white hover:bg-accent-hover',
+        primary:
+          'rounded-md border border-transparent bg-accent text-white hover:bg-accent-hover disabled:border-border-subtle disabled:bg-surface disabled:text-fg-faint disabled:hover:bg-surface',
         secondary:
-          'rounded-md border border-border bg-surface-raised text-fg-secondary hover:border-accent',
+          'rounded-md border border-border bg-surface-raised text-fg-secondary hover:border-accent disabled:border-border-subtle disabled:bg-transparent disabled:text-fg-faint disabled:hover:border-border-subtle disabled:hover:bg-transparent',
         destructive:
-          'rounded-md border border-border bg-surface-raised text-error hover:border-error-border hover:bg-error-subtle',
-        ghost: 'text-fg-secondary hover:bg-surface',
-        link: 'text-accent underline-offset-4 hover:underline',
+          'rounded-md border border-error-border-soft bg-transparent text-error hover:border-error-border-medium hover:bg-error-subtle disabled:border-border-subtle disabled:bg-transparent disabled:text-fg-faint disabled:hover:border-border-subtle disabled:hover:bg-transparent',
+        ghost:
+          'text-fg-secondary hover:bg-surface disabled:text-fg-faint disabled:hover:bg-transparent',
+        link:
+          'text-accent underline-offset-4 hover:underline disabled:text-fg-faint disabled:hover:no-underline',
       },
       size: {
         sm: 'h-7 px-2 text-xs',

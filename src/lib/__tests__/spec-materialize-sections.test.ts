@@ -43,8 +43,9 @@ describe('optionalInputSlotsWithSpecMaterial', () => {
     const spec = minimalSpec({
       'existing-design': { content: 'x' },
       'research-context': { content: 'y' },
+      'design-system': { content: 'z' },
     });
-    expect(optionalInputSlotsWithSpecMaterial(spec)).toEqual(['researchContext', 'existingDesign']);
+    expect(optionalInputSlotsWithSpecMaterial(spec)).toEqual(['researchContext', 'existingDesign', 'designSystem']);
   });
 
   it('includes a slot when the facet has images but empty text', () => {

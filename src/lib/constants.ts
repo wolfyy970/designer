@@ -1,5 +1,8 @@
 import type { SpecSectionId, SpecSectionMeta } from '../types/spec';
-import { LOCKDOWN_MODEL_ID } from './lockdown-model';
+import {
+  DEFAULT_COMPILER_PROVIDER as PROVIDER_FROM_CONFIG,
+  DEFAULT_MODEL_ID as MODEL_ID_FROM_CONFIG,
+} from './provider-defaults';
 
 export const SPEC_SECTIONS: SpecSectionMeta[] = [
   {
@@ -12,29 +15,25 @@ export const SPEC_SECTIONS: SpecSectionMeta[] = [
   {
     id: 'existing-design',
     title: 'Existing Design',
-    description:
-      "Today's baseline: what works, what fails, and notes or screenshots of the current experience.",
+    description: 'What works, what fails in the current design. Optional screenshots.',
     required: false,
   },
   {
     id: 'research-context',
     title: 'Research & Context',
-    description:
-      "Who you're designing for, what they need, and why today's options fall short.",
+    description: 'Related research and/or context.',
     required: false,
   },
   {
     id: 'objectives-metrics',
     title: 'Objectives & Metrics',
-    description:
-      "Success for the business and user: goals, KPIs, how you'll measure, and timeframe.",
+    description: 'How you will measure the success of the design.',
     required: false,
   },
   {
     id: 'design-constraints',
     title: 'Design Constraints',
-    description:
-      'Non-negotiables versus what may vary—brand, accessibility, legal limits, and exploration axes.',
+    description: 'Non-negotiables versus what may vary.',
     required: false,
   },
   {
@@ -46,17 +45,12 @@ export const SPEC_SECTIONS: SpecSectionMeta[] = [
   },
 ];
 
-// Default providers (incubator / hypothesis workspace fallback)
-const viteEnv = (import.meta as unknown as { env: Record<string, string | undefined> }).env;
-export const DEFAULT_INCUBATOR_PROVIDER =
-  viteEnv.VITE_DEFAULT_INCUBATOR_PROVIDER ||
-  viteEnv.VITE_DEFAULT_COMPILER_PROVIDER ||
-  'openrouter';
+// Default provider / model for auto-created Model nodes.
+// Sourced from config/provider-defaults.json (validated at module load).
+export const DEFAULT_INCUBATOR_PROVIDER = PROVIDER_FROM_CONFIG;
 /** @deprecated Use {@link DEFAULT_INCUBATOR_PROVIDER} */
-export const DEFAULT_COMPILER_PROVIDER = DEFAULT_INCUBATOR_PROVIDER;
-
-// Default model for auto-created Model nodes (OpenRouter slug; matches lockdown pin)
-export const DEFAULT_MODEL_ID = viteEnv.VITE_DEFAULT_MODEL_ID || LOCKDOWN_MODEL_ID;
+export const DEFAULT_COMPILER_PROVIDER = PROVIDER_FROM_CONFIG;
+export const DEFAULT_MODEL_ID = MODEL_ID_FROM_CONFIG;
 
 /**
  * Default node data for each auto-created prerequisite type.

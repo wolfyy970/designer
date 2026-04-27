@@ -43,6 +43,8 @@ export function mapSessionTypeToLlmLogSource(sessionType?: SessionType): LlmLogE
       return 'incubator';
     case 'inputs-gen':
       return 'inputsGen';
+    case 'internal-context':
+      return 'internalContext';
     case 'design-system':
       return 'designSystem';
     case 'evaluation':

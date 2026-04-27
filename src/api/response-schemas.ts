@@ -106,10 +106,30 @@ export const ProvidersListResponseSchema = z.array(ProviderInfoSchema);
 /** POST /api/design-system/extract */
 export const DesignSystemExtractResponseSchema = z.object({
   result: z.string(),
+  lint: z
+    .object({
+      errors: z.number().int().min(0),
+      warnings: z.number().int().min(0),
+      infos: z.number().int().min(0),
+      findings: z
+        .array(
+          z.object({
+            severity: z.enum(['error', 'warning', 'info']),
+            message: z.string(),
+          }),
+        )
+        .optional(),
+    })
+    .optional(),
 });
 
 /** POST /api/inputs/generate */
 export const InputsGenerateResponseSchema = z.object({
+  result: z.string(),
+});
+
+/** POST /api/internal-context/generate */
+export const InternalContextGenerateResponseSchema = z.object({
   result: z.string(),
 });
 
@@ -135,6 +155,8 @@ export const AppConfigResponseSchema = z.object({
   defaultRubricWeights: DefaultRubricWeightsSchema,
   /** Server env `MAX_CONCURRENT_AGENTIC_RUNS` (1–100); parallel design/hypothesis lanes each use one slot. */
   maxConcurrentRuns: z.number().int().min(1).max(100),
+  /** When false, the evaluator-driven revision loop UI is hidden on hypothesis nodes. */
+  autoImprove: z.boolean(),
 });
 
 export type AppConfigResponse = z.infer<typeof AppConfigResponseSchema>;

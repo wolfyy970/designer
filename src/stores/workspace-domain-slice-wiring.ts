@@ -93,6 +93,8 @@ export function createWorkspaceDomainWiringSlice(set: DomainSet): Pick<
           w.inputNodeIds = uniqPush(w.inputNodeIds, sourceId);
         } else if (sourceType === NODE_TYPES.PREVIEW) {
           w.previewNodeIds = uniqPush(w.previewNodeIds, sourceId);
+        } else if (sourceType === NODE_TYPES.DESIGN_SYSTEM) {
+          w.designSystemNodeIds = uniqPush(w.designSystemNodeIds, sourceId);
         } else return s;
         return {
           incubatorWirings: { ...s.incubatorWirings, [incubatorId]: w },
@@ -108,6 +110,8 @@ export function createWorkspaceDomainWiringSlice(set: DomainSet): Pick<
           w.inputNodeIds = removeId(w.inputNodeIds, sourceId);
         } else if (sourceType === NODE_TYPES.PREVIEW) {
           w.previewNodeIds = removeId(w.previewNodeIds, sourceId);
+        } else if (sourceType === NODE_TYPES.DESIGN_SYSTEM) {
+          w.designSystemNodeIds = removeId(w.designSystemNodeIds, sourceId);
         } else return s;
         return {
           incubatorWirings: { ...s.incubatorWirings, [incubatorId]: w },

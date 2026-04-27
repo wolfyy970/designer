@@ -82,7 +82,7 @@ That still snapshots the **current on-disk** contents of that path (legacy “sa
 | Diff latest snapshot vs working file | `pnpm snap --diff-current <path>` |
 | Restore a saved version (backs up current file first) | `pnpm snap --restore <path> <safeTs>` |
 
-The **`safeTs`** id is the first column from `--list`. **`pnpm version-snapshot`** is still available as an alias to the older script if you have muscle memory.
+The **`safeTs`** id is the first column from `--list`. Skill-specific notes live in [skills/README.md](skills/README.md).
 
 **Note — meta-harness:** The separate **`pnpm meta-harness`** app snapshots those paths **automatically** when its proposer or promotion **`P`** writes files. You **do not** run **`pnpm snap`** for that flow. See **[meta-harness/VERSIONING.md](meta-harness/VERSIONING.md)**.
 
@@ -96,7 +96,7 @@ The canvas (`/canvas`) is the default interface. Nodes connect left-to-right. Yo
 
 ### 1. Fill in Input Nodes
 
-The canvas starts with a **Design Brief**, a **Model**, and an **Incubator** — all pre-connected. Add more input nodes from the toolbar:
+The canvas starts with a **Design Brief**, a **Model**, and an **Incubator** — all pre-connected. Optional input facets appear as ghost cards; use the circular **Add to canvas** control on a ghost to materialize that input node.
 
 - **Design Brief** — The primary directive. What are you designing and why?
 - **Existing Design** — Describe what exists today. Drag-and-drop screenshots as reference images.
@@ -106,13 +106,13 @@ The canvas starts with a **Design Brief**, a **Model**, and an **Incubator** —
 
 Write in prose, not bullets. Precision is the product.
 
-**Optional inputs:** The default template focuses on Design Brief + Model + Incubator. Other sections may show as **ghost** prompts on the canvas until you add the node from the toolbar (or load a saved canvas whose spec already fills that section—see **Managing Canvases**).
+**Optional inputs:** The default template focuses on Design Brief + Model + Incubator. Other sections may show as **ghost** prompts on the canvas until you add them from the ghost card (or load a saved canvas whose spec already fills that section—see **Managing Canvases**). Ghost cards are persistent affordances and reappear if you remove the optional input node.
 
 **Auto-generate (Research / Objectives / Constraints):** On those three input nodes, an **auto-generate** action (when shown) drafts or refines the spec facet body from your **Design Brief** and any other spec sections you have already filled in. It uses the **first Model node** on the canvas (document order—the same fallback as auto-connect). **Lockdown** still pins provider/model server-side. The server resolves copy from the `**inputs-gen-research-context`**, `**inputs-gen-objectives-metrics`**, and `**inputs-gen-design-constraints**` skill packages under `**skills/**` (see [ARCHITECTURE.md](ARCHITECTURE.md)).
 
 ### 2. Connect a Model Node
 
-Add a **Model** node (Processing group) and connect it to the Incubator. Select your provider and model in the Model node — **unless the deployment is in lockdown mode** (server env `LOCKDOWN` unset or empty): then every run uses **OpenRouter + MiniMax M2.5**, pickers are disabled, and the canvas reconciles to that pin. Set `LOCKDOWN=false` on the API to restore normal selection. With lockdown off, you can use different Model nodes for **incubation** vs **generation** (e.g. a reasoning model on the Incubator and a faster one on hypotheses).
+Use the **Model** node connected to the Incubator. Select your provider and model in the Model node — **unless lockdown is enabled** in `config/feature-flags.json`: then every run uses **OpenRouter + MiniMax M2.5**, pickers are disabled, and the canvas reconciles to that pin. With lockdown off, you can use different Model nodes for **incubation** vs **generation** (e.g. a reasoning model on the Incubator and a faster one on hypotheses).
 
 ### 3. Incubate
 
@@ -128,12 +128,13 @@ Hypothesis nodes appear to the right of the Incubator. Each represents a hypothe
 
 Edit these before generation. Remove strategies not worth exploring.
 
-### 5. Add Design System (Optional)
+### 5. Design System (Optional)
 
-Add a **Design System** node from the toolbar (Processing group). It auto-connects to all existing hypotheses. You can have multiple design system nodes — e.g., one for Material Design tokens, another for a custom system.
+Use a **Design System** node when a run should follow an existing brand or component language. The default canvas includes the core pipeline; connect Design System nodes to the Incubator and/or hypotheses when you want that source included.
 
-- Type or paste design tokens directly into the content area
-- Drag-and-drop screenshots of existing design systems, then click **Extract from Images** to have an LLM read the tokens from the images
+- Type or paste DESIGN.md, tokens, style-guide prose, or brand notes into the content area
+- Drag-and-drop screenshots or reference images when visual source material matters
+- Click **Generate DESIGN.md** to create a linted Google DESIGN.md document from the text/images; the Incubator shows connected document status and refreshes missing or stale documents before incubation
 
 ### 6. Generate Designs
 
@@ -149,7 +150,7 @@ Running generation again adds new versions — use the version navigation arrows
 
 **While a run is in flight:** Use **Stop** on the **hypothesis** card to abort the in-flight request for that strategy lane (same as ending the SSE stream).
 
-**Progress and workspace:** Starting **Design** does **not** auto-open the run workspace—the preview card shows progress first. Use **Watch agent** or the **panel** icon on the preview toolbar to open the **run workspace** (an overlay on the right); you can still **pan and zoom** the canvas while it is open. The preview card footer summarizes live status (including streamed size while a tool argument is building). **Skills in use** and the full **Monitor** timeline—including tool traces—live in that workspace. The timeline’s **Tool use** block shows the active tool in the header when collapsed; when expanded, the header drops that label so it isn’t duplicated above the streaming line in the log.
+**Progress and workspace:** Starting **Design** does **not** auto-open the run workspace—the preview card shows progress first. Use **Watch agent** or the **panel** icon on the preview toolbar to open the **run workspace** (an overlay on the right); you can still **pan and zoom** the canvas while it is open. The preview card footer summarizes live status with a **three-state chip** that shows what the model is doing right now: 🧠 Brain for extended reasoning, 💬 for narrating (visible text between tool calls), and 🔧 Wrench for an active tool call; the token count keeps ticking through every phase. When a thinking turn ends, a transient **`🧠 Xs`** badge briefly shows how long it reasoned. **Skills in use** and the full **Monitor** timeline—including tool traces—live in the workspace. The timeline’s **Tool use** block shows the active tool in the header when collapsed; when expanded, each streaming tool row uses the same pulse + `Nk tok` pattern as the chip.
 
 **Removing nodes from the canvas:** Use **Backspace** or **Delete** with one or more nodes selected. A short confirmation appears for nodes that can be removed (input cards and structural nodes like the incubator stay protected). Removing a hypothesis also drops its preview nodes. **Selected connections** (edges) delete with the same keys and no extra dialog. The shared spec document is separate; text in section cards may still exist there until you edit it elsewhere.
 
@@ -204,4 +205,3 @@ Click **Canvas Manager** in the header:
 - **Import JSON** — Loads a previously exported canvas
 - **Load** — Switch to a saved canvas
 - **Delete** — Remove a saved canvas from localStorage
-

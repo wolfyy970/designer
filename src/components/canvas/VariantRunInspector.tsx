@@ -63,7 +63,7 @@ export default function VariantRunInspector() {
   /**
    * Close only when the graph is known to no longer contain this preview (or type is wrong).
    * Do not close when `node` is missing but `nodes` is empty — that can happen transiently
-   * (rehydration / layout) and would immediately undo "Open workspace" right after open.
+   * (rehydration / layout) and would immediately undo "Open run panel" right after open.
    */
   useEffect(() => {
     if (!runInspectorPreviewNodeId) return;
@@ -246,7 +246,7 @@ export default function VariantRunInspector() {
   return (
     <aside
       className="absolute inset-y-0 right-0 z-[41] flex h-full min-h-0 w-[var(--width-variant-inspector)] flex-col border-l border-border-subtle bg-surface shadow-lg"
-      aria-label="Preview run workspace"
+      aria-label="Preview run panel"
     >
       {/* ── Identity header ──────────────────────────────────── */}
       <div className="shrink-0 border-b border-border-subtle px-3 py-1.5">

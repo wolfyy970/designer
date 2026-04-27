@@ -12,7 +12,7 @@ import { OPTIONAL_INPUT_SLOTS } from './canvas-layout';
 export function optionalInputSlotsWithSpecMaterial(spec: DesignSpec): InputGhostTargetType[] {
   const out: InputGhostTargetType[] = [];
   for (const slot of OPTIONAL_INPUT_SLOTS) {
-    const sid = NODE_TYPE_TO_SECTION[slot];
+    const sid = slot === 'designSystem' ? 'design-system' : NODE_TYPE_TO_SECTION[slot];
     if (!sid) continue;
     const sec = spec.sections[sid];
     if (!sec) continue;

@@ -1,5 +1,5 @@
 import type { ReferenceImage } from './spec';
-import type { ThinkingLevel } from './workspace-domain';
+import type { DesignMdDocument, ThinkingLevel } from './workspace-domain';
 
 // ── Per-node data interfaces ────────────────────────────────────────
 // These provide type safety within node components, eliminating `as` casts.
@@ -17,13 +17,15 @@ export type InputGhostTargetType =
   | 'existingDesign'
   | 'researchContext'
   | 'objectivesMetrics'
-  | 'designConstraints';
+  | 'designConstraints'
+  | 'designSystem';
 
 const INPUT_GHOST_TARGET_TYPE_SET = new Set<string>([
   'existingDesign',
   'researchContext',
   'objectivesMetrics',
   'designConstraints',
+  'designSystem',
 ]);
 
 export function isInputGhostTargetType(v: string): v is InputGhostTargetType {
@@ -55,6 +57,7 @@ export type DesignSystemNodeData = NodeData<{
   title?: string;
   content?: string;
   images?: ReferenceImage[];
+  designMdDocument?: DesignMdDocument;
   providerId?: string;
   modelId?: string;
 }>;

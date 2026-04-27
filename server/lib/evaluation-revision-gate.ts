@@ -1,13 +1,31 @@
 /**
  * Rule-based thresholds for {@link enforceRevisionGate} (agentic revision loop).
  * Centralized so product tuning and tests reference one place.
+ * Numeric knobs live in `config/evaluation-thresholds.json`.
  */
 
+import { z } from 'zod';
+import rawThresholds from '../../config/evaluation-thresholds.json';
 import {
   DEFAULT_RUBRIC_WEIGHTS,
   EVALUATOR_RUBRIC_IDS,
   type EvaluatorRubricId,
 } from '../../src/types/evaluation.ts';
+
+export const EvaluationThresholdsFileSchema = z
+  .object({
+    revisionGate: z
+      .object({
+        criticalScoreMax:     z.number().int().min(0),
+        implCriticalScoreMax: z.number().int().min(0),
+        lowAverageThreshold:  z.number().min(0),
+      })
+      .strict(),
+    maxRevisionRoundsCap: z.number().int().min(1),
+  })
+  .strict();
+
+const _thresholds = EvaluationThresholdsFileSchema.parse(rawThresholds);
 
 const DESIGN_STRATEGY_RUBRICS: ReadonlySet<EvaluatorRubricId> = new Set(['design', 'strategy']);
 const IMPL_BROWSER_RUBRICS: ReadonlySet<EvaluatorRubricId> = new Set(['implementation', 'browser']);
@@ -44,16 +62,19 @@ export function resolveRubricWeights(
 }
 
 /** Normalized per-criterion scores at or below this value trigger revision for design & strategy rubrics. */
-export const REVISION_GATE_CRITICAL_SCORE_MAX = 2;
+export const REVISION_GATE_CRITICAL_SCORE_MAX = _thresholds.revisionGate.criticalScoreMax;
 
 /**
  * Normalized per-criterion scores at or below this value trigger revision for implementation & browser rubrics only.
  * Looser than design/strategy so minor code hygiene (e.g. score 2) does not force a revision round.
  */
-export const REVISION_GATE_IMPL_CRITICAL_SCORE_MAX = 1;
+export const REVISION_GATE_IMPL_CRITICAL_SCORE_MAX = _thresholds.revisionGate.implCriticalScoreMax;
 
 /** Weighted overall score below this triggers revision when there are no other gate triggers. */
-export const REVISION_GATE_LOW_AVERAGE_THRESHOLD = 3.5;
+export const REVISION_GATE_LOW_AVERAGE_THRESHOLD = _thresholds.revisionGate.lowAverageThreshold;
+
+/** Server-side cap for revision rounds (aligned with client evaluator settings). */
+export const MAX_REVISION_ROUNDS_CAP = _thresholds.maxRevisionRoundsCap;
 
 /**
  * Parse rubric id from a normalized score key (`design_design_quality`, `browser_page_structure`).

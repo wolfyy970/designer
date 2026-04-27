@@ -6,7 +6,6 @@
     "server/app.ts",
     "meta-harness/runner.tsx",
     "scripts/snap.ts",
-    "scripts/version-snapshot.ts",
     "scripts/bump-patch-version.ts"
   ],
   "ignore": [

@@ -50,7 +50,7 @@ export default function App() {
           <ApiServerGate>
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                {/* Canvas is the sole workspace */}
+                {/* Canvas is the sole app surface. */}
                 <Route path="/canvas" element={<ErrorBoundary><CanvasPage /></ErrorBoundary>} />
                 {import.meta.env.DEV && DesignTokensKitchenSink ? (
                   <Route path="/dev/design-tokens" element={<DesignTokensKitchenSink />} />

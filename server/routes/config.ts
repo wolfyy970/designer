@@ -5,6 +5,7 @@ import {
   LOCKDOWN_MODEL_LABEL,
   LOCKDOWN_PROVIDER_ID,
 } from '../../src/lib/lockdown-model.ts';
+import { FEATURE_LOCKDOWN, FEATURE_AUTO_IMPROVE } from '../../src/lib/feature-flags.ts';
 import { DEFAULT_RUBRIC_WEIGHTS } from '../../src/types/evaluation.ts';
 
 const configRoute = new Hono();
@@ -14,10 +15,10 @@ configRoute.get('/', (c) => {
     agenticMaxRevisionRounds: env.AGENTIC_MAX_REVISION_ROUNDS,
     agenticMinOverallScore: env.AGENTIC_MIN_OVERALL_SCORE ?? null,
     defaultRubricWeights: { ...DEFAULT_RUBRIC_WEIGHTS },
-    /** Matches `MAX_CONCURRENT_AGENTIC_RUNS` — cap on parallel agentic runs per server process. */
     maxConcurrentRuns: env.MAX_CONCURRENT_AGENTIC_RUNS,
+    autoImprove: FEATURE_AUTO_IMPROVE,
   };
-  if (!env.LOCKDOWN) {
+  if (!FEATURE_LOCKDOWN) {
     return c.json({ lockdown: false, ...evaluator });
   }
   return c.json({

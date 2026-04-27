@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, cleanup, screen } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { act, render, cleanup, screen } from '@testing-library/react';
 import TaskStreamMonitor from '../TaskStreamMonitor';
 import type { TaskStreamState } from '../../../../hooks/task-stream-state';
 
@@ -59,12 +59,13 @@ describe('TaskStreamMonitor — status row', () => {
     expect(container.textContent).toContain('tokens');
   });
 
-  it('shows the Brain icon and keeps "tokens" label when a thinking turn is open', () => {
+  it('shows the Brain icon and keeps "tokens" label when streamMode is thinking', () => {
     const { container } = render(
       <TaskStreamMonitor
         state={{
           ...base,
           streamedModelChars: 1800,
+          streamMode: 'thinking',
           thinkingTurns: [{ turnId: 0, startedAt: Date.now(), text: 'reasoning…' }],
         }}
         elapsed={3}
@@ -72,6 +73,29 @@ describe('TaskStreamMonitor — status row', () => {
     );
     expect(container.querySelector('[aria-label="thinking"]')).not.toBeNull();
     expect(container.textContent).not.toContain('↓');
+    expect(container.textContent).toContain('tokens');
+  });
+
+  it('shows the Wrench icon when streamMode is tool', () => {
+    const { container } = render(
+      <TaskStreamMonitor
+        state={{ ...base, streamedModelChars: 1800, streamMode: 'tool' }}
+        elapsed={3}
+      />,
+    );
+    expect(container.querySelector('[aria-label="tool"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="thinking"]')).toBeNull();
+    expect(container.textContent).toContain('tokens');
+  });
+
+  it('shows the MessageSquare icon when streamMode is narrating', () => {
+    const { container } = render(
+      <TaskStreamMonitor
+        state={{ ...base, streamedModelChars: 1800, streamMode: 'narrating' }}
+        elapsed={3}
+      />,
+    );
+    expect(container.querySelector('[aria-label="narrating"]')).not.toBeNull();
     expect(container.textContent).toContain('tokens');
   });
 
@@ -187,5 +211,80 @@ describe('TaskStreamMonitor — suppressed noise', () => {
   it('never shows the agentic phase tag', () => {
     const { container } = render(<TaskStreamMonitor state={richState} elapsed={5} />);
     expect(container.textContent ?? '').not.toMatch(/evaluating/i);
+  });
+});
+
+describe('TaskStreamMonitor — thought-for-Xs badge', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanup();
+  });
+
+  it('shows "🧠 Xs" badge after a thinking turn closes', () => {
+    vi.useFakeTimers();
+    const tStart = Date.now() - 4000;
+    const tEnd = Date.now();
+    const { rerender, container } = render(
+      <TaskStreamMonitor
+        state={{
+          ...base,
+          streamedModelChars: 1800,
+          streamMode: 'thinking',
+          thinkingTurns: [{ turnId: 0, startedAt: tStart, text: 'reasoning…' }],
+        }}
+        elapsed={4}
+      />,
+    );
+    expect(container.querySelector('[aria-label="thinking"]')).not.toBeNull();
+
+    act(() => {
+      rerender(
+        <TaskStreamMonitor
+          state={{
+            ...base,
+            streamedModelChars: 1800,
+            streamMode: 'narrating',
+            thinkingTurns: [{ turnId: 0, startedAt: tStart, endedAt: tEnd, text: 'done' }],
+          }}
+          elapsed={4}
+        />,
+      );
+    });
+    expect(container.querySelector('[aria-label*="thought for"]')).not.toBeNull();
+    expect(container.textContent).toMatch(/\d+s/);
+  });
+
+  it('dismisses the badge after 3.5 seconds', () => {
+    vi.useFakeTimers();
+    const tStart = Date.now() - 3000;
+    const tEnd = Date.now();
+    const { rerender, container } = render(
+      <TaskStreamMonitor
+        state={{ ...base, streamedModelChars: 1800, thinkingTurns: [{ turnId: 0, startedAt: tStart, text: 'reasoning…' }] }}
+        elapsed={3}
+      />,
+    );
+    act(() => {
+      rerender(
+        <TaskStreamMonitor
+          state={{ ...base, streamedModelChars: 1800, thinkingTurns: [{ turnId: 0, startedAt: tStart, endedAt: tEnd, text: 'done' }] }}
+          elapsed={3}
+        />,
+      );
+    });
+    expect(container.querySelector('[aria-label*="thought for"]')).not.toBeNull();
+
+    act(() => { vi.advanceTimersByTime(3500); });
+    expect(container.querySelector('[aria-label*="thought for"]')).toBeNull();
+  });
+
+  it('does not show the badge when thinking never started', () => {
+    const { container } = render(
+      <TaskStreamMonitor
+        state={{ ...base, streamedModelChars: 1800 }}
+        elapsed={3}
+      />,
+    );
+    expect(container.querySelector('[aria-label*="thought for"]')).toBeNull();
   });
 });

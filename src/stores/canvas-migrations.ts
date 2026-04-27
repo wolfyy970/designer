@@ -1,4 +1,3 @@
-import { isInputGhostTargetType, type InputGhostTargetType } from '../types/canvas-data';
 import { DEFAULT_COL_GAP } from '../lib/canvas-layout';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 import { EDGE_TYPES, EDGE_STATUS, NODE_TYPES } from '../constants/canvas';
@@ -22,7 +21,6 @@ const FRESH_STATE = {
   viewport: { x: 0, y: 0, zoom: 0.85 },
   showMiniMap: true,
   colGap: DEFAULT_COL_GAP,
-  autoLayout: true,
 };
 
 // ── Per-version migration functions ──────────────────────────────────
@@ -411,24 +409,18 @@ function migrateV16ToV17(s: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
-/** v17 → v18: default dismissedSectionGhostSlots for ghost dismiss persistence */
+/** v17 → v18: remove ghost-dismiss persistence now that ghost cards are permanent affordances. */
 function migrateV17ToV18(s: Record<string, unknown>): Record<string, unknown> {
-  if (!Array.isArray(s.dismissedSectionGhostSlots)) {
-    return { ...s, dismissedSectionGhostSlots: [] };
-  }
-  return s;
+  const out: Record<string, unknown> = { ...s };
+  delete out.dismissedSectionGhostSlots;
+  return out;
 }
 
-/** v18 → v19: sanitize dismissedSectionGhostSlots (strip invalid strings) */
+/** v18 → v19: remove legacy ghost-dismiss persistence. */
 function migrateV18ToV19(s: Record<string, unknown>): Record<string, unknown> {
-  const raw = s.dismissedSectionGhostSlots;
-  if (!Array.isArray(raw)) {
-    return { ...s, dismissedSectionGhostSlots: [] };
-  }
-  const dismissedSectionGhostSlots = raw.filter(
-    (x): x is InputGhostTargetType => typeof x === 'string' && isInputGhostTargetType(x),
-  );
-  return { ...s, dismissedSectionGhostSlots };
+  const out: Record<string, unknown> = { ...s };
+  delete out.dismissedSectionGhostSlots;
+  return out;
 }
 
 /** v19 → v20: rename node type 'variant' → 'preview', node data variantStrategyId → strategyId */
@@ -463,7 +455,7 @@ function migrateV20ToV21(s: Record<string, unknown>): Record<string, unknown> {
 const LEGACY_GHOST_ID_PREFIX = 'ghost-section-';
 const INPUT_GHOST_ID_PREFIX = 'ghost-input-';
 
-/** v21 → v22: input-ghost node type/id prefix; persist keys for dismissed slots + toolbar nudge. */
+/** v21 → v22: input-ghost node type/id prefix; persist keys for dismissed slots. */
 function migrateV21ToV22(s: Record<string, unknown>): Record<string, unknown> {
   const nodes = (s.nodes as Array<Record<string, unknown>>) ?? [];
   const idRewrites = new Map<string, string>();
@@ -492,23 +484,13 @@ function migrateV21ToV22(s: Record<string, unknown>): Record<string, unknown> {
     };
   });
 
-  const dismissedRaw = s.dismissedInputGhostSlots ?? s.dismissedSectionGhostSlots;
-  let dismissedInputGhostSlots: InputGhostTargetType[] = [];
-  if (Array.isArray(dismissedRaw)) {
-    dismissedInputGhostSlots = dismissedRaw.filter(
-      (x): x is InputGhostTargetType => typeof x === 'string' && isInputGhostTargetType(x),
-    );
-  }
-
-  const inputGhostToolbarNudge = Boolean(s.inputGhostToolbarNudge ?? s.sectionGhostToolbarNudge);
-
   const out: Record<string, unknown> = { ...s };
+  delete out.dismissedInputGhostSlots;
   delete out.dismissedSectionGhostSlots;
   delete out.sectionGhostToolbarNudge;
+  delete out.inputGhostToolbarNudge;
   out.nodes = nextNodes;
   out.edges = nextEdges;
-  out.dismissedInputGhostSlots = dismissedInputGhostSlots;
-  out.inputGhostToolbarNudge = inputGhostToolbarNudge;
   return out;
 }
 
@@ -581,6 +563,21 @@ function migrateV26ToV27(s: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
+/** v27 → v28: auto layout is implicit canvas behavior, not persisted state. */
+function migrateV27ToV28(s: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...s };
+  delete out.autoLayout;
+  return out;
+}
+
+/** v28 → v29: ghost input cards are no longer dismissible. */
+function migrateV28ToV29(s: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...s };
+  delete out.dismissedInputGhostSlots;
+  delete out.dismissedSectionGhostSlots;
+  return out;
+}
+
 // ── Top-level migration runner ────────────────────────────────────────
 
 /**
@@ -622,6 +619,8 @@ export function migrateCanvasState(
   if (fromVersion < 25) s = migrateV24ToV25(s);
   if (fromVersion < 26) s = migrateV25ToV26(s);
   if (fromVersion < 27) s = migrateV26ToV27(s);
+  if (fromVersion < 28) s = migrateV27ToV28(s);
+  if (fromVersion < 29) s = migrateV28ToV29(s);
 
   return s;
 }

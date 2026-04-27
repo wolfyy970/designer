@@ -15,7 +15,8 @@ describe('isValidConnection', () => {
     }
   });
 
-  it('allows designSystem to connect to hypothesis', () => {
+  it('allows designSystem to connect to compiler and hypothesis', () => {
+    expect(isValidConnection('designSystem', 'incubator')).toBe(true);
     expect(isValidConnection('designSystem', 'hypothesis')).toBe(true);
   });
 
@@ -30,10 +31,6 @@ describe('isValidConnection', () => {
   it('allows preview to connect to compiler and existingDesign', () => {
     expect(isValidConnection('preview', 'incubator')).toBe(true);
     expect(isValidConnection('preview', 'existingDesign')).toBe(true);
-  });
-
-  it('rejects designSystem connecting to compiler', () => {
-    expect(isValidConnection('designSystem', 'incubator')).toBe(false);
   });
 
   it('rejects reverse connections', () => {

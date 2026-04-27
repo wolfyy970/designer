@@ -22,7 +22,7 @@ export const VALID_CONNECTIONS: Record<NodeType, Set<NodeType>> = {
   researchContext: new Set(['incubator']),
   objectivesMetrics: new Set(['incubator']),
   designConstraints: new Set(['incubator']),
-  designSystem: new Set(['hypothesis']),
+  designSystem: new Set(['incubator', 'hypothesis']),
   incubator: new Set(['hypothesis']),
   hypothesis: new Set(['preview']),
   preview: new Set(['incubator', 'existingDesign']),
@@ -79,7 +79,7 @@ export function dedupeEdgesById<T extends { id: string }>(edges: T[]): T[] {
  * Compute structural edges when a node is added from the palette.
  * Model connections are handled separately via buildModelEdgeForNode
  * or buildModelEdgesFromParent — this only wires inputs↔incubator
- * and designSystem↔hypothesis.
+ * and designSystem↔incubator / designSystem↔hypothesis.
  */
 export function buildAutoConnectEdges(
   newNodeId: string,

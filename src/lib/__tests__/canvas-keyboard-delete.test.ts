@@ -9,6 +9,9 @@ describe('canvas-keyboard-delete', () => {
   it('excludes protected node types', () => {
     expect(KEYBOARD_DELETE_PROTECTED_NODE_TYPES.has('incubator')).toBe(true);
     expect(KEYBOARD_DELETE_PROTECTED_NODE_TYPES.has('designBrief')).toBe(true);
+    expect(KEYBOARD_DELETE_PROTECTED_NODE_TYPES.has('model')).toBe(true);
+    expect(KEYBOARD_DELETE_PROTECTED_NODE_TYPES.has('inputGhost')).toBe(true);
+    expect(KEYBOARD_DELETE_PROTECTED_NODE_TYPES.has('researchContext')).toBe(false);
     expect(KEYBOARD_DELETE_PROTECTED_NODE_TYPES.has('hypothesis')).toBe(false);
     expect(KEYBOARD_DELETE_PROTECTED_NODE_TYPES.has('designSystem')).toBe(false);
   });
@@ -17,11 +20,21 @@ describe('canvas-keyboard-delete', () => {
     const store: WorkspaceNode[] = [
       { id: 'ds-1', type: 'designSystem', position: { x: 0, y: 0 }, data: {} },
       { id: 'inc-1', type: 'incubator', position: { x: 0, y: 0 }, data: {} },
+      { id: 'model-1', type: 'model', position: { x: 0, y: 0 }, data: {} },
+      { id: 'brief-1', type: 'designBrief', position: { x: 0, y: 0 }, data: {} },
+      { id: 'research-1', type: 'researchContext', position: { x: 0, y: 0 }, data: {} },
       { id: 'h-1', type: 'hypothesis', position: { x: 0, y: 0 }, data: {} },
     ];
-    const flowSelected = [{ id: 'ds-1' }, { id: 'inc-1' }, { id: 'h-1' }];
+    const flowSelected = [
+      { id: 'ds-1' },
+      { id: 'inc-1' },
+      { id: 'model-1' },
+      { id: 'brief-1' },
+      { id: 'research-1' },
+      { id: 'h-1' },
+    ];
     const removable = removableWorkspaceNodesFromFlowSelection(flowSelected, store);
-    expect(removable.map((n) => n.id)).toEqual(['ds-1', 'h-1']);
+    expect(removable.map((n) => n.id)).toEqual(['ds-1', 'research-1', 'h-1']);
   });
 
   it('drops ids missing from store', () => {

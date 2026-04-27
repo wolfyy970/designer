@@ -1,6 +1,6 @@
 /**
  * Smart snapshots: `pnpm snap` compares versioned files to their latest snapshot and saves only what changed.
- * Subcommands mirror version-snapshot for list/diff/restore.
+ * Subcommands support list/diff/restore.
  */
 import { access } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';

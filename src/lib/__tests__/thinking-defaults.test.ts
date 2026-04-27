@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
+import rawConfig from '../../../config/thinking-defaults.json';
 import {
   THINKING_CONFIG_DEFAULTS,
   THINKING_BUDGET_BY_LEVEL,
@@ -7,6 +9,7 @@ import {
   THINKING_LEVELS,
   THINKING_TASKS,
   THINKING_OFF,
+  ThinkingDefaultsFileSchema,
   resolveThinkingConfig,
 } from '../thinking-defaults';
 
@@ -118,5 +121,74 @@ describe('resolveThinkingConfig — budget clamp', () => {
       budgetTokens: Number.POSITIVE_INFINITY,
     });
     expect(infResult.budgetTokens).toBe(THINKING_BUDGET_MAX_TOKENS);
+  });
+});
+
+describe('thinking-defaults — JSON config file', () => {
+  it('config/thinking-defaults.json round-trips cleanly through the file schema', () => {
+    const result = ThinkingDefaultsFileSchema.safeParse(rawConfig);
+    if (!result.success) {
+      // Surface the Zod error so a future bad edit is immediately actionable.
+      throw new Error(`config/thinking-defaults.json is malformed: ${result.error.message}`);
+    }
+    expect(result.success).toBe(true);
+  });
+
+  it('the shipped JSON defines every task slot', () => {
+    for (const task of THINKING_TASKS) {
+      expect(THINKING_CONFIG_DEFAULTS[task]).toBeDefined();
+    }
+  });
+
+  it('the shipped JSON defines all six level budgets', () => {
+    for (const level of THINKING_LEVELS) {
+      expect(typeof THINKING_BUDGET_BY_LEVEL[level]).toBe('number');
+    }
+  });
+
+  it('rejects a file missing a task slot', () => {
+    const bad = {
+      ...rawConfig,
+      perTaskDefaults: {
+        design: { level: 'high', budgetTokens: 16384 },
+        // incubate, internal-context, inputs, design-system, evaluator missing
+      },
+    };
+    expect(() => ThinkingDefaultsFileSchema.parse(bad)).toThrow(z.ZodError);
+  });
+
+  it('rejects a file with a level outside the enum', () => {
+    const bad = {
+      ...rawConfig,
+      perTaskDefaults: {
+        ...rawConfig.perTaskDefaults,
+        design: { level: 'extreme', budgetTokens: 16384 },
+      },
+    };
+    expect(() => ThinkingDefaultsFileSchema.parse(bad)).toThrow(z.ZodError);
+  });
+
+  it('rejects a file with a negative budget', () => {
+    const bad = {
+      ...rawConfig,
+      perTaskDefaults: {
+        ...rawConfig.perTaskDefaults,
+        evaluator: { level: 'low', budgetTokens: -1 },
+      },
+    };
+    expect(() => ThinkingDefaultsFileSchema.parse(bad)).toThrow(z.ZodError);
+  });
+
+  it('rejects a file where budgetBounds.max < min', () => {
+    const bad = {
+      ...rawConfig,
+      budgetBounds: { minTokens: 4096, maxTokens: 1024 },
+    };
+    expect(() => ThinkingDefaultsFileSchema.parse(bad)).toThrow(z.ZodError);
+  });
+
+  it('rejects a file with an unknown top-level key', () => {
+    const bad = { ...rawConfig, unexpected: true };
+    expect(() => ThinkingDefaultsFileSchema.parse(bad)).toThrow(z.ZodError);
   });
 });

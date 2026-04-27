@@ -57,32 +57,33 @@ export function PermanentDeleteConfirmDialog({
         aria-modal="true"
         aria-labelledby="permanent-delete-title"
         aria-describedby={DESCRIPTION_ID}
-        className="relative z-10 w-full max-w-md rounded-xl border border-border bg-surface-raised shadow-xl"
+        className="relative z-10 w-full max-w-sm rounded-lg border border-border bg-surface-floating shadow-lg"
       >
-        <div className="flex gap-3 border-b border-border-subtle px-4 py-3">
+        <div className="flex items-start gap-2.5 px-3 py-3">
           <div
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-error-subtle text-error"
+            className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-error-border-soft bg-error-subtle text-error"
             aria-hidden
           >
-            <AlertTriangle size={18} strokeWidth={2} />
+            <AlertTriangle size={14} strokeWidth={2} />
           </div>
-          <div className="min-w-0 flex-1 pt-0.5">
-            <h2 id="permanent-delete-title" className="text-sm font-semibold text-fg">
+          <div className="min-w-0 flex-1">
+            <h2 id="permanent-delete-title" className="text-xs font-medium leading-snug text-fg-secondary">
               {title}
             </h2>
+            <div
+              id={DESCRIPTION_ID}
+              className="mt-1.5 text-nano leading-relaxed text-fg-muted"
+            >
+              {description}
+            </div>
           </div>
         </div>
-        <div
-          id={DESCRIPTION_ID}
-          className="px-4 py-3 text-nano leading-relaxed text-fg-secondary"
-        >
-          {description}
-        </div>
-        <div className="flex justify-end gap-2 border-t border-border-subtle px-4 py-3">
+        <div className="flex justify-end gap-2 border-t border-border-subtle px-3 py-2.5">
           <Button
             ref={cancelRef}
             variant="secondary"
             size="sm"
+            className="font-normal"
             onClick={onCancel}
           >
             {cancelLabel}
@@ -90,6 +91,7 @@ export function PermanentDeleteConfirmDialog({
           <Button
             variant="destructive"
             size="sm"
+            className="font-normal"
             onClick={onConfirm}
           >
             {confirmLabel}

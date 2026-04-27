@@ -4,6 +4,7 @@ import type {
   DomainDesignSystemContent,
   DomainHypothesis,
   DomainModelProfile,
+  DesignMdLintSummary,
 } from '../types/workspace-domain';
 import type { ProvenanceContext } from '../types/provenance-context';
 import type { ProviderModel } from '../types/provider';
@@ -17,11 +18,14 @@ export interface IncubateRequest {
   spec: DesignSpec;
   providerId: string;
   modelId: string;
+  internalContextDocument?: string;
+  designSystemDocuments?: { nodeId: string; title: string; content: string }[];
   referenceDesigns?: { name: string; code: string }[];
   supportsVision?: boolean;
   promptOptions?: {
     count?: number;
     existingStrategies?: HypothesisStrategy[];
+    designSystemDocuments?: { nodeId: string; title: string; content: string }[];
   };
   /** Optional per-request thinking override; server merges with task defaults + capability gate. */
   thinking?: ThinkingOverride;
@@ -83,7 +87,10 @@ export interface ProviderInfo {
 // ── Design System ───────────────────────────────────────────────────
 
 export interface DesignSystemExtractRequest {
-  images: ReferenceImage[];
+  title?: string;
+  content?: string;
+  images?: ReferenceImage[];
+  sourceHash?: string;
   providerId: string;
   modelId: string;
   thinking?: ThinkingOverride;
@@ -91,6 +98,7 @@ export interface DesignSystemExtractRequest {
 
 export interface DesignSystemExtractResponse {
   result: string;
+  lint?: DesignMdLintSummary;
 }
 
 // ── Spec inputs auto-generate (magic wand) ──────────────────────────
@@ -113,5 +121,19 @@ export interface InputsGenerateRequest {
 }
 
 export interface InputsGenerateResponse {
+  result: string;
+}
+
+// ── Internal context document (spec inputs → derived Markdown) ──────
+
+export interface InternalContextGenerateRequest {
+  spec: DesignSpec;
+  sourceHash: string;
+  providerId: string;
+  modelId: string;
+  thinking?: ThinkingOverride;
+}
+
+export interface InternalContextGenerateResponse {
   result: string;
 }

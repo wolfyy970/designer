@@ -8,7 +8,7 @@ import type { TaskStreamState } from '../../../hooks/task-stream-state';
 type Props = {
   result: GenerationResult;
   elapsed: number;
-  /** When true, run workspace overlay is open for this variant — hide the redundant CTA. */
+  /** When true, the run panel is open for this variant — hide the redundant CTA. */
   isWorkspaceOpen: boolean;
   onOpenWorkspace: () => void;
 };
@@ -19,7 +19,7 @@ type Props = {
  * (inputs-gen, incubate, hypothesis auto-gen) and the richer design run render
  * through one `TaskStreamMonitor`. The monitor renders only the fields we
  * populate — tool rows, plan counts, skill strips, etc. are intentionally
- * omitted (the full detail lives in the run workspace when you open it).
+ * omitted (the full detail lives in the run panel when you open it).
  */
 function resultToMonitorState(result: GenerationResult): TaskStreamState {
   return {
@@ -28,10 +28,11 @@ function resultToMonitorState(result: GenerationResult): TaskStreamState {
     activityLog: result.activityLog,
     streamedModelChars: result.streamedModelChars,
     thinkingTurns: result.thinkingTurns,
+    streamMode: result.streamMode,
   };
 }
 
-/** In-node shell while a run is streaming — optional link to the full run workspace overlay. */
+/** In-node shell while a run is streaming — optional link to the full run panel. */
 export function VariantNodeGenerating({
   result,
   elapsed,
@@ -42,11 +43,11 @@ export function VariantNodeGenerating({
   const centerBlurb = (() => {
     if (isRevising) {
       return isWorkspaceOpen
-        ? 'Updating from evaluator feedback — full task list and preview are in the run workspace.'
+        ? 'Updating from evaluator feedback — full task list and preview are in the run panel.'
         : 'Updating from evaluator feedback — follow progress here; use Watch agent for the full monitor, files, and preview.';
     }
     return isWorkspaceOpen
-      ? 'Generating — full tasks, activity, and preview are in the run workspace.'
+      ? 'Generating — full tasks, activity, and preview are in the run panel.'
       : 'Generating — follow progress here. Use Watch agent for the full monitor, files, and live preview.';
   })();
 

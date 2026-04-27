@@ -1,4 +1,4 @@
-import type { RunTraceEvent, SkillInfo, ThinkingTurnSlice } from '../types/provider';
+import type { RunTraceEvent, SkillInfo, StreamMode, ThinkingTurnSlice } from '../types/provider';
 import {
   batchedRafUpdater,
   type PlaceholderRafBatch,
@@ -42,6 +42,8 @@ export interface TaskStreamState {
    * `estimateTextTokens` or `Math.round(chars / 3.6)` for display.
    */
   streamedModelChars?: number;
+  /** What the model is currently emitting — drives the live chip icon. */
+  streamMode?: StreamMode;
 }
 
 /** In-memory buffers for RAF + trace ring (mirrors placeholder session, minus eval/design). */

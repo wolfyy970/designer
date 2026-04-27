@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Brain, Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Brain, Loader2, MessageSquare, Wrench } from 'lucide-react';
 import type { LivenessSlice, SkillInfo, TodoItem } from '../../../types/provider';
 import { buildGeneratingPrimaryLine, buildNoPlanBuildingLine } from '../../../lib/generating-footer-primary';
 import { useGenerationStallHints } from '../../../hooks/use-generation-stall-hints';
@@ -34,6 +34,7 @@ export function GeneratingFooter({
     streamedModelChars,
     agenticPhase,
     evaluationStatus,
+    streamMode,
   } = liveness;
   const total = plan?.length ?? 0;
   const hasPlan = total > 0;
@@ -59,6 +60,28 @@ export function GeneratingFooter({
     hasPlan,
     elapsed,
   });
+
+  // Capture the last thinking duration when a reasoning turn closes, show briefly.
+  const lastThinkingSecRef = useRef(0);
+  const wasThinkingRef = useRef(false);
+  const [lastThoughtSec, setLastThoughtSec] = useState<number | null>(null);
+  useEffect(() => {
+    if (isActivelyThinking && thinkingSec > 0) {
+      lastThinkingSecRef.current = thinkingSec;
+    }
+  }, [isActivelyThinking, thinkingSec]);
+  useEffect(() => {
+    if (wasThinkingRef.current && !isActivelyThinking) {
+      const dur = lastThinkingSecRef.current;
+      if (dur > 0) {
+        setLastThoughtSec(dur);
+        const id = window.setTimeout(() => setLastThoughtSec(null), 3500);
+        wasThinkingRef.current = false;
+        return () => window.clearTimeout(id);
+      }
+    }
+    wasThinkingRef.current = isActivelyThinking;
+  }, [isActivelyThinking]);
 
   const todoHint = useMemo(() => {
     if (!liveTodos?.length) return undefined;
@@ -214,15 +237,32 @@ export function GeneratingFooter({
             <>
               <span aria-hidden>·</span>
               <span
-                title={`${streamedModelChars} streamed characters${isActivelyThinking ? ' (reasoning)' : ''}`}
+                title={`${streamedModelChars} streamed characters (${streamMode ?? 'working'})`}
                 className="inline-flex items-center gap-1"
               >
-                {isActivelyThinking ? (
+                {streamMode === 'thinking' ? (
                   <Brain size={10} className="shrink-0 text-accent" aria-label="thinking" />
+                ) : streamMode === 'tool' ? (
+                  <Wrench size={10} className="shrink-0 text-accent" aria-label="tool" />
+                ) : streamMode === 'narrating' ? (
+                  <MessageSquare size={10} className="shrink-0 text-accent" aria-label="narrating" />
                 ) : (
                   <span aria-hidden>↓</span>
                 )}
                 {formatTokEstimate(streamedModelChars)} tokens
+              </span>
+            </>
+          ) : null}
+          {lastThoughtSec != null && !isActivelyThinking ? (
+            <>
+              <span aria-hidden>·</span>
+              <span
+                className="inline-flex items-center gap-0.5 text-fg-faint"
+                title={`Reasoned for ${lastThoughtSec}s`}
+                aria-label={`thought for ${lastThoughtSec} seconds`}
+              >
+                <Brain size={9} className="shrink-0 text-accent" aria-hidden />
+                {lastThoughtSec}s
               </span>
             </>
           ) : null}

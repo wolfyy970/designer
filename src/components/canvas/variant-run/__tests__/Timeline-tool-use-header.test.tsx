@@ -42,8 +42,11 @@ describe('Timeline Tool use header', () => {
     const toolUseButton = screen.getByRole('button', { name: /Tool use/i });
     expect(toolUseButton.textContent).not.toMatch(/write/);
 
-    expect(screen.getByText(/Streaming/)).toBeTruthy();
+    // Expanded streaming row: <code>toolName</code> + " → /" + per-tool tokens,
+    // no more "Streaming ..." prefix (we standardized on the token-indicator pattern).
     expect(screen.getByText('write')).toBeTruthy();
+    // Container text includes the per-tool token estimate (e.g., " · 278 tok").
+    expect(screen.getByRole('button', { name: /Tool use/i }).parentElement?.textContent ?? '').toMatch(/ tok/);
   });
 
   it('shows tool path in the header when the Tool use section is collapsed', () => {

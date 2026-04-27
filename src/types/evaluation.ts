@@ -3,20 +3,22 @@
  * Shared between client metadata and server orchestration.
  */
 
-import rubricWeightsJson from '../lib/rubric-weights.json';
+import { z } from 'zod';
+import rubricWeightsJson from '../../config/rubric-weights.json';
 
 /** Canonical rubric order for parallel workers, aggregation, and UI. */
 export const EVALUATOR_RUBRIC_IDS = ['design', 'strategy', 'implementation', 'browser'] as const;
 
 export type EvaluatorRubricId = (typeof EVALUATOR_RUBRIC_IDS)[number];
 
-/** Repo source of truth: `src/lib/rubric-weights.json` */
-export const DEFAULT_RUBRIC_WEIGHTS: Record<EvaluatorRubricId, number> = {
-  design: rubricWeightsJson.design,
-  strategy: rubricWeightsJson.strategy,
-  implementation: rubricWeightsJson.implementation,
-  browser: rubricWeightsJson.browser,
-};
+const RubricWeightsFileSchema = z
+  .object({ design: z.number().min(0), strategy: z.number().min(0), implementation: z.number().min(0), browser: z.number().min(0) })
+  .strict();
+
+const _parsedWeights = RubricWeightsFileSchema.parse(rubricWeightsJson);
+
+/** Repo source of truth: `config/rubric-weights.json` */
+export const DEFAULT_RUBRIC_WEIGHTS: Record<EvaluatorRubricId, number> = _parsedWeights;
 
 export const EVALUATOR_WORKER_COUNT = EVALUATOR_RUBRIC_IDS.length;
 

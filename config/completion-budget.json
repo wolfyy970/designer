@@ -1,0 +1,10 @@
+{
+  "minCompletion":   256,
+  "absoluteCeiling": 2097152,
+  "margins": {
+    "incubate":   1536,
+    "compaction": 2048,
+    "agentTurn":  6144,
+    "default":    4096
+  }
+}
