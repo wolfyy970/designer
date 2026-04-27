@@ -55,10 +55,15 @@ export default function CanvasHeader() {
     <>
       <div className="absolute top-0 left-0 right-0 z-10 flex h-header items-center justify-between border-b border-border bg-header-scrim px-4 backdrop-blur-sm">
         {/* Left: App identity */}
-        <div className="flex w-0 min-w-0 flex-1 items-baseline gap-2 sm:gap-3">
-          <span className="shrink-0 font-logo text-base font-medium leading-none tracking-wide text-fg">
-            AutoDesigner
-          </span>
+        <div className="flex w-0 min-w-0 flex-1 items-center gap-2 sm:gap-3">
+          <div className="shrink-0 text-left leading-none">
+            <span className="block font-logo text-lg font-medium leading-none tracking-wide text-fg">
+              Auto Designer
+            </span>
+            <span className="mt-0.5 block font-sans text-pico font-medium uppercase leading-none tracking-[0.18em] text-fg-muted">
+              UX Harness
+            </span>
+          </div>
           <span
             className="min-w-0 truncate text-pico leading-none text-fg-muted tabular-nums"
             title={appReleaseLabel()}
