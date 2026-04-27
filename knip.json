@@ -10,11 +10,27 @@
   ],
   "ignore": [
     "api/**",
+    "scripts/bump-patch-version.ts",
     "**/.vendor/**",
     "**/dist/**"
   ],
   "ignoreDependencies": [
+    "@fontsource-variable/fraunces",
+    "@fontsource-variable/inter-tight",
     "@fontsource-variable/jetbrains-mono",
-    "@fontsource-variable/space-grotesk"
-  ]
+    "tailwindcss"
+  ],
+  "workspaces": {
+    "packages/design-system": {
+      "entry": [
+        "vitest.setup.ts",
+        "__tests__/**/*.test.ts",
+        "components/ui/__tests__/**/*.test.{ts,tsx}",
+        "lib/__tests__/**/*.test.ts"
+      ],
+      "project": [
+        "**/*.{ts,tsx,js,mjs}"
+      ]
+    }
+  }
 }

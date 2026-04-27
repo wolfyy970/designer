@@ -1,17 +1,13 @@
 import { Hono } from 'hono';
-import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { DesignSpecSchema } from '../../src/types/spec.ts';
 import type { IncubatorPromptOptions } from '../../src/lib/prompts/incubator-user.ts';
 import { buildIncubatorUserPrompt } from '../../src/lib/prompts/incubator-user.ts';
 import { HypothesisStrategySchema, ThinkingOverrideSchema } from '../lib/hypothesis-schemas.ts';
-import { resolveThinkingConfig } from '../../src/lib/thinking-defaults.ts';
 import { getPromptBody } from '../lib/prompt-resolution.ts';
 import { clampProviderModel } from '../lib/lockdown-model.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
-import { runTaskAgentSseBody } from '../lib/sse-task-route.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
-import { executeTaskAgentStream } from '../services/task-agent-execution.ts';
 import { parseJsonLenient } from '../lib/parse-json-lenient.ts';
 import { extractLlmJsonObjectSegment } from '../lib/extract-llm-json.ts';
 import {
@@ -21,6 +17,7 @@ import {
 import { generateId, now } from '../../src/lib/utils.ts';
 import { env } from '../env.ts';
 import { appendIncubateParsedLogEntry } from '../log-store.ts';
+import { runTaskAgentRoute } from '../lib/task-agent-route-runner.ts';
 
 const incubate = new Hono();
 
@@ -140,92 +137,73 @@ Use the \`use_skill\` tool to load relevant skills before beginning your analysi
 
 ${assembledSpec}`;
 
-  return streamSSE(c, async (stream) => {
-    const abortSignal = c.req.raw.signal;
-    const correlationId = crypto.randomUUID();
-    if (env.isDev) {
-      console.debug('[incubate] request', {
-        correlationId,
-        providerId: body.providerId,
-        modelId: body.modelId,
-        specSections: Object.keys(body.spec.sections).length,
-        hypothesisCount: body.promptOptions?.count,
-      });
-    }
-    await runTaskAgentSseBody(stream, async ({ write, allocId, gate }) => {
-      const thinking = resolveThinkingConfig('incubate', body.modelId, body.thinking);
-      const taskResult = await executeTaskAgentStream(
-        stream,
-        {
-          userPrompt: agentUserPrompt,
-          providerId: body.providerId,
-          modelId: body.modelId,
-          sessionType: 'incubation',
-          thinking,
-          signal: abortSignal,
-          correlationId,
-          resultFile: 'result.json',
-          initialProgressMessage: 'Incubating spec to hypotheses…',
-        },
-        { allocId, writeGate: gate },
+  return runTaskAgentRoute(c, {
+    routeLabel: 'incubate',
+    body,
+    userPrompt: agentUserPrompt,
+    sessionType: 'incubation',
+    thinkingTask: 'incubate',
+    resultFile: 'result.json',
+    initialProgressMessage: 'Incubating spec to hypotheses…',
+    debugPayload: (b) => ({
+      specSections: Object.keys(b.spec.sections).length,
+      hypothesisCount: b.promptOptions?.count,
+    }),
+    onTaskResult: async (taskResult, { write, correlationId }) => {
+      const jsonStr = extractLlmJsonObjectSegment(taskResult.result);
+      const raw = parseJsonLenient(jsonStr);
+      const { dimensions, hypotheses } = LLMResponseSchema.parse(
+        typeof raw === 'object' && raw !== null ? raw : {},
       );
-
-      if (taskResult) {
-        const jsonStr = extractLlmJsonObjectSegment(taskResult.result);
-        const raw = parseJsonLenient(jsonStr);
-        const { dimensions, hypotheses } = LLMResponseSchema.parse(
-          typeof raw === 'object' && raw !== null ? raw : {},
+      const plan = {
+        id: generateId(),
+        specId: body.spec.id,
+        dimensions,
+        hypotheses,
+        generatedAt: now(),
+        incubatorModel: body.modelId,
+      };
+      if (incubationLooksLikeTemplateEcho(plan)) {
+        if (env.isDev) {
+          console.debug('[incubate] validation failed: template echo', {
+            correlationId,
+            hypothesisCount: plan.hypotheses.length,
+          });
+        }
+        throw new Error(
+          'The model returned placeholder text instead of real hypotheses (often from copying a schema example). Try Generate again, or switch model.',
         );
-        const plan = {
-          id: generateId(),
-          specId: body.spec.id,
-          dimensions,
-          hypotheses,
-          generatedAt: now(),
-          incubatorModel: body.modelId,
-        };
-        if (incubationLooksLikeTemplateEcho(plan)) {
-          if (env.isDev) {
-            console.debug('[incubate] validation failed: template echo', {
-              correlationId,
-              hypothesisCount: plan.hypotheses.length,
-            });
-          }
-          throw new Error(
-            'The model returned placeholder text instead of real hypotheses (often from copying a schema example). Try Generate again, or switch model.',
-          );
+      }
+      if (incubationFirstHypothesisEmpty(plan)) {
+        if (env.isDev) {
+          console.debug('[incubate] validation failed: empty hypothesis text', {
+            correlationId,
+            hypothesisCount: plan.hypotheses.length,
+          });
         }
-        if (incubationFirstHypothesisEmpty(plan)) {
-          if (env.isDev) {
-            console.debug('[incubate] validation failed: empty hypothesis text', {
-              correlationId,
-              hypothesisCount: plan.hypotheses.length,
-            });
-          }
-          throw new Error(
-            'The model returned no hypothesis text (the core bet field was empty). Try Generate again, or switch model.',
-          );
-        }
-        const firstBet = plan.hypotheses[0]?.hypothesis ?? '';
-        appendIncubateParsedLogEntry({
+        throw new Error(
+          'The model returned no hypothesis text (the core bet field was empty). Try Generate again, or switch model.',
+        );
+      }
+      const firstBet = plan.hypotheses[0]?.hypothesis ?? '';
+      appendIncubateParsedLogEntry({
+        correlationId,
+        hypothesisCount: plan.hypotheses.length,
+        hypothesisNames: plan.hypotheses.map((h) => h.name),
+        firstHypothesisText: firstBet,
+        dimensionCount: plan.dimensions.length,
+      });
+      if (env.isDev) {
+        console.debug('[incubate] plan parsed (before incubate_result SSE)', {
           correlationId,
           hypothesisCount: plan.hypotheses.length,
           hypothesisNames: plan.hypotheses.map((h) => h.name),
-          firstHypothesisText: firstBet,
+          firstHypothesisText: firstBet.length > 400 ? `${firstBet.slice(0, 400)}…` : firstBet,
           dimensionCount: plan.dimensions.length,
         });
-        if (env.isDev) {
-          console.debug('[incubate] plan parsed (before incubate_result SSE)', {
-            correlationId,
-            hypothesisCount: plan.hypotheses.length,
-            hypothesisNames: plan.hypotheses.map((h) => h.name),
-            firstHypothesisText: firstBet.length > 400 ? `${firstBet.slice(0, 400)}…` : firstBet,
-            dimensionCount: plan.dimensions.length,
-          });
-        }
-        await write(SSE_EVENT_NAMES.incubate_result, JSON.parse(JSON.stringify(plan)));
       }
-    });
+      await write(SSE_EVENT_NAMES.incubate_result, JSON.parse(JSON.stringify(plan)));
+    },
   });
 });
 

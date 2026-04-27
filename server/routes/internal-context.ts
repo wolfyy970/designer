@@ -1,16 +1,12 @@
 import { Hono } from 'hono';
-import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { clampProviderModel } from '../lib/lockdown-model.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
-import { runTaskAgentSseBody } from '../lib/sse-task-route.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { DesignSpecSchema } from '../../src/types/spec.ts';
 import { buildInternalContextUserMessage } from '../../src/lib/internal-context.ts';
-import { executeTaskAgentStream } from '../services/task-agent-execution.ts';
-import { resolveThinkingConfig } from '../../src/lib/thinking-defaults.ts';
 import { ThinkingOverrideSchema } from '../lib/hypothesis-schemas.ts';
-import { env } from '../env.ts';
+import { runTaskAgentRoute } from '../lib/task-agent-route-runner.ts';
 
 const InternalContextGenerateRequestSchema = z.object({
   spec: DesignSpecSchema,
@@ -42,39 +38,18 @@ Use the \`use_skill\` tool to load relevant skills before generating.
 
 ${contextMessage}`;
 
-  return streamSSE(c, async (stream) => {
-    const abortSignal = c.req.raw.signal;
-    const correlationId = crypto.randomUUID();
-    if (env.isDev) {
-      console.debug('[internal-context] request', {
-        correlationId,
-        providerId: body.providerId,
-        modelId: body.modelId,
-        sourceHash: body.sourceHash,
-      });
-    }
-    await runTaskAgentSseBody(stream, async ({ write, allocId, gate }) => {
-      const thinking = resolveThinkingConfig('internal-context', body.modelId, body.thinking);
-      const taskResult = await executeTaskAgentStream(
-        stream,
-        {
-          userPrompt: agentUserPrompt,
-          providerId: body.providerId,
-          modelId: body.modelId,
-          sessionType: 'internal-context',
-          thinking,
-          signal: abortSignal,
-          correlationId,
-          resultFile: 'result.md',
-          initialProgressMessage: 'Synthesizing internal context…',
-        },
-        { allocId, writeGate: gate },
-      );
-
-      if (taskResult) {
-        await write(SSE_EVENT_NAMES.task_result, { result: taskResult.result.trim() });
-      }
-    });
+  return runTaskAgentRoute(c, {
+    routeLabel: 'internal-context',
+    body,
+    userPrompt: agentUserPrompt,
+    sessionType: 'internal-context',
+    thinkingTask: 'internal-context',
+    resultFile: 'result.md',
+    initialProgressMessage: 'Synthesizing internal context…',
+    debugPayload: (b) => ({ sourceHash: b.sourceHash }),
+    onTaskResult: async (taskResult, { write }) => {
+      await write(SSE_EVENT_NAMES.task_result, { result: taskResult.result.trim() });
+    },
   });
 });
 

@@ -1,6 +1,7 @@
 import type { DesignSystemNodeData } from '../types/canvas-data';
 import type { ReferenceImage } from '../types/spec';
 import type { DesignMdDocument } from '../types/workspace-domain';
+import { hashDocumentSource, imageFingerprint } from './document-fingerprint';
 
 export type DesignMdSource = {
   title?: string;
@@ -9,26 +10,6 @@ export type DesignMdSource = {
 };
 
 export type DesignMdStatus = 'missing' | 'ready' | 'stale' | 'generating' | 'error';
-
-function hashString(input: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < input.length; i += 1) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return (h >>> 0).toString(16).padStart(8, '0');
-}
-
-function imageFingerprint(img: ReferenceImage): Record<string, string | number | undefined> {
-  return {
-    id: img.id,
-    filename: img.filename,
-    description: img.description,
-    extractedContext: img.extractedContext,
-    dataUrlHash: hashString(img.dataUrl),
-    dataUrlLength: img.dataUrl.length,
-  };
-}
 
 export function designMdSourcePayload(source: DesignMdSource): unknown {
   return {
@@ -39,7 +20,7 @@ export function designMdSourcePayload(source: DesignMdSource): unknown {
 }
 
 export function computeDesignMdSourceHash(source: DesignMdSource): string {
-  return `fnv1a:${hashString(JSON.stringify(designMdSourcePayload(source)))}`;
+  return hashDocumentSource(designMdSourcePayload(source));
 }
 
 export function isDesignMdDocumentStale(
@@ -72,4 +53,3 @@ export function designSystemSourceFromNodeData(data: DesignSystemNodeData): Desi
     images: data.images ?? [],
   };
 }
-

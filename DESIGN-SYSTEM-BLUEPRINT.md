@@ -68,7 +68,6 @@ packages/design-system/
 │       └── __tests__/
 ├── lib/
 │   ├── utils.ts                # cn() helper with tailwind-merge classGroups registration
-│   ├── ui-constants.ts         # Shared visual constants (ICON_STROKE_WIDTH, etc.)
 │   └── node-display.ts         # Pure helpers lifted from feature code
 ├── types/
 │   └── *.ts                    # Public type contracts (shared between app and DS)
@@ -510,7 +509,6 @@ A complete implementation has all of these:
 
 ### Utilities
 - [ ] `cn()` helper with every custom font-size/tracking utility registered
-- [ ] `ui-constants.ts` for shared visual constants
 
 ### Live catalog
 - [ ] `/kitchen-sink` route with sections for Foundations, Atoms, Molecules, Organisms, Patterns, States

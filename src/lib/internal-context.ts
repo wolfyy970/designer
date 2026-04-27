@@ -1,4 +1,5 @@
-import type { DesignSpec, InternalContextDocument, ReferenceImage, SpecSectionId } from '../types/spec';
+import type { DesignSpec, InternalContextDocument, SpecSectionId } from '../types/spec';
+import { hashDocumentSource, imageFingerprint } from './document-fingerprint';
 
 const SOURCE_SECTION_IDS: SpecSectionId[] = [
   'design-brief',
@@ -7,26 +8,6 @@ const SOURCE_SECTION_IDS: SpecSectionId[] = [
   'objectives-metrics',
   'design-constraints',
 ];
-
-function hashString(input: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < input.length; i += 1) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return (h >>> 0).toString(16).padStart(8, '0');
-}
-
-function imageFingerprint(img: ReferenceImage): Record<string, string | number | undefined> {
-  return {
-    id: img.id,
-    filename: img.filename,
-    description: img.description,
-    extractedContext: img.extractedContext,
-    dataUrlHash: hashString(img.dataUrl),
-    dataUrlLength: img.dataUrl.length,
-  };
-}
 
 export function internalContextSourcePayload(spec: DesignSpec): unknown {
   return {
@@ -43,7 +24,7 @@ export function internalContextSourcePayload(spec: DesignSpec): unknown {
 }
 
 export function computeInternalContextSourceHash(spec: DesignSpec): string {
-  return `fnv1a:${hashString(JSON.stringify(internalContextSourcePayload(spec)))}`;
+  return hashDocumentSource(internalContextSourcePayload(spec));
 }
 
 export function isInternalContextDocumentStale(

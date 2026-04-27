@@ -123,4 +123,16 @@ describe('POST /api/design-system/extract', () => {
     const text = await res.text();
     expect(text).toContain('failed lint');
   });
+
+  it('writes lint summary in the task_result payload', async () => {
+    const res = await app.request('http://localhost/api/design-system/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(minimalBody),
+    });
+    const text = await res.text();
+    expect(text).toContain('event: task_result');
+    expect(text).toContain('"result":"---\\nname: Test\\n---\\n# Test"');
+    expect(text).toContain('"lint":{"errors":0,"warnings":0,"infos":0,"findings":[]}');
+  });
 });

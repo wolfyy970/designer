@@ -21,6 +21,10 @@ import {
   getDesignMdStatus,
   isDesignMdDocumentStale,
 } from '../../../lib/design-md';
+import {
+  buildDesignMdDocument,
+  buildFailedDesignMdDocument,
+} from '../../../lib/design-md-document';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
 import { NodeErrorBlock } from './shared/NodeErrorBlock';
@@ -117,28 +121,25 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
         { signal: ac.signal },
       );
       if (!response || ac.signal.aborted) return;
-      update('designMdDocument', {
+      update('designMdDocument', buildDesignMdDocument({
         content: response.result,
         sourceHash,
-        generatedAt: new Date().toISOString(),
         providerId: providerId!,
         modelId: modelId!,
         lint: response.lint,
-      });
+      }));
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       if (err instanceof Error && err.name === 'AbortError') return;
       const message = err instanceof Error ? err.message : 'DESIGN.md generation failed';
       setExtractError(message);
-      update('designMdDocument', {
-        content: designMdDocument?.content ?? '',
+      update('designMdDocument', buildFailedDesignMdDocument({
+        existing: designMdDocument,
         sourceHash,
-        generatedAt: designMdDocument?.generatedAt ?? new Date().toISOString(),
         providerId: providerId!,
         modelId: modelId!,
-        lint: designMdDocument?.lint,
         error: message,
-      });
+      }));
     } finally {
       setExtracting(false);
     }

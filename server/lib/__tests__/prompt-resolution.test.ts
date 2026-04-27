@@ -43,4 +43,13 @@ describe('getPromptBody', () => {
     const afterFrontmatter = raw.replace(/^---[\s\S]*?---\s*/, '');
     expect(body.trim()).toBe(afterFrontmatter.trim());
   });
+
+  it('routes the DESIGN.md extraction prompt to the authoritative authoring contract', async () => {
+    const body = await getPromptBody('design-system-extract-system');
+
+    expect(body).toContain('Google Labs / Stitch format');
+    expect(body).toContain('Write the complete document to `DESIGN.md` in the workspace root.');
+    expect(body).toContain('Return only the file content in that file.');
+    expect(body).toContain('Do not use non-spec top-level token groups');
+  });
 });

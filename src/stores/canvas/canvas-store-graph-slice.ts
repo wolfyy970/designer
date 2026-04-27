@@ -54,6 +54,26 @@ const REMOVE_PROTECTED_NODE_TYPES = new Set<string>([
   'inputGhost',
 ]);
 
+function syncRemovedEdges(
+  removed: readonly WorkspaceEdge[],
+  nodes: readonly WorkspaceNode[],
+): void {
+  for (const edge of removed) {
+    syncDomainForRemovedEdge(edge, nodes as WorkspaceNode[]);
+  }
+}
+
+function removeEdgesAndSync(
+  state: Pick<CanvasStore, 'edges' | 'nodes'>,
+  shouldRemove: (edge: WorkspaceEdge) => boolean,
+): WorkspaceEdge[] {
+  const removed = state.edges.filter(shouldRemove);
+  if (removed.length === 0) return state.edges;
+  syncRemovedEdges(removed, state.nodes);
+  const removedIds = new Set(removed.map((edge) => edge.id));
+  return state.edges.filter((edge) => !removedIds.has(edge.id));
+}
+
 export const createGraphSlice: StateCreator<
   CanvasStore,
   [],
@@ -91,10 +111,7 @@ export const createGraphSlice: StateCreator<
     const next = applyWorkspaceEdgeChanges(changes, prev);
     const nextIds = new Set(next.map((e) => e.id));
     const removed = prev.filter((e) => !nextIds.has(e.id));
-    const nodes = get().nodes;
-    for (const e of removed) {
-      syncDomainForRemovedEdge(e, nodes);
-    }
+    syncRemovedEdges(removed, get().nodes);
     set({ edges: next });
   },
 
@@ -123,9 +140,7 @@ export const createGraphSlice: StateCreator<
         if (e.target !== connection.target) return false;
         return nodes.find((n) => n.id === e.source)?.type === NODE_TYPES.MODEL;
       });
-      for (const e of removed) {
-        syncDomainForRemovedEdge(e, nodes);
-      }
+      syncRemovedEdges(removed, nodes);
       edges = edges.filter((e) => !removed.some((r) => r.id === e.id));
     }
 
@@ -258,7 +273,8 @@ export const createGraphSlice: StateCreator<
   },
 
   removeEdge: (edgeId) => {
-    set({ edges: get().edges.filter((e) => e.id !== edgeId) });
+    const state = get();
+    set({ edges: removeEdgesAndSync(state, (e) => e.id === edgeId) });
   },
 
   updateNodeData: (nodeId, data) => {
@@ -275,8 +291,7 @@ export const createGraphSlice: StateCreator<
   },
 
   disconnectOutputs: (nodeId) => {
-    set({
-      edges: get().edges.filter((e) => e.source !== nodeId),
-    });
+    const state = get();
+    set({ edges: removeEdgesAndSync(state, (e) => e.source === nodeId) });
   },
 });

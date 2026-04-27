@@ -9,6 +9,7 @@ import type {
   InternalContextGenerateRequest,
   InternalContextGenerateResponse,
 } from './types';
+import type { z } from 'zod';
 import { parseApiErrorBody } from '../lib/error-utils';
 import { SSE_EVENT_NAMES } from '../constants/sse-events';
 import { readSseEventStream } from '../lib/sse-reader';
@@ -18,6 +19,11 @@ import {
 } from '../lib/sse-diagnostics';
 import { API_BASE } from './client-shared.ts';
 import { dispatchGenerateStreamEvent, type GenerateStreamCallbacks } from './client-sse.ts';
+import {
+  DesignSystemExtractResponseSchema,
+  InputsGenerateResponseSchema,
+  InternalContextGenerateResponseSchema,
+} from './response-schemas.ts';
 
 export interface PostTaskStreamOptions {
   signal?: AbortSignal;
@@ -27,8 +33,9 @@ export interface PostTaskStreamOptions {
 async function postTaskStream(
   path: string,
   body: unknown,
+  responseSchema: z.ZodType<{ result: string }>,
   options?: PostTaskStreamOptions,
-): Promise<{ result: string } & Record<string, unknown>> {
+): Promise<{ result: string }> {
   const response = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -42,8 +49,7 @@ async function postTaskStream(
   const reader = response.body?.getReader();
   if (!reader) throw new Error('No response stream');
 
-  let result: string | null = null;
-  let taskPayload: ({ result: string } & Record<string, unknown>) | null = null;
+  let taskPayload: unknown = null;
   let errorMsg: string | null = null;
 
   const diag = createSseStreamDiagnostics();
@@ -53,9 +59,8 @@ async function postTaskStream(
     await readSseEventStream(reader, async (eventName, dataLine) => {
       try {
         const data = JSON.parse(dataLine) as Record<string, unknown>;
-        if (eventName === SSE_EVENT_NAMES.task_result && typeof data.result === 'string') {
-          result = data.result;
-          taskPayload = { ...data, result: data.result };
+        if (eventName === SSE_EVENT_NAMES.task_result) {
+          taskPayload = data;
         } else if (eventName === SSE_EVENT_NAMES.error && typeof data.error === 'string') {
           errorMsg = data.error;
           options?.agentic?.onError?.(data.error);
@@ -77,28 +82,31 @@ async function postTaskStream(
     diag.logClose();
   }
 
-  if (errorMsg && !result) throw new Error(errorMsg);
-  if (!result) throw new Error('Task completed without result');
-  return taskPayload ?? { result };
+  if (errorMsg && taskPayload == null) throw new Error(errorMsg);
+  const parsed = responseSchema.safeParse(taskPayload);
+  if (!parsed.success) {
+    throw new Error(`Invalid task result payload: ${parsed.error.message}`);
+  }
+  return parsed.data;
 }
 
 export async function extractDesignSystem(
   req: DesignSystemExtractRequest,
   options?: PostTaskStreamOptions,
 ): Promise<DesignSystemExtractResponse> {
-  return postTaskStream('/design-system/extract', req, options) as Promise<DesignSystemExtractResponse>;
+  return postTaskStream('/design-system/extract', req, DesignSystemExtractResponseSchema, options);
 }
 
 export async function generateInputContent(
   req: InputsGenerateRequest,
   options?: PostTaskStreamOptions,
 ): Promise<InputsGenerateResponse> {
-  return postTaskStream('/inputs/generate', req, options);
+  return postTaskStream('/inputs/generate', req, InputsGenerateResponseSchema, options);
 }
 
 export async function generateInternalContext(
   req: InternalContextGenerateRequest,
   options?: PostTaskStreamOptions,
 ): Promise<InternalContextGenerateResponse> {
-  return postTaskStream('/internal-context/generate', req, options);
+  return postTaskStream('/internal-context/generate', req, InternalContextGenerateResponseSchema, options);
 }

@@ -15,15 +15,12 @@ import { useGenerationStore } from '../../../stores/generation-store';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { countConnectedIncubatorInputs } from '../../../lib/incubator-input-count';
 import type { IncubatorNodeData } from '../../../types/canvas-data';
-import type { DesignSystemNodeData } from '../../../types/canvas-data';
 import type { WorkspaceNode } from '../../../types/workspace-graph';
 import type { HypothesisStrategy } from '../../../types/incubator';
 import { incubateStream } from '../../../api/client';
-import { extractDesignSystem, generateInternalContext } from '../../../api/client';
 import { buildIncubateInputs } from '../../../lib/canvas-graph';
 import { getDesignSystemNodeData } from '../../../lib/canvas-node-data';
 import {
-  computeDesignMdSourceHash,
   designMdSourceHasInput,
   designSystemSourceFromNodeData,
   type DesignMdStatus,
@@ -31,7 +28,6 @@ import {
   isDesignMdDocumentStale,
 } from '../../../lib/design-md';
 import {
-  computeInternalContextSourceHash,
   isInternalContextDocumentStale,
 } from '../../../lib/internal-context';
 import { useWorkspaceDomainStore } from '../../../stores/workspace-domain-store';
@@ -52,6 +48,10 @@ import {
 } from '../../../hooks/task-stream-state';
 import { NodeErrorBlock } from './shared/NodeErrorBlock';
 import { useThinkingDefaultsStore } from '../../../stores/thinking-defaults-store';
+import {
+  needsInternalContextRefresh,
+  useIncubatorDocumentPreparation,
+} from '../../../hooks/useIncubatorDocumentPreparation';
 
 const COUNT_OPTIONS = [1, 2, 3, 5];
 const DEFAULT_COUNT = 3;
@@ -182,58 +182,18 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
     [hasDesignBrief, isCompiling, modelId],
   );
 
-  const refreshInternalContext = useCallback(async (): Promise<string> => {
-    if (!providerId || !modelId) throw new Error('Connect a Model node first');
-    const currentSpec = useSpecStore.getState().spec;
-    const sourceHash = computeInternalContextSourceHash(currentSpec);
-    setContextGenerating(true);
-    setTaskStreamState({ ...createInitialTaskStreamState(), status: 'streaming' });
-    let session: ReturnType<typeof createTaskStreamSession> | undefined;
-    try {
-      const taskSession = createTaskStreamSession({
-        sessionId: `internal-context-${id}-${Date.now()}`,
-        correlationId: crypto.randomUUID(),
-        onPatch: (patch) => setTaskStreamState((prev) => ({ ...prev, ...patch })),
-      });
-      session = taskSession;
-      const thinkingOverride = useThinkingDefaultsStore.getState().overrides['internal-context'];
-      const response = await generateInternalContext(
-        {
-          spec: currentSpec,
-          sourceHash,
-          providerId,
-          modelId,
-          thinking: thinkingOverride,
-        },
-        { agentic: taskSession.callbacks },
-      );
-      const doc = {
-        content: response.result,
-        sourceHash,
-        generatedAt: new Date().toISOString(),
-        providerId,
-        modelId,
-      };
-      useSpecStore.getState().setInternalContextDocument(doc);
-      return response.result;
-    } catch (err) {
-      const message = normalizeError(err, 'Internal context generation failed');
-      const existing = useSpecStore.getState().spec.internalContextDocument;
-      useSpecStore.getState().setInternalContextDocument({
-        content: existing?.content ?? '',
-        sourceHash,
-        generatedAt: existing?.generatedAt ?? new Date().toISOString(),
-        providerId,
-        modelId,
-        error: message,
-      });
-      throw err;
-    } finally {
-      void session?.finalize();
-      setTaskStreamState(createInitialTaskStreamState('idle'));
-      setContextGenerating(false);
-    }
-  }, [id, modelId, providerId]);
+  const {
+    refreshInternalContext,
+    refreshDesignMdDocument,
+    ensureDesignSystemDocuments,
+  } = useIncubatorDocumentPreparation({
+    incubatorId: id,
+    providerId,
+    modelId,
+    setTaskStreamState,
+    setContextGenerating,
+    setDesignMdGeneratingNodeId,
+  });
 
   const handleRefreshInternalContext = useCallback(() => {
     void refreshInternalContext().catch((err) => {
@@ -241,105 +201,11 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
     });
   }, [refreshInternalContext, setError]);
 
-  const refreshDesignMdDocument = useCallback(async (nodeId: string): Promise<string> => {
-    if (!providerId || !modelId) throw new Error('Connect a Model node first');
-    const currentNode = useCanvasStore.getState().nodes.find((n) => n.id === nodeId);
-    if (!currentNode || currentNode.type !== NODE_TYPES.DESIGN_SYSTEM) {
-      throw new Error('Design System node is no longer available');
-    }
-    const data = (currentNode.data ?? {}) as DesignSystemNodeData;
-    const source = designSystemSourceFromNodeData(data);
-    if (!designMdSourceHasInput(source)) throw new Error('Design System node has no source content');
-    const sourceHash = computeDesignMdSourceHash(source);
-    setDesignMdGeneratingNodeId(nodeId);
-    setTaskStreamState({ ...createInitialTaskStreamState(), status: 'streaming' });
-    let session: ReturnType<typeof createTaskStreamSession> | undefined;
-    try {
-      const taskSession = createTaskStreamSession({
-        sessionId: `design-md-${nodeId}-${Date.now()}`,
-        correlationId: crypto.randomUUID(),
-        onPatch: (patch) => setTaskStreamState((prev) => ({ ...prev, ...patch })),
-      });
-      session = taskSession;
-      const thinkingOverride = useThinkingDefaultsStore.getState().overrides['design-system'];
-      const response = await extractDesignSystem(
-        {
-          title: source.title,
-          content: source.content,
-          images: [...(source.images ?? [])],
-          sourceHash,
-          providerId,
-          modelId,
-          thinking: thinkingOverride,
-        },
-        { agentic: taskSession.callbacks },
-      );
-      const document = {
-        content: response.result,
-        sourceHash,
-        generatedAt: new Date().toISOString(),
-        providerId,
-        modelId,
-        lint: response.lint,
-      };
-      useCanvasStore.getState().updateNodeData(nodeId, { designMdDocument: document });
-      return response.result;
-    } catch (err) {
-      const message = normalizeError(err, 'DESIGN.md generation failed');
-      const existing = ((useCanvasStore.getState().nodes.find((n) => n.id === nodeId)?.data ?? {}) as DesignSystemNodeData).designMdDocument;
-      useCanvasStore.getState().updateNodeData(nodeId, {
-        designMdDocument: {
-          content: existing?.content ?? '',
-          sourceHash,
-          generatedAt: existing?.generatedAt ?? new Date().toISOString(),
-          providerId,
-          modelId,
-          lint: existing?.lint,
-          error: message,
-        },
-      });
-      throw err;
-    } finally {
-      void session?.finalize();
-      setTaskStreamState(createInitialTaskStreamState('idle'));
-      setDesignMdGeneratingNodeId(null);
-    }
-  }, [modelId, providerId]);
-
   const handleRefreshDesignMdDocument = useCallback((nodeId: string) => {
     void refreshDesignMdDocument(nodeId).catch((err) => {
       setError(normalizeError(err, 'DESIGN.md generation failed'));
     });
   }, [refreshDesignMdDocument, setError]);
-
-  const ensureDesignSystemDocuments = useCallback(async (): Promise<{ nodeId: string; title: string; content: string }[]> => {
-    const out: { nodeId: string; title: string; content: string }[] = [];
-    const currentNodes = useCanvasStore.getState().nodes;
-    const currentDomainWiring = useWorkspaceDomainStore.getState().incubatorWirings[id];
-    const nodeById = new Map(currentNodes.map((n) => [n.id, n] as const));
-    const scopedIds = currentDomainWiring?.designSystemNodeIds ?? [];
-    const candidates = scopedIds.length > 0
-      ? scopedIds.map((nodeId) => nodeById.get(nodeId))
-      : currentNodes.filter((node) =>
-          node.type === NODE_TYPES.DESIGN_SYSTEM &&
-          useCanvasStore.getState().edges.some((edge) => edge.source === node.id && edge.target === id),
-        );
-    for (const node of candidates) {
-      if (!node || node.type !== NODE_TYPES.DESIGN_SYSTEM) continue;
-      let data = (node.data ?? {}) as DesignSystemNodeData;
-      const source = designSystemSourceFromNodeData(data);
-      if (!designMdSourceHasInput(source)) continue;
-      if (!data.designMdDocument?.content || data.designMdDocument.error || isDesignMdDocumentStale(source, data.designMdDocument)) {
-        await refreshDesignMdDocument(node.id);
-        data = ((useCanvasStore.getState().nodes.find((n) => n.id === node.id)?.data ?? {}) as DesignSystemNodeData);
-      }
-      const content = data.designMdDocument?.content?.trim();
-      if (content) {
-        out.push({ nodeId: node.id, title: data.title || 'Design System', content });
-      }
-    }
-    return out;
-  }, [id, refreshDesignMdDocument]);
 
   const handleIncubate = useCallback(async () => {
     if (useIncubatorStore.getState().isCompiling || contextGenerating || designMdGeneratingNodeId) return;
@@ -365,10 +231,8 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
 
     let session: ReturnType<typeof createTaskStreamSession> | undefined;
     try {
-      const currentSpec = useSpecStore.getState().spec;
-      let internalContextDocument = currentSpec.internalContextDocument?.content ?? '';
-      const currentDoc = currentSpec.internalContextDocument;
-      if (!currentDoc?.content || currentDoc.error || isInternalContextDocumentStale(currentSpec, currentDoc)) {
+      let internalContextDocument = useSpecStore.getState().spec.internalContextDocument?.content ?? '';
+      if (needsInternalContextRefresh()) {
         internalContextDocument = await refreshInternalContext();
       }
       const designSystemDocumentsForPrompt = await ensureDesignSystemDocuments();

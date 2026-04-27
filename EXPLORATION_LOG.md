@@ -37,6 +37,8 @@ Append newest first.
 
 | Date | Note |
 |------|------|
+| 2026-04-27 | **DESIGN.md skill merge:** the downloaded `design-md` authoring guide was folded into `skills/design-system-extract-system/SKILL.md`, keeping the existing `design-system` catalog key while strengthening the Google/Stitch token, prose, section-order, and lint contracts; prompt-resolution and agentic-context tests assert the route still exposes the skill. |
+| 2026-04-27 | **Refactor audit remediation:** canvas edge removal now routes through one sync path so direct edge deletes/provider disconnects update workspace-domain wiring; task SSE clients validate final payloads with Zod; Incubator document preparation moved into a hook/shared document helpers; task-agent routes share a runner; Knip workspace config now distinguishes true dead code from design-system package tests. |
 | 2026-04-27 | **Pre-commit hardening:** default `pnpm test` is hermetic again; live meta-harness/API and OpenRouter sandbox LLM tests are opt-in via env flags. Docs were refreshed for config JSON, internal-context synthesis, DESIGN.md generation, implicit layout, protected nodes, and ghost persistence removal. |
 | 2026-04-27 | **Incubator document rows:** `StatusPanel` supports green-dot-only ready rows, Incubator now labels the generated spec as “Design specification,” hides view/refresh actions unless state warrants them, and still auto-refreshes missing/stale/error design artifacts before incubation. |
 | 2026-04-27 | **Protected canvas nodes:** design brief, model, incubator, and input ghost nodes no longer expose delete controls; `removeNode` and keyboard deletion now protect them too. Ghost dismiss persistence was removed so optional inputs reappear as ghosts after removal. |

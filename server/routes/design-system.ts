@@ -1,15 +1,11 @@
 import { Hono } from 'hono';
-import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { clampProviderModel } from '../lib/lockdown-model.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
-import { runTaskAgentSseBody } from '../lib/sse-task-route.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
-import { executeTaskAgentStream } from '../services/task-agent-execution.ts';
-import { resolveThinkingConfig } from '../../src/lib/thinking-defaults.ts';
 import { ThinkingOverrideSchema } from '../lib/hypothesis-schemas.ts';
-import { env } from '../env.ts';
 import { lintDesignMdDocument } from '../lib/design-md-lint.ts';
+import { runTaskAgentRoute } from '../lib/task-agent-route-runner.ts';
 
 const designSystem = new Hono();
 
@@ -76,47 +72,28 @@ ${imageDescriptions}
 
 Generate DESIGN.md from this design-system source.`;
 
-  return streamSSE(c, async (stream) => {
-    const abortSignal = c.req.raw.signal;
-    const correlationId = crypto.randomUUID();
-    if (env.isDev) {
-      console.debug('[design-system] request', {
-        correlationId,
-        providerId: body.providerId,
-        modelId: body.modelId,
-        imageCount: body.images?.length ?? 0,
-        hasText: Boolean(body.content?.trim()),
-      });
-    }
-    await runTaskAgentSseBody(stream, async ({ write, allocId, gate }) => {
-      const thinking = resolveThinkingConfig('design-system', body.modelId, body.thinking);
-      const taskResult = await executeTaskAgentStream(
-        stream,
-        {
-          userPrompt: agentUserPrompt,
-          providerId: body.providerId,
-          modelId: body.modelId,
-          sessionType: 'design-system',
-          thinking,
-          signal: abortSignal,
-          correlationId,
-          resultFile: 'DESIGN.md',
-          initialProgressMessage: 'Generating DESIGN.md…',
-        },
-        { allocId, writeGate: gate },
-      );
-
-      if (taskResult) {
-        const result = taskResult.result.trim();
-        const lint = await lintDesignMdDocument(result);
-        if (lint.errors > 0) {
-          throw new Error(
-            `Generated DESIGN.md failed lint with ${lint.errors} error${lint.errors === 1 ? '' : 's'}.`,
-          );
-        }
-        await write(SSE_EVENT_NAMES.task_result, { result, lint });
+  return runTaskAgentRoute(c, {
+    routeLabel: 'design-system',
+    body,
+    userPrompt: agentUserPrompt,
+    sessionType: 'design-system',
+    thinkingTask: 'design-system',
+    resultFile: 'DESIGN.md',
+    initialProgressMessage: 'Generating DESIGN.md…',
+    debugPayload: (b) => ({
+      imageCount: b.images?.length ?? 0,
+      hasText: Boolean(b.content?.trim()),
+    }),
+    onTaskResult: async (taskResult, { write }) => {
+      const result = taskResult.result.trim();
+      const lint = await lintDesignMdDocument(result);
+      if (lint.errors > 0) {
+        throw new Error(
+          `Generated DESIGN.md failed lint with ${lint.errors} error${lint.errors === 1 ? '' : 's'}.`,
+        );
       }
-    });
+      await write(SSE_EVENT_NAMES.task_result, { result, lint });
+    },
   });
 });
 

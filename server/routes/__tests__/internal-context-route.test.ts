@@ -61,4 +61,28 @@ describe('POST /api/internal-context/generate', () => {
       expect.anything(),
     );
   });
+
+  it('writes trimmed task_result payloads', async () => {
+    const res = await app.request('http://localhost/api/internal-context/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(baseBody),
+    });
+    const text = await res.text();
+    expect(text).toContain('event: task_result');
+    expect(text).toContain('"result":"# Context"');
+  });
+
+  it('surfaces task execution errors on the SSE stream', async () => {
+    vi.mocked(executeTaskAgentStream).mockRejectedValueOnce(new Error('context failed'));
+    const res = await app.request('http://localhost/api/internal-context/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(baseBody),
+    });
+    const text = await res.text();
+    expect(text).toContain('event: error');
+    expect(text).toContain('context failed');
+    expect(text).toContain('event: done');
+  });
 });
