@@ -11,6 +11,16 @@ import type { ProviderModel } from '../types/provider';
 import type { EvaluationContextPayload } from '../types/evaluation';
 import type { WorkspaceSnapshotWire } from '../lib/workspace-snapshot-schema';
 import type { ThinkingOverride } from '../lib/thinking-defaults';
+import type {
+  AppConfigResponse,
+  DesignSystemExtractWireResponse,
+  HypothesisPromptBundleWireResponse,
+  IncubateWireResponse,
+  InputsGenerateWireResponse,
+  InternalContextGenerateWireResponse,
+  ModelsWireResponse,
+  ProvidersListWireResponse,
+} from './wire-schemas';
 
 // ── Incubate (spec → incubation plan) ────────────────────────────────
 
@@ -31,7 +41,7 @@ export interface IncubateRequest {
   thinking?: ThinkingOverride;
 }
 
-export type IncubateResponse = IncubationPlan;
+export type IncubateResponse = IncubateWireResponse & IncubationPlan;
 
 /** Workspace slice sent to `/api/hypothesis/*` (mirrors client domain + graph). */
 export interface HypothesisWorkspaceApiPayload {
@@ -45,18 +55,11 @@ export interface HypothesisWorkspaceApiPayload {
   defaultIncubatorProvider: string;
 }
 
-export interface HypothesisPromptBundleResponse {
+export type HypothesisPromptBundleResponse = HypothesisPromptBundleWireResponse & {
   prompts: CompiledPrompt[];
   evaluationContext: EvaluationContextPayload | null;
   provenance: ProvenanceContext;
-  generationContext: {
-    modelCredentials: {
-      providerId: string;
-      modelId: string;
-      thinkingLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high';
-    }[];
-  };
-}
+};
 
 export interface HypothesisGenerateApiPayload extends HypothesisWorkspaceApiPayload {
   correlationId?: string;
@@ -76,13 +79,15 @@ export type { GenerateSSEEvent } from '../lib/generate-sse-event-schema';
 
 // ── Models ──────────────────────────────────────────────────────────
 
-export type ModelsResponse = ProviderModel[];
+export type ModelsResponse = ModelsWireResponse & ProviderModel[];
 
 export interface ProviderInfo {
   id: string;
   name: string;
   description: string;
 }
+
+export type ProvidersListResponse = ProvidersListWireResponse & ProviderInfo[];
 
 // ── Design System ───────────────────────────────────────────────────
 
@@ -96,10 +101,9 @@ export interface DesignSystemExtractRequest {
   thinking?: ThinkingOverride;
 }
 
-export interface DesignSystemExtractResponse {
-  result: string;
+export type DesignSystemExtractResponse = DesignSystemExtractWireResponse & {
   lint?: DesignMdLintSummary;
-}
+};
 
 // ── Spec inputs auto-generate (magic wand) ──────────────────────────
 
@@ -120,9 +124,7 @@ export interface InputsGenerateRequest {
   thinking?: ThinkingOverride;
 }
 
-export interface InputsGenerateResponse {
-  result: string;
-}
+export type InputsGenerateResponse = InputsGenerateWireResponse;
 
 // ── Internal context document (spec inputs → derived Markdown) ──────
 
@@ -134,6 +136,5 @@ export interface InternalContextGenerateRequest {
   thinking?: ThinkingOverride;
 }
 
-export interface InternalContextGenerateResponse {
-  result: string;
-}
+export type InternalContextGenerateResponse = InternalContextGenerateWireResponse;
+export type { AppConfigResponse };

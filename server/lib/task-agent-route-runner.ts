@@ -70,9 +70,7 @@ export function runTaskAgentRoute<TBody extends TaskAgentRouteBody>(
         { allocId, writeGate: gate },
       );
 
-      if (taskResult) {
-        await options.onTaskResult(taskResult, { write, correlationId });
-      }
+      await options.onTaskResult(taskResult, { write, correlationId });
     });
   });
 }

@@ -1,55 +1,45 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import { useReactFlow, type NodeProps, type Node } from '@xyflow/react';
-import { ArrowRight, Eye, Plus, RefreshCw } from 'lucide-react';
+import { ArrowRight, Plus, RefreshCw } from 'lucide-react';
 import { normalizeError } from '../../../lib/error-utils';
 import { Button } from '@ds/components/ui/button';
 import { Badge } from '@ds/components/ui/badge';
 import { DocumentViewer } from '@ds/components/ui/document-viewer';
-import { StatusPanel, type StatusPanelTone } from '@ds/components/ui/status-panel';
+import type { StatusPanelTone } from '@ds/components/ui/status-panel';
 import { useSpecStore } from '../../../stores/spec-store';
 import {
   useIncubatorStore,
-  findStrategy,
 } from '../../../stores/incubator-store';
-import { useGenerationStore } from '../../../stores/generation-store';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { countConnectedIncubatorInputs } from '../../../lib/incubator-input-count';
 import type { IncubatorNodeData } from '../../../types/canvas-data';
 import type { WorkspaceNode } from '../../../types/workspace-graph';
-import type { HypothesisStrategy } from '../../../types/incubator';
-import { incubateStream } from '../../../api/client';
-import { buildIncubateInputs } from '../../../lib/canvas-graph';
 import { getDesignSystemNodeData } from '../../../lib/canvas-node-data';
 import {
-  designMdSourceHasInput,
   designSystemSourceFromNodeData,
-  type DesignMdStatus,
-  getDesignMdStatus,
   isDesignMdDocumentStale,
 } from '../../../lib/design-md';
 import {
   isInternalContextDocumentStale,
 } from '../../../lib/internal-context';
 import { useWorkspaceDomainStore } from '../../../stores/workspace-domain-store';
-import { scheduleCanvasFitView } from '../../../lib/canvas-fit-view';
 import { processingOrFilled } from '../../../lib/node-status';
 import { isPlaceholderHypothesis } from '../../../lib/hypothesis-node-utils';
-import { EDGE_STATUS, NODE_TYPES, RF_INTERACTIVE } from '../../../constants/canvas';
+import { NODE_TYPES, RF_INTERACTIVE } from '../../../constants/canvas';
 import { useConnectedModel } from '../../../hooks/useConnectedModel';
 import { useElapsedTimer } from '../../../hooks/useElapsedTimer';
+import { useIncubatorRun } from '../../../hooks/useIncubatorRun';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
 import TaskStreamMonitor from './TaskStreamMonitor';
 import Modal from '../../shared/Modal';
-import { createTaskStreamSession } from '../../../hooks/task-stream-session';
+import { IncubatorDocumentStatusPanels } from './IncubatorDocumentStatusPanels';
 import {
   createInitialTaskStreamState,
   type TaskStreamState,
 } from '../../../hooks/task-stream-state';
 import { NodeErrorBlock } from './shared/NodeErrorBlock';
-import { useThinkingDefaultsStore } from '../../../stores/thinking-defaults-store';
 import {
-  needsInternalContextRefresh,
   useIncubatorDocumentPreparation,
 } from '../../../hooks/useIncubatorDocumentPreparation';
 
@@ -58,23 +48,10 @@ const DEFAULT_COUNT = 3;
 
 type IncubatorNodeFlowType = Node<IncubatorNodeData, 'incubator'>;
 
-function designMdStatusLabel(status: DesignMdStatus): string {
-  if (status === 'missing') return 'needs generation';
-  if (status === 'generating') return 'generating...';
-  return status;
-}
-
 function documentStatusLabel(status: string): string | undefined {
   if (status === 'ready') return undefined;
   if (status === 'generating') return 'generating...';
   return status;
-}
-
-function designMdStatusTone(status: DesignMdStatus): StatusPanelTone {
-  if (status === 'ready') return 'success';
-  if (status === 'error') return 'error';
-  if (status === 'generating') return 'accent';
-  return 'warning';
 }
 
 function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>) {
@@ -86,15 +63,9 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
 
   const isCompiling = useIncubatorStore((s) => s.isCompiling);
   const error = useIncubatorStore((s) => s.error);
-  const appendStrategiesToNode = useIncubatorStore((s) => s.appendStrategiesToNode);
-  const setCompiling = useIncubatorStore((s) => s.setCompiling);
   const setError = useIncubatorStore((s) => s.setError);
 
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
-  const syncAfterIncubate = useCanvasStore((s) => s.syncAfterIncubate);
-  const addPlaceholderHypotheses = useCanvasStore((s) => s.addPlaceholderHypotheses);
-  const removePlaceholders = useCanvasStore((s) => s.removePlaceholders);
-  const setEdgeStatusBySource = useCanvasStore((s) => s.setEdgeStatusBySource);
   const edges = useCanvasStore((s) => s.edges);
   const nodes = useCanvasStore((s) => s.nodes);
   const domainWiring = useWorkspaceDomainStore((s) => s.incubatorWirings[id]);
@@ -207,96 +178,21 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
     });
   }, [refreshDesignMdDocument, setError]);
 
-  const handleIncubate = useCallback(async () => {
-    if (useIncubatorStore.getState().isCompiling || contextGenerating || designMdGeneratingNodeId) return;
-
-    const results = useGenerationStore.getState().results;
-    const wiring = useWorkspaceDomainStore.getState().incubatorWirings[id];
-
-    const incubationPlans = useIncubatorStore.getState().incubationPlans;
-    const existingStrategies: HypothesisStrategy[] = [];
-    const hypotheses = useWorkspaceDomainStore.getState().hypotheses;
-    for (const h of Object.values(hypotheses)) {
-      if (h.incubatorId !== id || h.placeholder) continue;
-      const strategy = findStrategy(incubationPlans, h.strategyId);
-      if (strategy) existingStrategies.push(strategy);
-    }
-
-    setCompiling(true);
-    setTaskStreamState({ ...createInitialTaskStreamState(), status: 'streaming' });
-    setError(null);
-    setEdgeStatusBySource(id, EDGE_STATUS.PROCESSING);
-
-    const placeholderIds = addPlaceholderHypotheses(id, hypothesisCount);
-
-    let session: ReturnType<typeof createTaskStreamSession> | undefined;
-    try {
-      let internalContextDocument = useSpecStore.getState().spec.internalContextDocument?.content ?? '';
-      if (needsInternalContextRefresh()) {
-        internalContextDocument = await refreshInternalContext();
-      }
-      const designSystemDocumentsForPrompt = await ensureDesignSystemDocuments();
-
-      const freshSpec = useSpecStore.getState().spec;
-      const { partialSpec, referenceDesigns } =
-        await buildIncubateInputs(nodes, edges, freshSpec, id, results, wiring);
-
-      const taskSession = createTaskStreamSession({
-        sessionId: `incubate-${id}-${Date.now()}`,
-        correlationId: crypto.randomUUID(),
-        onPatch: (patch) => setTaskStreamState((prev) => ({ ...prev, ...patch })),
-      });
-      session = taskSession;
-      const thinkingOverride = useThinkingDefaultsStore.getState().overrides.incubate;
-      const map = await incubateStream(
-        {
-          spec: partialSpec,
-          providerId: providerId!,
-          modelId: modelId!,
-          referenceDesigns,
-          supportsVision,
-          internalContextDocument,
-          designSystemDocuments: designSystemDocumentsForPrompt,
-          promptOptions: { count: hypothesisCount, existingStrategies },
-          thinking: thinkingOverride,
-        },
-        { agentic: taskSession.callbacks },
-      );
-      removePlaceholders(placeholderIds);
-      appendStrategiesToNode(id, map);
-      syncAfterIncubate(map.hypotheses, id);
-      setEdgeStatusBySource(id, EDGE_STATUS.COMPLETE);
-      scheduleCanvasFitView(fitView);
-    } catch (err) {
-      removePlaceholders(placeholderIds);
-      setError(normalizeError(err, 'Incubation failed'));
-      setEdgeStatusBySource(id, EDGE_STATUS.ERROR);
-    } finally {
-      void session?.finalize();
-      setTaskStreamState(createInitialTaskStreamState('idle'));
-      setCompiling(false);
-    }
-  }, [
-    edges,
+  const handleIncubate = useIncubatorRun({
+    incubatorId: id,
     nodes,
-    id,
-    modelId,
+    edges,
     providerId,
+    modelId,
     supportsVision,
     hypothesisCount,
-    setCompiling,
-    setError,
-    appendStrategiesToNode,
-    syncAfterIncubate,
-    addPlaceholderHypotheses,
-    removePlaceholders,
-    setEdgeStatusBySource,
-    fitView,
     contextGenerating,
     designMdGeneratingNodeId,
     refreshInternalContext,
     ensureDesignSystemDocuments,
-  ]);
+    fitView,
+    setTaskStreamState,
+  });
 
   const elapsed = useElapsedTimer(isCompiling || contextGenerating || Boolean(designMdGeneratingNodeId));
 
@@ -364,116 +260,23 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
         {error && !isCompiling && <NodeErrorBlock variant="plain" message={error} />}
 
         <div className={`${RF_INTERACTIVE} space-y-2`}>
-          <div className="space-y-1.5">
-            <StatusPanel
-              title="Design specification"
-              status={internalContextStatusLabel}
-              tone={internalContextStatusTone}
-              animated={internalContextStatus === 'generating'}
-              density="compact"
-              actions={internalContextCanView || internalContextCanRefresh ? (
-                <>
-                  {internalContextCanView ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="iconSm"
-                      aria-label="View design specification"
-                      title="View design specification"
-                      onClick={() => setContextModalOpen(true)}
-                    >
-                      <Eye size={11} aria-hidden />
-                    </Button>
-                  ) : null}
-                  {internalContextCanRefresh ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="iconSm"
-                      disabled={isCompiling || contextGenerating}
-                      aria-label="Refresh design specification"
-                      title="Refresh design specification"
-                      onClick={handleRefreshInternalContext}
-                    >
-                      <RefreshCw size={11} aria-hidden />
-                    </Button>
-                  ) : null}
-                </>
-              ) : undefined}
-            >
-              {internalContextDoc?.error && !contextGenerating ? (
-                <span className="text-error">{internalContextDoc.error}</span>
-              ) : null}
-            </StatusPanel>
-
-            {scopedDesignSystemNodes.length === 0 ? (
-              <StatusPanel
-                title="DESIGN.md"
-                status="optional"
-                tone="neutral"
-                density="compact"
-              />
-            ) : scopedDesignSystemNodes.map((node) => {
-              const ds = getDesignSystemNodeData(node);
-              const source = ds ? designSystemSourceFromNodeData(ds) : {};
-              const doc = ds?.designMdDocument;
-              const hasSourceInput = designMdSourceHasInput(source);
-              const dsStatus = getDesignMdStatus(source, designMdGeneratingNodeId === node.id, doc);
-              const optional = !hasSourceInput && !doc?.content && dsStatus !== 'generating' && dsStatus !== 'error';
-              const docHasContent = Boolean(doc?.content?.trim());
-              const canRefreshDesignMd =
-                canRunDocumentTask &&
-                !optional &&
-                hasSourceInput &&
-                (dsStatus === 'missing' ||
-                  dsStatus === 'stale' ||
-                  dsStatus === 'error' ||
-                  dsStatus === 'generating');
-              return (
-                <StatusPanel
-                  key={node.id}
-                  title={`${ds?.title || 'Design System'} DESIGN.md`}
-                  status={optional ? 'optional' : documentStatusLabel(designMdStatusLabel(dsStatus))}
-                  tone={optional ? 'neutral' : designMdStatusTone(dsStatus)}
-                  animated={dsStatus === 'generating'}
-                  density="compact"
-                  actions={docHasContent || canRefreshDesignMd ? (
-                    <>
-                      {docHasContent ? (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="iconSm"
-                          aria-label={`View ${ds?.title || 'Design System'} DESIGN.md`}
-                          title={`View ${ds?.title || 'Design System'} DESIGN.md`}
-                          onClick={() => setDesignMdModalNodeId(node.id)}
-                        >
-                          <Eye size={11} aria-hidden />
-                        </Button>
-                      ) : null}
-                      {canRefreshDesignMd ? (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="iconSm"
-                          disabled={isCompiling || contextGenerating || Boolean(designMdGeneratingNodeId)}
-                          aria-label={`Refresh ${ds?.title || 'Design System'} DESIGN.md`}
-                          title={`Refresh ${ds?.title || 'Design System'} DESIGN.md`}
-                          onClick={() => handleRefreshDesignMdDocument(node.id)}
-                        >
-                          <RefreshCw size={11} aria-hidden />
-                        </Button>
-                      ) : null}
-                    </>
-                  ) : undefined}
-                >
-                  {doc?.error && dsStatus !== 'generating' ? (
-                    <span className="text-error">{doc.error}</span>
-                  ) : null}
-                </StatusPanel>
-              );
-            })}
-          </div>
+          <IncubatorDocumentStatusPanels
+            internalContextDoc={internalContextDoc}
+            internalContextStatus={internalContextStatus}
+            internalContextStatusLabel={internalContextStatusLabel}
+            internalContextStatusTone={internalContextStatusTone}
+            internalContextCanView={internalContextCanView}
+            internalContextCanRefresh={internalContextCanRefresh}
+            contextGenerating={contextGenerating}
+            isCompiling={isCompiling}
+            scopedDesignSystemNodes={scopedDesignSystemNodes}
+            canRunDocumentTask={canRunDocumentTask}
+            designMdGeneratingNodeId={designMdGeneratingNodeId}
+            onViewInternalContext={() => setContextModalOpen(true)}
+            onRefreshInternalContext={handleRefreshInternalContext}
+            onViewDesignMdDocument={setDesignMdModalNodeId}
+            onRefreshDesignMdDocument={handleRefreshDesignMdDocument}
+          />
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">

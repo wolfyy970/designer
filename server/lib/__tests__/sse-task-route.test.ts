@@ -34,6 +34,8 @@ describe('runTaskAgentSseBody', () => {
     const errorIdx = writes.findIndex((w) => w.event === SSE_EVENT_NAMES.error);
     expect(errorIdx).toBeGreaterThanOrEqual(0);
     expect(JSON.parse(writes[errorIdx]!.data)).toMatchObject({ error: expect.stringContaining('boom') });
+    expect(writes.slice(errorIdx + 1).some((w) => w.event === SSE_EVENT_NAMES.phase)).toBe(false);
     expect(writes.at(-1)?.event).toBe(SSE_EVENT_NAMES.done);
+    expect(writes.filter((w) => w.event === SSE_EVENT_NAMES.done)).toHaveLength(1);
   });
 });

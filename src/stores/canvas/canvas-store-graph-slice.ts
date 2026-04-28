@@ -15,10 +15,9 @@ import {
   computeAdjacentPosition,
   computeDefaultPosition,
   reconcileEphemeralGhostNodes,
-  isEphemeralInputGhostId,
   snap,
 } from '../../lib/canvas-layout';
-import { NODE_TYPES, INPUT_NODE_TYPES, buildEdgeId, EDGE_TYPES, EDGE_STATUS } from '../../constants/canvas';
+import { NODE_TYPES, INPUT_NODE_TYPES } from '../../constants/canvas';
 import {
   isValidConnection as checkValidConnection,
   buildAutoConnectEdges,
@@ -41,18 +40,17 @@ import {
   syncNodeDataToWorkspaceDomain,
 } from '../../workspace/canvas-orchestration';
 import {
+  planConnectionMutation,
+  planEdgeRemoval,
+  planRemoveNodeMutation,
+  shouldIgnoreNodeChangeRemoval,
+} from '../../workspace/canvas-mutation-planner';
+import {
   scheduleDebouncedAutoLayout,
   shouldScheduleAutoLayoutOnDimensionChange,
 } from '../canvas/dimension-layout-debounce';
 import { optionalInputSlotsWithSpecMaterial } from '../../lib/spec-materialize-sections';
 import type { CanvasStore } from './canvas-store-types';
-
-const REMOVE_PROTECTED_NODE_TYPES = new Set<string>([
-  NODE_TYPES.DESIGN_BRIEF,
-  NODE_TYPES.MODEL,
-  NODE_TYPES.INCUBATOR,
-  'inputGhost',
-]);
 
 function syncRemovedEdges(
   removed: readonly WorkspaceEdge[],
@@ -67,11 +65,9 @@ function removeEdgesAndSync(
   state: Pick<CanvasStore, 'edges' | 'nodes'>,
   shouldRemove: (edge: WorkspaceEdge) => boolean,
 ): WorkspaceEdge[] {
-  const removed = state.edges.filter(shouldRemove);
-  if (removed.length === 0) return state.edges;
-  syncRemovedEdges(removed, state.nodes);
-  const removedIds = new Set(removed.map((edge) => edge.id));
-  return state.edges.filter((edge) => !removedIds.has(edge.id));
+  const plan = planEdgeRemoval(state.edges, shouldRemove);
+  syncRemovedEdges(plan.removedEdges, state.nodes);
+  return plan.nextEdges;
 }
 
 export const createGraphSlice: StateCreator<
@@ -96,9 +92,7 @@ export const createGraphSlice: StateCreator<
     const filtered = changes.filter((ch) => {
       if (ch.type !== 'remove') return true;
       const id = 'id' in ch ? (ch.id as string) : '';
-      if (isEphemeralInputGhostId(id)) return false;
-      const node = get().nodes.find((n) => n.id === id);
-      return !node || !REMOVE_PROTECTED_NODE_TYPES.has(node.type);
+      return !shouldIgnoreNodeChangeRemoval(id, get().nodes);
     });
     set({ nodes: applyWorkspaceNodeChanges(filtered, get().nodes) });
     if (shouldScheduleAutoLayoutOnDimensionChange(filtered)) {
@@ -133,29 +127,16 @@ export const createGraphSlice: StateCreator<
     const targetNode = nodes.find((n) => n.id === connection.target);
     if (!sourceNode || !targetNode) return;
 
-    let edges = [...get().edges];
-
-    if (sourceNode.type === NODE_TYPES.MODEL && targetNode.type === NODE_TYPES.HYPOTHESIS) {
-      const removed = edges.filter((e) => {
-        if (e.target !== connection.target) return false;
-        return nodes.find((n) => n.id === e.source)?.type === NODE_TYPES.MODEL;
-      });
-      syncRemovedEdges(removed, nodes);
-      edges = edges.filter((e) => !removed.some((r) => r.id === e.id));
-    }
-
-    const edgeId = buildEdgeId(connection.source!, connection.target!);
-    if (edges.some((e) => e.id === edgeId)) return;
-    const newEdge: WorkspaceEdge = {
-      id: edgeId,
+    const plan = planConnectionMutation({
       source: connection.source!,
       target: connection.target!,
-      type: EDGE_TYPES.DATA_FLOW,
-      data: { status: EDGE_STATUS.IDLE },
-    };
-    edges = [...edges, newEdge];
-    set({ edges });
-    syncDomainForNewEdge(newEdge, get().nodes, edges);
+      nodes,
+      edges: get().edges,
+    });
+    syncRemovedEdges(plan.removedEdges, nodes);
+    if (!plan.newEdge) return;
+    set({ edges: plan.nextEdges });
+    syncDomainForNewEdge(plan.newEdge, get().nodes, plan.nextEdges);
   },
 
   addNode: (type, position) => {
@@ -223,11 +204,16 @@ export const createGraphSlice: StateCreator<
 
   removeNode: (nodeId) => {
     const state = get();
-    const node = state.nodes.find((n) => n.id === nodeId);
-    if (!node) return;
-    if (REMOVE_PROTECTED_NODE_TYPES.has(node.type)) {
-      return;
-    }
+    const plan = planRemoveNodeMutation({
+      nodeId,
+      nodes: state.nodes,
+      edges: state.edges,
+      previewNodeIdMap: state.previewNodeIdMap,
+      runInspectorPreviewNodeId: state.runInspectorPreviewNodeId,
+      expandedPreviewId: state.expandedPreviewId,
+    });
+    if (!plan) return;
+    const { node } = plan;
 
     resetSpecSectionForRemovedNode(node);
 
@@ -237,37 +223,17 @@ export const createGraphSlice: StateCreator<
       removeCompilerPlanForNode(nodeId);
     }
 
-    const removeIds = new Set<string>([nodeId]);
     if (node.type === NODE_TYPES.HYPOTHESIS) {
       const refId = getHypothesisRefId(node);
       if (refId) removeCompilerStrategyByRefId(refId);
-      for (const e of state.edges) {
-        if (e.source !== nodeId) continue;
-        const target = state.nodes.find((n) => n.id === e.target && n.type === NODE_TYPES.PREVIEW);
-        if (target) removeIds.add(target.id);
-      }
     }
 
-    const inspectorId = get().runInspectorPreviewNodeId;
-    const expandedId = get().expandedPreviewId;
-    const clearInspector =
-      inspectorId != null && [...removeIds].some((rid) => rid === inspectorId);
-    const clearExpanded =
-      expandedId != null && [...removeIds].some((rid) => rid === expandedId);
-    const nextPreviewMap = new Map(get().previewNodeIdMap);
-    for (const [k, v] of nextPreviewMap) {
-      if (removeIds.has(v)) nextPreviewMap.delete(k);
-    }
     set({
-      nodes: reconcileEphemeralGhostNodes(
-        state.nodes.filter((n) => !removeIds.has(n.id)),
-      ),
-      edges: state.edges.filter(
-        (e) => !removeIds.has(e.source) && !removeIds.has(e.target),
-      ),
-      previewNodeIdMap: nextPreviewMap,
-      ...(clearInspector ? { runInspectorPreviewNodeId: null as string | null } : {}),
-      ...(clearExpanded ? { expandedPreviewId: null as string | null } : {}),
+      nodes: plan.nextNodes,
+      edges: plan.nextEdges,
+      previewNodeIdMap: plan.nextPreviewNodeIdMap,
+      ...(plan.clearInspector ? { runInspectorPreviewNodeId: null as string | null } : {}),
+      ...(plan.clearExpanded ? { expandedPreviewId: null as string | null } : {}),
     });
     get().applyAutoLayout();
   },

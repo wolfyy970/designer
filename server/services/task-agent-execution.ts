@@ -49,6 +49,16 @@ export interface TaskAgentResult {
 
 type TaskOutcome = 'success' | 'error' | 'no_result';
 
+export class TaskAgentExecutionError extends Error {
+  readonly outcome: Exclude<TaskOutcome, 'success'>;
+
+  constructor(message: string, outcome: Exclude<TaskOutcome, 'success'> = 'error') {
+    super(message);
+    this.name = 'TaskAgentExecutionError';
+    this.outcome = outcome;
+  }
+}
+
 function emitTaskResultLine(input: {
   sessionType: SessionType;
   correlationId: string;
@@ -138,8 +148,8 @@ function emitTaskRunLine(input: {
 }
 
 /**
- * Run an agentic task and stream events. Returns the task result (or null on failure).
- * The calling route is responsible for emitting the final result event and `done`.
+ * Run an agentic task and stream progress events. Returns the task result on
+ * success, or throws a task error for the route wrapper to serialize.
  */
 export async function executeTaskAgentStream(
   stream: SseStreamWriter,
@@ -148,7 +158,7 @@ export async function executeTaskAgentStream(
     allocId: () => string;
     writeGate?: WriteGate;
   },
-): Promise<TaskAgentResult | null> {
+): Promise<TaskAgentResult> {
   const startedAt = Date.now();
   const correlationId = input.correlationId ?? crypto.randomUUID();
   let outcome: TaskOutcome = 'error';
@@ -174,8 +184,6 @@ export async function executeTaskAgentStream(
   const acquired = await acquireAgenticSlotOrReject();
   if (!acquired) {
     errorMessage = 'Too many agentic runs are active. Please wait and try again.';
-    await write(SSE_EVENT_NAMES.error, { error: errorMessage });
-    await write(SSE_EVENT_NAMES.done, {});
     emitTaskRunLine({
       sessionType: input.sessionType,
       correlationId,
@@ -187,7 +195,7 @@ export async function executeTaskAgentStream(
       errorMessage,
       thinking: input.thinking,
     });
-    return null;
+    throw new TaskAgentExecutionError(errorMessage, 'error');
   }
 
   try {
@@ -219,10 +227,8 @@ export async function executeTaskAgentStream(
     );
 
     if (!sessionResult) {
-      outcome = 'no_result';
       errorMessage = 'Agent session completed without result.';
-      await write(SSE_EVENT_NAMES.error, { error: errorMessage });
-      return null;
+      throw new TaskAgentExecutionError(errorMessage, 'no_result');
     }
 
     sandboxFileCount = Object.keys(sessionResult.files).length;
@@ -299,21 +305,15 @@ export async function executeTaskAgentStream(
 
     outcome = 'no_result';
     errorMessage = `Agent did not write the expected result file (${resultFile}).`;
-    await write(SSE_EVENT_NAMES.error, {
-      error: errorMessage,
-    });
-    return null;
+    throw new TaskAgentExecutionError(errorMessage, 'no_result');
   } catch (err) {
     errorMessage = normalizeError(err);
-    outcome = 'error';
-    try {
-      await write(SSE_EVENT_NAMES.error, { error: errorMessage });
-    } catch (writeErr) {
-      if (env.isDev) {
-        console.error('[task-agent] failed to write error event', writeErr);
-      }
+    if (err instanceof TaskAgentExecutionError) {
+      outcome = err.outcome;
+    } else {
+      outcome = 'error';
     }
-    return null;
+    throw err;
   } finally {
     emitTaskRunLine({
       sessionType: input.sessionType,

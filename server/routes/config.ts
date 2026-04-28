@@ -7,6 +7,7 @@ import {
 } from '../../src/lib/lockdown-model.ts';
 import { FEATURE_LOCKDOWN, FEATURE_AUTO_IMPROVE } from '../../src/lib/feature-flags.ts';
 import { DEFAULT_RUBRIC_WEIGHTS } from '../../src/types/evaluation.ts';
+import { AppConfigResponseSchema } from '../../src/api/wire-schemas.ts';
 
 const configRoute = new Hono();
 
@@ -19,15 +20,15 @@ configRoute.get('/', (c) => {
     autoImprove: FEATURE_AUTO_IMPROVE,
   };
   if (!FEATURE_LOCKDOWN) {
-    return c.json({ lockdown: false, ...evaluator });
+    return c.json(AppConfigResponseSchema.parse({ lockdown: false, ...evaluator }));
   }
-  return c.json({
+  return c.json(AppConfigResponseSchema.parse({
     lockdown: true,
     lockdownProviderId: LOCKDOWN_PROVIDER_ID,
     lockdownModelId: LOCKDOWN_MODEL_ID,
     lockdownModelLabel: LOCKDOWN_MODEL_LABEL,
     ...evaluator,
-  });
+  }));
 });
 
 export default configRoute;

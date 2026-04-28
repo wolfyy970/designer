@@ -26,7 +26,7 @@ vi.mock('../../lib/agentic-skills-emission.ts', () => ({
   emitSkillsLoadedEvents: mocks.emitSkillsLoadedEvents,
 }));
 
-import { executeTaskAgentStream } from '../task-agent-execution.ts';
+import { executeTaskAgentStream, TaskAgentExecutionError } from '../task-agent-execution.ts';
 
 describe('executeTaskAgentStream', () => {
   beforeEach(() => {
@@ -40,7 +40,7 @@ describe('executeTaskAgentStream', () => {
     mocks.emitSkillsLoadedEvents.mockResolvedValue(undefined);
   });
 
-  it('writes error + done and returns null when agentic slot is unavailable', async () => {
+  it('rejects without terminal SSE events when agentic slot is unavailable', async () => {
     mocks.acquireAgenticSlotOrReject.mockResolvedValue(false);
 
     const sse: { event: string; data: Record<string, unknown> }[] = [];
@@ -52,7 +52,7 @@ describe('executeTaskAgentStream', () => {
       ),
     };
 
-    const out = await executeTaskAgentStream(
+    await expect(executeTaskAgentStream(
       stream as never,
       {
         userPrompt: 'x',
@@ -61,13 +61,81 @@ describe('executeTaskAgentStream', () => {
         sessionType: 'incubation',
       },
       { allocId: () => '0' },
-    );
+    )).rejects.toThrow(TaskAgentExecutionError);
 
-    expect(out).toBeNull();
-    const errEv = sse.find((e) => e.event === SSE_EVENT_NAMES.error);
-    expect(errEv?.data.error).toMatch(/Too many agentic runs/);
-    expect(sse.some((e) => e.event === SSE_EVENT_NAMES.done)).toBe(true);
+    expect(sse.some((e) => e.event === SSE_EVENT_NAMES.error)).toBe(false);
+    expect(sse.some((e) => e.event === SSE_EVENT_NAMES.done)).toBe(false);
     expect(mocks.releaseAgenticSlot).not.toHaveBeenCalled();
+  });
+
+  it('rejects without terminal SSE events when the Pi session has no result', async () => {
+    mocks.acquireAgenticSlotOrReject.mockResolvedValue(true);
+    mocks.runDesignAgentSession.mockResolvedValue(null);
+
+    const sse: { event: string; data: Record<string, unknown> }[] = [];
+    const stream = {
+      writeSSE: vi.fn(
+        async (opts: { data: string; event: string; id: string }) => {
+          sse.push({ event: opts.event, data: JSON.parse(opts.data) as Record<string, unknown> });
+        },
+      ),
+    };
+
+    await expect(executeTaskAgentStream(
+      stream as never,
+      {
+        userPrompt: 'task',
+        providerId: 'openrouter',
+        modelId: 'm',
+        sessionType: 'incubation',
+        resultFile: 'result.json',
+      },
+      { allocId: () => '0' },
+    )).rejects.toMatchObject({
+      outcome: 'no_result',
+      message: 'Agent session completed without result.',
+    });
+
+    expect(sse.some((e) => e.event === SSE_EVENT_NAMES.error)).toBe(false);
+    expect(sse.some((e) => e.event === SSE_EVENT_NAMES.done)).toBe(false);
+    expect(mocks.releaseAgenticSlot).toHaveBeenCalledOnce();
+  });
+
+  it('rejects without terminal SSE events when no non-empty result file exists', async () => {
+    mocks.acquireAgenticSlotOrReject.mockResolvedValue(true);
+    mocks.runDesignAgentSession.mockResolvedValue({
+      files: { 'notes.txt': '   ' },
+      todos: [],
+      emittedFilePaths: ['notes.txt'],
+    });
+
+    const sse: { event: string; data: Record<string, unknown> }[] = [];
+    const stream = {
+      writeSSE: vi.fn(
+        async (opts: { data: string; event: string; id: string }) => {
+          sse.push({ event: opts.event, data: JSON.parse(opts.data) as Record<string, unknown> });
+        },
+      ),
+    };
+
+    await expect(executeTaskAgentStream(
+      stream as never,
+      {
+        userPrompt: 'task',
+        providerId: 'openrouter',
+        modelId: 'm',
+        sessionType: 'incubation',
+        resultFile: 'result.json',
+      },
+      { allocId: () => '0' },
+    )).rejects.toMatchObject({
+      outcome: 'no_result',
+      message: 'Agent did not write the expected result file (result.json).',
+    });
+
+    expect(sse.some((e) => e.event === SSE_EVENT_NAMES.error)).toBe(false);
+    expect(sse.some((e) => e.event === SSE_EVENT_NAMES.done)).toBe(false);
+    expect(mocks.releaseAgenticSlot).toHaveBeenCalledOnce();
   });
 
   it('runs Pi session and returns extracted result when result file exists', async () => {
