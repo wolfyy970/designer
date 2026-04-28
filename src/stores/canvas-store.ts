@@ -13,6 +13,7 @@ import { createGraphSlice } from './canvas/canvas-store-graph-slice';
 import { createUiSlice } from './canvas/canvas-store-ui-slice';
 import { createSyncSlice } from './canvas/canvas-store-sync-slice';
 import { createLayoutSlice } from './canvas/canvas-store-layout-slice';
+import { INPUT_GHOST_NODE_TYPE } from '../constants/canvas';
 
 export { INPUT_NODE_TYPES } from '../constants/canvas';
 export { GRID_SIZE } from '../lib/canvas-layout';
@@ -73,7 +74,7 @@ export const useCanvasStore = create<CanvasStore>()(
         }
       },
       partialize: (state) => ({
-        nodes: state.nodes.filter((n) => n.type !== 'inputGhost'),
+        nodes: state.nodes.filter((n) => n.type !== INPUT_GHOST_NODE_TYPE),
         edges: state.edges,
         viewport: state.viewport,
         showMiniMap: state.showMiniMap,

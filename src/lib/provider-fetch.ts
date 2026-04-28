@@ -2,7 +2,25 @@
  * Shared fetch utilities for OpenAI-compatible providers.
  * No environment-specific imports — safe for both client and server.
  */
+import { z } from 'zod';
 import type { ProviderModel, ChatResponse, ChatResponseMetadata } from '../types/provider';
+
+const ChatCompletionSuccessSchema = z.object({
+  choices: z.array(z.object({
+    message: z.object({
+      content: z.union([
+        z.string(),
+        z.array(z.record(z.string(), z.unknown())),
+      ]),
+    }).passthrough(),
+    finish_reason: z.unknown().optional(),
+  }).passthrough()).min(1),
+  usage: z.record(z.string(), z.unknown()).optional(),
+}).passthrough();
+
+const ModelListSuccessSchema = z.object({
+  data: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+}).passthrough();
 
 /**
  * Extract the assistant message text from a chat completion response.
@@ -69,7 +87,12 @@ export async function fetchChatCompletion(
     throw new Error(`${providerLabel} API error (${response.status}): ${errorBody}`);
   }
 
-  return response.json() as Promise<Record<string, unknown>>;
+  const data = await response.json() as unknown;
+  const parsed = ChatCompletionSuccessSchema.safeParse(data);
+  if (!parsed.success) {
+    throw new Error(`${providerLabel} API returned an invalid chat completion response`);
+  }
+  return parsed.data;
 }
 
 /** Fetch and parse a model list from an OpenAI-compatible /models endpoint. */
@@ -81,8 +104,10 @@ export async function fetchModelList(
   try {
     const response = await fetch(url, extraHeaders ? { headers: extraHeaders } : undefined);
     if (!response.ok) return [];
-    const json = await response.json() as Record<string, unknown>;
-    return mapFn((json.data ?? []) as Record<string, unknown>[]);
+    const json = await response.json() as unknown;
+    const parsed = ModelListSuccessSchema.safeParse(json);
+    if (!parsed.success) return [];
+    return mapFn(parsed.data.data);
   } catch {
     return [];
   }

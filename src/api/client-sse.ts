@@ -4,7 +4,6 @@
 import type {
   IncubateRequest,
   IncubateResponse,
-  GenerateSSEEvent,
   HypothesisGenerateApiPayload,
 } from './types';
 import type { RunTraceEvent, SkillInfo, TodoItem } from '../types/provider';
@@ -15,18 +14,30 @@ import type {
   EvaluatorRubricId,
   EvaluatorWorkerReport,
 } from '../types/evaluation';
-import { formatZodFlattenDetails, normalizeError, parseApiErrorBody } from '../lib/error-utils';
-import { safeParseGenerateSSEEvent } from '../lib/generate-sse-event-schema';
+import { normalizeError, parseApiErrorBody } from '../lib/error-utils';
 import { SSE_EVENT_NAMES } from '../constants/sse-events';
 import { readSseEventStream } from '../lib/sse-reader';
 import {
   attachSseDiagWindow,
   createSseStreamDiagnostics,
-  type SseStreamDiagnostics,
 } from '../lib/sse-diagnostics';
 import type { ZodError } from 'zod';
 import { IncubateResponseSchema } from './response-schemas';
 import { API_BASE, INVALID_SERVER_RESPONSE } from './client-shared.ts';
+import {
+  callbacksForHypothesisLane,
+  finalizeMissingHypothesisLanes,
+  notifyAllHypothesisLanesError,
+  type HypothesisLaneSession,
+} from './client-sse-lane-router';
+import { parseHypothesisSseJson, stripLaneIndex } from './client-sse-json';
+import { dispatchGenerateStreamEvent } from './client-sse-dispatch';
+
+export { parseHypothesisSseJson } from './client-sse-json';
+export {
+  dispatchGenerateStreamEvent,
+  dispatchParsedAgenticSseEvent,
+} from './client-sse-dispatch';
 
 // ── Generate (SSE) ──────────────────────────────────────────────────
 
@@ -65,140 +76,6 @@ export interface GenerateStreamCallbacks {
   onDone?: () => void;
   /** Fired when SSE JSON fails schema validation (wire `event:` name + body). */
   onParseError?: (eventName: string, data: Record<string, unknown>, error: ZodError) => void;
-}
-
-/** Parse hypothesis SSE JSON line; returns null if not a plain object (arrays/primitives rejected). */
-export function parseHypothesisSseJson(raw: string): Record<string, unknown> | null {
-  try {
-    const v = JSON.parse(raw) as unknown;
-    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
-      return v as Record<string, unknown>;
-    }
-  } catch {
-    /* dev warning in caller */
-  }
-  return null;
-}
-
-/** Remove server multiplex field before building typed SSE events. */
-function stripLaneIndex(data: Record<string, unknown>): {
-  laneIndex?: number;
-  rest: Record<string, unknown>;
-} {
-  const laneIndex = data.laneIndex;
-  const rest = { ...data };
-  delete rest.laneIndex;
-  return {
-    laneIndex: typeof laneIndex === 'number' ? laneIndex : undefined,
-    rest,
-  };
-}
-
-/**
- * Dispatches a Zod-validated agentic SSE payload to callbacks (same as hypothesis generate).
- * Exported for tests and task-stream consumers that parse with `safeParseGenerateSSEEvent`.
- */
-export function dispatchParsedAgenticSseEvent(
-  event: GenerateSSEEvent,
-  callbacks: GenerateStreamCallbacks,
-): void {
-  switch (event.type) {
-    case SSE_EVENT_NAMES.progress:
-      callbacks.onProgress?.(event.status);
-      break;
-    case SSE_EVENT_NAMES.activity:
-      callbacks.onActivity?.(event.entry);
-      break;
-    case SSE_EVENT_NAMES.thinking:
-      callbacks.onThinking?.(event.turnId, event.delta);
-      break;
-    case SSE_EVENT_NAMES.streaming_tool:
-      callbacks.onStreamingTool?.(
-        event.toolName,
-        event.streamedChars,
-        event.done,
-        event.toolPath,
-      );
-      break;
-    case SSE_EVENT_NAMES.trace:
-      callbacks.onTrace?.(event.trace);
-      break;
-    case SSE_EVENT_NAMES.code:
-      callbacks.onCode?.(event.code);
-      break;
-    case SSE_EVENT_NAMES.error:
-      callbacks.onError?.(event.error);
-      break;
-    case SSE_EVENT_NAMES.file:
-      callbacks.onFile?.(event.path, event.content);
-      break;
-    case SSE_EVENT_NAMES.plan:
-      callbacks.onPlan?.(event.files);
-      break;
-    case SSE_EVENT_NAMES.todos:
-      callbacks.onTodos?.(event.todos);
-      break;
-    case SSE_EVENT_NAMES.phase:
-      callbacks.onPhase?.(event.phase);
-      break;
-    case SSE_EVENT_NAMES.evaluation_progress:
-      callbacks.onEvaluationProgress?.(event.round, event.phase, event.message);
-      break;
-    case SSE_EVENT_NAMES.evaluation_worker_done:
-      callbacks.onEvaluationWorkerDone?.(event.round, event.rubric, event.report);
-      break;
-    case SSE_EVENT_NAMES.evaluation_report:
-      callbacks.onEvaluationReport?.(event.round, event.snapshot);
-      break;
-    case SSE_EVENT_NAMES.revision_round:
-      callbacks.onRevisionRound?.(event.round, event.brief);
-      break;
-    case SSE_EVENT_NAMES.skills_loaded:
-      callbacks.onSkillsLoaded?.(event.skills);
-      break;
-    case SSE_EVENT_NAMES.skill_activated:
-      callbacks.onSkillActivated?.({
-        key: event.key,
-        name: event.name,
-        description: event.description,
-      });
-      break;
-    case SSE_EVENT_NAMES.checkpoint:
-      callbacks.onCheckpoint?.(event.checkpoint);
-      break;
-    case SSE_EVENT_NAMES.lane_done:
-      break;
-    case SSE_EVENT_NAMES.done:
-      callbacks.onDone?.();
-      break;
-  }
-}
-
-/** @returns `false` when the stream should not process further events (fatal parse / contract break). */
-export function dispatchGenerateStreamEvent(
-  currentEvent: string,
-  data: Record<string, unknown>,
-  callbacks: GenerateStreamCallbacks,
-  diag?: SseStreamDiagnostics,
-): boolean {
-  const result = safeParseGenerateSSEEvent(currentEvent, data);
-  if (!result.ok) {
-    diag?.recordDrop('zod', currentEvent);
-    callbacks.onParseError?.(currentEvent, data, result.error);
-    const detail = formatZodFlattenDetails(result.error.flatten());
-    const first = result.error.issues[0];
-    const suffix = detail || (first ? `: ${first.path.join('.')}: ${first.message}` : '');
-    callbacks.onError?.(
-      normalizeError(new Error(`Invalid SSE event "${currentEvent}"${suffix}`)),
-    );
-    if (import.meta.env.DEV) {
-      console.warn('[generate SSE] invalid payload', currentEvent, result.error.flatten(), data);
-    }
-    return false;
-  }
-  dispatchParsedAgenticSseEvent(result.event, callbacks);
-  diag?.recordReceived(currentEvent);
-  return true;
 }
 
 // ── Incubate (SSE stream) ───────────────────────────────────────────
@@ -358,22 +235,6 @@ export async function incubate(req: IncubateRequest, signal?: AbortSignal): Prom
   return incubateStream(req, undefined, signal);
 }
 
-export interface HypothesisLaneSession {
-  callbacks: GenerateStreamCallbacks;
-  finalizeAfterStream: () => Promise<void>;
-}
-
-/** Stream-level SSE failure: every active lane gets the same error (avoids mis-attributing to lane 0). */
-function notifyAllHypothesisLanesError(
-  lanes: HypothesisLaneSession[],
-  err: unknown,
-): void {
-  const msg = normalizeError(err);
-  for (const lane of lanes) {
-    lane.callbacks.onError?.(msg);
-  }
-}
-
 /**
  * Multiplexed hypothesis generation: one SSE stream, `laneIndex` on each event (except final `done`).
  */
@@ -453,10 +314,7 @@ export async function generateHypothesisStream(
           );
           return false;
         }
-        const cbs =
-          typeof laneIndex === 'number' && lanes[laneIndex]
-            ? lanes[laneIndex].callbacks
-            : lanes[0]?.callbacks;
+        const cbs = callbacksForHypothesisLane(lanes, laneIndex);
         if (cbs) {
           notifyError = cbs;
           const ok = dispatchGenerateStreamEvent(currentEvent, rest, cbs, diag);
@@ -483,21 +341,7 @@ export async function generateHypothesisStream(
     diag.logClose();
   }
 
-  for (let i = 0; i < lanes.length; i++) {
-    if (!finalizedLaneIndices.has(i)) {
-      try {
-        await lanes[i].finalizeAfterStream();
-      } catch (err) {
-        if (import.meta.env.DEV) {
-          console.warn('[generate SSE] finalize after stream end (missing lane_done)', i, err);
-        }
-        lanes[i].callbacks.onError?.(
-          normalizeError(
-            err instanceof Error ? err : new Error('Stream ended before lane completed'),
-            'Generation stream ended unexpectedly',
-          ),
-        );
-      }
-    }
-  }
+  await finalizeMissingHypothesisLanes(lanes, finalizedLaneIndices);
 }
+
+export type { HypothesisLaneSession };

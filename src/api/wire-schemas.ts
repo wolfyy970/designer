@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ReferenceImageSchema } from '../types/spec';
+import { ThinkingLevelSchema } from '../lib/thinking-defaults';
 
 /** Match server incubate parse: models may send `range` as a string or string[]. */
 const dimensionRangeSchema = z.union([
@@ -79,7 +80,7 @@ export const HypothesisPromptBundleResponseSchema = z.object({
       z.object({
         providerId: z.string(),
         modelId: z.string(),
-        thinkingLevel: z.enum(['off', 'minimal', 'low', 'medium', 'high']),
+        thinkingLevel: ThinkingLevelSchema,
       }),
     ),
   }),

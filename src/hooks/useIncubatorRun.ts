@@ -1,10 +1,10 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
 import { incubateStream } from '../api/client';
 import { EDGE_STATUS } from '../constants/canvas';
-import { buildIncubateInputs } from '../lib/canvas-graph';
 import { scheduleCanvasFitView } from '../lib/canvas-fit-view';
 import { normalizeError } from '../lib/error-utils';
 import { needsInternalContextRefresh } from './useIncubatorDocumentPreparation';
+import { buildIncubatorRunInputs } from './incubator-run-inputs';
 import { createTaskStreamSession } from './task-stream-session';
 import {
   createInitialTaskStreamState,
@@ -12,14 +12,10 @@ import {
 } from './task-stream-state';
 import { useCanvasStore } from '../stores/canvas-store';
 import { useGenerationStore } from '../stores/generation-store';
-import {
-  findStrategy,
-  useIncubatorStore,
-} from '../stores/incubator-store';
+import { useIncubatorStore } from '../stores/incubator-store';
 import { useSpecStore } from '../stores/spec-store';
 import { useThinkingDefaultsStore } from '../stores/thinking-defaults-store';
 import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
-import type { HypothesisStrategy } from '../types/incubator';
 import type { WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 
 interface UseIncubatorRunParams {
@@ -72,17 +68,9 @@ export function useIncubatorRun({
       return;
     }
 
-    const results = useGenerationStore.getState().results;
-    const wiring = useWorkspaceDomainStore.getState().incubatorWirings[incubatorId];
-
-    const incubationPlans = useIncubatorStore.getState().incubationPlans;
-    const existingStrategies: HypothesisStrategy[] = [];
-    const hypotheses = useWorkspaceDomainStore.getState().hypotheses;
-    for (const h of Object.values(hypotheses)) {
-      if (h.incubatorId !== incubatorId || h.placeholder) continue;
-      const strategy = findStrategy(incubationPlans, h.strategyId);
-      if (strategy) existingStrategies.push(strategy);
-    }
+    const generationState = useGenerationStore.getState();
+    const domainState = useWorkspaceDomainStore.getState();
+    const incubatorState = useIncubatorStore.getState();
 
     setCompiling(true);
     setTaskStreamState({ ...createInitialTaskStreamState(), status: 'streaming' });
@@ -100,15 +88,21 @@ export function useIncubatorRun({
       }
       const designSystemDocumentsForPrompt = await ensureDesignSystemDocuments();
 
-      const freshSpec = useSpecStore.getState().spec;
-      const { partialSpec, referenceDesigns } = await buildIncubateInputs(
-        nodes,
-        edges,
-        freshSpec,
-        incubatorId,
-        results,
-        wiring,
-      );
+      const runInputs = await buildIncubatorRunInputs({
+        snapshot: {
+          incubatorId,
+          nodes,
+          edges,
+          spec: useSpecStore.getState().spec,
+          results: generationState.results,
+          wiring: domainState.incubatorWirings[incubatorId],
+          incubationPlans: incubatorState.incubationPlans,
+          hypotheses: domainState.hypotheses,
+        },
+        hypothesisCount,
+        internalContextDocument,
+        designSystemDocuments: designSystemDocumentsForPrompt,
+      });
 
       const taskSession = createTaskStreamSession({
         sessionId: `incubate-${incubatorId}-${Date.now()}`,
@@ -119,14 +113,14 @@ export function useIncubatorRun({
       const thinkingOverride = useThinkingDefaultsStore.getState().overrides.incubate;
       const map = await incubateStream(
         {
-          spec: partialSpec,
+          spec: runInputs.spec,
           providerId: providerId!,
           modelId: modelId!,
-          referenceDesigns,
+          referenceDesigns: runInputs.referenceDesigns,
           supportsVision,
-          internalContextDocument,
-          designSystemDocuments: designSystemDocumentsForPrompt,
-          promptOptions: { count: hypothesisCount, existingStrategies },
+          internalContextDocument: runInputs.internalContextDocument,
+          designSystemDocuments: runInputs.designSystemDocuments,
+          promptOptions: runInputs.promptOptions,
           thinking: thinkingOverride,
         },
         { agentic: taskSession.callbacks },

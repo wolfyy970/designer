@@ -21,10 +21,9 @@ import {
   LOCKDOWN_MODEL_ID,
   LOCKDOWN_PROVIDER_ID,
 } from '../lib/lockdown-model';
+import { THINKING_LEVELS } from '../lib/thinking-defaults';
 
 export type { WorkspaceGraphSnapshot };
-
-const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high'] as const satisfies readonly ThinkingLevel[];
 
 function isThinkingLevel(x: unknown): x is ThinkingLevel {
   return typeof x === 'string' && (THINKING_LEVELS as readonly string[]).includes(x);

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { encodeVirtualPathForUrl } from '../lib/preview-entry';
 import { bundleVirtualFS } from '../lib/iframe-utils';
 import { normalizeError } from '../lib/error-utils';
+import { cleanupPreviewSession } from '../lib/preview-session-cleanup';
 
 type PreviewState = {
   previewSrc: string | null;
@@ -38,7 +39,7 @@ export function useArtifactPreviewUrl(
         try {
           const prevId = sessionRef.current;
           if (prevId) {
-            void fetch(`/api/preview/sessions/${prevId}`, { method: 'DELETE' }).catch(() => {});
+            cleanupPreviewSession(prevId);
             sessionRef.current = null;
           }
 
@@ -50,7 +51,7 @@ export function useArtifactPreviewUrl(
           if (!res.ok) throw new Error(`preview register ${res.status}`);
           const body = (await res.json()) as { id: string; entry: string };
           if (cancelled) {
-            void fetch(`/api/preview/sessions/${body.id}`, { method: 'DELETE' }).catch(() => {});
+            cleanupPreviewSession(body.id);
             return;
           }
           sessionRef.current = body.id;
@@ -92,7 +93,7 @@ export function useArtifactPreviewUrl(
       window.clearTimeout(timer);
       const sid = sessionRef.current;
       if (sid) {
-        void fetch(`/api/preview/sessions/${sid}`, { method: 'DELETE' }).catch(() => {});
+        cleanupPreviewSession(sid);
         sessionRef.current = null;
       }
     };

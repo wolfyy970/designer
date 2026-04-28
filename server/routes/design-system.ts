@@ -1,34 +1,15 @@
 import { Hono } from 'hono';
-import { z } from 'zod';
 import { clampProviderModel } from '../lib/lockdown-model.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
-import { ThinkingOverrideSchema } from '../lib/hypothesis-schemas.ts';
 import { lintDesignMdDocument } from '../lib/design-md-lint.ts';
 import { runTaskAgentRoute } from '../lib/task-agent-route-runner.ts';
+import { DesignSystemExtractRequestSchema } from '../../src/api/request-schemas.ts';
 
 const designSystem = new Hono();
 
-const ExtractRequestSchema = z.object({
-  title: z.string().optional(),
-  content: z.string().optional(),
-  sourceHash: z.string().optional(),
-  images: z.array(z.object({
-    dataUrl: z.string(),
-    mimeType: z.string().optional(),
-    name: z.string().optional(),
-    filename: z.string().optional(),
-    description: z.string().optional(),
-  }).passthrough()).optional(),
-  providerId: z.string().min(1),
-  modelId: z.string().min(1),
-  thinking: ThinkingOverrideSchema.optional(),
-}).refine((body) => Boolean(body.content?.trim()) || Boolean(body.images?.length), {
-  message: 'Provide design-system text, reference images, or both.',
-});
-
 designSystem.post('/extract', async (c) => {
-  const parsed = await parseRequestJson(c, ExtractRequestSchema);
+  const parsed = await parseRequestJson(c, DesignSystemExtractRequestSchema);
   if (!parsed.ok) return parsed.response;
   const pinned = clampProviderModel(parsed.data.providerId, parsed.data.modelId);
   const body = { ...parsed.data, providerId: pinned.providerId, modelId: pinned.modelId };

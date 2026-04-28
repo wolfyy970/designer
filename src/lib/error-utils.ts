@@ -1,3 +1,10 @@
+/**
+ * Error boundary convention:
+ * - Server routes serialize user-facing failures as structured JSON `{ error, details? }`.
+ * - Browser API clients parse that envelope and throw normalized Error messages.
+ * - Optional telemetry/debug side channels should no-op or log only when explicitly enabled.
+ */
+
 /** Normalize an unknown caught value to a string message. */
 export function normalizeError(err: unknown, fallback?: string): string {
   if (err instanceof Error) return err.message;

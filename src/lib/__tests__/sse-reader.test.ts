@@ -64,6 +64,24 @@ describe('readSseEventStream', () => {
     expect(fn).toHaveBeenCalledWith('done', '{}');
   });
 
+  it('joins multiline data and dispatches on blank line', async () => {
+    const received: { ev: string; data: string }[] = [];
+    const reader = chunksReader(['event: message\ndata: first\ndata: second\n\n']);
+    await readSseEventStream(reader, (ev, data) => {
+      received.push({ ev, data });
+    });
+    expect(received).toEqual([{ ev: 'message', data: 'first\nsecond' }]);
+  });
+
+  it('ignores comments and dispatches a final unterminated frame at stream end', async () => {
+    const received: { ev: string; data: string }[] = [];
+    const reader = chunksReader([': keepalive\n', 'event: done\n', 'data: {}']);
+    await readSseEventStream(reader, (ev, data) => {
+      received.push({ ev, data });
+    });
+    expect(received).toEqual([{ ev: 'done', data: '{}' }]);
+  });
+
   it('stops reading when handler returns false', async () => {
     const fn = vi.fn().mockImplementationOnce(() => false);
     const reader = chunksReader(['event: a\ndata: 1\n', 'event: b\ndata: 2\n']);

@@ -47,6 +47,20 @@ describe('migrateCanvasState({}, version) — corruption recovery contract', () 
   }
 });
 
+describe('migrateCanvasState final shape validation', () => {
+  it('normalizes malformed top-level collections to safe defaults', () => {
+    const result = migrateCanvasState(
+      { nodes: 'bad', edges: null, viewport: 'bad', showMiniMap: 'bad', colGap: 'bad' },
+      29,
+    );
+    expect(result.nodes).toEqual([]);
+    expect(result.edges).toEqual([]);
+    expect(result.viewport).toEqual({ x: 0, y: 0, zoom: 0.85 });
+    expect(result.showMiniMap).toBe(true);
+    expect(result.colGap).toBeGreaterThan(0);
+  });
+});
+
 // ── v0/v1 → fresh reset ──────────────────────────────────────────────
 
 describe('v0/v1 → v4: complete reset', () => {

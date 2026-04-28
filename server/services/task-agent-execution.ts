@@ -11,18 +11,19 @@ import { normalizeError } from '../../src/lib/error-utils.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import type { ThinkingConfig } from '../../src/lib/thinking-defaults.ts';
 import { agenticOrchestratorEventToSse } from '../lib/agentic-sse-map.ts';
-import { buildAgenticSystemContext } from '../lib/build-agentic-system-context.ts';
 import type { SessionType } from '../lib/skill-discovery.ts';
-import { runDesignAgentSession, type AgentRunEvent } from './pi-agent-service.ts';
-import { emitSkillsLoadedEvents } from '../lib/agentic-skills-emission.ts';
-import { acquireAgenticSlotOrReject, releaseAgenticSlot } from '../lib/agentic-concurrency.ts';
 import { env } from '../env.ts';
 import type { SseStreamWriter } from './generate-execution.ts';
 import { createWriteGate, type WriteGate } from '../lib/sse-write-gate.ts';
-import { OBSERVABILITY_SCHEMA_VERSION } from '../lib/observability-line.ts';
-import { writeObservabilityLine } from '../lib/observability-sink.ts';
-import { appendTaskResultLogEntry, appendTaskRunLogEntry } from '../log-store.ts';
-import { writeTaskRunDiskLog } from '../lib/task-run-logger.ts';
+import { resolveTaskAgentResultFile } from './task-agent-result-files.ts';
+import {
+  emitTaskResultLine,
+  emitTaskRunLine,
+  type TaskAgentOutcome,
+  writeSuccessfulTaskRunDiskLog,
+} from './task-agent-observability.ts';
+import { acquireTaskAgentSlot, releaseTaskAgentSlot } from './task-agent-slot.ts';
+import { runTaskAgentPiSession } from './task-agent-session.ts';
 
 export interface TaskAgentInput {
   userPrompt: string;
@@ -38,6 +39,12 @@ export interface TaskAgentInput {
   correlationId?: string;
   /** File path in the sandbox to extract as the task result (default: 'result.json'). */
   resultFile?: string;
+  /**
+   * Current routes historically accept the first non-empty sandbox file when
+   * the requested file is missing. Keep that behavior explicit so stricter
+   * routes can opt in later without changing the executor contract.
+   */
+  resultFileFallback?: 'firstNonEmptyFile' | 'strict';
   initialProgressMessage?: string;
 }
 
@@ -47,103 +54,13 @@ export interface TaskAgentResult {
   files: Record<string, string>;
 }
 
-type TaskOutcome = 'success' | 'error' | 'no_result';
-
 export class TaskAgentExecutionError extends Error {
-  readonly outcome: Exclude<TaskOutcome, 'success'>;
+  readonly outcome: Exclude<TaskAgentOutcome, 'success'>;
 
-  constructor(message: string, outcome: Exclude<TaskOutcome, 'success'> = 'error') {
+  constructor(message: string, outcome: Exclude<TaskAgentOutcome, 'success'> = 'error') {
     super(message);
     this.name = 'TaskAgentExecutionError';
     this.outcome = outcome;
-  }
-}
-
-function emitTaskResultLine(input: {
-  sessionType: SessionType;
-  correlationId: string;
-  resultFile: string;
-  resultContent: string;
-  files: Record<string, string>;
-}): void {
-  const ts = new Date().toISOString();
-  writeObservabilityLine({
-    v: OBSERVABILITY_SCHEMA_VERSION,
-    ts,
-    type: 'task_result',
-    payload: {
-      sessionType: input.sessionType,
-      correlationId: input.correlationId,
-      resultFile: input.resultFile,
-      resultContent: input.resultContent,
-      sandboxFilePaths: Object.keys(input.files),
-    },
-  });
-  appendTaskResultLogEntry({
-    correlationId: input.correlationId,
-    sessionType: input.sessionType,
-    resultFile: input.resultFile,
-    resultContent: input.resultContent,
-    sandboxFilePaths: Object.keys(input.files),
-  });
-  if (env.isDev) {
-    console.debug('[task-agent] result extracted', {
-      sessionType: input.sessionType,
-      correlationId: input.correlationId,
-      resultFile: input.resultFile,
-      resultChars: input.resultContent.length,
-      sandboxFileCount: Object.keys(input.files).length,
-    });
-  }
-}
-
-function emitTaskRunLine(input: {
-  sessionType: SessionType;
-  correlationId: string;
-  providerId: string;
-  modelId: string;
-  durationMs: number;
-  outcome: TaskOutcome;
-  resultFile?: string;
-  sandboxFileCount: number;
-  errorMessage?: string;
-  thinking?: ThinkingConfig;
-}): void {
-  const ts = new Date().toISOString();
-  writeObservabilityLine({
-    v: OBSERVABILITY_SCHEMA_VERSION,
-    ts,
-    type: 'task_run',
-    payload: {
-      sessionType: input.sessionType,
-      correlationId: input.correlationId,
-      providerId: input.providerId,
-      modelId: input.modelId,
-      durationMs: input.durationMs,
-      outcome: input.outcome,
-      resultFile: input.resultFile,
-      sandboxFileCount: input.sandboxFileCount,
-      errorMessage: input.errorMessage,
-      thinking: input.thinking,
-    },
-  });
-  appendTaskRunLogEntry({
-    correlationId: input.correlationId,
-    sessionType: input.sessionType,
-    providerId: input.providerId,
-    modelId: input.modelId,
-    durationMs: input.durationMs,
-    outcome: input.outcome,
-    resultFile: input.resultFile,
-    sandboxFileCount: input.sandboxFileCount,
-    errorMessage: input.errorMessage,
-    thinking: input.thinking,
-  });
-  if (env.isDev) {
-    console.debug('[task-agent] task_run summary', {
-      ...input,
-      ts,
-    });
   }
 }
 
@@ -161,7 +78,7 @@ export async function executeTaskAgentStream(
 ): Promise<TaskAgentResult> {
   const startedAt = Date.now();
   const correlationId = input.correlationId ?? crypto.randomUUID();
-  let outcome: TaskOutcome = 'error';
+  let outcome: TaskAgentOutcome = 'error';
   let errorMessage: string | undefined;
   let resultFileUsed: string | undefined;
   let sandboxFileCount = 0;
@@ -181,7 +98,7 @@ export async function executeTaskAgentStream(
     await write(sseEvent, data);
   };
 
-  const acquired = await acquireAgenticSlotOrReject();
+  const acquired = await acquireTaskAgentSlot();
   if (!acquired) {
     errorMessage = 'Too many agentic runs are active. Please wait and try again.';
     emitTaskRunLine({
@@ -201,29 +118,18 @@ export async function executeTaskAgentStream(
   try {
     await write(SSE_EVENT_NAMES.phase, { phase: 'building' });
 
-    const ctx = await buildAgenticSystemContext({ sessionType: input.sessionType });
-    await emitSkillsLoadedEvents(writeEvent, ctx.loadedSkills, 'building');
-
-    const forward = async (e: AgentRunEvent): Promise<void> => {
-      await writeEvent(e);
-    };
-
-    const sessionResult = await runDesignAgentSession(
+    const { sessionResult, skillKeys } = await runTaskAgentPiSession(
       {
         userPrompt: input.userPrompt,
         providerId: input.providerId,
         modelId: input.modelId,
-        thinkingLevel: input.thinking?.level,
+        sessionType: input.sessionType,
+        thinking: input.thinking,
         signal: input.signal,
         correlationId,
-        sessionType: input.sessionType,
-        systemPrompt: ctx.systemPrompt,
-        skillCatalog: ctx.skillCatalog,
-        seedFiles: ctx.sandboxSeedFiles,
-        initialProgressMessage:
-          input.initialProgressMessage ?? 'Starting task…',
+        initialProgressMessage: input.initialProgressMessage,
       },
-      forward,
+      writeEvent,
     );
 
     if (!sessionResult) {
@@ -234,73 +140,37 @@ export async function executeTaskAgentStream(
     sandboxFileCount = Object.keys(sessionResult.files).length;
     const resultFile = input.resultFile ?? 'result.json';
     resultFileUsed = resultFile;
-    const resultContent = sessionResult.files[resultFile];
 
-    if (resultContent != null) {
+    const resolved = resolveTaskAgentResultFile({
+      files: sessionResult.files,
+      resultFile,
+      fallback: input.resultFileFallback ?? 'firstNonEmptyFile',
+    });
+
+    if (resolved) {
       outcome = 'success';
+      resultFileUsed = resolved.resultFile;
       emitTaskResultLine({
         sessionType: input.sessionType,
         correlationId,
-        resultFile,
-        resultContent,
+        resultFile: resolved.resultFile,
+        resultContent: resolved.result,
         files: sessionResult.files,
       });
-      const baseDir = env.OBSERVABILITY_LOG_BASE_DIR;
-      if (baseDir) {
-        void writeTaskRunDiskLog({
-          baseDir,
-          correlationId,
-          sessionType: input.sessionType,
-          providerId: input.providerId,
-          modelId: input.modelId,
-          userPrompt: input.userPrompt,
-          resultFile,
-          resultContent,
-          sandboxFilePaths: Object.keys(sessionResult.files),
-          skillKeys: ctx.loadedSkills.map((s) => s.key),
-          durationMs: Date.now() - startedAt,
-          outcome: 'success',
-        }).catch((err) => {
-          if (env.isDev) console.error('[task-agent] writeTaskRunDiskLog failed', err);
-        });
-      }
-      return { result: resultContent, resultFile, files: sessionResult.files };
-    }
-
-    const firstFile = Object.entries(sessionResult.files).find(
-      ([, content]) => content.trim().length > 0,
-    );
-    if (firstFile) {
-      outcome = 'success';
-      const [altFile, altContent] = firstFile;
-      resultFileUsed = altFile;
-      emitTaskResultLine({
-        sessionType: input.sessionType,
+      writeSuccessfulTaskRunDiskLog({
+        baseDir: env.OBSERVABILITY_LOG_BASE_DIR,
         correlationId,
-        resultFile: altFile,
-        resultContent: altContent,
-        files: sessionResult.files,
+        sessionType: input.sessionType,
+        providerId: input.providerId,
+        modelId: input.modelId,
+        userPrompt: input.userPrompt,
+        resultFile: resolved.resultFile,
+        resultContent: resolved.result,
+        sandboxFilePaths: Object.keys(sessionResult.files),
+        skillKeys,
+        durationMs: Date.now() - startedAt,
       });
-      const baseDir = env.OBSERVABILITY_LOG_BASE_DIR;
-      if (baseDir) {
-        void writeTaskRunDiskLog({
-          baseDir,
-          correlationId,
-          sessionType: input.sessionType,
-          providerId: input.providerId,
-          modelId: input.modelId,
-          userPrompt: input.userPrompt,
-          resultFile: altFile,
-          resultContent: altContent,
-          sandboxFilePaths: Object.keys(sessionResult.files),
-          skillKeys: ctx.loadedSkills.map((s) => s.key),
-          durationMs: Date.now() - startedAt,
-          outcome: 'success',
-        }).catch((err) => {
-          if (env.isDev) console.error('[task-agent] writeTaskRunDiskLog failed', err);
-        });
-      }
-      return { result: altContent, resultFile: altFile, files: sessionResult.files };
+      return { result: resolved.result, resultFile: resolved.resultFile, files: sessionResult.files };
     }
 
     outcome = 'no_result';
@@ -327,6 +197,6 @@ export async function executeTaskAgentStream(
       errorMessage: outcome !== 'success' ? errorMessage : undefined,
       thinking: input.thinking,
     });
-    releaseAgenticSlot();
+    releaseTaskAgentSlot();
   }
 }

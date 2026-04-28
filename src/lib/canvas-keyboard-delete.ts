@@ -1,4 +1,4 @@
-import { NODE_TYPES } from '../constants/canvas';
+import { INPUT_GHOST_NODE_TYPE, NODE_TYPES } from '../constants/canvas';
 import type { WorkspaceNode } from '../types/workspace-graph';
 
 /** Node types that cannot be removed via keyboard Delete/Backspace. */
@@ -6,7 +6,7 @@ export const KEYBOARD_DELETE_PROTECTED_NODE_TYPES = new Set<string>([
   NODE_TYPES.DESIGN_BRIEF,
   NODE_TYPES.MODEL,
   NODE_TYPES.INCUBATOR,
-  'inputGhost',
+  INPUT_GHOST_NODE_TYPE,
 ]);
 
 /**

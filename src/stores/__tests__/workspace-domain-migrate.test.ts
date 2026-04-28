@@ -37,9 +37,32 @@ describe('migrateWorkspaceDomainPersist', () => {
       modelProfiles: {},
       incubatorWirings: {},
       previewSlots: {},
+      designSystems: {},
       incubatorModelNodeIds: {},
     };
     const out = migrateWorkspaceDomainPersist(v9, 9) as typeof v9;
     expect(out).toEqual(v9);
+  });
+
+  it('normalizes malformed top-level collections to empty records', () => {
+    const out = migrateWorkspaceDomainPersist(
+      {
+        hypotheses: 'bad',
+        modelProfiles: null,
+        incubatorWirings: [],
+        previewSlots: 42,
+        designSystems: undefined,
+        incubatorModelNodeIds: 'bad',
+      },
+      10,
+    ) as Record<string, unknown>;
+    expect(out).toEqual({
+      hypotheses: {},
+      modelProfiles: {},
+      incubatorWirings: {},
+      previewSlots: {},
+      designSystems: {},
+      incubatorModelNodeIds: {},
+    });
   });
 });

@@ -10,7 +10,6 @@ import type { ProvenanceContext } from '../types/provenance-context';
 import type { ProviderModel } from '../types/provider';
 import type { EvaluationContextPayload } from '../types/evaluation';
 import type { WorkspaceSnapshotWire } from '../lib/workspace-snapshot-schema';
-import type { ThinkingOverride } from '../lib/thinking-defaults';
 import type {
   AppConfigResponse,
   DesignSystemExtractWireResponse,
@@ -21,25 +20,21 @@ import type {
   ModelsWireResponse,
   ProvidersListWireResponse,
 } from './wire-schemas';
+import type {
+  DesignSystemExtractRequestWire,
+  IncubateRequestWire,
+  InputsGenerateRequestWire,
+  InternalContextGenerateRequestWire,
+} from './request-schemas';
 
 // ── Incubate (spec → incubation plan) ────────────────────────────────
 
-export interface IncubateRequest {
+export type IncubateRequest = IncubateRequestWire & {
   spec: DesignSpec;
-  providerId: string;
-  modelId: string;
-  internalContextDocument?: string;
-  designSystemDocuments?: { nodeId: string; title: string; content: string }[];
-  referenceDesigns?: { name: string; code: string }[];
-  supportsVision?: boolean;
-  promptOptions?: {
-    count?: number;
+  promptOptions?: IncubateRequestWire['promptOptions'] & {
     existingStrategies?: HypothesisStrategy[];
-    designSystemDocuments?: { nodeId: string; title: string; content: string }[];
   };
-  /** Optional per-request thinking override; server merges with task defaults + capability gate. */
-  thinking?: ThinkingOverride;
-}
+};
 
 export type IncubateResponse = IncubateWireResponse & IncubationPlan;
 
@@ -91,15 +86,9 @@ export type ProvidersListResponse = ProvidersListWireResponse & ProviderInfo[];
 
 // ── Design System ───────────────────────────────────────────────────
 
-export interface DesignSystemExtractRequest {
-  title?: string;
-  content?: string;
+export type DesignSystemExtractRequest = DesignSystemExtractRequestWire & {
   images?: ReferenceImage[];
-  sourceHash?: string;
-  providerId: string;
-  modelId: string;
-  thinking?: ThinkingOverride;
-}
+};
 
 export type DesignSystemExtractResponse = DesignSystemExtractWireResponse & {
   lint?: DesignMdLintSummary;
@@ -107,34 +96,16 @@ export type DesignSystemExtractResponse = DesignSystemExtractWireResponse & {
 
 // ── Spec inputs auto-generate (magic wand) ──────────────────────────
 
-export type InputsGenerateTargetApiId =
-  | 'research-context'
-  | 'objectives-metrics'
-  | 'design-constraints';
-
-export interface InputsGenerateRequest {
-  inputId: InputsGenerateTargetApiId;
-  designBrief: string;
-  existingDesign?: string;
-  researchContext?: string;
-  objectivesMetrics?: string;
-  designConstraints?: string;
-  providerId: string;
-  modelId: string;
-  thinking?: ThinkingOverride;
-}
+export type InputsGenerateTargetApiId = InputsGenerateRequestWire['inputId'];
+export type InputsGenerateRequest = InputsGenerateRequestWire;
 
 export type InputsGenerateResponse = InputsGenerateWireResponse;
 
 // ── Internal context document (spec inputs → derived Markdown) ──────
 
-export interface InternalContextGenerateRequest {
+export type InternalContextGenerateRequest = InternalContextGenerateRequestWire & {
   spec: DesignSpec;
-  sourceHash: string;
-  providerId: string;
-  modelId: string;
-  thinking?: ThinkingOverride;
-}
+};
 
 export type InternalContextGenerateResponse = InternalContextGenerateWireResponse;
 export type { AppConfigResponse };

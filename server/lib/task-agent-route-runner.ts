@@ -25,6 +25,7 @@ export interface TaskAgentRouteOptions<TBody extends TaskAgentRouteBody> {
   sessionType: SessionType;
   thinkingTask: ThinkingTask;
   resultFile: string;
+  resultFileFallback?: 'firstNonEmptyFile' | 'strict';
   initialProgressMessage: string;
   debugPayload?: (body: TBody) => Record<string, unknown>;
   onTaskResult: (
@@ -65,6 +66,7 @@ export function runTaskAgentRoute<TBody extends TaskAgentRouteBody>(
           signal: abortSignal,
           correlationId,
           resultFile: options.resultFile,
+          resultFileFallback: options.resultFileFallback ?? 'firstNonEmptyFile',
           initialProgressMessage: options.initialProgressMessage,
         },
         { allocId, writeGate: gate },

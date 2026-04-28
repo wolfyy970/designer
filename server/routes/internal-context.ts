@@ -1,20 +1,10 @@
 import { Hono } from 'hono';
-import { z } from 'zod';
 import { clampProviderModel } from '../lib/lockdown-model.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
-import { DesignSpecSchema } from '../../src/types/spec.ts';
 import { buildInternalContextUserMessage } from '../../src/lib/internal-context.ts';
-import { ThinkingOverrideSchema } from '../lib/hypothesis-schemas.ts';
 import { runTaskAgentRoute } from '../lib/task-agent-route-runner.ts';
-
-const InternalContextGenerateRequestSchema = z.object({
-  spec: DesignSpecSchema,
-  sourceHash: z.string().min(1),
-  providerId: z.string().min(1),
-  modelId: z.string().min(1),
-  thinking: ThinkingOverrideSchema.optional(),
-});
+import { InternalContextGenerateRequestSchema } from '../../src/api/request-schemas.ts';
 
 const internalContext = new Hono();
 

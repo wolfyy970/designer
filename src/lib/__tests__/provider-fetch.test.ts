@@ -141,6 +141,17 @@ describe('fetchChatCompletion', () => {
     expect(result).toEqual(mockData);
   });
 
+  it('throws when a successful response is not a chat completion payload', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({}),
+    }));
+
+    await expect(
+      fetchChatCompletion('https://api.example.com', {}, {}, 'TestProvider'),
+    ).rejects.toThrow('TestProvider API returned an invalid chat completion response');
+  });
+
   it('throws mapped error for known status codes', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,
@@ -168,7 +179,7 @@ describe('fetchChatCompletion', () => {
   it('merges extraHeaders into request', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({}),
+      json: () => Promise.resolve({ choices: [{ message: { content: 'ok' } }] }),
     });
     vi.stubGlobal('fetch', mockFetch);
 
@@ -246,5 +257,17 @@ describe('fetchModelList', () => {
 
     const result = await fetchModelList('https://api.example.com/models', () => []);
     expect(result).toEqual([]);
+  });
+
+  it('returns empty array when data is not a model array', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: 'not-an-array' }),
+    }));
+
+    const mapFn = vi.fn();
+    const result = await fetchModelList('https://api.example.com/models', mapFn);
+    expect(result).toEqual([]);
+    expect(mapFn).not.toHaveBeenCalled();
   });
 });

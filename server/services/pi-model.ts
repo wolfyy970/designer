@@ -4,8 +4,9 @@
 import type { Model } from './pi-sdk/types.ts';
 import { env } from '../env.ts';
 import { completionBudgetFromPromptTokens } from '../lib/completion-budget.ts';
+import type { ThinkingLevel } from '../../src/lib/thinking-defaults.ts';
 
-export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type { ThinkingLevel };
 
 const ZEROED_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 

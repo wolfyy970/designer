@@ -93,6 +93,18 @@ describe('HypothesisPromptBundleResponseSchema', () => {
     });
     expect(r.success).toBe(true);
   });
+
+  it('accepts every shared thinking level in model credentials', () => {
+    const r = HypothesisPromptBundleResponseSchema.safeParse({
+      prompts: [],
+      evaluationContext: null,
+      provenance: { strategies: {} },
+      generationContext: {
+        modelCredentials: [{ providerId: 'p', modelId: 'm', thinkingLevel: 'xhigh' as const }],
+      },
+    });
+    expect(r.success).toBe(true);
+  });
 });
 
 describe('DesignSystemExtractResponseSchema', () => {
@@ -101,4 +113,3 @@ describe('DesignSystemExtractResponseSchema', () => {
     expect(DesignSystemExtractResponseSchema.safeParse({}).success).toBe(false);
   });
 });
-

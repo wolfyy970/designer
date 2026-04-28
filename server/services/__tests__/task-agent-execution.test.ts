@@ -138,6 +138,60 @@ describe('executeTaskAgentStream', () => {
     expect(mocks.releaseAgenticSlot).toHaveBeenCalledOnce();
   });
 
+  it('falls back to the first non-empty file when the expected result file is missing', async () => {
+    mocks.acquireAgenticSlotOrReject.mockResolvedValue(true);
+    mocks.runDesignAgentSession.mockResolvedValue({
+      files: { 'notes.txt': 'fallback result' },
+      todos: [],
+      emittedFilePaths: ['notes.txt'],
+    });
+
+    const out = await executeTaskAgentStream(
+      { writeSSE: vi.fn(async () => {}) } as never,
+      {
+        userPrompt: 'task',
+        providerId: 'openrouter',
+        modelId: 'm',
+        sessionType: 'inputs-gen',
+        resultFile: 'result.txt',
+        resultFileFallback: 'firstNonEmptyFile',
+      },
+      { allocId: () => '0' },
+    );
+
+    expect(out).toMatchObject({
+      result: 'fallback result',
+      resultFile: 'notes.txt',
+    });
+    expect(mocks.releaseAgenticSlot).toHaveBeenCalledOnce();
+  });
+
+  it('rejects missing expected result files when fallback is strict', async () => {
+    mocks.acquireAgenticSlotOrReject.mockResolvedValue(true);
+    mocks.runDesignAgentSession.mockResolvedValue({
+      files: { 'notes.txt': 'fallback result' },
+      todos: [],
+      emittedFilePaths: ['notes.txt'],
+    });
+
+    await expect(executeTaskAgentStream(
+      { writeSSE: vi.fn(async () => {}) } as never,
+      {
+        userPrompt: 'task',
+        providerId: 'openrouter',
+        modelId: 'm',
+        sessionType: 'inputs-gen',
+        resultFile: 'result.txt',
+        resultFileFallback: 'strict',
+      },
+      { allocId: () => '0' },
+    )).rejects.toMatchObject({
+      outcome: 'no_result',
+      message: 'Agent did not write the expected result file (result.txt).',
+    });
+    expect(mocks.releaseAgenticSlot).toHaveBeenCalledOnce();
+  });
+
   it('runs Pi session and returns extracted result when result file exists', async () => {
     mocks.acquireAgenticSlotOrReject.mockResolvedValue(true);
     mocks.runDesignAgentSession.mockResolvedValue({

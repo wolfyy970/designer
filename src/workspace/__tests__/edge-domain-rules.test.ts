@@ -3,6 +3,7 @@ import { NODE_TYPES } from '../../constants/canvas';
 import { isValidConnection } from '../../lib/canvas-connections';
 import type { CanvasNodeType } from '../../types/workspace-graph';
 import {
+  EDGE_DOMAIN_RULES,
   HYDRATE_EDGE_RULES,
   INCREMENTAL_NEW_EDGE_RULES,
   INCREMENTAL_REMOVED_EDGE_RULES,
@@ -48,5 +49,29 @@ describe('edge-domain-rules', () => {
     const incrementalIds = new Set(INCREMENTAL_NEW_EDGE_RULES.map((r) => r.id));
     const hydrateIds = new Set(HYDRATE_EDGE_RULES.map((r) => r.id));
     expect(hydrateIds).toEqual(incrementalIds);
+  });
+
+  it('derives all phase-specific registries from one rule registry', () => {
+    expect(INCREMENTAL_NEW_EDGE_RULES).toEqual(
+      EDGE_DOMAIN_RULES.filter((r) => r.onAdd).map((r) => ({
+        id: r.id,
+        match: r.match,
+        apply: r.onAdd,
+      })),
+    );
+    expect(INCREMENTAL_REMOVED_EDGE_RULES).toEqual(
+      EDGE_DOMAIN_RULES.filter((r) => r.onRemove).map((r) => ({
+        id: r.id,
+        match: r.match,
+        apply: r.onRemove,
+      })),
+    );
+    expect(HYDRATE_EDGE_RULES).toEqual(
+      EDGE_DOMAIN_RULES.filter((r) => r.onHydrate).map((r) => ({
+        id: r.id,
+        match: r.match,
+        apply: r.onHydrate,
+      })),
+    );
   });
 });

@@ -1,5 +1,5 @@
 import type { InputGhostData, InputGhostTargetType } from '../types/canvas-data';
-import { INPUT_NODE_TYPES } from '../constants/canvas';
+import { INPUT_GHOST_NODE_TYPE, INPUT_NODE_TYPES } from '../constants/canvas';
 import type { CanvasNodeType, WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 
 type CanvasNode = WorkspaceNode;
@@ -76,7 +76,7 @@ const DEFAULT_CANVAS_Y = 300;
 function nodeH(node: CanvasNode): number {
   const measured = node.measured?.height as number | undefined;
   if (measured != null) return measured;
-  if (node.type === 'inputGhost') return FALLBACK_H.inputGhost;
+  if (node.type === INPUT_GHOST_NODE_TYPE) return FALLBACK_H.inputGhost;
   if (INPUT_NODE_TYPES.has(node.type as CanvasNodeType)) return FALLBACK_H.inputCard;
   return FALLBACK_H[node.type as string] ?? 200;
 }
@@ -95,7 +95,7 @@ const TYPE_ORDER_LAYER: Record<string, number> = {
  */
 export function layoutTypeOrder(n: CanvasNode): number {
   if (n.type === 'designBrief') return LAYER0_ORDER_BRIEF;
-  if (n.type === 'inputGhost') {
+  if (n.type === INPUT_GHOST_NODE_TYPE) {
     const t = (n.data as InputGhostData).targetType;
     return LAYER0_GHOST_BASE + optionalInputSlotIndex(t ?? '');
   }
@@ -118,14 +118,14 @@ export function layoutTypeOrder(n: CanvasNode): number {
 export function reconcileInputGhostNodes(
   nodes: WorkspaceNode[],
 ): WorkspaceNode[] {
-  const base = nodes.filter((n) => n.type !== 'inputGhost');
+  const base = nodes.filter((n) => n.type !== INPUT_GHOST_NODE_TYPE);
   const have = new Set(base.map((n) => n.type));
   const ghosts: WorkspaceNode[] = [];
   for (const slot of OPTIONAL_INPUT_SLOTS) {
     if (have.has(slot)) continue;
     ghosts.push({
       id: inputGhostStableId(slot),
-      type: 'inputGhost',
+      type: INPUT_GHOST_NODE_TYPE,
       position: { x: 0, y: 0 },
       data: { targetType: slot },
     });

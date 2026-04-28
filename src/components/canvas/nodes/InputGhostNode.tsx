@@ -5,9 +5,10 @@ import { RF_INTERACTIVE } from '../../../constants/canvas';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { SPEC_SECTIONS } from '../../../lib/constants';
 import { NODE_TYPE_TO_SECTION } from '../../../types/workspace-graph';
+import { INPUT_GHOST_NODE_TYPE } from '../../../constants/canvas';
 import type { InputGhostData } from '../../../types/canvas-data';
 
-type InputGhostFlowNode = Node<InputGhostData, 'inputGhost'>;
+type InputGhostFlowNode = Node<InputGhostData, typeof INPUT_GHOST_NODE_TYPE>;
 
 function InputGhostNode({ data }: NodeProps<InputGhostFlowNode>) {
   const { targetType } = data;

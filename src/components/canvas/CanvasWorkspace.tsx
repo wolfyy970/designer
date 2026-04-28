@@ -15,7 +15,7 @@ import '@xyflow/react/dist/base.css';
 import { useCanvasStore, INPUT_NODE_TYPES, GRID_SIZE, type CanvasNodeType } from '../../stores/canvas-store';
 import { useGenerationStore } from '../../stores/generation-store';
 import { GENERATION_STATUS } from '../../constants/generation';
-import { PREVIEW_NODE_GENERATING_Z_INDEX } from '../../constants/canvas';
+import { INPUT_GHOST_NODE_TYPE, PREVIEW_NODE_GENERATING_Z_INDEX } from '../../constants/canvas';
 import { getPreviewNodeData } from '../../lib/canvas-node-data';
 import {
   scheduleCanvasFitView,
@@ -199,7 +199,7 @@ function CanvasInner() {
   const miniMapNodeColor = useCallback((node: { type?: string }) => {
     const t = node.type as CanvasNodeType | undefined;
     if (t && INPUT_NODE_TYPES.has(t)) return 'var(--color-fg-muted)'; // inputs
-    if (t === 'inputGhost') return 'var(--color-fg-faint)';
+    if (t === INPUT_GHOST_NODE_TYPE) return 'var(--color-fg-faint)';
     switch (t) {
       case 'incubator':
       case 'designSystem':

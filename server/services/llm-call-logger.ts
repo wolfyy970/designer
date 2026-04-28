@@ -1,6 +1,5 @@
 /**
- * Central wrappers so every GenerationProvider.generateChat and loggedCallLLM usage
- * records one row in the dev LLM log (see /api/logs).
+ * Central wrapper so every GenerationProvider.generateChat usage records one row in the dev LLM log.
  */
 import { performance } from 'node:perf_hooks';
 import type {
@@ -10,19 +9,13 @@ import type {
   GenerationProvider,
   ProviderOptions,
 } from '../../src/types/provider.ts';
-import type { ReferenceImage } from '../../src/types/spec.ts';
 import type { LlmLogEntry } from '../log-store.ts';
 import {
-  appendLlmCallResponse,
   beginLlmCall,
   failLlmCall,
   finalizeLlmCall,
-  setLlmCallResponseBody,
   setLlmCallWaitingStatus,
 } from '../log-store.ts';
-import type { CompletionPurpose } from '../lib/completion-budget.ts';
-import { getProvider } from './providers/registry.ts';
-import { mergeReferenceImagesIntoMessages } from '../lib/merge-reference-images-into-messages.ts';
 import { providerLogFields } from './llm-log-metadata.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
 
@@ -185,86 +178,4 @@ export async function loggedGenerateChat(
   return withLlmCallLifecycle(ctx, model, providerId, systemPrompt, userPrompt, sig, noopUpdater, async () =>
     provider.generateChat(messages, mergedOptions),
   );
-}
-
-/**
- * Like {@link loggedGenerateChat}, but uses {@link GenerationProvider.generateChatStream} when present
- * so the UI can show tokens as they arrive; falls back to {@link loggedGenerateChat} otherwise.
- */
-export async function loggedGenerateChatStream(
-  provider: GenerationProvider,
-  providerId: string,
-  messages: ChatMessage[],
-  options: ProviderOptions,
-  ctx: LlmLogContext,
-  onDelta: (accumulatedRaw: string) => void | Promise<void>,
-): Promise<ChatResponse> {
-  const model = options.model ?? '';
-  const { systemPrompt, userPrompt } = chatMessagesToLogFields(messages);
-  const sig = ctx.signal ?? options.signal;
-  const mergedOptions: ProviderOptions = { ...options, signal: sig };
-
-  return withLlmCallLifecycle(ctx, model, providerId, systemPrompt, userPrompt, sig, noopUpdater, async (h) => {
-        let accSeenLen = 0;
-        let streamBodyStarted = false;
-
-        const onDeltaForLog = async (accumulated: string) => {
-          const incremental = accumulated.slice(accSeenLen);
-          accSeenLen = accumulated.length;
-          if (incremental) {
-            if (!streamBodyStarted) {
-              streamBodyStarted = true;
-              h.onFirstStreamBody();
-              setLlmCallResponseBody(h.logId, incremental);
-            } else {
-              appendLlmCallResponse(h.logId, incremental);
-            }
-          }
-          await onDelta(accumulated);
-        };
-
-        const streamFn = provider.generateChatStream;
-        return streamFn
-          ? await streamFn.call(provider, messages, mergedOptions, onDeltaForLog)
-          : await (async () => {
-              const r = await provider.generateChat(messages, mergedOptions);
-              await onDeltaForLog(r.raw);
-              return r;
-            })();
-      });
-}
-
-type CallLLMOptions = {
-  temperature?: number;
-  max_tokens?: number;
-  images?: ReferenceImage[];
-  signal?: AbortSignal;
-  completionPurpose?: CompletionPurpose;
-};
-
-/** Provider registry chat with automatic logLlmCall (success or transport error). */
-export async function loggedCallLLM(
-  messages: ChatMessage[],
-  model: string,
-  providerId: string,
-  options: CallLLMOptions,
-  ctx: LlmLogContext,
-): Promise<string> {
-  const { systemPrompt, userPrompt } = chatMessagesToLogFields(messages);
-  const sig = options.signal ?? ctx.signal;
-
-  const response = await withLlmCallLifecycle(ctx, model, providerId, systemPrompt, userPrompt, sig, noopUpdater, async () => {
-    const provider = getProvider(providerId);
-    if (!provider) {
-      throw new Error(`Unknown provider: ${providerId}`);
-    }
-    const finalMessages = mergeReferenceImagesIntoMessages(messages, options.images);
-    return provider.generateChat(finalMessages, {
-      model,
-      signal: sig,
-      ...(options.images && options.images.length > 0 ? { supportsVision: true } : {}),
-      completionPurpose: options.completionPurpose,
-    });
-  });
-  return response.raw;
 }

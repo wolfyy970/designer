@@ -176,7 +176,7 @@ flowchart TB
 
 **Hypothesis ↔ model (single active wiring)** — A hypothesis may have **only one** Model node connected at a time: connecting a new model replaces the previous edge, and domain `modelNodeIds` holds at most one id. Persisted state migrates with canvas **v25** (dedupe model→hypothesis edges, first edge wins) and workspace domain **v9** (truncate legacy multi-id lists). When an incubator has several models, auto-wiring new hypotheses inherits only the **first** model edge from the incubator.
 
-**Canvas as projection** — `src/stores/canvas-store.ts` still persists React Flow–backed **nodes and edges** for layout and interaction. Graph edits call `src/workspace/domain-commands.ts` so domain relations stay the source of truth for incubate/generate. Pure graph helpers live in `src/workspace/graph-queries.ts`; mutation planning for add/remove/connect/disconnect behavior lives in `src/workspace/canvas-mutation-planner.ts` so graph deltas can be characterized separately from Zustand side effects.
+**Canvas as projection** — `src/stores/canvas-store.ts` still persists React Flow–backed **nodes and edges** for layout and interaction. Graph edits call `src/workspace/domain-commands.ts` so domain relations stay the source of truth for incubate/generate. Pure graph helpers live in `src/workspace/graph-queries.ts`; mutation planning lives in `src/workspace/canvas-mutation-planner.ts`, and `src/stores/canvas/canvas-graph-transaction.ts` applies planned graph/domain/spec/layout effects so Zustand slices stay thin.
 
 **Incubate → graph** — When incubation returns new **strategies**, the incubator UI calls `syncAfterIncubate` on the canvas store to add **hypothesis** nodes and edges (and `linkHypothesesAfterIncubate` for domain rows). Existing strategies already represented by a hypothesis `refId` are not duplicated.
 
@@ -322,7 +322,8 @@ POST endpoints validate bodies with Zod (typically via `**parse-request**` / `sa
 | `lib/skill-schema.ts`                      | Zod: skill YAML frontmatter                                                                                                                                                                                                                             |
 | `lib/frontmatter.ts` / `lib/frontmatter-split.ts` | Shared `---` YAML frontmatter split for `**prompt-discovery**` / `**skill-discovery**` (split implementation + re-export)                                                                                                                            |
 | `lib/sse-task-route.ts`                    | Shared SSE wrapper for task-agent routes (`incubate`, `inputs-generate`, `design-system`) — owns terminal task SSE (`phase: complete` + `done` on success, `error` + `done` on throw), write gate, dev write-count summary                                                                                                 |
-| `services/task-agent-execution.ts`         | `executeTaskAgentStream` — Pi build-only task sessions for incubation / inputs-gen / design-system; forwards non-terminal agentic SSE; throws typed task errors for route serialization; NDJSON + `log-store` task entries                                                                                              |
+| `services/task-agent-execution.ts`         | `executeTaskAgentStream` facade for Pi build-only task sessions; forwards non-terminal agentic SSE and throws typed task errors for route serialization. Slot lifecycle, Pi session invocation, result-file resolution, and observability live in the focused `task-agent-*` helper modules. |
+| `services/task-agent-session.ts` / `task-agent-slot.ts` / `task-agent-result-files.ts` / `task-agent-observability.ts` | Task-agent internals split by responsibility: Pi session invocation, concurrency slot ownership, expected/fallback result-file policy, and NDJSON + `log-store` task entries. |
 | `lib/pi-bridge-narrowing.ts`               | Runtime guards for Pi SDK message slices at the NPM boundary (`pi-session-event-bridge`)                                                                                                                                                                |
 | `lib/agentic-skills-emission.ts`           | Shared `skills_loaded` trace + SSE for orchestrator and task-agent execution                                                                                                                                                                            |
 
@@ -423,10 +424,12 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 | `client.ts`          | Barrel re-export — import from here for backward compatibility; implementation split across the modules below.                                                                                                                                 |
 | `client-shared.ts`   | Shared helpers (e.g. `postJson`, base URL).                                                                                                                                                                   |
 | `client-rest.ts`     | JSON GET/POST, config, models.                                                                                                                                                                                |
-| `client-sse.ts`      | Hypothesis + `/api/generate` SSE streams; Zod parsing via `**src/lib/generate-sse-event-schema.ts**`.                                                                                                        |
+| `client-sse.ts`      | Public hypothesis + `/api/generate` SSE stream API; orchestrates callbacks while helper modules own JSON parsing, typed dispatch, lane routing, and finalization policy. |
+| `client-sse-json.ts` / `client-sse-dispatch.ts` / `client-sse-lane-router.ts` | Internal SSE helpers for malformed JSON/Zod handling, event callback dispatch, and multiplexed hypothesis lane state. |
 | `client-task-stream.ts` | Incubate, inputs-generate, design-system task SSE (looser JSON line parsing than hypothesis streams).                                                                                                     |
+| `request-schemas.ts` / `hypothesis-request-schemas.ts` | Client/server-safe Zod request contracts for task-agent routes and hypothesis payloads. Server routes and client types import from these modules to avoid schema drift. |
 | `wire-schemas.ts`    | Client/server-safe Zod response contracts shared by API parsers and routes that validate their own returned JSON (for example `/api/config`). `response-schemas.ts` re-exports this module for compatibility. |
-| `types.ts`           | Request/response interfaces for incubate, hypothesis, and observability. `GenerateSSEEvent` includes alternate **event shapes** (e.g. `file`, `plan`). Legacy `/api/generate` wire types live on the server. |
+| `types.ts`           | Public API request/response types inferred from shared request/response schemas where possible. `GenerateSSEEvent` includes alternate **event shapes** (e.g. `file`, `plan`). Legacy `/api/generate` wire types live on the server. |
 
 **Behavior (unchanged from monolith):** Hypothesis design uses `generateHypothesisStream`; `incubateStream` accepts optional **`IncubateStreamOptions`** (`incubate` vs `agentic` callbacks). `GenerateStreamCallbacks` includes `onFile` / `onPlan` / trace hooks.
 
@@ -476,7 +479,7 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 | File            | What it exports                                                         |
 | --------------- | ----------------------------------------------------------------------- |
-| `canvas.ts`     | `NODE_TYPES`, `EDGE_TYPES`, `EDGE_STATUS`, `NODE_STATUS`, `buildEdgeId` |
+| `canvas.ts`     | `NODE_TYPES`, `INPUT_GHOST_NODE_TYPE`, `EDGE_TYPES`, `EDGE_STATUS`, `NODE_STATUS`, `buildEdgeId` |
 | `generation.ts` | `GENERATION_STATUS`                                                     |
 
 
@@ -495,7 +498,7 @@ Single source of truth for string literals shared across the codebase. Eliminate
 | `canvas-layout.ts`      | Sugiyama-style layout (`computeLayout`)                                                                                                                                                           |
 | `error-utils.ts`        | `normalizeError` — consistent error normalization                                                                                                                                                 |
 | `sse-diagnostics.ts`    | Dev-only `SseStreamDiagnostics` — event counters, drop tracker, `window.__SSE_DIAG`                                                                                                               |
-| `sse-reader.ts`         | Shared SSE framing: `readSseEventStream` — pairs `event:`/`data:` lines across TCP chunks                                                                                                         |
+| `sse-reader.ts`         | Shared SSE framing: `readSseEventStream` — handles multiline `data:`, comments, blank-line dispatch, final unterminated frames, and TCP chunk boundaries. |
 | `constants.ts`          | UI timing constants (`FIT_VIEW_DURATION_MS`, `AUTO_LAYOUT_DEBOUNCE_MS`, etc.)                                                                                                                     |
 
 
@@ -519,7 +522,7 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 **Why SSE for generation.** Each hypothesis lane is a separate SSE stream. Events include `progress`, `activity`, `plan`, `file`, evaluator progress, and `done`. The client manages sequencing across lanes. **Dev diagnostics:** `SseStreamDiagnostics` (client, `src/lib/sse-diagnostics.ts`) tracks event counts, drops, and timing per stream — inspect via `window.__SSE_DIAG` in the browser console. Server-side `generate-execution` logs a write-count summary at stream close. `pi-session-event-bridge` uses `safeBridgeEmit` so async failures are logged instead of silently swallowed, and unknown Pi event types print in dev.
 
-**Why URL-backed preview.** Agentic runs produce a **virtual file tree**. The API serves it at `**/api/preview/sessions/:id/...`** so iframe `**src`** uses real relative URLs (multi-page `a href` works). Sessions are ephemeral (TTL), not durable storage.
+**Why URL-backed preview.** Agentic runs produce a **virtual file tree**. The API validates and canonicalizes relative file keys before serving them at `**/api/preview/sessions/:id/...`** so iframe `**src`** uses real relative URLs (multi-page `a href` works) without accepting absolute, traversal, duplicate-normalized, or no-entry file maps. Sessions are ephemeral (TTL), not durable storage.
 
 **Why `bundleVirtualFS` still exists.** Fallback when preview registration fails, and for **evaluator** `bundled_preview_html` context. It inlines `<link>` / `<script src>` from the entry HTML determined by `**resolvePreviewEntryPath`**.
 

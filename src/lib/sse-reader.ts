@@ -1,5 +1,5 @@
 /**
- * Shared SSE framing: decode stream chunks, split lines, pair `event:` with following `data:`.
+ * Shared SSE framing: decode stream chunks and dispatch complete SSE events.
  * Callers own JSON parse and business logic (preserves prior try/catch behavior).
  * Return `false` from `onDataLine` to stop reading and cancel the reader (fatal wire error).
  */
@@ -9,30 +9,60 @@ export async function readSseEventStream(
 ): Promise<void> {
   const decoder = new TextDecoder();
   let buffer = '';
-  /** Must persist across TCP chunks so `data:` lines always pair with the preceding `event:` line. */
   let currentEvent = '';
+  let dataLines: string[] = [];
+
+  const dispatch = async (): Promise<void | false> => {
+    if (dataLines.length === 0) return undefined;
+    const data = dataLines.join('\n');
+    dataLines = [];
+    const cont = await onDataLine(currentEvent, data);
+    if (cont === false) {
+      try {
+        await reader.cancel();
+      } catch {
+        /* ignore */
+      }
+      return false;
+    }
+    currentEvent = '';
+    return undefined;
+  };
 
   while (true) {
     const { done, value } = await reader.read();
-    if (done) break;
+    if (done) {
+      buffer += decoder.decode();
+      if (buffer.length > 0) {
+        const line = buffer.replace(/\r$/, '');
+        if (line === '') {
+          if ((await dispatch()) === false) return;
+        } else if (line.startsWith('event:')) {
+          if ((await dispatch()) === false) return;
+          currentEvent = line.slice(6).trimStart();
+        } else if (line.startsWith('data:')) {
+          dataLines.push(line.slice(5).replace(/^ /, ''));
+        }
+      }
+      await dispatch();
+      break;
+    }
 
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split('\n');
     buffer = lines.pop() ?? '';
 
     for (const line of lines) {
-      if (line.startsWith('event: ')) {
-        currentEvent = line.slice(7).trim();
-      } else if (line.startsWith('data: ')) {
-        const cont = await onDataLine(currentEvent, line.slice(6));
-        if (cont === false) {
-          try {
-            await reader.cancel();
-          } catch {
-            /* ignore */
-          }
-          return;
-        }
+      const trimmedLine = line.replace(/\r$/, '');
+      if (trimmedLine === '') {
+        if ((await dispatch()) === false) return;
+      } else if (trimmedLine.startsWith(':')) {
+        continue;
+      } else if (trimmedLine.startsWith('event:')) {
+        if ((await dispatch()) === false) return;
+        currentEvent = trimmedLine.slice(6).trimStart();
+      } else if (trimmedLine.startsWith('data:')) {
+        dataLines.push(trimmedLine.slice(5).replace(/^ /, ''));
       }
     }
   }

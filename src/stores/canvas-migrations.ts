@@ -622,5 +622,23 @@ export function migrateCanvasState(
   if (fromVersion < 28) s = migrateV27ToV28(s);
   if (fromVersion < 29) s = migrateV28ToV29(s);
 
-  return s;
+  return normalizeMigratedCanvasState(s);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeMigratedCanvasState(state: Record<string, unknown>): Record<string, unknown> {
+  const viewport = isRecord(state.viewport) ? state.viewport : FRESH_STATE.viewport;
+  return {
+    ...state,
+    nodes: Array.isArray(state.nodes) ? state.nodes : [],
+    edges: Array.isArray(state.edges) ? state.edges : [],
+    viewport,
+    showMiniMap: typeof state.showMiniMap === 'boolean' ? state.showMiniMap : FRESH_STATE.showMiniMap,
+    colGap: typeof state.colGap === 'number' && Number.isFinite(state.colGap)
+      ? state.colGap
+      : FRESH_STATE.colGap,
+  };
 }

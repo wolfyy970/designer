@@ -51,6 +51,7 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_DEV_API_PORT': JSON.stringify(devApiPortForClient),
     },
     test: {
+      setupFiles: ['src/test/setup.ts'],
       // `.vendor` holds upstream Pi sources; their test suite expects optional packages we don't install.
       exclude: [
         'node_modules/**',

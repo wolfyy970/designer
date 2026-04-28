@@ -49,8 +49,8 @@ Evaluators use separate LLM rubrics (browser / design / strategy / implementatio
 
 ## Client/server boundary (mental model)
 
-- **Browser:** Canvas UI, Zustand, IndexedDB for code/files, local **prompt assembly** (`compileVariantPrompts`) before generate, API client with **Zod-validated** JSON for stable endpoints and **SSE framing** helpers for generate streams.
-- **Server:** All provider keys, **incubate**, generate, hypothesis multiplex, design-system extract, logs. Hypothesis routes validate workspace payloads (including **DesignSpec** and **design system** shapes) before building context from `hypothesis-generation-pure.ts`.
+- **Browser:** Canvas UI, Zustand, IndexedDB for code/files, local **prompt assembly** (`compileVariantPrompts`) before generate, API client with shared Zod request/response contracts and SSE helpers for framing, JSON parsing, dispatch, and lane routing.
+- **Server:** All provider keys, **incubate**, generate, hypothesis multiplex, design-system extract, logs. Task and hypothesis routes validate shared wire contracts before building context from `hypothesis-generation-pure.ts`.
 
 ---
 

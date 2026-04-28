@@ -1,47 +1,21 @@
 import type { StateCreator } from 'zustand';
+import { INPUT_GHOST_NODE_TYPE } from '../../constants/canvas';
 import type { DesignSpec } from '../../types/spec';
-import {
-  type CanvasNodeType,
-  type WorkspaceEdge,
-  type WorkspaceNode,
-} from '../../types/workspace-graph';
 import {
   applyWorkspaceEdgeChanges,
   applyWorkspaceNodeChanges,
 } from '../../workspace/reactflow-adapter';
 import { generateId } from '../../lib/utils';
-import {
-  columnX,
-  computeAdjacentPosition,
-  computeDefaultPosition,
-  reconcileEphemeralGhostNodes,
-  snap,
-} from '../../lib/canvas-layout';
-import { NODE_TYPES, INPUT_NODE_TYPES } from '../../constants/canvas';
+import { reconcileEphemeralGhostNodes } from '../../lib/canvas-layout';
 import {
   isValidConnection as checkValidConnection,
-  buildAutoConnectEdges,
-  buildModelEdgeForNode,
-  findMissingPrerequisite,
 } from '../../lib/canvas-connections';
-import { getHypothesisRefId } from '../../lib/hypothesis-node-utils';
-import { PREREQUISITE_DEFAULTS } from '../../lib/constants';
 import {
-  syncDomainForNewEdge,
-  syncDomainForRemovedEdge,
-  syncDomainForRemovedNode,
-} from '../../workspace/domain-commands';
-import {
-  ensureHypothesisStrategyBinding,
-  hydrateDomainAfterSpecMaterialize,
-  removeCompilerPlanForNode,
-  removeCompilerStrategyByRefId,
-  resetSpecSectionForRemovedNode,
-  syncNodeDataToWorkspaceDomain,
-} from '../../workspace/canvas-orchestration';
-import {
+  planAddNodeMutation,
   planConnectionMutation,
   planEdgeRemoval,
+  planNodeDataUpdate,
+  planOptionalInputMaterialization,
   planRemoveNodeMutation,
   shouldIgnoreNodeChangeRemoval,
 } from '../../workspace/canvas-mutation-planner';
@@ -49,26 +23,15 @@ import {
   scheduleDebouncedAutoLayout,
   shouldScheduleAutoLayoutOnDimensionChange,
 } from '../canvas/dimension-layout-debounce';
-import { optionalInputSlotsWithSpecMaterial } from '../../lib/spec-materialize-sections';
 import type { CanvasStore } from './canvas-store-types';
-
-function syncRemovedEdges(
-  removed: readonly WorkspaceEdge[],
-  nodes: readonly WorkspaceNode[],
-): void {
-  for (const edge of removed) {
-    syncDomainForRemovedEdge(edge, nodes as WorkspaceNode[]);
-  }
-}
-
-function removeEdgesAndSync(
-  state: Pick<CanvasStore, 'edges' | 'nodes'>,
-  shouldRemove: (edge: WorkspaceEdge) => boolean,
-): WorkspaceEdge[] {
-  const plan = planEdgeRemoval(state.edges, shouldRemove);
-  syncRemovedEdges(plan.removedEdges, state.nodes);
-  return plan.nextEdges;
-}
+import {
+  commitAddNodeTransaction,
+  commitConnectionTransaction,
+  commitEdgeRemovalTransaction,
+  commitNodeDataTransaction,
+  commitRemoveNodeTransaction,
+  commitSpecMaterializeTransaction,
+} from './canvas-graph-transaction';
 
 export const createGraphSlice: StateCreator<
   CanvasStore,
@@ -105,8 +68,7 @@ export const createGraphSlice: StateCreator<
     const next = applyWorkspaceEdgeChanges(changes, prev);
     const nextIds = new Set(next.map((e) => e.id));
     const removed = prev.filter((e) => !nextIds.has(e.id));
-    syncRemovedEdges(removed, get().nodes);
-    set({ edges: next });
+    commitEdgeRemovalTransaction({ removedEdges: removed, nextEdges: next }, get().nodes, set);
   },
 
   isValidConnection: (connection) => {
@@ -114,7 +76,7 @@ export const createGraphSlice: StateCreator<
     const sourceNode = nodes.find((n) => n.id === connection.source);
     const targetNode = nodes.find((n) => n.id === connection.target);
     if (!sourceNode || !targetNode) return false;
-    if (sourceNode.type === 'inputGhost' || targetNode.type === 'inputGhost') {
+    if (sourceNode.type === INPUT_GHOST_NODE_TYPE || targetNode.type === INPUT_GHOST_NODE_TYPE) {
       return false;
     }
     return checkValidConnection(sourceNode.type ?? '', targetNode.type ?? '');
@@ -133,73 +95,31 @@ export const createGraphSlice: StateCreator<
       nodes,
       edges: get().edges,
     });
-    syncRemovedEdges(plan.removedEdges, nodes);
-    if (!plan.newEdge) return;
-    set({ edges: plan.nextEdges });
-    syncDomainForNewEdge(plan.newEdge, get().nodes, plan.nextEdges);
+    commitConnectionTransaction(plan, nodes, set);
   },
 
   addNode: (type, position) => {
     const state = get();
-
-    if (INPUT_NODE_TYPES.has(type) && state.nodes.some((n) => n.type === type)) return undefined;
-    if (type === NODE_TYPES.HYPOTHESIS && !state.nodes.some((n) => n.type === NODE_TYPES.INCUBATOR)) return undefined;
-
-    const id = `${type}-${generateId()}`;
-    const col = columnX(state.colGap);
-    const targetPos = snap(position ?? computeDefaultPosition(type, state.nodes, col));
-
-    const newNode: WorkspaceNode = {
-      id,
+    const plan = planAddNodeMutation({
       type,
-      position: targetPos,
-      data: { ...PREREQUISITE_DEFAULTS[type] },
-    };
-
-    let intermediateNodes = state.nodes;
-    const prereqType = findMissingPrerequisite(type, state.nodes);
-    if (prereqType) {
-      const prereqId = `${prereqType}-${generateId()}`;
-      const prereqNode: WorkspaceNode = {
-        id: prereqId,
-        type: prereqType as CanvasNodeType,
-        position: computeAdjacentPosition(targetPos, state.colGap),
-        data: PREREQUISITE_DEFAULTS[prereqType] ?? {},
-      };
-      intermediateNodes = [...intermediateNodes, prereqNode];
-    }
-
-    const structuralEdges = buildAutoConnectEdges(id, type, intermediateNodes);
-    const modelEdges = buildModelEdgeForNode(id, type, intermediateNodes);
-
-    if (type === NODE_TYPES.HYPOTHESIS) {
-      const pendingEdges = [...state.edges, ...structuralEdges, ...modelEdges];
-      const nodesWithNew: WorkspaceNode[] = [...intermediateNodes, newNode];
-      const refId = ensureHypothesisStrategyBinding(id, nodesWithNew, pendingEdges);
-      if (refId) {
-        newNode.data = { ...newNode.data, refId };
-      }
-    }
-
-    set({
-      nodes: reconcileEphemeralGhostNodes(
-        [...intermediateNodes, newNode],
-      ),
-      edges: [...state.edges, ...structuralEdges, ...modelEdges],
+      position,
+      nodes: state.nodes,
+      edges: state.edges,
+      colGap: state.colGap,
+      generateId,
     });
-    get().applyAutoLayout();
-    return id;
+    if (!plan) return undefined;
+
+    return commitAddNodeTransaction(plan, reconcileEphemeralGhostNodes, set, get().applyAutoLayout);
   },
 
   materializeOptionalInputNodesFromSpec: (spec: DesignSpec) => {
-    for (const slot of optionalInputSlotsWithSpecMaterial(spec)) {
-      if (get().nodes.some((n) => n.type === slot)) continue;
+    for (const slot of planOptionalInputMaterialization(spec, get().nodes)) {
       get().addNode(slot);
     }
     const nodes = get().nodes;
     const edges = get().edges;
-    hydrateDomainAfterSpecMaterialize(nodes, edges);
-    get().applyAutoLayout();
+    commitSpecMaterializeTransaction(nodes, edges, get().applyAutoLayout);
   },
 
   removeNode: (nodeId) => {
@@ -213,51 +133,25 @@ export const createGraphSlice: StateCreator<
       expandedPreviewId: state.expandedPreviewId,
     });
     if (!plan) return;
-    const { node } = plan;
 
-    resetSpecSectionForRemovedNode(node);
-
-    syncDomainForRemovedNode(node);
-
-    if (node.type === NODE_TYPES.INCUBATOR) {
-      removeCompilerPlanForNode(nodeId);
-    }
-
-    if (node.type === NODE_TYPES.HYPOTHESIS) {
-      const refId = getHypothesisRefId(node);
-      if (refId) removeCompilerStrategyByRefId(refId);
-    }
-
-    set({
-      nodes: plan.nextNodes,
-      edges: plan.nextEdges,
-      previewNodeIdMap: plan.nextPreviewNodeIdMap,
-      ...(plan.clearInspector ? { runInspectorPreviewNodeId: null as string | null } : {}),
-      ...(plan.clearExpanded ? { expandedPreviewId: null as string | null } : {}),
-    });
-    get().applyAutoLayout();
+    commitRemoveNodeTransaction(plan, nodeId, set, get().applyAutoLayout);
   },
 
   removeEdge: (edgeId) => {
     const state = get();
-    set({ edges: removeEdgesAndSync(state, (e) => e.id === edgeId) });
+    const plan = planEdgeRemoval(state.edges, (e) => e.id === edgeId);
+    commitEdgeRemovalTransaction(plan, state.nodes, set);
   },
 
   updateNodeData: (nodeId, data) => {
-    set({
-      nodes: get().nodes.map((n) =>
-        n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n,
-      ),
-    });
-    const n = get().nodes.find((x) => x.id === nodeId);
-    if (!n) return;
-    const merged = { ...n.data, ...data };
-    const mergedNode = { ...n, data: merged } as WorkspaceNode;
-    syncNodeDataToWorkspaceDomain(n, mergedNode, data);
+    const plan = planNodeDataUpdate({ nodeId, nodes: get().nodes, data });
+    if (!plan) return;
+    commitNodeDataTransaction(plan, data, set);
   },
 
   disconnectOutputs: (nodeId) => {
     const state = get();
-    set({ edges: removeEdgesAndSync(state, (e) => e.source === nodeId) });
+    const plan = planEdgeRemoval(state.edges, (e) => e.source === nodeId);
+    commitEdgeRemovalTransaction(plan, state.nodes, set);
   },
 });

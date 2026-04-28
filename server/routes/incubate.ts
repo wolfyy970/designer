@@ -1,9 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { DesignSpecSchema } from '../../src/types/spec.ts';
-import type { IncubatorPromptOptions } from '../../src/lib/prompts/incubator-user.ts';
 import { buildIncubatorUserPrompt } from '../../src/lib/prompts/incubator-user.ts';
-import { HypothesisStrategySchema, ThinkingOverrideSchema } from '../lib/hypothesis-schemas.ts';
 import { getPromptBody } from '../lib/prompt-resolution.ts';
 import { clampProviderModel } from '../lib/lockdown-model.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
@@ -18,39 +15,9 @@ import { generateId, now } from '../../src/lib/utils.ts';
 import { env } from '../env.ts';
 import { appendIncubateParsedLogEntry } from '../log-store.ts';
 import { runTaskAgentRoute } from '../lib/task-agent-route-runner.ts';
+import { IncubateRequestSchema } from '../../src/api/request-schemas.ts';
 
 const incubate = new Hono();
-
-const IncubatorPromptOptionsSchema = z.object({
-  count: z.number().int().positive().optional(),
-  existingStrategies: z.array(HypothesisStrategySchema).optional(),
-  internalContextDocument: z.string().optional(),
-  designSystemDocuments: z
-    .array(z.object({ nodeId: z.string(), title: z.string(), content: z.string() }))
-    .optional(),
-}) satisfies z.ZodType<IncubatorPromptOptions>;
-
-const IncubateRequestSchema = z.object({
-  spec: DesignSpecSchema,
-  providerId: z.string().min(1),
-  modelId: z.string().min(1),
-  referenceDesigns: z
-    .array(
-      z.object({
-        name: z.string(),
-        code: z.string(),
-      }),
-    )
-    .optional(),
-  supportsVision: z.boolean().optional(),
-  internalContextDocument: z.string().optional(),
-  designSystemDocuments: z
-    .array(z.object({ nodeId: z.string(), title: z.string(), content: z.string() }))
-    .optional(),
-  promptOptions: IncubatorPromptOptionsSchema.optional(),
-  /** Optional per-request thinking override. Missing → server falls back to the 'incubate' task default. */
-  thinking: ThinkingOverrideSchema.optional(),
-});
 
 /** LLMs often emit `range` as a string or as an array of discrete values — normalize to string. */
 const dimensionRangeSchema = z.union([

@@ -16,7 +16,7 @@ type DomainHypothesisV2 = DomainHypothesis & { agentMode?: LegacyAgentMode };
  * @param fromVersion — store version before migration
  */
 export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: number): unknown {
-  let p = persisted as Record<string, unknown>;
+  let p = isRecord(persisted) ? persisted : {};
   if (fromVersion < 2) {
     p = {
       ...p,
@@ -198,5 +198,25 @@ export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: n
     }
     p = { ...p, incubatorWirings };
   }
-  return p;
+  return normalizeWorkspaceDomainPersistShape(p);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function recordOrEmpty(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function normalizeWorkspaceDomainPersistShape(p: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...p,
+    incubatorWirings: recordOrEmpty(p.incubatorWirings),
+    incubatorModelNodeIds: recordOrEmpty(p.incubatorModelNodeIds),
+    hypotheses: recordOrEmpty(p.hypotheses),
+    modelProfiles: recordOrEmpty(p.modelProfiles),
+    designSystems: recordOrEmpty(p.designSystems),
+    previewSlots: recordOrEmpty(p.previewSlots),
+  };
 }

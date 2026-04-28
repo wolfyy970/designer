@@ -14,6 +14,9 @@ export const NODE_TYPES = {
 
 export type NodeType = (typeof NODE_TYPES)[keyof typeof NODE_TYPES];
 
+/** Ephemeral optional-input placeholder node type. Kept outside NODE_TYPES because it is not a domain node. */
+export const INPUT_GHOST_NODE_TYPE = 'inputGhost' as const;
+
 /**
  * Input node types (spec facets → incubator).
  * Single source of truth — use everywhere instead of duplicating the set.

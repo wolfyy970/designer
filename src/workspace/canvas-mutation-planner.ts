@@ -1,12 +1,28 @@
-import { EDGE_STATUS, EDGE_TYPES, NODE_TYPES, buildEdgeId } from '../constants/canvas';
-import { isEphemeralInputGhostId, reconcileEphemeralGhostNodes } from '../lib/canvas-layout';
-import type { WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
+import { EDGE_STATUS, EDGE_TYPES, INPUT_GHOST_NODE_TYPE, NODE_TYPES, buildEdgeId } from '../constants/canvas';
+import { INPUT_NODE_TYPES } from '../constants/canvas';
+import {
+  columnX,
+  computeAdjacentPosition,
+  computeDefaultPosition,
+  isEphemeralInputGhostId,
+  reconcileEphemeralGhostNodes,
+  snap,
+} from '../lib/canvas-layout';
+import {
+  buildAutoConnectEdges,
+  buildModelEdgeForNode,
+  findMissingPrerequisite,
+} from '../lib/canvas-connections';
+import { PREREQUISITE_DEFAULTS } from '../lib/constants';
+import { optionalInputSlotsWithSpecMaterial } from '../lib/spec-materialize-sections';
+import type { DesignSpec } from '../types/spec';
+import type { CanvasNodeType, WorkspaceEdge, WorkspaceNode } from '../types/workspace-graph';
 
 export const REMOVE_PROTECTED_NODE_TYPES = new Set<string>([
   NODE_TYPES.DESIGN_BRIEF,
   NODE_TYPES.MODEL,
   NODE_TYPES.INCUBATOR,
-  'inputGhost',
+  INPUT_GHOST_NODE_TYPE,
 ]);
 
 export function isProtectedNodeRemoval(node: WorkspaceNode | undefined): boolean {
@@ -132,5 +148,114 @@ export function planRemoveNodeMutation(input: {
     clearInspector:
       input.runInspectorPreviewNodeId != null && removeIds.has(input.runInspectorPreviewNodeId),
     clearExpanded: input.expandedPreviewId != null && removeIds.has(input.expandedPreviewId),
+  };
+}
+
+export interface AddNodePlan {
+  nodeId: string;
+  newNode: WorkspaceNode;
+  prerequisiteNode?: WorkspaceNode;
+  nodesBeforeNew: WorkspaceNode[];
+  nextNodes: WorkspaceNode[];
+  structuralEdges: WorkspaceEdge[];
+  modelEdges: WorkspaceEdge[];
+  nextEdges: WorkspaceEdge[];
+  hypothesisBinding?: {
+    nodeId: string;
+    nodesWithNew: WorkspaceNode[];
+    pendingEdges: WorkspaceEdge[];
+  };
+}
+
+export function planAddNodeMutation(input: {
+  type: CanvasNodeType;
+  position?: { x: number; y: number };
+  nodes: readonly WorkspaceNode[];
+  edges: readonly WorkspaceEdge[];
+  colGap: number;
+  generateId: () => string;
+}): AddNodePlan | undefined {
+  if (INPUT_NODE_TYPES.has(input.type) && input.nodes.some((node) => node.type === input.type)) {
+    return undefined;
+  }
+  if (
+    input.type === NODE_TYPES.HYPOTHESIS &&
+    !input.nodes.some((node) => node.type === NODE_TYPES.INCUBATOR)
+  ) {
+    return undefined;
+  }
+
+  const nodeId = `${input.type}-${input.generateId()}`;
+  const col = columnX(input.colGap);
+  const existingNodes = [...input.nodes];
+  const targetPos = snap(input.position ?? computeDefaultPosition(input.type, existingNodes, col));
+  const newNode: WorkspaceNode = {
+    id: nodeId,
+    type: input.type,
+    position: targetPos,
+    data: { ...PREREQUISITE_DEFAULTS[input.type] },
+  };
+
+  let nodesBeforeNew = existingNodes;
+  let prerequisiteNode: WorkspaceNode | undefined;
+  const prereqType = findMissingPrerequisite(input.type, existingNodes);
+  if (prereqType) {
+    prerequisiteNode = {
+      id: `${prereqType}-${input.generateId()}`,
+      type: prereqType as CanvasNodeType,
+      position: computeAdjacentPosition(targetPos, input.colGap),
+      data: PREREQUISITE_DEFAULTS[prereqType] ?? {},
+    };
+    nodesBeforeNew = [...nodesBeforeNew, prerequisiteNode];
+  }
+
+  const structuralEdges = buildAutoConnectEdges(nodeId, input.type, nodesBeforeNew);
+  const modelEdges = buildModelEdgeForNode(nodeId, input.type, nodesBeforeNew);
+  const nodesWithNew = [...nodesBeforeNew, newNode];
+  const nextEdges = [...input.edges, ...structuralEdges, ...modelEdges];
+
+  return {
+    nodeId,
+    newNode,
+    prerequisiteNode,
+    nodesBeforeNew,
+    nextNodes: reconcileEphemeralGhostNodes(nodesWithNew),
+    structuralEdges,
+    modelEdges,
+    nextEdges,
+    hypothesisBinding:
+      input.type === NODE_TYPES.HYPOTHESIS
+        ? { nodeId, nodesWithNew, pendingEdges: nextEdges }
+        : undefined,
+  };
+}
+
+export function planOptionalInputMaterialization(spec: DesignSpec, nodes: readonly WorkspaceNode[]): CanvasNodeType[] {
+  return optionalInputSlotsWithSpecMaterial(spec).filter(
+    (slot) => !nodes.some((node) => node.type === slot),
+  );
+}
+
+export interface NodeDataUpdatePlan {
+  previousNode: WorkspaceNode;
+  mergedNode: WorkspaceNode;
+  nextNodes: WorkspaceNode[];
+}
+
+export function planNodeDataUpdate(input: {
+  nodeId: string;
+  nodes: readonly WorkspaceNode[];
+  data: Record<string, unknown>;
+}): NodeDataUpdatePlan | undefined {
+  const previousNode = input.nodes.find((node) => node.id === input.nodeId);
+  if (!previousNode) return undefined;
+  const mergedNode = {
+    ...previousNode,
+    data: { ...previousNode.data, ...input.data },
+  } as WorkspaceNode;
+  return {
+    previousNode,
+    mergedNode,
+    nextNodes: input.nodes.map((node) => (node.id === input.nodeId ? mergedNode : node)),
   };
 }
