@@ -4,7 +4,7 @@
 
 **Stack:** Tailwind CSS v4 reads `@theme inline { … }` custom properties in `globals.css` as utilities (e.g. `bg-warning-subtle`, `text-file-html`, `font-display`). Body/UI sans, display serif, and monospace are wired in `@theme inline` (see **Typefaces**). React atoms live under `packages/design-system/components/ui/` and import as `@ds/components/ui/<name>` (TS path alias).
 
-**Canonical visual reference:** [`AutoDesigner Indigo Reference.html`](AutoDesigner%20Indigo%20Reference.html) — pixel-accurate spec for every atom/molecule/organism in both themes. Open side-by-side when building or reviewing canvas chrome.
+**Canonical visual reference:** [`Designer Indigo Reference.html`](Designer%20Indigo%20Reference.html) — pixel-accurate spec for every atom/molecule/organism in both themes. Open side-by-side when building or reviewing canvas chrome.
 
 ---
 
@@ -14,7 +14,7 @@
 |------|-------------------------|--------|----------|
 | **Body / UI** | `--font-sans` → default `font-sans` | **Inter Tight Variable** (latin subset in `src/fonts/latin-subsets.css`) | Node body text, inputs, buttons, labels — everything that isn't a title or numeric |
 | **Display** | `--font-display` → `font-display` | **Fraunces Variable** (same subsets file) | Canvas title in the header (italic), `h1.page-title`-style emphasis. **Not** used on node `<h3>` titles — those stay sans per the reference |
-| **Wordmark / logo** | `--font-logo` → `font-logo` | **Fraunces Variable** | AutoDesigner wordmark in `CanvasHeader` |
+| **Wordmark / logo** | `--font-logo` → `font-logo` | **Fraunces Variable** | Designer wordmark in `CanvasHeader` |
 | **Code / numerics** | `--font-mono` | **JetBrains Mono Variable** (same subsets file) | Chips, badges, per-dimension scorecard numerics, file paths, code blocks |
 
 The three-voice triad (serif display + tight sans body + mono numerics) is the system. **Never introduce a fourth family.** Do not list font file names elsewhere — change `tokens.json` `font.*` entries + the `@font-face` declarations in `src/fonts/latin-subsets.css` once; this table stays semantic.
@@ -149,6 +149,6 @@ These are the DS-side counterpart to the wider drift guards in the [blueprint](D
 ## Related docs
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — System layout, stores, API; links here for UI tokens.
-- [AutoDesigner Indigo Reference.html](AutoDesigner%20Indigo%20Reference.html) — canonical visual reference; every atom/state rendered pixel-accurate.
+- [Designer Indigo Reference.html](Designer%20Indigo%20Reference.html) — canonical visual reference; every atom/state rendered pixel-accurate.
 - [DESIGN-SYSTEM-BLUEPRINT.md](DESIGN-SYSTEM-BLUEPRINT.md) — portable DS blueprint (full spec; Phases 1–5 + hardening + Badge landed, remaining phases queued — atoms sweep, patterns, studio tier, kitchen-sink restructure, full drift guards, CI).
 - [DOCUMENTATION.md](DOCUMENTATION.md) — How documentation is organized (this file is in the README hub).

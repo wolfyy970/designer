@@ -4,7 +4,7 @@ export default defineConfig({
   build: {
     ssr: 'server/vercel-entry.ts',
     outDir: 'api',
-    emptyOutDir: false,
+    emptyOutDir: true,
     target: 'node22',
     minify: false,
     sourcemap: false,

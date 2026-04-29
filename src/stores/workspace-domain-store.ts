@@ -1,5 +1,5 @@
 /**
- * Canonical domain state for the Auto Designer workspace (client).
+ * Canonical domain state for the Designer workspace (client).
  * Graph/canvas projects from this; compile + generation read relations here.
  */
 import { create } from 'zustand';

@@ -75,6 +75,35 @@ export function scheduleCanvasFitViewToNodes(
   }, FIT_VIEW_DELAY_MS);
 }
 
+/**
+ * Focus one node after layout settles. Missing/empty ids consume the request without moving
+ * the viewport; callers can pass `hasNode` when the target may have been removed.
+ */
+export function scheduleCanvasFocusToNode(
+  fitView: (options?: FitViewOptions) => void | Promise<boolean>,
+  nodeId: string | null | undefined,
+  afterFocus?: () => void,
+  hasNode?: (nodeId: string) => boolean,
+): ReturnType<typeof setTimeout> | undefined {
+  const id = nodeId?.trim();
+  if (!id) {
+    afterFocus?.();
+    return undefined;
+  }
+  return setTimeout(() => {
+    if (hasNode?.(id) === false) {
+      afterFocus?.();
+      return;
+    }
+    void fitView({
+      ...DEFAULT_FIT_VIEW_OPTIONS,
+      nodes: [{ id }],
+      maxZoom: SUBSET_FIT_VIEW_MAX_ZOOM,
+    });
+    afterFocus?.();
+  }, FIT_VIEW_DELAY_MS);
+}
+
 export type ScheduleCanvasFitViewOptions = FitViewOptions | (() => FitViewOptions);
 
 /**

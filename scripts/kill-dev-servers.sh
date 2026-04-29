@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop local Auto Designer dev processes listening on the default API and Vite ports.
+# Stop local Designer dev processes listening on the default API and Vite ports.
 # Defaults must match server/dev-defaults.ts (PORT / VITE_PORT fallbacks).
 set -euo pipefail
 

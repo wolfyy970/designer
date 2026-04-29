@@ -30,7 +30,10 @@ export interface CanvasStore {
   previewNodeIdMap: Map<string, string>;
   connectingFrom: { nodeType: CanvasNodeType; handleType: 'source' | 'target' } | null;
   pendingFitViewAfterTemplate: boolean;
+  pendingFocusNodeId: string | null;
   consumePendingFitView: () => void;
+  requestNodeFocus: (nodeId: string) => void;
+  consumePendingNodeFocus: () => void;
 
   onNodesChange: (changes: Parameters<typeof applyWorkspaceNodeChanges>[0]) => void;
   onEdgesChange: (changes: Parameters<typeof applyWorkspaceEdgeChanges>[0]) => void;

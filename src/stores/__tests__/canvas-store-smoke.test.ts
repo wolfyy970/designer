@@ -2,7 +2,36 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { NODE_TYPES } from '../../constants/canvas';
 import { useCanvasStore } from '../canvas-store';
 import { useWorkspaceDomainStore } from '../workspace-domain-store';
+import type { DesignSpec, SpecSection } from '../../types/spec';
 import type { WorkspaceNode } from '../../types/workspace-graph';
+
+function section(id: SpecSection['id'], content = ''): SpecSection {
+  return {
+    id,
+    content,
+    images: [],
+    lastModified: '2026-01-01T00:00:00.000Z',
+  };
+}
+
+function minimalSpec(sections: Partial<DesignSpec['sections']>): DesignSpec {
+  return {
+    id: 'spec-1',
+    title: 'Spec',
+    sections: {
+      'design-brief': section('design-brief'),
+      'research-context': section('research-context'),
+      'objectives-metrics': section('objectives-metrics'),
+      'design-constraints': section('design-constraints'),
+      'existing-design': section('existing-design'),
+      'design-system': section('design-system'),
+      ...sections,
+    },
+    createdAt: '2026-01-01T00:00:00.000Z',
+    lastModified: '2026-01-01T00:00:00.000Z',
+    version: 1,
+  };
+}
 
 describe('canvas-store smoke', () => {
   beforeEach(() => {
@@ -54,6 +83,44 @@ describe('canvas-store smoke', () => {
     const nodes = useCanvasStore.getState().nodes;
     expect(nodes.some((n) => n.id === 'research-1')).toBe(false);
     expect(nodes.some((n) => n.type === 'inputGhost' && n.data.targetType === NODE_TYPES.RESEARCH_CONTEXT)).toBe(true);
+  });
+
+  it('initializes new canvases with a connected Design System node', () => {
+    useCanvasStore.getState().initializeCanvas();
+
+    const { nodes, edges } = useCanvasStore.getState();
+    const model = nodes.find((node) => node.type === NODE_TYPES.MODEL);
+    const designSystem = nodes.find((node) => node.type === NODE_TYPES.DESIGN_SYSTEM);
+    const incubator = nodes.find((node) => node.type === NODE_TYPES.INCUBATOR);
+
+    expect(designSystem).toBeDefined();
+    expect(nodes.some((node) => node.type === 'inputGhost' && node.data.targetType === NODE_TYPES.DESIGN_SYSTEM)).toBe(false);
+    expect(edges.some((edge) => edge.source === model?.id && edge.target === designSystem?.id)).toBe(true);
+    expect(edges.some((edge) => edge.source === designSystem?.id && edge.target === incubator?.id)).toBe(true);
+    expect(useWorkspaceDomainStore.getState().incubatorWirings[incubator!.id]?.designSystemNodeIds).toEqual([designSystem!.id]);
+  });
+
+  it('records and consumes an ephemeral node focus request', () => {
+    const newId = useCanvasStore.getState().addNode(NODE_TYPES.RESEARCH_CONTEXT);
+    expect(newId).toBeDefined();
+
+    useCanvasStore.getState().requestNodeFocus(newId!);
+    expect(useCanvasStore.getState().pendingFocusNodeId).toBe(newId);
+
+    useCanvasStore.getState().consumePendingNodeFocus();
+    expect(useCanvasStore.getState().pendingFocusNodeId).toBeNull();
+  });
+
+  it('does not request node focus when materializing optional inputs from a spec', () => {
+    useCanvasStore.getState().materializeOptionalInputNodesFromSpec(
+      minimalSpec({
+        'research-context': section('research-context', 'Known research'),
+      }),
+    );
+
+    const { nodes, pendingFocusNodeId } = useCanvasStore.getState();
+    expect(nodes.some((n) => n.type === NODE_TYPES.RESEARCH_CONTEXT)).toBe(true);
+    expect(pendingFocusNodeId).toBeNull();
   });
 
   it('removeEdge detaches model and design-system hypothesis wiring from the domain store', () => {

@@ -35,6 +35,7 @@ const initialCanvasState: Pick<
   | 'previewNodeIdMap'
   | 'connectingFrom'
   | 'pendingFitViewAfterTemplate'
+  | 'pendingFocusNodeId'
 > = {
   nodes: [],
   edges: [],
@@ -48,6 +49,7 @@ const initialCanvasState: Pick<
   previewNodeIdMap: new Map<string, string>(),
   connectingFrom: null,
   pendingFitViewAfterTemplate: false,
+  pendingFocusNodeId: null,
 };
 
 export const useCanvasStore = create<CanvasStore>()(

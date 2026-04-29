@@ -21,9 +21,13 @@ export const createUiSlice: StateCreator<
     | 'setEdgeStatusByTarget'
     | 'clearPreviewNodeIdMap'
     | 'consumePendingFitView'
+    | 'requestNodeFocus'
+    | 'consumePendingNodeFocus'
   >
 > = (set, get) => ({
   consumePendingFitView: () => set({ pendingFitViewAfterTemplate: false }),
+  requestNodeFocus: (nodeId) => set({ pendingFocusNodeId: nodeId }),
+  consumePendingNodeFocus: () => set({ pendingFocusNodeId: null }),
 
   setViewport: (viewport) => set({ viewport }),
 

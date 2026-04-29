@@ -19,6 +19,7 @@ import { INPUT_GHOST_NODE_TYPE, PREVIEW_NODE_GENERATING_Z_INDEX } from '../../co
 import { getPreviewNodeData } from '../../lib/canvas-node-data';
 import {
   scheduleCanvasFitView,
+  scheduleCanvasFocusToNode,
   DEFAULT_FIT_VIEW_OPTIONS,
   fitViewOptionsWithInspectorDock,
 } from '../../lib/canvas-fit-view';
@@ -117,6 +118,8 @@ function CanvasInner() {
   const setConnectingFrom = useCanvasStore((s) => s.setConnectingFrom);
   const pendingFitViewAfterTemplate = useCanvasStore((s) => s.pendingFitViewAfterTemplate);
   const consumePendingFitView = useCanvasStore((s) => s.consumePendingFitView);
+  const pendingFocusNodeId = useCanvasStore((s) => s.pendingFocusNodeId);
+  const consumePendingNodeFocus = useCanvasStore((s) => s.consumePendingNodeFocus);
   const runInspectorPreviewNodeId = useCanvasStore((s) => s.runInspectorPreviewNodeId);
 
   useEffect(() => {
@@ -128,6 +131,19 @@ function CanvasInner() {
     const id = scheduleCanvasFitView(fitView, consumePendingFitView);
     return () => window.clearTimeout(id);
   }, [pendingFitViewAfterTemplate, fitView, consumePendingFitView]);
+
+  useEffect(() => {
+    if (!pendingFocusNodeId) return;
+    const id = scheduleCanvasFocusToNode(
+      fitView,
+      pendingFocusNodeId,
+      consumePendingNodeFocus,
+      (nodeId) => getNodes().some((node) => node.id === nodeId),
+    );
+    return () => {
+      if (id != null) window.clearTimeout(id);
+    };
+  }, [pendingFocusNodeId, fitView, getNodes, consumePendingNodeFocus]);
 
   const runInspectorFitPrevRef = useRef<string | null>(null);
   useEffect(() => {

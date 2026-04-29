@@ -38,7 +38,7 @@ export function Header({ state }: { state: RunnerState }) {
       <Box flexDirection="row" justifyContent="space-between" width="100%">
         <Box flexDirection="column" marginRight={1}>
           <Gradient name="vice">
-            <Text bold>Auto Designer meta-harness</Text>
+            <Text bold>Designer meta-harness</Text>
           </Gradient>
           <Text color="magenta">{modeLine}</Text>
         </Box>

@@ -16,7 +16,7 @@ Read [PRODUCT.md § North Star](PRODUCT.md#north-star) before making any design 
 
 **Patch** (`x.y.Z` last segment): auto-incremented on every local `**git commit`** by Husky (`.husky/pre-commit` → `scripts/bump-patch-version.ts`, logic in `src/lib/semver-bump-patch.ts`). **Major and minor** (`x.y`) change only when you edit `**version`** in root `**package.json`** manually (e.g. `0.4.0`); the next commit then bumps patch to `0.4.1`. Skip the bump for a one-off commit: `SKIP_PATCH_BUMP=1 git commit ...`. CI (`CI=true`) never runs the bump.
 
-The header's **date/time** comes from `**git log -1 --format=%cI`** (committer time of `HEAD`) when Vite loads — no manual timestamp. If you ship a tree **without** `.git`, set optional `**releasedAt`** in `package.json` (ISO-8601); `vite.config.ts` falls back to it. Display is always **America/New_York** (EST/EDT) in the UI.
+The header's **date/time** comes from `**git log -1 --format=%cI`** (committer time of `HEAD`) when Vite loads — no manual timestamp. If you ship a tree **without** `.git`, set optional `**releasedAt`** in `package.json` (ISO-8601) for a fixed timestamp; otherwise `vite.config.ts` falls back to the build time. Display is always **America/New_York** (EST/EDT) in the UI.
 
 **Version and timestamp in the header are baked in when Vite starts** (`vite.config.ts` `define`). After you change `package.json` or make a new `git commit`, **restart `pnpm dev`** / `**pnpm dev:all**` (or run `pnpm build` / `pnpm preview`) so the canvas header shows the updated `v…` and Eastern time — a running dev server does not pick up new values on its own.
 

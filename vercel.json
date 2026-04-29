@@ -1,9 +1,13 @@
 {
   "buildCommand": "pnpm build && pnpm vercel:function:build",
   "outputDirectory": "dist",
+  "env": {
+    "NODEJS_HELPERS": "0"
+  },
   "functions": {
     "api/[[...route]].js": {
-      "includeFiles": "{config,prompts,skills}/**"
+      "includeFiles": "{config,prompts,skills}/**",
+      "maxDuration": 800
     }
   },
   "routes": [

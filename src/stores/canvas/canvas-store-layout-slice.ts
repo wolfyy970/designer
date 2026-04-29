@@ -36,6 +36,7 @@ export const createLayoutSlice: StateCreator<
     const col = columnX(state.colGap);
     const briefId = `designBrief-${generateId()}`;
     const modelId = `model-${generateId()}`;
+    const designSystemId = `designSystem-${generateId()}`;
     const incubatorId = `incubator-${generateId()}`;
 
     const coreNodes = [
@@ -52,9 +53,15 @@ export const createLayoutSlice: StateCreator<
         data: { ...PREREQUISITE_DEFAULTS['model'] },
       },
       {
+        id: designSystemId,
+        type: 'designSystem' as const,
+        position: snap({ x: col.incubator, y: 280 }),
+        data: {},
+      },
+      {
         id: incubatorId,
         type: 'incubator' as const,
-        position: snap({ x: col.incubator, y: 400 }),
+        position: snap({ x: col.incubator, y: 560 }),
         data: {},
       },
     ];
@@ -71,6 +78,20 @@ export const createLayoutSlice: StateCreator<
         {
           id: buildEdgeId(modelId, incubatorId),
           source: modelId,
+          target: incubatorId,
+          type: EDGE_TYPES.DATA_FLOW,
+          data: { status: EDGE_STATUS.IDLE },
+        },
+        {
+          id: buildEdgeId(modelId, designSystemId),
+          source: modelId,
+          target: designSystemId,
+          type: EDGE_TYPES.DATA_FLOW,
+          data: { status: EDGE_STATUS.IDLE },
+        },
+        {
+          id: buildEdgeId(designSystemId, incubatorId),
+          source: designSystemId,
           target: incubatorId,
           type: EDGE_TYPES.DATA_FLOW,
           data: { status: EDGE_STATUS.IDLE },
@@ -95,6 +116,7 @@ export const createLayoutSlice: StateCreator<
       lineageNodeIds: new Set(),
       lineageEdgeIds: new Set(),
       pendingFitViewAfterTemplate: false,
+      pendingFocusNodeId: null,
     });
     get().initializeCanvas();
   },
@@ -109,5 +131,6 @@ export const createLayoutSlice: StateCreator<
       lineageNodeIds: new Set(),
       lineageEdgeIds: new Set(),
       pendingFitViewAfterTemplate: false,
+      pendingFocusNodeId: null,
     }),
 });

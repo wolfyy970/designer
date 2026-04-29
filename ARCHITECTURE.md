@@ -574,7 +574,8 @@ During a meta-harness **run**, repo `**skills/`** is **restored** from per-sessi
 **Vercel:**
 
 - `vercel.json` configures static output from `dist/` and API routes via `api/[[...route]].js`
-- `api/[[...route]].js` exports `maxDuration = 800` for Vercel Pro / Fluid Compute compatibility streams
+- `api/[[...route]].js` exports `maxDuration = 800`, and `vercel.json` repeats `maxDuration = 800` for Vercel Pro / Fluid Compute compatibility streams
+- `vercel.json` sets `NODEJS_HELPERS=0`; this is required by the Hono Node/Vercel adapter so SSE routes use raw request/response streams instead of Vercel's Node helper layer
 - Set `OPENROUTER_API_KEY` as a Vercel environment variable
 - Set `ALLOWED_ORIGINS` when the browser origin is not same-origin with `/api`
 - Set `PREVIEW_PUBLIC_URL` when server-side browser evaluation must call a public deployment URL

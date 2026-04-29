@@ -12,13 +12,14 @@ import { DEFAULT_DEV_API_PORT, DEFAULT_DEV_CLIENT_PORT } from './server/dev-defa
 const rootDir = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-8')) as {
   version?: string;
-  /** Optional fallback when `.git` is missing (e.g. tarball) */
+  /** Optional fallback when `.git` is missing and a fixed release timestamp is preferred */
   releasedAt?: string;
 };
 
 /**
- * Commit timestamp of HEAD — updates automatically on every commit (no manual date).
- * Uses committer date, strict ISO (`git log -1 --format=%cI`).
+ * Release timestamp for display.
+ * Prefer HEAD committer time when `.git` is available; Vercel CLI uploads do not
+ * include `.git`, so fall back to package metadata and finally the build time.
  */
 function releasedAtIsoFromGitOrPkg(): string {
   try {
@@ -31,7 +32,10 @@ function releasedAtIsoFromGitOrPkg(): string {
   } catch {
     // Not a git repo, git missing, or empty history
   }
-  return typeof pkg.releasedAt === 'string' ? pkg.releasedAt : '';
+  if (typeof pkg.releasedAt === 'string' && pkg.releasedAt.trim()) {
+    return pkg.releasedAt;
+  }
+  return new Date().toISOString();
 }
 
 const releasedAtIso = releasedAtIsoFromGitOrPkg();

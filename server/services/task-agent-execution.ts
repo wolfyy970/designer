@@ -84,6 +84,13 @@ export async function executeTaskAgentStream(
   let sandboxFileCount = 0;
 
   const gate = options.writeGate ?? createWriteGate();
+  const logContext = {
+    sessionType: input.sessionType,
+    correlationId,
+    providerId: input.providerId,
+    modelId: input.modelId,
+  };
+  const log = env.isDev ? console.debug : console.info;
 
   const write = async (event: string, data: Record<string, unknown>) => {
     const payload = JSON.stringify(data);
@@ -116,8 +123,11 @@ export async function executeTaskAgentStream(
   }
 
   try {
+    log('[task-agent] acquired', logContext);
     await write(SSE_EVENT_NAMES.phase, { phase: 'building' });
+    log('[task-agent] first_sse_write', logContext);
 
+    log('[task-agent] pi_session_start', logContext);
     const { sessionResult, skillKeys } = await runTaskAgentPiSession(
       {
         userPrompt: input.userPrompt,
@@ -131,6 +141,11 @@ export async function executeTaskAgentStream(
       },
       writeEvent,
     );
+    log('[task-agent] pi_session_end', {
+      ...logContext,
+      hasResult: Boolean(sessionResult),
+      skillCount: skillKeys.length,
+    });
 
     if (!sessionResult) {
       errorMessage = 'Agent session completed without result.';
@@ -185,6 +200,13 @@ export async function executeTaskAgentStream(
     }
     throw err;
   } finally {
+    log('[task-agent] finished', {
+      ...logContext,
+      durationMs: Date.now() - startedAt,
+      outcome,
+      resultFile: resultFileUsed,
+      sandboxFileCount,
+    });
     emitTaskRunLine({
       sessionType: input.sessionType,
       correlationId,

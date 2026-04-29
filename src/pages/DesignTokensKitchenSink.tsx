@@ -218,7 +218,7 @@ export function DesignTokensKitchenSinkContent({ embedded = false }: { embedded?
             </div>
             <div>
               <p className="label mb-1">Wordmark — font-logo</p>
-              <p className="font-logo text-base font-medium tracking-wide text-fg">AutoDesigner</p>
+              <p className="font-logo text-base font-medium tracking-wide text-fg">Designer</p>
               <p className="mt-1 text-nano text-fg-muted">
                 <span className="font-mono">--font-logo:</span> {fontLogo}
               </p>

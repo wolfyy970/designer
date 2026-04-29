@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
+  scheduleCanvasFocusToNode,
   scheduleCanvasFitView,
   scheduleCanvasFitViewToNodes,
   SUBSET_FIT_VIEW_MAX_ZOOM,
@@ -78,5 +79,43 @@ describe('scheduleCanvasFitViewToNodes', () => {
     vi.runAllTimers();
     expect(fitView).toHaveBeenCalledTimes(1);
     expect(fitView.mock.calls[0][0]).not.toHaveProperty('nodes');
+  });
+});
+
+describe('scheduleCanvasFocusToNode', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('focuses a single node with the shared subset zoom cap', () => {
+    const fitView = vi.fn();
+    const afterFocus = vi.fn();
+    scheduleCanvasFocusToNode(fitView, 'node-1', afterFocus);
+    vi.runAllTimers();
+    expect(fitView).toHaveBeenCalledTimes(1);
+    expect(fitView.mock.calls[0][0]?.nodes).toEqual([{ id: 'node-1' }]);
+    expect(fitView.mock.calls[0][0]?.maxZoom).toBe(SUBSET_FIT_VIEW_MAX_ZOOM);
+    expect(afterFocus).toHaveBeenCalledTimes(1);
+  });
+
+  it('consumes an empty focus request without moving the viewport', () => {
+    const fitView = vi.fn();
+    const afterFocus = vi.fn();
+    const timerId = scheduleCanvasFocusToNode(fitView, ' ', afterFocus);
+    expect(timerId).toBeUndefined();
+    expect(fitView).not.toHaveBeenCalled();
+    expect(afterFocus).toHaveBeenCalledTimes(1);
+  });
+
+  it('consumes a missing-node focus request without moving the viewport', () => {
+    const fitView = vi.fn();
+    const afterFocus = vi.fn();
+    scheduleCanvasFocusToNode(fitView, 'missing-node', afterFocus, () => false);
+    vi.runAllTimers();
+    expect(fitView).not.toHaveBeenCalled();
+    expect(afterFocus).toHaveBeenCalledTimes(1);
   });
 });

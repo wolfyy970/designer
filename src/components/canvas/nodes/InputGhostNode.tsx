@@ -19,7 +19,9 @@ function InputGhostNode({ data }: NodeProps<InputGhostFlowNode>) {
     (e: React.PointerEvent) => {
       e.stopPropagation();
       e.preventDefault();
-      useCanvasStore.getState().addNode(targetType);
+      const store = useCanvasStore.getState();
+      const nodeId = store.addNode(targetType);
+      if (nodeId) store.requestNodeFocus(nodeId);
     },
     [targetType],
   );

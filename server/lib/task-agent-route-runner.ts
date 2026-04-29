@@ -41,20 +41,27 @@ export function runTaskAgentRoute<TBody extends TaskAgentRouteBody>(
   return streamSSE(c, async (stream) => {
     const abortSignal = c.req.raw.signal;
     const correlationId = crypto.randomUUID();
-    if (env.isDev) {
-      console.debug(`[${options.routeLabel}] request`, {
-        correlationId,
-        providerId: options.body.providerId,
-        modelId: options.body.modelId,
-        ...options.debugPayload?.(options.body),
-      });
-    }
+    const logContext = {
+      route: options.routeLabel,
+      correlationId,
+      providerId: options.body.providerId,
+      modelId: options.body.modelId,
+      ...options.debugPayload?.(options.body),
+    };
+    const log = env.isDev ? console.debug : console.info;
+    log(`[task-route] request`, logContext);
     await runTaskAgentSseBody(stream, async ({ write, allocId, gate }) => {
       const thinking = resolveThinkingConfig(
         options.thinkingTask,
         options.body.modelId,
         options.body.thinking,
       );
+      log(`[task-route] execute`, {
+        route: options.routeLabel,
+        correlationId,
+        thinkingLevel: thinking?.level,
+        thinkingBudgetTokens: thinking?.budgetTokens,
+      });
       const taskResult = await executeTaskAgentStream(
         stream,
         {
@@ -72,6 +79,12 @@ export function runTaskAgentRoute<TBody extends TaskAgentRouteBody>(
         { allocId, writeGate: gate },
       );
 
+      log(`[task-route] result`, {
+        route: options.routeLabel,
+        correlationId,
+        resultFile: taskResult.resultFile,
+        fileCount: Object.keys(taskResult.files).length,
+      });
       await options.onTaskResult(taskResult, { write, correlationId });
     });
   });
