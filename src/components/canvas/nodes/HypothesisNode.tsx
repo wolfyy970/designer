@@ -1,6 +1,6 @@
 import { memo, useCallback, useState } from 'react';
 import { type NodeProps, type Node, Handle, Position } from '@xyflow/react';
-import { FileText, Pencil, X } from 'lucide-react';
+import { Download, Pencil, X } from 'lucide-react';
 import { useIncubatorStore, findStrategy } from '../../../stores/incubator-store';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import { countActiveGenerationSlots, useGenerationStore } from '../../../stores/generation-store';
@@ -244,11 +244,15 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
                 e.preventDefault();
                 e.stopPropagation();
               }}
-              onClick={handleExportDebugMarkdown}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleExportDebugMarkdown();
+              }}
               className="nodrag shrink-0 rounded p-0.5 text-fg-faint transition-colors hover:text-fg-muted"
               title="Download hypothesis debug snapshot (Markdown)"
+              aria-label="Download hypothesis debug snapshot"
             >
-              <FileText size={10} />
+              <Download size={10} />
             </button>
           </>
         ) : (
@@ -272,11 +276,15 @@ function HypothesisNode({ id: nodeId, data, selected }: NodeProps<HypothesisNode
                 e.preventDefault();
                 e.stopPropagation();
               }}
-              onClick={handleExportDebugMarkdown}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleExportDebugMarkdown();
+              }}
               className="nodrag shrink-0 rounded p-0.5 text-fg-faint transition-colors hover:text-fg-muted"
               title="Download hypothesis debug snapshot (Markdown)"
+              aria-label="Download hypothesis debug snapshot"
             >
-              <FileText size={10} />
+              <Download size={10} />
             </button>
           </div>
         )}

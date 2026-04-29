@@ -14,7 +14,7 @@ vi.mock('../../lib/agentic-concurrency.ts', () => ({
   releaseAgenticSlot: mocks.releaseAgenticSlot,
 }));
 
-vi.mock('../pi-agent-service.ts', () => ({
+vi.mock('../agent-runtime.ts', () => ({
   runDesignAgentSession: mocks.runDesignAgentSession,
 }));
 

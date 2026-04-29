@@ -1,4 +1,4 @@
-import { normalizeError } from '../../src/lib/error-utils.ts';
+import { normalizeProviderError } from '../lib/provider-error-normalize.ts';
 import { env } from '../env.ts';
 import { runAgenticWithEvaluation } from './agentic-orchestrator.ts';
 import type { GenerateStreamBody } from '../lib/generate-stream-schema.ts';
@@ -140,8 +140,8 @@ async function tryWriteSseErrorTail(
 ): Promise<void> {
   const payload = JSON.stringify(
     options.laneIndex !== undefined
-      ? { error: normalizeError(primaryErr), laneIndex: options.laneIndex }
-      : { error: normalizeError(primaryErr) },
+      ? { error: normalizeProviderError(primaryErr), laneIndex: options.laneIndex }
+      : { error: normalizeProviderError(primaryErr) },
   );
   try {
     await gate.enqueue(async () => {

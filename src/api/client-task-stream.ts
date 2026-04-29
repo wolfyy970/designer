@@ -20,6 +20,14 @@ import {
 import { API_BASE } from './client-shared.ts';
 import { dispatchGenerateStreamEvent, type GenerateStreamCallbacks } from './client-sse.ts';
 import {
+  isLikelyStreamConnectionLoss,
+  lostStreamConnectionError,
+} from './client-sse-lifecycle.ts';
+import {
+  isOpenRouterCreditExhaustionLike,
+  notifyOpenRouterBudgetRefresh,
+} from '../lib/openrouter-budget.ts';
+import {
   DesignSystemExtractResponseSchema,
   InputsGenerateResponseSchema,
   InternalContextGenerateResponseSchema,
@@ -36,12 +44,22 @@ async function postTaskStream(
   responseSchema: z.ZodType<{ result: string }>,
   options?: PostTaskStreamOptions,
 ): Promise<{ result: string }> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: options?.signal,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: options?.signal,
+    });
+  } catch (err) {
+    if (isLikelyStreamConnectionLoss(err, options?.signal)) {
+      const lost = lostStreamConnectionError();
+      options?.agentic?.onError?.(lost.message);
+      throw lost;
+    }
+    throw err;
+  }
   if (!response.ok) {
     const text = await response.text();
     throw new Error(parseApiErrorBody(text));
@@ -63,6 +81,9 @@ async function postTaskStream(
           taskPayload = data;
         } else if (eventName === SSE_EVENT_NAMES.error && typeof data.error === 'string') {
           errorMsg = data.error;
+          if (isOpenRouterCreditExhaustionLike(data.error)) {
+            notifyOpenRouterBudgetRefresh();
+          }
           options?.agentic?.onError?.(data.error);
         } else if (eventName === SSE_EVENT_NAMES.done) {
           options?.agentic?.onDone?.();
@@ -78,6 +99,13 @@ async function postTaskStream(
         }
       }
     });
+  } catch (err) {
+    if (isLikelyStreamConnectionLoss(err, options?.signal)) {
+      const lost = lostStreamConnectionError();
+      options?.agentic?.onError?.(lost.message);
+      throw lost;
+    }
+    throw err;
   } finally {
     diag.logClose();
   }

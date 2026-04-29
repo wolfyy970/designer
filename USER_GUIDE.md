@@ -32,7 +32,7 @@ Both processes are needed for local development.
 
 **Only Vite running:** The UI blocks on `**GET /api/config`** until the API (default **`PORT`** **4731**) answers—use `**pnpm dev:all`** or run `**pnpm dev:server`** alongside `**pnpm dev`**. The dev design-token page `**/dev/design-tokens**` is the only route that skips that check.
 
-**Saved canvases and browser storage:** The app keeps your **active spec** and **Canvas manager** library in **localStorage** for the origin you use (default dev: `**http://localhost:4732**`; not `127.0.0.1` — that is a separate origin to the browser). The URL includes the **port**: opening the app on a different port is a different site, so lists and the current canvas can look empty. Vite uses **`strictPort`** for the dev URL; if Vite won’t start, run `pnpm dev:kill` and retry. Override with **`VITE_PORT`** in `.env.local` (see `.env.example`).
+**Saved canvases and browser storage:** The app keeps your active workspace in browser storage for the origin you use (default dev: `**http://localhost:4732**`; not `127.0.0.1` — that is a separate origin to the browser). Canvas Manager stores the lightweight list in **localStorage** and full canvas snapshots/artifacts in **IndexedDB**. The URL includes the **port**: opening the app on a different port is a different site, so lists and the current canvas can look empty. Vite uses **`strictPort`** for the dev URL; if Vite won’t start, run `pnpm dev:kill` and retry. Override with **`VITE_PORT`** in `.env.local` (see `.env.example`).
 
 ## Dev logs
 
@@ -198,10 +198,13 @@ When off, drag nodes freely.
 
 Click **Canvas Manager** in the header:
 
-- **Save Current** — Snapshot the active canvas to localStorage
+- **Save Current** — Snapshot the active canvas to the browser library
 - **New Canvas** — Saves the current canvas, creates a blank canvas
 - **Duplicate** — Creates a copy for iteration
-- **Export JSON** — Downloads the canvas as a `.json` file
-- **Import JSON** — Loads a previously exported canvas
-- **Load** — Switch to a saved canvas
-- **Delete** — Remove a saved canvas from localStorage
+- **Export Canvas** — Downloads a self-contained canvas `.json` bundle where practical
+- **Import Canvas** — Loads a previously exported canvas bundle; legacy spec-only JSON still imports
+- **Load** — Saves the current canvas, then switches to a saved canvas
+- **Reload saved** — Explicitly discards unsaved active changes and reloads the saved copy
+- **Delete** — Remove a saved canvas from the browser library
+
+Saved canvases include the graph, viewport, inputs, model/settings nodes, domain wiring, incubator state, generated preview metadata, version selections, best-pick overrides, and generated artifacts. Purely transient UI state such as open modals, hover/focus, and live stream internals is not saved. Replacing actions stop active runs before checkpointing so late stream callbacks cannot mutate the newly loaded canvas.

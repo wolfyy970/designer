@@ -1,17 +1,20 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Settings, FolderOpen, Pencil, RotateCcw } from 'lucide-react';
 import { ThemeToggle } from '@ds/components/ui/theme-toggle';
 import { useSpecStore } from '../../stores/spec-store';
-import { useCanvasStore } from '../../stores/canvas-store';
 import SpecManager from '../shared/SpecManager';
 import SettingsModal from '../shared/SettingsModal';
-import { scheduleLibraryTitleSyncIfEntryExists } from '../../services/canvas-library-session';
+import {
+  resetCanvasAfterCheckpoint,
+  scheduleLibraryTitleSyncIfEntryExists,
+} from '../../services/canvas-library-session';
 import { appReleaseLabel } from '../../lib/app-release';
 
 export default function CanvasHeader() {
   const title = useSpecStore((s) => s.spec.title);
   const setTitle = useSpecStore((s) => s.setTitle);
-  const resetCanvas = useCanvasStore((s) => s.resetCanvas);
+  const settingsEnabled = import.meta.env.DEV;
 
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(title);
@@ -56,11 +59,15 @@ export default function CanvasHeader() {
       <div className="absolute top-0 left-0 right-0 z-10 flex h-header items-center justify-between border-b border-border bg-header-scrim px-4 backdrop-blur-sm">
         {/* Left: App identity */}
         <div className="flex w-0 min-w-0 flex-1 items-baseline gap-3">
-          <div className="shrink-0 leading-none">
-            <span className="block font-logo text-2xl font-medium leading-none tracking-wide text-fg">
+          <Link
+            to="/"
+            className="shrink-0 leading-none"
+            aria-label="Go to Designer home page"
+          >
+            <span className="block font-logo text-2xl font-medium leading-none tracking-wide text-fg hover:text-fg-secondary">
               Designer
             </span>
-          </div>
+          </Link>
           <span
             className="min-w-0 truncate text-pico leading-none text-fg-muted tabular-nums"
             title={appReleaseLabel()}
@@ -99,7 +106,7 @@ export default function CanvasHeader() {
           <button
             onClick={() => {
               if (window.confirm('Reset canvas to default template? This clears all nodes.')) {
-                resetCanvas();
+                void resetCanvasAfterCheckpoint();
               }
             }}
             className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-fg-secondary hover:bg-surface-raised"
@@ -116,8 +123,22 @@ export default function CanvasHeader() {
           </button>
           <ThemeToggle />
           <button
-            onClick={() => setShowSettings(true)}
-            className="rounded-md p-1.5 text-fg-secondary hover:bg-surface-raised"
+            type="button"
+            onClick={() => {
+              if (settingsEnabled) setShowSettings(true);
+            }}
+            disabled={!settingsEnabled}
+            aria-label={
+              settingsEnabled
+                ? 'Open settings'
+                : 'Settings are available in development only'
+            }
+            title={
+              settingsEnabled
+                ? 'Settings'
+                : 'Settings are available in development only'
+            }
+            className="rounded-md p-1.5 text-fg-secondary hover:bg-surface-raised disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent"
           >
             <Settings size={16} />
           </button>
@@ -125,10 +146,12 @@ export default function CanvasHeader() {
       </div>
 
       <SpecManager open={showCanvases} onClose={() => setShowCanvases(false)} />
-      <SettingsModal
-        open={showSettings}
-        onClose={() => setShowSettings(false)}
-      />
+      {settingsEnabled ? (
+        <SettingsModal
+          open={showSettings}
+          onClose={() => setShowSettings(false)}
+        />
+      ) : null}
     </>
   );
 }

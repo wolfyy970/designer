@@ -23,4 +23,9 @@ describe('isAppRetryableUpstreamError', () => {
     expect(isAppRetryableUpstreamError('')).toBe(false);
     expect(isAppRetryableUpstreamError('validation failed')).toBe(false);
   });
+
+  it('does not retry credit exhaustion errors', () => {
+    expect(isAppRetryableUpstreamError('OpenRouter API error (402): insufficient credits')).toBe(false);
+    expect(isAppRetryableUpstreamError('OpenRouter credits are exhausted')).toBe(false);
+  });
 });

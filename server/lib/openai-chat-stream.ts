@@ -1,4 +1,5 @@
 import { normalizeError } from '../../src/lib/error-utils.ts';
+import { normalizeOpenRouterCreditError } from '../../src/lib/openrouter-budget.ts';
 import type { ChatResponse, ChatResponseMetadata } from '../../src/types/provider.ts';
 
 function num(v: unknown): number | undefined {
@@ -78,6 +79,8 @@ export async function streamOpenAICompatibleChat(
 
   if (!response.ok) {
     const errText = await response.text();
+    const creditMessage = normalizeOpenRouterCreditError(errText || `${options.providerLabel} ${response.status}`);
+    if (creditMessage) throw new Error(creditMessage);
     const mapped = options.errorMap[response.status];
     if (mapped) throw new Error(mapped);
     throw new Error(`${options.providerLabel} API error (${response.status}): ${errText}`);
@@ -114,6 +117,8 @@ export async function streamOpenAICompatibleChat(
 
       const err = chunk.error as Record<string, unknown> | undefined;
       if (err != null) {
+        const creditMessage = normalizeOpenRouterCreditError(err);
+        if (creditMessage) throw new Error(creditMessage);
         const msg =
           typeof err === 'object' && typeof err.message === 'string'
             ? err.message

@@ -32,6 +32,13 @@ export function abortGenerationForStrategy(strategyId: string): void {
   controllers.delete(strategyId);
 }
 
+export function abortAllGenerations(): void {
+  for (const c of controllers.values()) {
+    c.abort();
+  }
+  controllers.clear();
+}
+
 export function isAbortError(err: unknown): boolean {
   if (err instanceof DOMException && err.name === 'AbortError') return true;
   if (err instanceof Error && err.name === 'AbortError') return true;

@@ -36,6 +36,7 @@ import type { CanvasStore } from '../stores/canvas/canvas-store-types';
 import type { CompiledPrompt } from '../types/incubator';
 import type { GenerationResult } from '../types/provider';
 import { resolveEvaluatorSettings } from './resolveEvaluatorSettings';
+import { LOST_STREAM_CONNECTION_MESSAGE } from '../api/client-sse-lifecycle';
 
 export interface GenerationProgress {
   completed: number;
@@ -223,7 +224,7 @@ export async function runHypothesisGenerateFlow({
 
     const n = genCtx.modelCredentials.length;
     const idSet = new Set(lanePlaceholderIds);
-    const errorCount = useGenerationStore
+    const erroredLaneResults = useGenerationStore
       .getState()
       .results.filter(
         (r) =>
@@ -231,9 +232,19 @@ export async function runHypothesisGenerateFlow({
           r.strategyId === strategyId &&
           r.status === GENERATION_STATUS.ERROR &&
           r.error !== GENERATION_STOPPED_MESSAGE,
-      ).length;
+      );
+    const errorCount = erroredLaneResults.length;
     if (errorCount > 0) {
-      setGenerationError(errorCount === n ? 'Generation failed' : `${errorCount} of ${n} failed`);
+      const allLostConnection =
+        errorCount === n &&
+        erroredLaneResults.every((result) => result.error === LOST_STREAM_CONNECTION_MESSAGE);
+      setGenerationError(
+        allLostConnection
+          ? LOST_STREAM_CONNECTION_MESSAGE
+          : errorCount === n
+            ? 'Generation failed'
+            : `${errorCount} of ${n} failed`,
+      );
     }
   }
 }

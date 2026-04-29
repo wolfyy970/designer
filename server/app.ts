@@ -9,6 +9,7 @@ import designSystem from './routes/design-system.ts';
 import hypothesis from './routes/hypothesis.ts';
 import preview from './routes/preview.ts';
 import configRoute from './routes/config.ts';
+import providerStatus from './routes/provider-status.ts';
 import inputsGenerate from './routes/inputs-generate.ts';
 import internalContext from './routes/internal-context.ts';
 import { env } from './env.ts';
@@ -60,6 +61,7 @@ app.use(
 
 app.get('/health', (c) => c.json({ ok: true }));
 app.route('/config', configRoute);
+app.route('/provider-status', providerStatus);
 app.route('/incubate', incubate);
 app.route('/generate', generate);
 app.route('/models', models);

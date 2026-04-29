@@ -9,7 +9,7 @@ function FullScreenSpinner() {
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-bg px-8">
       <div className="flex flex-col items-center gap-6">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-fg-faint border-t-fg" />
-        <span className="font-logo text-nano font-medium tracking-wide text-fg-muted">AutoDesigner</span>
+        <span className="font-logo text-nano font-medium tracking-wide text-fg-muted">Designer</span>
       </div>
     </div>
   );
@@ -28,7 +28,7 @@ function ApiServerBlocked({
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-start bg-bg px-8 pt-[min(32vh,10rem)] sm:pt-[28vh]">
       <div className="flex w-full max-w-md flex-col gap-4 text-left font-sans">
         <span className="shrink-0 font-logo text-nano font-medium leading-none tracking-wide text-fg-muted">
-          AutoDesigner
+          Designer
         </span>
         <p className="text-base font-medium leading-snug text-fg sm:text-lg">API server not reachable</p>
         <p className="text-sm leading-relaxed text-fg-secondary">

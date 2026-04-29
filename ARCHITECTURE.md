@@ -71,31 +71,37 @@ flowchart TB
   end
 
   subgraph piAdapter [Pi adapter and NPM boundary]
-    runSession[runDesignAgentSession]
+    runtime[agent-runtime facade]
+    runSession[pi-agent-service]
+    toolRegistry[agent-tool-registry]
     virtualTools[pi-sdk virtual-tools]
     piSdkRest[pi-sdk types stream budget]
     piNpm["@mariozechner pi-ai and pi-coding-agent"]
     eventBridge[pi-session-event-bridge]
     bashTool[pi-bash-tool]
     appTools[pi-app-tools]
-    runSession --> virtualTools
+    runtime --> runSession
+    runSession --> toolRegistry
+    toolRegistry --> virtualTools
+    toolRegistry --> bashTool
+    toolRegistry --> appTools
     runSession --> piSdkRest
     runSession --> piNpm
     runSession --> eventBridge
-    runSession --> bashTool
-    runSession --> appTools
     piSdkRest --> piNpm
   end
 
   subgraph vws [Virtual workspace]
+    workspaceContract[virtual-workspace]
     sandboxSeed[agent-bash-sandbox]
     bashRuntime[just-bash FS and exec]
+    workspaceContract --> sandboxSeed
     sandboxSeed --> bashRuntime
   end
 
   agentOrch --> evalSvc
-  agentOrch --> runSession
-  runSession --> sandboxSeed
+  agentOrch --> runtime
+  runSession --> workspaceContract
   virtualTools --> bashRuntime
   bashTool --> bashRuntime
 
@@ -108,14 +114,14 @@ flowchart TB
 
 Confusing these layers causes bad prompts and false “tool not working” reports.
 
-1. **Layer 1 — VFS + just-bash** (`[agent-bash-sandbox.ts](server/services/agent-bash-sandbox.ts)`, `just-bash`): In-memory tree at `**/home/user/project`**; `bash.fs.*` and `bash.exec`. Optional runtimes (**network**, **python**, **javascript**) are **not** enabled in our constructor—do not document `npm`, `curl`, etc. as available unless you change that code.
-2. **Layer 2 — Pi `ToolDefinition`s** (`[virtual-tools.ts](server/services/pi-sdk/virtual-tools.ts)`, `[pi-bash-tool.ts](server/services/pi-bash-tool.ts)`, `[pi-app-tools.ts](server/services/pi-app-tools.ts)`): Same tool **names** and **parameter schemas** as Pi’s native tools; `**execute**` delegates to Layer 1. Model-facing `**description**` strings are merged from `**SANDBOX_TOOL_OVERRIDES**` (file tools + accurate sandbox copy). `**promptSnippet**` / `**promptGuidelines**` on tools are **not** injected into the system message when Pi uses a `**customPrompt**` (we pass the resolved designer system prompt from `**prompts/designer-agentic-system/PROMPT.md**` via `**server/lib/prompt-resolution.ts**` into `createSandboxResourceLoader.getSystemPrompt()`). Only `**description**` is reliably seen by the model **via the API tool schema** (JSON function definitions). See the comment above `**SANDBOX_TOOL_OVERRIDES**` in `virtual-tools.ts`.
+1. **Layer 1 — VFS + just-bash** (`[virtual-workspace.ts](server/services/virtual-workspace.ts)` over `[agent-bash-sandbox.ts](server/services/agent-bash-sandbox.ts)`, `just-bash`): In-memory tree at `**/home/user/project`**; `bash.fs.*` and `bash.exec`. Optional runtimes (**network**, **python**, **javascript**) are **not** enabled in our constructor—do not document `npm`, `curl`, etc. as available unless you change that code.
+2. **Layer 2 — Tool registry + Pi `ToolDefinition`s** (`[agent-tool-registry.ts](server/services/agent-tool-registry.ts)`, `[virtual-tools.ts](server/services/pi-sdk/virtual-tools.ts)`, `[pi-bash-tool.ts](server/services/pi-bash-tool.ts)`, `[pi-app-tools.ts](server/services/pi-app-tools.ts)`): The registry groups virtual file tools, bash, app tools, and validation tools while preserving exact model-facing order. Tool definitions keep the same **names** and **parameter schemas** as Pi’s native tools; `**execute**` delegates to Layer 1. Model-facing `**description**` strings are merged from `**SANDBOX_TOOL_OVERRIDES**` (file tools + accurate sandbox copy). `**promptSnippet**` / `**promptGuidelines**` on tools are **not** injected into the system message when Pi uses a `**customPrompt**` (we pass the resolved designer system prompt from `**prompts/designer-agentic-system/PROMPT.md**` via `**server/lib/prompt-resolution.ts**` into `createSandboxResourceLoader.getSystemPrompt()`). Only `**description**` is reliably seen by the model **via the API tool schema** (JSON function definitions). See the comment above `**SANDBOX_TOOL_OVERRIDES**` in `virtual-tools.ts`.
 3. **Layer 3 — What the design LLM sees:** **System message** = body from `**prompts/designer-agentic-system/PROMPT.md**` (loaded via `**server/lib/prompt-resolution.ts**`) + `**Current date**` and `**Current working directory**` appended by Pi’s `buildSystemPrompt`—those two lines are **not** in the repo prompt file. **User message** = hypothesis/spec + hardcoded workspace root reminder in `[pi-agent-service.ts](server/services/pi-agent-service.ts)`. Repo **skills** (including `**agents-md-file**`) are **not** copied into the sandbox; the agent loads them via **`use_skill`** (host-backed catalog). Pi’s `getAgentsFiles()` is empty.
 
-- `**agentic-orchestrator**` calls `**runDesignAgentSession**` only — it does not import `@mariozechner/*` directly. To replace Pi, rework `**server/services/pi-sdk/**`, `**pi-agent-service.ts**`, and the event bridge; keep the orchestrator’s build/eval/revision contract stable. **`[pi-agent-service.ts](server/services/pi-agent-service.ts)`** may call **`session.agent.continue()`** after **`[upstream-retry.ts](server/lib/upstream-retry.ts)`**-classified upstream errors (capped retries) when Pi’s built-in auto-retry regex does not match the provider message.
+- `**agentic-orchestrator**` and task-agent execution call the app-owned `**agent-runtime**` facade — they do not import `@mariozechner/*` or `pi-agent-service.ts` directly. To replace Pi, rework `**server/services/pi-sdk/**`, `**pi-agent-service.ts**`, `**agent-tool-registry.ts**`, and the event bridge; keep the orchestrator’s build/eval/revision contract stable. **`[pi-agent-service.ts](server/services/pi-agent-service.ts)`** may call **`session.agent.continue()`** after **`[upstream-retry.ts](server/lib/upstream-retry.ts)`**-classified upstream errors (capped retries) when Pi’s built-in auto-retry regex does not match the provider message.
 - `**createAgentSession**` uses `**tools: []**` so default Pi tools never touch the host filesystem; `**virtual-tools**` maps native Pi file tool schemas to `**just-bash**`, and `**pi-bash-tool**` runs shell commands in the same instance. `**cwd**` is the sandbox project root; `**createSandboxResourceLoader({ systemPrompt, contextWindow, getCompactionPromptBody? })**` (async: calls `**reload()**`) uses Pi `**DefaultResourceLoader**` + shared in-memory `**SettingsManager**` for compaction thresholds + optional `**getCompactionPromptBody**` (body from the `**agent-context-compaction**` skill on disk via `**prompt-resolution.ts**`); it injects the agentic system prompt via `**getSystemPrompt()**`.
 - `**pi-session-event-bridge**` turns Pi session callbacks into `**AgentRunEvent**`, which `**executeGenerateStream**` serializes to SSE for the client. It handles **`agent_end`**: when the last assistant message has **`stopReason: error`** (upstream LLM/stream failure), the client receives **`error`** SSE plus a trace row so runs do not appear to succeed silently.
-- `**agent-bash-sandbox**` starts empty except optional **caller seeds** (e.g. prior design files on revision rounds); the agent writes generated artifacts only—**skills are not copied into the VFS**. `**extractDesignFiles**` collects the workspace after the run; **`computeDesignFilesBeyondSeed`** compares to the session seed when seeds exist (revision) so unchanged seeded files do not count as new work. Evaluation runs in `**design-evaluation-service**` (parallel workers), not inside Pi tool definitions. Repo-root `**skills/**` packages (see `**server/lib/skill-discovery.ts**`) are walked at each Pi session boundary; non-`**manual**` skills matching the session tags are listed in `**<available_skills>**` on the Pi `**use_skill**` tool (host-backed bodies, not sandbox files). Successful `**use_skill**` calls emit `**skill_activated**` (SSE + trace). `**skills_loaded**` (+ trace) advertises the catalog summary for the UI.
+- `**virtual-workspace**` is the app VFS contract: it starts empty except optional **caller seeds** (e.g. prior design files on revision rounds), normalizes paths under the sandbox root, extracts file maps after a run, and computes files changed beyond the seed. The agent writes generated artifacts only—**skills are not copied into the VFS**. Evaluation runs in `**design-evaluation-service**` (parallel workers), not inside Pi tool definitions. Repo-root `**skills/**` packages (see `**server/lib/skill-discovery.ts**`) are walked at each Pi session boundary; non-`**manual**` skills matching the session tags are listed in `**<available_skills>**` on the Pi `**use_skill**` tool (host-backed bodies, not sandbox files). Successful `**use_skill**` calls emit `**skill_activated**` (SSE + trace). `**skills_loaded**` (+ trace) advertises the catalog summary for the UI.
 
 ### Tool inventory
 
@@ -233,6 +239,7 @@ flowchart TB
 | Endpoint                        | Method | Purpose                                                                                                                                                                                         | Response                   |
 | ------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
 | `/api/config`                   | GET    | App flags (`lockdown` + pinned models when locked, `autoImprove`), **agentic evaluator defaults** (`agenticMaxRevisionRounds`, `agenticMinOverallScore` from env), `defaultRubricWeights`, and `maxConcurrentRuns` (= `MAX_CONCURRENT_AGENTIC_RUNS`) so the UI can proactively disable **Generate** with a *“Server busy (N/M)”* hint instead of letting the request fail with 503 | JSON                       |
+| `/api/provider-status/openrouter` | GET  | Server-owned OpenRouter key/budget status for home page and canvas budget banners; exposes safe availability/reset fields, never the API key or account details | JSON                       |
 | `/api/incubate`                 | POST   | Incubate spec into incubation plan (SSE: Pi task stream + `incubate_result`; client may also subscribe to **agentic** events for live monitor — see `incubateStream` options in `src/api/client.ts`) | SSE → `IncubationPlan`     |
 | `/api/internal-context/generate` | POST  | Synthesize a design specification from spec sections and reference-image metadata (Pi task agent; SSE; final `task_result` with Markdown) | SSE stream                 |
 | `/api/generate`                 | POST   | Generate one design (agentic path; legacy `mode: "single"` accepted as alias)                                                                                                                   | SSE stream                 |
@@ -283,6 +290,7 @@ POST endpoints validate bodies with Zod (typically via `**parse-request**` / `sa
 | `log-store.ts`                             | In-memory LLM call ring (dev); **task** run/result rings (`task_run`, `task_result`); finalized rows + one-shots → `writeObservabilityLine` NDJSON via `server/lib/observability-sink.ts`                                                            |
 | `trace-log-store.ts`                       | Run-trace ring (dedupe by `event.id`); client POST `/api/logs/trace`; same NDJSON sink                                                                                                                                                                  |
 | `routes/config.ts`                         | GET /api/config — feature flags (`lockdown`, `autoImprove`), lockdown model ids, `AGENTIC_MAX_REVISION_ROUNDS` / `AGENTIC_MIN_OVERALL_SCORE`, `defaultRubricWeights`, `MAX_CONCURRENT_AGENTIC_RUNS`                                                        |
+| `routes/provider-status.ts`                | GET /api/provider-status/openrouter — safe OpenRouter availability/budget status for UI banners and home page status                                                                                                                                       |
 | `routes/incubate.ts`                       | POST /api/incubate                                                                                                                                                                                                                                      |
 | `routes/internal-context.ts`                | POST /api/internal-context/generate — task-agent synthesis of the design specification from spec inputs                                                                                                                                                  |
 | `routes/generate.ts`                       | POST /api/generate — delegates to `services/generate-execution.ts`                                                                                                                                                                                      |
@@ -296,9 +304,11 @@ POST endpoints validate bodies with Zod (typically via `**parse-request**` / `sa
 | `routes/preview.ts`                        | POST/GET `/api/preview/sessions*` — ephemeral virtual FS for iframe + eval                                                                                                                                                                              |
 | `lib/prompt-resolution.ts`                 | Resolve prompt bodies from disk (`skills/*/SKILL.md`, `prompts/designer-agentic-system/PROMPT.md`) for incubation, inputs-gen, design-system extract, evaluators, and agentic paths                                                                     |
 | `lib/prompt-templates.ts`                  | Structural placeholder / template-variable glue on top of resolved bodies                                                                                                                                                                               |
+| `services/agent-runtime.ts`                | App-owned runtime facade for design and task sessions. Orchestrators import this boundary, not `pi-agent-service.ts` directly.                                                                                                                          |
 | `services/pi-sdk/`                         | **Only** place that imports `@mariozechner/pi-ai` / `@mariozechner/pi-coding-agent`; types, `createAgentSession`, `streamSimple`, stream budget, `**virtual-tools.ts`** (Pi tool definitions → `just-bash` FS / `grep` via `bash.exec`).                |
-| `services/pi-agent-service.ts`             | Pi session adapter — `tools: []`, `customTools` = virtual file tools + bash + **use_skill** (skill catalog in tool description) + app tools; `session.prompt`; LLM log wrapping; merges app + SDK system prompts; SSE via `pi-session-event-bridge.ts`. |
-| `services/agent-bash-sandbox.ts`           | `just-bash` instance: seed design files, extract artifacts after the run.                                                                                                                                                                               |
+| `services/pi-agent-service.ts`             | Pi session adapter — `tools: []`, `customTools` from `agent-tool-registry`; `session.prompt`; LLM log wrapping; merges app + SDK system prompts; SSE via `pi-session-event-bridge.ts`. |
+| `services/virtual-workspace.ts` / `agent-bash-sandbox.ts` | App VFS contract over `just-bash`: seed design files, normalize project paths, snapshot/extract artifacts, and compute files changed beyond seed.                                                                                                           |
+| `services/agent-tool-registry.ts`          | Capability grouping and deterministic ordering for virtual file tools, bash, app tools, validation tools, and session-scoped skill catalog injection.                                                                                                    |
 | `services/pi-bash-tool.ts`                 | Pi `bash` tool → `bash.exec`, snapshot diff → SSE file events for design paths.                                                                                                                                                                         |
 | `services/pi-app-tools.ts`                 | Pi tools: `todo_write`, `use_skill` (loads `SkillCatalogEntry` body + `skill_activated` event), `validate_js`, `validate_html` (HTML checks delegate to **`html-validation.ts`**).                                                                                                                                      |
 | `services/html-validation.ts`            | Shared workspace HTML validation (DOCTYPE, balance, asset refs) — testable without Pi session.                                                                                                                                                         |
@@ -309,6 +319,7 @@ POST endpoints validate bodies with Zod (typically via `**parse-request**` / `sa
 | `services/browser-playwright-evaluator.ts` | Playwright headless render + DOM/console checks                                                                                                                                                                                                         |
 | `services/incubator.ts`                    | LLM incubation — Zod-validates request/response boundaries                                                                                                                                                                                              |
 | `services/providers/openrouter.ts`         | OpenRouter provider (direct API, auth header)                                                                                                                                                                                                           |
+| `services/openrouter-budget-status.ts`     | OpenRouter key status lookup and reset-time normalization for daily/weekly/monthly key limits                                                                                                                                                            |
 | `services/providers/lmstudio.ts`           | LM Studio provider (direct URL)                                                                                                                                                                                                                         |
 | `services/providers/registry.ts`           | Provider registration and lookup                                                                                                                                                                                                                        |
 | `lib/provider-helpers.ts`                  | Re-exports from `src/lib/provider-fetch.ts` + server-specific `buildChatRequestFromMessages`                                                                                                                                                            |
@@ -336,7 +347,7 @@ Hypothesis and `/api/generate` traffic use the **agentic** orchestrator. `mode` 
 
 **Orchestrator (`runAgenticWithEvaluation`):**
 
-1. **Build:** `runDesignAgentSession` in `pi-agent-service.ts` — virtual FS starts empty except optional caller `seedFiles`; the agent writes design artifacts. Each Pi session boundary re-runs `**discoverSkills`** (revision rounds use a fresh Pi session and a fresh skill catalog).
+1. **Build:** `runDesignAgentSession` via `agent-runtime.ts` → `pi-agent-service.ts` — virtual FS starts empty except optional caller `seedFiles`; the agent writes design artifacts. Each Pi session boundary re-runs `**discoverSkills`** (revision rounds use a fresh Pi session and a fresh skill catalog).
 2. **Evaluate + revise** *(skipped when `**evaluationContext`** is `**null**`, e.g. hypothesis **Auto-improve** off):* `runEvaluationWorkers` in `design-evaluation-service.ts` runs design / strategy / implementation LLM rubrics plus **browser** checks:
   - **Preflight:** `browser-qa-evaluator.ts` — HTML/VM heuristics (fast).
   - **Grounded:** `browser-playwright-evaluator.ts` — headless Chromium via Playwright (`setContent` on bundled HTML), console/page errors, visible text, layout box, broken images. Disabled when `VITEST=true` or `BROWSER_PLAYWRIGHT_EVAL=0`.
@@ -345,7 +356,7 @@ Hypothesis and `/api/generate` traffic use the **agentic** orchestrator. `mode` 
 
 **Env defaults** (`server/env.ts`): `AGENTIC_MAX_REVISION_ROUNDS` (default `5`, clamped 0–20), optional `AGENTIC_MIN_OVERALL_SCORE`. Request body may pass `agenticMaxRevisionRounds` / `agenticMinOverallScore`. For Playwright in production: install browsers once (`pnpm exec playwright install chromium`).
 
-`server/services/pi-sdk/` is the **NPM import boundary** for Pi packages (and the right place to replace Pi with another agent later). Other server code uses `./pi-sdk` or `../services/pi-sdk` for types/session helpers only — not deep Pi imports. Session orchestration stays in `pi-agent-service.ts`; app-specific Pi tools in `pi-*-tool(s).ts`; virtual FS mapping in `pi-sdk/virtual-tools.ts`; sandbox in `agent-bash-sandbox.ts`; `**sandbox-resource-loader.ts`** supplies the sealed-session resource loader (`getSystemPrompt()` carries the embedded agentic system prompt; no host-repo merge). Agentic system context (system prompt + **`skillCatalog`**) is built in `server/lib/build-agentic-system-context.ts`.
+`server/services/pi-sdk/` is the **NPM import boundary** for Pi packages (and the right place to replace Pi package imports later). Orchestrators import `agent-runtime.ts`, not Pi service modules. Session orchestration stays in `pi-agent-service.ts`; app-specific Pi tools in `pi-*-tool(s).ts`; capability grouping/order in `agent-tool-registry.ts`; virtual FS mapping in `pi-sdk/virtual-tools.ts`; the app VFS contract in `virtual-workspace.ts`; `**sandbox-resource-loader.ts`** supplies the sealed-session resource loader (`getSystemPrompt()` carries the embedded agentic system prompt; no host-repo merge). Agentic system context (system prompt + **`skillCatalog`**) is built in `server/lib/build-agentic-system-context.ts`.
 
 **Google Fonts (agentic HTML):** Agent output may reference **only** `https://fonts.googleapis.com/...` (stylesheet API) and `**https://fonts.gstatic.com/...`** (font files referenced from that CSS). Allowlist logic lives in `[src/lib/google-fonts-allowlist.ts](src/lib/google-fonts-allowlist.ts)`; Pi `**validate_html`** permits those URLs in `<link rel="stylesheet">`, and allowed `@import` inside `<style>` blocks; other external stylesheets and any external `<script src>` remain invalid. The preview iframe can load allowlisted URLs when the **user’s browser** has network access; the `**browser-qa-evaluator`** VM does not fetch the network, so typography there is not ground-truth for CDN fonts.
 
@@ -455,6 +466,8 @@ Multiple hypotheses generate simultaneously via `Promise.all`. Within a single h
 | `workspace-domain-store` | localStorage               | Domain-first relations and payloads (hypotheses, incubator wiring, model assignments, preview slots, mirrored node content). Prefer this for workflow semantics.                                                                                                                                                                                                                                                                                     |
 | `canvas-store`           | localStorage               | React Flow nodes/edges, viewport, auto-layout, transient UI (lineage, edge status, `previewNodeIdMap`). Kept in sync with domain on connect/disconnect and incubate/generate lifecycle.                                                                                                                                                                                                                                                              |
 
+**Canvas Manager snapshots.** The saved canvas library uses `src/services/persistence.ts` as the compatibility layer: localStorage keeps only list metadata for fast manager rendering, while IndexedDB stores versioned `SavedCanvasSnapshot` payloads (`src/types/saved-canvas.ts`) plus generated artifacts. `canvas-snapshots.ts` captures and restores graph state, viewport, domain wiring, incubator plans, generation metadata, selected versions, best-pick overrides, and code/files/provenance/eval-round artifacts. `canvas-library-session.ts` checkpoints before replacing the active session (load, import, duplicate, new, header reset), while explicit reload-from-saved skips that checkpoint by design. Legacy spec-only entries still restore through the spec materialization path.
+
 
 ### Hooks (`src/hooks/`)
 
@@ -504,7 +517,7 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 ## Key Design Decisions
 
-**Why a Hono server on Vercel.** All LLM orchestration runs server-side. API keys never reach the browser. LLM calls and SSE streaming run in a serverless function. Vercel supports 300s timeout (Hobby) or 800s (Pro) for streaming functions — sufficient for long agentic generation and evaluation.
+**Why a Hono server with bounded synchronous streams.** All LLM orchestration runs server-side. API keys never reach the browser. V1 production uses Vercel Pro bounded streaming functions (`maxDuration = 800`) and requires the browser request to stay open until the run finishes. If the connection drops, the client marks the run as non-resumable and asks the user to start again. Durable async jobs are future v2 work, not part of the deployed V1 API surface.
 
 **Why the server resolves prompts from the repo.** Prompt bodies live in `**skills/*/SKILL.md`** and `**prompts/designer-agentic-system/PROMPT.md**`; `**server/lib/prompt-resolution.ts**` loads them per request. The SPA sends workspace/spec payloads and model settings; prompt text is never client-editable.
 
@@ -522,7 +535,7 @@ Single source of truth for string literals shared across the codebase. Eliminate
 
 **Why SSE for generation.** Each hypothesis lane is a separate SSE stream. Events include `progress`, `activity`, `plan`, `file`, evaluator progress, and `done`. The client manages sequencing across lanes. **Dev diagnostics:** `SseStreamDiagnostics` (client, `src/lib/sse-diagnostics.ts`) tracks event counts, drops, and timing per stream — inspect via `window.__SSE_DIAG` in the browser console. Server-side `generate-execution` logs a write-count summary at stream close. `pi-session-event-bridge` uses `safeBridgeEmit` so async failures are logged instead of silently swallowed, and unknown Pi event types print in dev.
 
-**Why URL-backed preview.** Agentic runs produce a **virtual file tree**. The API validates and canonicalizes relative file keys before serving them at `**/api/preview/sessions/:id/...`** so iframe `**src`** uses real relative URLs (multi-page `a href` works) without accepting absolute, traversal, duplicate-normalized, or no-entry file maps. Sessions are ephemeral (TTL), not durable storage.
+**Why URL-backed preview.** Agentic runs produce a **virtual file tree**. The API validates and canonicalizes relative file keys before serving them at `**/api/preview/sessions/:id/...`** so iframe `**src`** uses real relative URLs (multi-page `a href` works) without accepting absolute, traversal, duplicate-normalized, or no-entry file maps. Sessions are behind a `PreviewSessionStore` port; the default implementation is still ephemeral in-memory TTL storage.
 
 **Why `bundleVirtualFS` still exists.** Fallback when preview registration fails, and for **evaluator** `bundled_preview_html` context. It inlines `<link>` / `<script src>` from the entry HTML determined by `**resolvePreviewEntryPath`**.
 
@@ -560,10 +573,20 @@ During a meta-harness **run**, repo `**skills/`** is **restored** from per-sessi
 
 **Vercel:**
 
-- `vercel.json` configures static output from `dist/` and API routes via `api/[[...route]].ts`
+- `vercel.json` configures static output from `dist/` and API routes via `api/[[...route]].js`
+- `api/[[...route]].js` exports `maxDuration = 800` for Vercel Pro / Fluid Compute compatibility streams
 - Set `OPENROUTER_API_KEY` as a Vercel environment variable
+- Set `ALLOWED_ORIGINS` when the browser origin is not same-origin with `/api`
+- Set `PREVIEW_PUBLIC_URL` when server-side browser evaluation must call a public deployment URL
 - `pnpm build` produces the SPA; Vercel bundles the serverless function automatically
-- **Preview sessions** are in-memory on one Node instance. On multi-instance / cold-start serverless, `POST /api/preview/sessions` and follow-up `GET` may hit different workers — the UI falls back to `bundleVirtualFS` `srcDoc` when requests fail; for sticky preview in production, persist maps (e.g. Redis) or route preview entirely client-side.
+- Synchronous `/api/generate`, `/api/hypothesis/generate`, and task streams are the V1 production path. The browser tab/request must stay open; connection loss cannot resume an in-flight run.
+- Default **preview sessions** and logs are per-instance. On multi-instance / cold-start serverless, a preview URL can 404 and the UI falls back where possible.
+
+**Portable deployment:**
+
+- Static SPA can run on Vercel, Netlify, Cloudflare Pages, or any CDN.
+- API ingress can run as Hono on Vercel Functions or any Node host.
+- Durable background workers, reconnect/resume, and database-backed artifact retention are future v2 work, not required for V1.
 
 **Local dev:**
 

@@ -2,7 +2,7 @@
  * Shared context + safe SSE emission for Pi session bridge modules.
  */
 import { emitEvent } from './pi-sdk/index.ts';
-import type { AgentRunEvent } from './pi-agent-run-types.ts';
+import type { AgentRunEvent } from './agent-runtime.ts';
 import type { RunTraceEvent } from '../../src/types/provider.ts';
 
 export interface PiSessionBridgeContext {

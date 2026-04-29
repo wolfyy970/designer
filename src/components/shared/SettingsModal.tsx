@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { RotateCcw } from 'lucide-react';
 import Modal from './Modal';
 import { DesignTokensModal } from './DesignTokensModal';
 import { PartitionSlider } from './PartitionSlider';
 import { floatWeightsToPercents, percentsToFloatWeights } from '../../lib/partition-slider-utils';
 import { useEvaluatorDefaultsStore } from '../../stores/evaluator-defaults-store';
 import { useThinkingDefaultsStore } from '../../stores/thinking-defaults-store';
+import { useAppConfig } from '../../hooks/useAppConfig';
 import {
   EVALUATOR_MAX_REVISION_ROUNDS_MAX,
   EVALUATOR_MAX_REVISION_ROUNDS_MIN,
@@ -24,11 +26,11 @@ import {
 } from '../../lib/thinking-defaults';
 
 const THINKING_TASK_LABELS: Record<ThinkingTask, string> = {
-  design: 'Design (agent build)',
-  incubate: 'Incubator / hypothesis auto-generate',
+  design: 'Designer node',
+  incubate: 'Incubator + hypothesis nodes',
   'internal-context': 'Design specification',
-  inputs: 'Input auto-generate',
-  'design-system': 'Design system extract',
+  inputs: 'Input nodes',
+  'design-system': 'Design system',
   evaluator: 'Evaluator',
 };
 
@@ -101,13 +103,21 @@ export default function SettingsModal({
   const [tab, setTab] = useState<Tab>('general');
   const [designTokensOpen, setDesignTokensOpen] = useState(false);
   const wasOpenRef = useRef(false);
+  const { data: appConfig } = useAppConfig();
+  const evaluatorEnabled = appConfig?.autoImprove ?? false;
 
   useEffect(() => {
-    if (open && !wasOpenRef.current && initialTab) {
+    if (open && !wasOpenRef.current && initialTab && (initialTab !== 'evaluator' || evaluatorEnabled)) {
       setTab(initialTab);
     }
     wasOpenRef.current = open;
-  }, [open, initialTab]);
+  }, [open, initialTab, evaluatorEnabled]);
+
+  useEffect(() => {
+    if (!evaluatorEnabled && tab === 'evaluator') {
+      setTab('general');
+    }
+  }, [evaluatorEnabled, tab]);
 
   return (
     <>
@@ -117,34 +127,32 @@ export default function SettingsModal({
       title="Settings"
       size="md"
     >
-      <div className="-mx-5 -mt-4 mb-4 flex border-b border-border px-5">
-        <button
-          type="button"
-          onClick={() => setTab('general')}
-          className={`border-b-2 px-3 py-2 text-xs font-medium transition-colors ${
-            tab === 'general'
-              ? 'border-fg text-fg'
-              : 'border-transparent text-fg-secondary hover:text-fg-secondary'
-          }`}
-        >
-          General
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('evaluator')}
-          className={`border-b-2 px-3 py-2 text-xs font-medium transition-colors ${
-            tab === 'evaluator'
-              ? 'border-fg text-fg'
-              : 'border-transparent text-fg-secondary hover:text-fg-secondary'
-          }`}
-        >
-          Evaluator defaults
-        </button>
-      </div>
+      {evaluatorEnabled ? (
+        <div className="-mx-5 -mt-4 mb-4 border-b border-border px-5 py-3">
+          <div
+            className="grid gap-2 rounded-md border border-border-subtle bg-bg/50 p-1 sm:grid-cols-2"
+            role="tablist"
+            aria-label="Settings sections"
+          >
+            <SettingsTabButton
+              active={tab === 'general'}
+              title="General"
+              description="Reasoning defaults and design-system tools"
+              onClick={() => setTab('general')}
+            />
+            <SettingsTabButton
+              active={tab === 'evaluator'}
+              title="Evaluator defaults"
+              description="Auto-improve rounds, target score, and rubric weights"
+              onClick={() => setTab('evaluator')}
+            />
+          </div>
+        </div>
+      ) : null}
 
       {tab === 'general' && (
         <div className="space-y-4">
-          <ReasoningSection />
+          <ReasoningSection showEvaluatorTask={evaluatorEnabled} />
           {import.meta.env.DEV ? (
             <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">
               <span className="block text-sm font-medium text-fg">Design system</span>
@@ -254,29 +262,83 @@ function EvaluatorSettingsTab() {
   );
 }
 
-function ReasoningSection() {
+function SettingsTabButton({
+  active,
+  title,
+  description,
+  onClick,
+}: {
+  active: boolean;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={`rounded px-3 py-2 text-left transition-colors input-focus ${
+        active
+          ? 'border border-border bg-surface-raised text-fg shadow-sm'
+          : 'border border-transparent text-fg-secondary hover:bg-surface/70 hover:text-fg'
+      }`}
+    >
+      <span className="block text-xs font-semibold leading-snug">{title}</span>
+      <span className="mt-0.5 block text-nano leading-snug text-fg-muted">{description}</span>
+    </button>
+  );
+}
+
+function ReasoningSection({ showEvaluatorTask }: { showEvaluatorTask: boolean }) {
   const overrides = useThinkingDefaultsStore((s) => s.overrides);
   const setLevel = useThinkingDefaultsStore((s) => s.setLevel);
   const setBudgetTokens = useThinkingDefaultsStore((s) => s.setBudgetTokens);
   const resetTask = useThinkingDefaultsStore((s) => s.resetTask);
+  const resetAll = useThinkingDefaultsStore((s) => s.resetAll);
+  const visibleTasks = useMemo(
+    () => THINKING_TASKS.filter((task) => showEvaluatorTask || task !== 'evaluator'),
+    [showEvaluatorTask],
+  );
+  const hasAnyCustomizations = visibleTasks.some((task) => {
+    const override = overrides[task] ?? {};
+    return override.level !== undefined || override.budgetTokens !== undefined;
+  });
 
   return (
     <div className="rounded-md border border-border-subtle bg-surface/60 px-3 py-2.5">
-      <span className="block text-sm font-medium text-fg">Reasoning (thinking)</span>
+      <div className="flex items-start justify-between gap-3">
+        <span className="block text-sm font-medium text-fg">Reasoning (thinking)</span>
+        <button
+          type="button"
+          onClick={resetAll}
+          disabled={!hasAnyCustomizations}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border-subtle px-2 py-1 text-nano font-medium text-fg-muted transition-colors input-focus hover:border-border hover:bg-surface-raised hover:text-fg-secondary disabled:cursor-default disabled:opacity-40 disabled:hover:border-border-subtle disabled:hover:bg-transparent disabled:hover:text-fg-muted"
+          title="Reset all reasoning defaults"
+          aria-label="Reset all reasoning defaults"
+        >
+          <RotateCcw size={12} aria-hidden />
+          Reset all
+        </button>
+      </div>
       <p className="mt-1 text-xs text-fg-secondary">
         Per-task reasoning effort + token budget for models that support extended thinking.
         Ignored on models without reasoning support (chip shows the ↓ arrow instead of the Brain icon).
       </p>
       <div className="mt-3 space-y-1.5">
-        {THINKING_TASKS.map((task) => {
+        {visibleTasks.map((task) => {
           const defaults = THINKING_CONFIG_DEFAULTS[task];
           const override = overrides[task] ?? {};
           const effectiveLevel = override.level ?? defaults.level;
           const budgetPlaceholder = THINKING_BUDGET_BY_LEVEL[effectiveLevel];
           const isCustomized = override.level !== undefined || override.budgetTokens !== undefined;
           return (
-            <div key={task} className="flex items-center gap-2">
-              <span className="min-w-[9rem] text-nano text-fg-secondary">
+            <div
+              key={task}
+              className="grid grid-cols-[minmax(12rem,1fr)_9rem_10rem_2rem_4rem] items-center gap-2"
+            >
+              <span className="min-w-0 text-nano text-fg-secondary">
                 {THINKING_TASK_LABELS[task]}
               </span>
               <select
@@ -314,9 +376,11 @@ function ReasoningSection() {
                 type="button"
                 onClick={() => resetTask(task)}
                 disabled={!isCustomized}
-                className="ml-auto text-nano text-fg-faint disabled:opacity-40 hover:text-fg-secondary"
+                className="inline-flex size-7 items-center justify-center justify-self-end rounded-full border border-border-subtle text-fg-faint transition-colors input-focus hover:border-border hover:bg-surface-raised hover:text-fg-secondary disabled:cursor-default disabled:opacity-35 disabled:hover:border-border-subtle disabled:hover:bg-transparent disabled:hover:text-fg-faint"
+                title={`Reset ${THINKING_TASK_LABELS[task]} reasoning defaults`}
+                aria-label={`Reset ${THINKING_TASK_LABELS[task]} reasoning defaults`}
               >
-                Reset
+                <RotateCcw size={12} aria-hidden />
               </button>
             </div>
           );

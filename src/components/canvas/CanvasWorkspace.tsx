@@ -27,6 +27,7 @@ import { toReactFlowEdges, toReactFlowNodes } from '../../workspace/reactflow-ad
 import { nodeTypes } from './nodes/node-types';
 import { edgeTypes } from './edges/edge-types';
 import CanvasHeader from './CanvasHeader';
+import OpenRouterBudgetBanner from './OpenRouterBudgetBanner';
 import CanvasToolbar from './CanvasToolbar';
 import VariantPreviewOverlay from './VariantPreviewOverlay';
 import VariantRunInspector from './VariantRunInspector';
@@ -216,6 +217,7 @@ function CanvasInner() {
   return (
     <div className="flex h-screen w-screen flex-col">
       <CanvasHeader />
+      <OpenRouterBudgetBanner />
       <div className="flex min-h-0 min-w-0 flex-1">
         <div className="relative min-h-0 min-w-0 flex-1">
           <ReactFlow

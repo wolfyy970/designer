@@ -4,15 +4,15 @@ import { normalizeError } from '../../lib/error-utils';
 import { useSpecStore } from '../../stores/spec-store';
 import { FEEDBACK_DISMISS_MS } from '../../lib/constants';
 import {
-  saveSpecToLibrary,
-  deleteSpecFromLibrary,
-  exportCanvas,
+  deleteCanvasFromLibrary,
 } from '../../services/persistence';
 import {
   activateSavedSpecById,
   activateImportedSpecFile,
   startNewCanvasAfterCheckpoint,
   duplicateCurrentSpec,
+  exportCurrentCanvas,
+  saveCurrentCanvasSnapshot,
   type ActivateSavedSpecResult,
 } from '../../services/canvas-library-session';
 import { useCanvasLibraryList } from '../../hooks/useCanvasLibraryList';
@@ -34,13 +34,28 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
 
   const { specs, refresh } = useCanvasLibraryList(open);
   const [savedFeedback, setSavedFeedback] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const runManagerAction = useCallback(
+    async (action: () => Promise<void>) => {
+      setBusy(true);
+      try {
+        await action();
+        refresh();
+      } finally {
+        setBusy(false);
+      }
+    },
+    [refresh],
+  );
 
   const handleSave = useCallback(() => {
-    saveSpecToLibrary(spec);
-    refresh();
-    setSavedFeedback(true);
-    setTimeout(() => setSavedFeedback(false), FEEDBACK_DISMISS_MS);
-  }, [spec, refresh]);
+    void runManagerAction(async () => {
+      await saveCurrentCanvasSnapshot();
+      setSavedFeedback(true);
+      setTimeout(() => setSavedFeedback(false), FEEDBACK_DISMISS_MS);
+    });
+  }, [runManagerAction]);
 
   const finalizeLoadResult = useCallback(
     (result: ActivateSavedSpecResult) => {
@@ -56,17 +71,21 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
 
   const handleLoad = useCallback(
     (specId: string) => {
-      finalizeLoadResult(activateSavedSpecById(specId));
+      void runManagerAction(async () => {
+        finalizeLoadResult(await activateSavedSpecById(specId));
+      });
     },
-    [finalizeLoadResult],
+    [finalizeLoadResult, runManagerAction],
   );
 
   const handleReloadFromSaved = useCallback(
     (specId: string) => {
       if (!window.confirm(CANVAS_MANAGER_RELOAD_CONFIRM)) return;
-      finalizeLoadResult(activateSavedSpecById(specId, { skipCheckpoint: true }));
+      void runManagerAction(async () => {
+        finalizeLoadResult(await activateSavedSpecById(specId, { skipCheckpoint: true }));
+      });
     },
-    [finalizeLoadResult],
+    [finalizeLoadResult, runManagerAction],
   );
 
   const handleDelete = useCallback(
@@ -78,43 +97,47 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
       ) {
         return;
       }
-      deleteSpecFromLibrary(specId);
-      refresh();
+      void runManagerAction(async () => {
+        await deleteCanvasFromLibrary(specId);
+      });
     },
-    [refresh],
+    [runManagerAction],
   );
 
   const handleExport = useCallback(() => {
-    exportCanvas(spec);
-  }, [spec]);
+    void runManagerAction(exportCurrentCanvas);
+  }, [runManagerAction]);
 
   const handleImport = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
       try {
-        await activateImportedSpecFile(file);
-        refresh();
-        onClose();
+        await runManagerAction(async () => {
+          await activateImportedSpecFile(file);
+          onClose();
+        });
       } catch (err) {
         alert(normalizeError(err, 'Import failed'));
       }
       if (fileInputRef.current) fileInputRef.current.value = '';
     },
-    [refresh, onClose],
+    [runManagerAction, onClose],
   );
 
   const handleDuplicate = useCallback(() => {
-    duplicateCurrentSpec();
-    refresh();
-    onClose();
-  }, [refresh, onClose]);
+    void runManagerAction(async () => {
+      await duplicateCurrentSpec();
+      onClose();
+    });
+  }, [runManagerAction, onClose]);
 
   const handleNew = useCallback(() => {
-    startNewCanvasAfterCheckpoint();
-    refresh();
-    onClose();
-  }, [refresh, onClose]);
+    void runManagerAction(async () => {
+      await startNewCanvasAfterCheckpoint();
+      onClose();
+    });
+  }, [runManagerAction, onClose]);
 
   return (
     <Modal open={open} onClose={onClose} title="Canvas Manager">
@@ -134,6 +157,7 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
           <button
             type="button"
             onClick={handleSave}
+            disabled={busy}
             className="ds-btn-primary-muted"
           >
             {savedFeedback ? (
@@ -148,6 +172,7 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
           <button
             type="button"
             onClick={handleNew}
+            disabled={busy}
             className="rounded-md border border-border px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface"
             title="Saves your current work, then starts a blank spec and resets the graph"
           >
@@ -156,6 +181,7 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
           <button
             type="button"
             onClick={handleDuplicate}
+            disabled={busy}
             className="flex items-center justify-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface"
             title="Saves current work, then opens a copy with new id (graph reset to match the copy)"
           >
@@ -165,18 +191,19 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
           <button
             type="button"
             onClick={handleExport}
+            disabled={busy}
             className="flex items-center justify-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface"
-            title="Download spec document as JSON (sections + metadata)"
+            title="Download the full canvas workspace as JSON"
           >
             <Download size={12} />
-            Export JSON
+            Export Canvas
           </button>
           <label
             className="flex cursor-pointer items-center justify-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-fg-secondary hover:bg-surface sm:col-span-2"
             title="Replace session with a previously exported JSON file (graph resets)"
           >
             <Upload size={12} />
-            Import JSON
+            Import Canvas
             <input
               ref={fileInputRef}
               type="file"
@@ -216,6 +243,7 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
                         <button
                           type="button"
                           onClick={() => handleReloadFromSaved(s.id)}
+                          disabled={busy}
                           className="flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-nano font-medium text-fg-secondary hover:bg-surface-raised"
                           title="Discard unsaved changes and reload the saved copy from this list"
                         >
@@ -226,6 +254,7 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
                         <button
                           type="button"
                           onClick={() => handleLoad(s.id)}
+                          disabled={busy}
                           className="rounded-md border border-border bg-surface px-2 py-1 text-nano font-medium text-fg-secondary hover:bg-surface-raised"
                         >
                           Load
@@ -234,7 +263,7 @@ export default function SpecManager({ open, onClose }: SpecManagerProps) {
                       <button
                         type="button"
                         onClick={() => handleDelete(s.id, s.title)}
-                        disabled={isActive}
+                        disabled={isActive || busy}
                         className={`rounded p-1 ${
                           isActive
                             ? 'cursor-not-allowed text-fg-faint'

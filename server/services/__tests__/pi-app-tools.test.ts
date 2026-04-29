@@ -5,7 +5,7 @@ import {
   createValidateHtmlTool,
   createValidateJsTool,
 } from '../pi-app-tools.ts';
-import { createAgentBashSandbox } from '../agent-bash-sandbox.ts';
+import { createAgentBashSandbox } from '../virtual-workspace.ts';
 import type { SkillCatalogEntry } from '../../lib/skill-schema.ts';
 import type { ExtensionContext } from '../pi-sdk/types.ts';
 import type { TodoItem } from '../../../src/types/provider.ts';

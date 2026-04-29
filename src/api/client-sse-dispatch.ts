@@ -3,6 +3,10 @@ import { SSE_EVENT_NAMES } from '../constants/sse-events';
 import type { SseStreamDiagnostics } from '../lib/sse-diagnostics';
 import { formatZodFlattenDetails, normalizeError } from '../lib/error-utils';
 import { safeParseGenerateSSEEvent } from '../lib/generate-sse-event-schema';
+import {
+  isOpenRouterCreditExhaustionLike,
+  notifyOpenRouterBudgetRefresh,
+} from '../lib/openrouter-budget';
 import type { GenerateSSEEvent } from './types';
 import type { GenerateStreamCallbacks } from './client-sse';
 
@@ -41,6 +45,9 @@ export function dispatchParsedAgenticSseEvent(
       callbacks.onCode?.(event.code);
       break;
     case SSE_EVENT_NAMES.error:
+      if (isOpenRouterCreditExhaustionLike(event.error)) {
+        notifyOpenRouterBudgetRefresh();
+      }
       callbacks.onError?.(event.error);
       break;
     case SSE_EVENT_NAMES.file:

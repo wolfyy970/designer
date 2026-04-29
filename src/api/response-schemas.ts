@@ -7,6 +7,7 @@ export {
   InputsGenerateResponseSchema,
   InternalContextGenerateResponseSchema,
   ModelsResponseSchema,
+  OpenRouterBudgetStatusResponseSchema,
   ProvidersListResponseSchema,
   type AppConfigResponse,
   type DesignSystemExtractWireResponse,
@@ -15,5 +16,6 @@ export {
   type InputsGenerateWireResponse,
   type InternalContextGenerateWireResponse,
   type ModelsWireResponse,
+  type OpenRouterBudgetStatusResponse,
   type ProvidersListWireResponse,
 } from './wire-schemas';

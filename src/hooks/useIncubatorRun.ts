@@ -3,6 +3,10 @@ import { incubateStream } from '../api/client';
 import { EDGE_STATUS } from '../constants/canvas';
 import { scheduleCanvasFitView } from '../lib/canvas-fit-view';
 import { normalizeError } from '../lib/error-utils';
+import {
+  createCanvasOperationController,
+  isCurrentCanvasSession,
+} from '../lib/canvas-session-guard';
 import { needsInternalContextRefresh } from './useIncubatorDocumentPreparation';
 import { buildIncubatorRunInputs } from './incubator-run-inputs';
 import { createTaskStreamSession } from './task-stream-session';
@@ -78,6 +82,8 @@ export function useIncubatorRun({
     setEdgeStatusBySource(incubatorId, EDGE_STATUS.PROCESSING);
 
     const placeholderIds = addPlaceholderHypotheses(incubatorId, hypothesisCount);
+    const operation = createCanvasOperationController();
+    const isCurrentOperation = () => isCurrentCanvasSession(operation.generation);
 
     let session: ReturnType<typeof createTaskStreamSession> | undefined;
     try {
@@ -124,20 +130,26 @@ export function useIncubatorRun({
           thinking: thinkingOverride,
         },
         { agentic: taskSession.callbacks },
+        operation.signal,
       );
+      if (!isCurrentOperation()) return;
       removePlaceholders(placeholderIds);
       appendStrategiesToNode(incubatorId, map);
       syncAfterIncubate(map.hypotheses, incubatorId);
       setEdgeStatusBySource(incubatorId, EDGE_STATUS.COMPLETE);
       scheduleCanvasFitView(fitView);
     } catch (err) {
+      if (!isCurrentOperation()) return;
       removePlaceholders(placeholderIds);
       setError(normalizeError(err, 'Incubation failed'));
       setEdgeStatusBySource(incubatorId, EDGE_STATUS.ERROR);
     } finally {
+      operation.dispose();
       void session?.finalize();
-      setTaskStreamState(createInitialTaskStreamState('idle'));
-      setCompiling(false);
+      if (isCurrentOperation()) {
+        setTaskStreamState(createInitialTaskStreamState('idle'));
+        setCompiling(false);
+      }
     }
   }, [
     addPlaceholderHypotheses,

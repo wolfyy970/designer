@@ -5,7 +5,7 @@ import type { RunTraceEvent } from '../../src/types/provider.ts';
 import { isAppRetryableUpstreamError, sleepMs } from '../lib/upstream-retry.ts';
 import type { AgentSession } from './pi-sdk/types.ts';
 import { findLastAssistantMessage } from '../lib/pi-message-helpers.ts';
-import type { AgentRunEvent } from './pi-agent-run-types.ts';
+import type { AgentRunEvent } from './agent-runtime.ts';
 
 /** Manual retries after upstream errors the Pi SDK regex does not classify as retryable. */
 export const MAX_APP_UPSTREAM_RETRIES = 2;

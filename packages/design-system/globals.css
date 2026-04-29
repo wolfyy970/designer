@@ -10,12 +10,6 @@
   --color-accent: var(--color-accent-500);
   --color-accent-hover: var(--color-accent-600);
 
-  /* Status */
-  --color-error: var(--color-error);
-  --color-warning: var(--color-warning);
-  --color-success: var(--color-success);
-  --color-info: var(--color-info);
-
   /* Accent derived (color-mix based — not in tokens.json as they reference base) */
   --color-accent-subtle: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
   --color-accent-glow: color-mix(in srgb, var(--color-accent) 35%, transparent);
@@ -384,7 +378,10 @@
   }
 }
 
-/* ── React Flow ─────────────────────────────────────────────────── */
+/* ── Canvas / React Flow affordances ───────────────────────────────
+ * CanvasWorkspace imports React Flow's base CSS after this global file, so
+ * rules that intentionally override XYFlow defaults need `!important`.
+ */
 .react-flow {
   --xy-node-boxshadow-selected: none;
   --xy-selection-background-color: color-mix(in srgb, var(--color-accent) 6%, transparent);
@@ -393,17 +390,39 @@
 }
 
 /*
+ * React Flow treats selectable nodes like clickable elements and gives them a
+ * hand cursor. These cards are draggable/selectable canvas objects, not
+ * buttons. Reserve the hand cursor for actual controls inside the node.
+ */
+.react-flow__node.selectable,
+.react-flow__node.draggable {
+  cursor: grab !important;
+}
+
+.react-flow__node.dragging {
+  cursor: grabbing !important;
+}
+
+.react-flow__node :where(button, [role="button"], [role="tab"], summary, label, select, input[type="checkbox"], input[type="radio"], input[type="range"]) {
+  cursor: pointer !important;
+}
+
+.react-flow__node :where(button:disabled, [aria-disabled="true"], select:disabled, input:disabled) {
+  cursor: not-allowed !important;
+}
+
+/*
  * XYFlow sets `.react-flow__node { user-select: none }` so dragging nodes does not select
  * node chrome. That inheritance blocks selecting text inside inputs. Re-enable selection
  * on real text fields and read-only copy blocks inside custom nodes.
  */
 .react-flow__node :where(
-  textarea,
-  select,
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea:not(:disabled),
+  input:not(:disabled):not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   [contenteditable="true"],
   [role="textbox"]
 ) {
+  cursor: text !important;
   user-select: text;
   -webkit-user-select: text;
 }
@@ -413,7 +432,6 @@
   -webkit-user-select: text;
 }
 
-/* ── Keyframes ──────────────────────────────────────────────────── */
 @keyframes dashmove {
   to { stroke-dashoffset: -12; }
 }
@@ -423,7 +441,22 @@
   50% { filter: drop-shadow(0 0 6px var(--color-warning)); }
 }
 
-/* ── Handle Affordance System ───────────────────────────────────── */
+.canvas-handle-success {
+  background-color: var(--color-success) !important;
+}
+
+.canvas-handle-warning {
+  background-color: var(--color-warning) !important;
+}
+
+.canvas-handle-cutout {
+  border-color: var(--color-bg) !important;
+}
+
+.dark .canvas-handle-cutout {
+  border-color: var(--color-surface-raised) !important;
+}
+
 .handle-diamond {
   clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
 }

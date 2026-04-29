@@ -1,6 +1,5 @@
 import {
   Download,
-  FileText,
   X,
   Minus,
   Plus,
@@ -10,9 +9,9 @@ import {
   ChevronRight,
   Trash2,
   Star,
+  Square,
 } from 'lucide-react';
 import { ZOOM_MIN, ZOOM_MAX } from '../../../hooks/useVariantZoom';
-import { Button } from '@ds/components/ui/button';
 import { Badge } from '@ds/components/ui/badge';
 
 interface VariantToolbarProps {
@@ -32,8 +31,6 @@ interface VariantToolbarProps {
   zoomOut: () => void;
   resetZoom: () => void;
   onDownload: () => void;
-  /** Markdown debug bundle (run trace, thinking, eval, code). */
-  onDownloadDebug?: () => void;
   onDeleteVersion: () => void;
   onExpand: () => void;
   onToggleWorkspace: () => void;
@@ -64,7 +61,6 @@ export default function VariantToolbar({
   zoomOut,
   resetZoom,
   onDownload,
-  onDownloadDebug,
   onDeleteVersion,
   onExpand,
   onToggleWorkspace,
@@ -89,19 +85,19 @@ export default function VariantToolbar({
         <Badge shape="tab" tone="success">Best</Badge>
       )}
       {showStopGeneration && onStopGeneration ? (
-        <Button
-          variant="destructive"
-          size="sm"
-          className="nodrag shrink-0"
+        <button
+          type="button"
+          className="nodrag shrink-0 rounded p-1 text-error transition-colors hover:bg-error-subtle hover:text-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error/40"
           onPointerDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
             onStopGeneration();
           }}
+          aria-label="Stop generation"
           title="Stop generation (cancels the in-flight request)"
         >
-          Stop
-        </Button>
+          <Square size={11} fill="currentColor" aria-hidden />
+        </button>
       ) : null}
 
       {/* Stack navigation */}
@@ -212,24 +208,15 @@ export default function VariantToolbar({
       >
         <PanelRight size={10} />
       </button>
-      {onDownloadDebug ? (
-        <button
-          type="button"
-          onPointerDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onClick={onDownloadDebug}
-          className="nodrag rounded p-0.5 text-fg-faint transition-colors hover:text-fg-muted"
-          title="Export debug snapshot (Markdown) — choose sections in the dialog"
-        >
-          <FileText size={10} />
-        </button>
-      ) : null}
       {hasCode && (
         <>
           <button
-            onClick={onDownload}
+            type="button"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onDownload();
+            }}
             className="nodrag rounded p-0.5 text-fg-faint transition-colors hover:text-fg-muted"
             title={`Download ${variantName}`}
           >

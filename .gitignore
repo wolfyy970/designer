@@ -33,3 +33,4 @@ test*.html
 *.njsproj
 *.sln
 *.sw?
+.vercel

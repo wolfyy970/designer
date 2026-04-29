@@ -6,21 +6,14 @@ import { fetchChatCompletion } from '../../../src/lib/provider-fetch.ts';
 import { buildChatRequestFromMessages } from '../../lib/provider-helpers.ts';
 import { env } from '../../env.ts';
 import type { SkillCatalogEntry } from '../../lib/skill-schema.ts';
-import type { ChatMessage, TodoItem } from '../../../src/types/provider.ts';
+import type { ChatMessage } from '../../../src/types/provider.ts';
 import type { ToolDefinition } from '../pi-sdk/types.ts';
 import {
   createAgentBashSandbox,
   extractDesignFiles,
   SANDBOX_PROJECT_ROOT,
-} from '../agent-bash-sandbox.ts';
-import { createSandboxBashTool } from '../pi-bash-tool.ts';
-import {
-  createTodoWriteTool,
-  createUseSkillTool,
-  createValidateHtmlTool,
-  createValidateJsTool,
-} from '../pi-app-tools.ts';
-import { createVirtualPiCodingTools } from '../pi-sdk/virtual-tools.ts';
+} from '../virtual-workspace.ts';
+import { buildAgentTools } from '../agent-tool-registry.ts';
 import type { ExtensionContext } from '../pi-sdk/types.ts';
 
 const ext = {} as ExtensionContext;
@@ -87,21 +80,14 @@ export async function runSandboxToolConversation(options: {
   }
 
   const bash = createAgentBashSandbox({ seedFiles: options.seedFiles });
-  const todoState: { current: TodoItem[] } = { current: [] };
-  const virtual = createVirtualPiCodingTools(bash, () => {});
-  const bashTool = createSandboxBashTool(bash, () => {});
-  const todoTool = createTodoWriteTool(todoState, () => {});
-  const useSkill = createUseSkillTool(options.skillCatalog ?? [], () => {});
-  const vjs = createValidateJsTool(bash);
-  const vhtml = createValidateHtmlTool(bash);
-  const tools = [
-    ...virtual,
-    bashTool,
-    todoTool,
-    useSkill,
-    vjs,
-    vhtml,
-  ] as ToolDefinition[];
+  const tools = buildAgentTools({
+    bash,
+    todoState: { current: [] },
+    skillCatalog: options.skillCatalog ?? [],
+    onDesignFile: () => {},
+    onTodos: () => {},
+    onSkillActivated: () => {},
+  }) as ToolDefinition[];
   const byName = getToolMap(tools);
   const openAiTools = piToolsToOpenAi(tools);
 

@@ -8,6 +8,7 @@ import { ErrorBoundary } from './components/shared/ErrorBoundary';
 import { ViewportGate } from './components/shared/ViewportGate';
 import { ApiServerGate } from './components/shared/ApiServerGate';
 
+const HomePage = lazy(() => import('./pages/HomePage'));
 const CanvasPage = lazy(() => import('./pages/CanvasPage'));
 const DesignTokensKitchenSink = import.meta.env.DEV
   ? lazy(() => import('./pages/DesignTokensKitchenSink'))
@@ -20,6 +21,18 @@ function PageLoader() {
     <div className="flex h-screen items-center justify-center">
       <div className="h-6 w-6 animate-spin rounded-full border-2 border-fg-faint border-t-fg" />
     </div>
+  );
+}
+
+function CanvasRoute() {
+  return (
+    <ViewportGate>
+      <ApiServerGate>
+        <ErrorBoundary>
+          <CanvasPage />
+        </ErrorBoundary>
+      </ApiServerGate>
+    </ViewportGate>
   );
 }
 
@@ -44,23 +57,19 @@ export default function App() {
   }, []);
 
   return (
-    <ViewportGate>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <ApiServerGate>
-            <Suspense fallback={<PageLoader />}>
-              <Routes>
-                {/* Canvas is the sole app surface. */}
-                <Route path="/canvas" element={<ErrorBoundary><CanvasPage /></ErrorBoundary>} />
-                {import.meta.env.DEV && DesignTokensKitchenSink ? (
-                  <Route path="/dev/design-tokens" element={<DesignTokensKitchenSink />} />
-                ) : null}
-                <Route path="*" element={<Navigate to="/canvas" replace />} />
-              </Routes>
-            </Suspense>
-          </ApiServerGate>
-        </BrowserRouter>
-      </QueryClientProvider>
-    </ViewportGate>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/canvas" element={<CanvasRoute />} />
+            {import.meta.env.DEV && DesignTokensKitchenSink ? (
+              <Route path="/dev/design-tokens" element={<DesignTokensKitchenSink />} />
+            ) : null}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }

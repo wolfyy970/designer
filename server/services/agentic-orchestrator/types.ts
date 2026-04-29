@@ -8,7 +8,7 @@ import type {
   EvaluatorWorkerReport,
 } from '../../../src/types/evaluation.ts';
 import type { LoadedSkillSummary } from '../../lib/skill-schema.ts';
-import type { AgentRunEvent, AgentSessionParams } from '../pi-agent-run-types.ts';
+import type { AgentRunEvent, AgentSessionParams } from '../agent-runtime.ts';
 
 export type AgenticOrchestratorBuildInput = Omit<AgentSessionParams, 'systemPrompt'>;
 

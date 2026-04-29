@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SANDBOX_PROJECT_ROOT, sandboxProjectAbsPath } from '../agent-bash-sandbox.ts';
+import { SANDBOX_PROJECT_ROOT, sandboxProjectAbsPath } from '../virtual-workspace.ts';
 
 describe('sandboxProjectAbsPath', () => {
   it('joins relative paths to the sandbox root', () => {

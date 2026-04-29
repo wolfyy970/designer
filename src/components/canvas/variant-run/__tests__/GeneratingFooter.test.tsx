@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { describe, it, expect, afterEach } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
 import { GeneratingFooter } from '../GeneratingFooter';
 
 describe('GeneratingFooter', () => {
@@ -106,78 +106,32 @@ describe('GeneratingFooter', () => {
     expect(container.querySelector('[aria-label="tool"]')).not.toBeNull();
   });
 
-  it('shows "🧠 Xs" badge after thinking ends', () => {
-    vi.useFakeTimers();
-    const tStart = Date.now() - 5000; // thinking started 5s ago
-    const { rerender, container } = render(
+  it('does not show a post-thinking duration badge', () => {
+    const { container, rerender } = render(
       <GeneratingFooter
         plan={undefined}
         written={0}
         elapsed={10}
         liveness={{
-          activeThinkingStartedAt: tStart,
+          activeThinkingStartedAt: Date.now() - 5000,
           streamedModelChars: 1800,
           streamMode: 'thinking',
         }}
       />,
     );
-    expect(container.querySelector('[aria-label="thinking"]')).not.toBeNull();
 
-    act(() => {
-      rerender(
-        <GeneratingFooter
-          plan={undefined}
-          written={0}
-          elapsed={10}
-          liveness={{ streamedModelChars: 1800, streamMode: 'narrating' }}
-        />,
-      );
-    });
-    expect(container.querySelector('[aria-label*="thought for"]')).not.toBeNull();
-    vi.useRealTimers();
-  });
-
-  it('dismisses the "🧠 Xs" badge after 3.5 seconds', () => {
-    vi.useFakeTimers();
-    const tStart = Date.now() - 5000;
-    const { rerender, container } = render(
+    rerender(
       <GeneratingFooter
         plan={undefined}
         written={0}
         elapsed={10}
-        liveness={{
-          activeThinkingStartedAt: tStart,
-          streamedModelChars: 1800,
-          streamMode: 'thinking',
-        }}
+        liveness={{ streamedModelChars: 1800, streamMode: 'narrating' }}
       />,
     );
-    act(() => {
-      rerender(
-        <GeneratingFooter
-          plan={undefined}
-          written={0}
-          elapsed={10}
-          liveness={{ streamedModelChars: 1800 }}
-        />,
-      );
-    });
-    expect(container.querySelector('[aria-label*="thought for"]')).not.toBeNull();
-    act(() => { vi.advanceTimersByTime(3500); });
+
     expect(container.querySelector('[aria-label*="thought for"]')).toBeNull();
-    vi.useRealTimers();
-  });
-
-  it('does not show the badge when thinking never started', () => {
-    render(
-      <GeneratingFooter
-        plan={undefined}
-        written={0}
-        elapsed={10}
-        liveness={{ streamedModelChars: 1800 }}
-      />,
-    );
     expect(screen.queryByTitle(/Reasoned for/)).toBeNull();
+    expect(container.querySelector('[aria-label="narrating"]')).not.toBeNull();
   });
 
   it('does not show streaming-file KB rows', () => {

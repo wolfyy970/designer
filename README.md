@@ -1,10 +1,10 @@
-# Auto Designer
+# Designer
 
 **Read the [North Star](PRODUCT.md#north-star) first.** Every decision in this repo serves that ambition.
 
 **Picking up after a break (humans and AI):** Prior chats are not retained—treat **this repository** as the source of truth. Start with **[AGENTS.md](AGENTS.md)** (commands and gotchas), **[PRODUCT.md](PRODUCT.md)** (product intent), and **[ARCHITECTURE.md](ARCHITECTURE.md)** for implementation depth. Optional: `git log -10 --oneline` for the latest merged work.
 
-A design brief feeds the **Incubator**, which produces hypothesis strategies that systematically explore the solution space. Each hypothesis **Design** run uses the **agentic** pipeline (multi-file Pi sandbox). By default that is a **single** agent build with **no** evaluator. Turn **Auto-improve** on the node to run **evaluation** and optional **revision** loops (round cap and target score; rubric weights under Settings). Everything connects on a visual node-graph canvas.
+Designer opens on a public home page, then the working canvas lives at `/canvas`. A design brief feeds the **Incubator**, which produces hypothesis strategies that systematically explore the solution space. Each hypothesis **Design** run uses the **agentic** pipeline (multi-file Pi sandbox). By default that is a **single** agent build with **no** evaluator. Turn **Auto-improve** on the node to run **evaluation** and optional **revision** loops (round cap and target score; rubric weights under Settings). Everything connects on a visual node-graph canvas.
 
 ## Quick Start
 
@@ -37,9 +37,9 @@ Product flags such as lockdown and Auto-improve now live in [config/feature-flag
 
 ## Canvas Workflow
 
-The primary interface is a visual node-graph canvas (`/canvas`, the default route):
+The primary working interface is a visual node-graph canvas (`/canvas`):
 
-1. **Input nodes** (left) — Design Brief, Existing Design, Research Context, Objectives & Metrics, Design Constraints. On a fresh canvas, optional inputs may appear as **ghost placeholders**; opening **Canvas Manager** → **Load** materializes real **input nodes** when the saved spec already has text or images for those **facets** (stored under `spec.sections` in data). **Research Context**, **Objectives & Metrics**, and **Design Constraints** offer an optional **auto-generate** control (from the Design Brief and other filled facets) using the **first Model node** on the canvas and `POST /api/inputs/generate` — details in [USER_GUIDE.md](USER_GUIDE.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
+1. **Input nodes** (left) — Design Brief, Existing Design, Research Context, Objectives & Metrics, Design Constraints. On a fresh canvas, optional inputs may appear as **ghost placeholders**; opening **Canvas Manager** → **Load** restores a full canvas snapshot and materializes real **input nodes** when a legacy saved spec already has text or images for those **facets**. **Research Context**, **Objectives & Metrics**, and **Design Constraints** offer an optional **auto-generate** control (from the Design Brief and other filled facets) using the **first Model node** on the canvas and `POST /api/inputs/generate` — details in [USER_GUIDE.md](USER_GUIDE.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
 2. **Model node** — Connect to the Incubator or to Hypotheses. Each **Hypothesis** accepts **one** active model connection at a time (a new connection replaces the previous one). The **Incubator** may still have multiple models for different workflows.
 3. **Incubator** — Connect input nodes and a Model node, then click Generate to produce hypothesis strategies
 4. **Hypotheses** — Editable strategy cards. Connect a Model node and use **Design** to run the **agentic** Pi build (**Auto-improve** off = one build with no evaluator; **on** = evaluation + optional revision rounds)
@@ -86,9 +86,9 @@ The header also opens **Settings** (General preferences). In **development**, a 
 | [DOCUMENTATION.md](DOCUMENTATION.md)             | How this doc set is organized (hub = this README)                                                                                                                                                     |
 
 
-## Deploying (Vercel)
+## Deploying
 
-Production uses **Vercel** (`vercel.json` + `api/[[...route]].ts` → Hono). The serverless function **`maxDuration`** is **800s** on Pro so long agentic SSE streams fit; Hobby max is shorter—use **Pro** for agentic runs with revision rounds. Set **`OPENROUTER_API_KEY`** in the Vercel project env. **`ALLOWED_ORIGINS`** in env may be required when the SPA is on a custom domain or preview URL that is not same-origin with `/api`—see `.env.example`. `/api/logs` is **disabled when `NODE_ENV=production`** (no shared in-memory ring).
+V1 production can run on **Vercel Pro** (`vercel.json` + `api/[[...route]].js` → Hono, `maxDuration = 800`) with bounded synchronous SSE streams. Users must keep the browser tab/request open while long design runs execute; if the connection drops, the in-flight run cannot be resumed and must be started again. Set `OPENROUTER_API_KEY`; set `ALLOWED_ORIGINS` when the SPA origin differs from `/api`; set `PREVIEW_PUBLIC_URL` to the production origin when server-side browser evaluation must call a public preview URL. The home page and canvas use `/api/provider-status/openrouter` to show OpenRouter budget availability without exposing key details. See [ARCHITECTURE.md § Deployment](ARCHITECTURE.md#deployment).
 
 Ephemeral **preview sessions** may not persist across separate serverless invocations—the UI falls back to bundled **`srcDoc`** when a preview URL 404s (relative links in that mode are limited).
 

@@ -8,6 +8,7 @@ export const APP_RETRYABLE_UPSTREAM_PATTERN = /upstream|5\d{2}|NaN|provider.*err
 
 export function isAppRetryableUpstreamError(message: string | undefined): boolean {
   if (!message?.trim()) return false;
+  if (/insufficient credits|out of credits|credits are exhausted|402/i.test(message)) return false;
   return APP_RETRYABLE_UPSTREAM_PATTERN.test(message);
 }
 

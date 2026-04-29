@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createAgentBashSandbox } from '../agent-bash-sandbox.ts';
+import { createAgentBashSandbox } from '../virtual-workspace.ts';
 import { createSandboxBashTool } from '../pi-bash-tool.ts';
 import type { ExtensionContext } from '../pi-sdk/types.ts';
 
@@ -134,4 +134,3 @@ describe('createSandboxBashTool', () => {
     expect(text.length).toBeGreaterThan(10);
   });
 });
-

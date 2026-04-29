@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { HypothesisGenerateApiPayload } from '../types';
 import { generateHypothesisStream } from '../client';
 import { SSE_EVENT_NAMES } from '../../constants/sse-events';
+import { LOST_STREAM_CONNECTION_MESSAGE } from '../client-sse-lifecycle';
 
 function sseResponse(events: { name: string; data: Record<string, unknown> }[]): Response {
   const encoder = new TextEncoder();
@@ -157,6 +158,102 @@ describe('generateHypothesisStream error surfacing', () => {
     expect(onError0).toHaveBeenCalledTimes(1);
     expect(onError1).toHaveBeenCalledTimes(1);
     expect(onError0.mock.calls[0][0]).toMatch(/missing laneIndex/);
+  });
+
+  it('maps fetch/network failure to the lost-connection message', async () => {
+    const onError = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    await expect(
+      generateHypothesisStream(dummyBody, [
+        { callbacks: { onError }, finalizeAfterStream: vi.fn().mockResolvedValue(undefined) },
+      ]),
+    ).rejects.toThrow(LOST_STREAM_CONNECTION_MESSAGE);
+
+    expect(onError).toHaveBeenCalledWith(LOST_STREAM_CONNECTION_MESSAGE);
+  });
+
+  it('maps reader failure to the lost-connection message', async () => {
+    const onError = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          new ReadableStream({
+            pull() {
+              throw new TypeError('terminated');
+            },
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    await expect(
+      generateHypothesisStream(dummyBody, [
+        { callbacks: { onError }, finalizeAfterStream: vi.fn().mockResolvedValue(undefined) },
+      ]),
+    ).rejects.toThrow(LOST_STREAM_CONNECTION_MESSAGE);
+
+    expect(onError).toHaveBeenCalledWith(LOST_STREAM_CONNECTION_MESSAGE);
+  });
+
+  it('does not mark lanes already finalized before a connection loss', async () => {
+    const onError0 = vi.fn();
+    const onError1 = vi.fn();
+    const finalize0 = vi.fn().mockResolvedValue(undefined);
+    const finalize1 = vi.fn().mockResolvedValue(undefined);
+    const encoder = new TextEncoder();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode(
+                  `event: ${SSE_EVENT_NAMES.lane_done}\ndata: ${JSON.stringify({ laneIndex: 0 })}\n\n`,
+                ),
+              );
+            },
+            pull() {
+              throw new TypeError('terminated');
+            },
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    await expect(
+      generateHypothesisStream(dummyBody, [
+        { callbacks: { onError: onError0 }, finalizeAfterStream: finalize0 },
+        { callbacks: { onError: onError1 }, finalizeAfterStream: finalize1 },
+      ]),
+    ).rejects.toThrow(LOST_STREAM_CONNECTION_MESSAGE);
+
+    expect(finalize0).toHaveBeenCalledTimes(1);
+    expect(finalize1).not.toHaveBeenCalled();
+    expect(onError0).not.toHaveBeenCalled();
+    expect(onError1).toHaveBeenCalledWith(LOST_STREAM_CONNECTION_MESSAGE);
+  });
+
+  it('does not map an intentional abort to lost connection', async () => {
+    const onError = vi.fn();
+    const abort = new DOMException('The operation was aborted.', 'AbortError');
+    const controller = new AbortController();
+    controller.abort();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(abort));
+
+    await expect(
+      generateHypothesisStream(
+        dummyBody,
+        [{ callbacks: { onError }, finalizeAfterStream: vi.fn().mockResolvedValue(undefined) }],
+        controller.signal,
+      ),
+    ).rejects.toBe(abort);
+
+    expect(onError).not.toHaveBeenCalled();
   });
 });
 

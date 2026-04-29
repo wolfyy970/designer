@@ -1,7 +1,9 @@
+/** @vitest-environment jsdom */
 import { describe, it, expect, vi } from 'vitest';
 import { dispatchParsedAgenticSseEvent } from '../client';
 import { SSE_EVENT_NAMES } from '../../constants/sse-events';
 import { safeParseGenerateSSEEvent } from '../../lib/generate-sse-event-schema';
+import { OPENROUTER_BUDGET_REFRESH_EVENT } from '../../lib/openrouter-budget';
 
 describe('dispatchParsedAgenticSseEvent', () => {
   it('dispatches progress to onProgress', () => {
@@ -27,5 +29,22 @@ describe('dispatchParsedAgenticSseEvent', () => {
     if (!parsed.ok) return;
     dispatchParsedAgenticSseEvent(parsed.event, { onTrace });
     expect(onTrace).toHaveBeenCalledWith(trace);
+  });
+
+  it('notifies budget status listeners on OpenRouter credit errors', () => {
+    const onRefresh = vi.fn();
+    window.addEventListener(OPENROUTER_BUDGET_REFRESH_EVENT, onRefresh);
+    const onError = vi.fn();
+    const parsed = safeParseGenerateSSEEvent(SSE_EVENT_NAMES.error, {
+      error: 'OpenRouter API error (402): insufficient credits',
+    });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+
+    dispatchParsedAgenticSseEvent(parsed.event, { onError });
+
+    expect(onError).toHaveBeenCalledWith('OpenRouter API error (402): insufficient credits');
+    expect(onRefresh).toHaveBeenCalledOnce();
+    window.removeEventListener(OPENROUTER_BUDGET_REFRESH_EVENT, onRefresh);
   });
 });

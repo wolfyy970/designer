@@ -12,7 +12,7 @@ This document is the **narrative** companion to [ARCHITECTURE.md](ARCHITECTURE.m
 4. **Design system node** — Optional; stores source text/images and a generated Google DESIGN.md document, then injects that document into prompts when wired to the Incubator or hypotheses.
 5. **Preview nodes** — Show iframe previews (URL-backed virtual FS for agentic multi-file); zip, evaluation summary. Versions stack per strategy; **Existing design** feedback loops can capture screenshots from previews.
 
-Multi-model runs per hypothesis use **`/api/hypothesis/generate`**: one SSE stream multiplexed with `laneIndex` and `lane_done` per model.
+Multi-model runs per hypothesis use **`/api/hypothesis/generate`**: one SSE stream multiplexed with `laneIndex` and `lane_done` per model. V1 hosted deployment keeps these synchronous SSE streams as the production path; the browser connection must stay open until the run finishes.
 
 ---
 
@@ -37,13 +37,15 @@ Evaluators use separate LLM rubrics (browser / design / strategy / implementatio
 
 ## PI engine (agentic generation)
 
-**Swap boundary** — Only `server/services/pi-sdk/` imports **`@mariozechner/pi-ai`** / **`@mariozechner/pi-coding-agent`**. Session wiring lives in **`pi-agent-service.ts`** (plus `agent-bash-sandbox.ts`, **`sandbox-resource-loader.ts`** for a no-op Pi resource loader, `pi-bash-tool.ts`, `pi-app-tools.ts`, `pi-session-event-bridge.ts`). The rest of the server calls **`runDesignAgentSession`** through generate/orchestrator code — not the Pi SDK directly — so another agent runtime could replace Pi behind the same seam.
+**Swap boundary** — Only `server/services/pi-sdk/` imports **`@mariozechner/pi-ai`** / **`@mariozechner/pi-coding-agent`**. Generate/orchestrator and task-agent code call the app-owned **`agent-runtime.ts`** facade, not Pi service modules directly. Pi session wiring lives behind **`pi-agent-service.ts`**; the app VFS contract is **`virtual-workspace.ts`**; deterministic tool grouping lives in **`agent-tool-registry.ts`**; and raw Pi session events are narrowed in **`pi-session-event-bridge.ts`** before becoming app `AgentRunEvent`s.
 
-**Sandbox** — **just-bash** provides an in-memory tree at a fixed project root for **generated** artifacts only; repo skills are **not** copied in — the agent loads them via **`use_skill`**. **`tools: []`** disables Pi’s default host-FS tools. **`pi-sdk/virtual-tools.ts`** registers the same Pi tool *schemas* (`read`, `write`, `edit`, `ls`, `find`, `grep`) with `operations` / `bash.exec` backed by that virtual FS, plus **`bash`**, **`todo_write`**, **`validate_js`**, **`validate_html`**. The wrapped **`edit`** tool can **retry once** after a “could not find” error using `[edit-match-cascade.ts](server/services/pi-sdk/edit-match-cascade.ts)` (see [ARCHITECTURE.md § Pi design sandbox](ARCHITECTURE.md#pi-design-sandbox-three-layer-contract) for the full tool table and cascade behavior). SSE **`file`** events fire when paths under the project root change via virtual tool writes or bash.
+**Sandbox** — **just-bash** provides an in-memory tree at a fixed project root for **generated** artifacts only; repo skills are **not** copied in — the agent loads them via **`use_skill`**. **`tools: []`** disables Pi’s default host-FS tools. The tool registry assembles the same ordered inventory as before: Pi-compatible virtual file tools (`read`, `write`, `edit`, `ls`, `find`, `grep`), plus **`bash`**, **`todo_write`**, **`use_skill`**, **`validate_js`**, and **`validate_html`**. The wrapped **`edit`** tool can **retry once** after a “could not find” error using `[edit-match-cascade.ts](server/services/pi-sdk/edit-match-cascade.ts)` (see [ARCHITECTURE.md § Pi design sandbox](ARCHITECTURE.md#pi-design-sandbox-three-layer-contract) for the full tool table and cascade behavior). SSE **`file`** events fire when paths under the project root change via virtual tool writes or bash.
 
 **Loop** — `createAgentSession` + `session.prompt`; subscribe events are bridged to app SSE. Long histories **compact** with the SDK’s token-aware compaction; evaluation context is appended in revision rounds when **Auto-improve** is on.
 
 **Evaluation and revision** — Only when **Auto-improve** is on: after the first build, **design-evaluation-service** runs rubric workers and a deterministic **browser QA** preflight (VM); optional **Playwright** merges when enabled and Chromium is available. Scores and a revision brief can **re-seed** the agent (bounded max rounds). Single-pass runs skip this entirely.
+
+**Deployment runtime** — V1 production uses Vercel Pro bounded synchronous SSE functions. If the browser/server connection drops, the active run cannot resume and the UI tells the user to start again. Durable background jobs remain a future v2 boundary, not part of the first hosted path.
 
 ---
 

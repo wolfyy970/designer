@@ -58,6 +58,17 @@ export function commitEdgeRemovalTransaction(
   commit({ edges: plan.nextEdges });
 }
 
+export function commitEdgeChangesTransaction(
+  prevEdges: readonly WorkspaceEdge[],
+  nextEdges: WorkspaceEdge[],
+  nodes: readonly WorkspaceNode[],
+  commit: CommitGraphPatch,
+): void {
+  const nextIds = new Set(nextEdges.map((edge) => edge.id));
+  const removedEdges = prevEdges.filter((edge) => !nextIds.has(edge.id));
+  commitEdgeRemovalTransaction({ removedEdges, nextEdges }, nodes, commit);
+}
+
 export function finalizeAddNodePlan(plan: AddNodePlan): WorkspaceNode {
   if (!plan.hypothesisBinding) return plan.newNode;
   const refId = ensureHypothesisStrategyBinding(
@@ -104,6 +115,19 @@ export function commitSpecMaterializeTransaction(
 ): void {
   applySpecMaterializeDomainSync(nodes, edges);
   applyAutoLayout();
+}
+
+export function commitOptionalInputMaterializationTransaction(input: {
+  slots: readonly WorkspaceNode['type'][];
+  addNode: (type: WorkspaceNode['type']) => string | undefined;
+  getNodes: () => readonly WorkspaceNode[];
+  getEdges: () => readonly WorkspaceEdge[];
+  applyAutoLayout: ApplyAutoLayout;
+}): void {
+  for (const slot of input.slots) {
+    input.addNode(slot);
+  }
+  commitSpecMaterializeTransaction(input.getNodes(), input.getEdges(), input.applyAutoLayout);
 }
 
 export function commitAddNodeTransaction(

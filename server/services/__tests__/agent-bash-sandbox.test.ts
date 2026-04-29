@@ -7,9 +7,9 @@ import {
   extractDesignFiles,
   SANDBOX_PROJECT_ROOT,
   snapshotDesignFiles,
-} from '../agent-bash-sandbox.ts';
+} from '../virtual-workspace.ts';
 
-describe('agent-bash-sandbox', () => {
+describe('virtual-workspace', () => {
   it('maps seedFiles under project root', () => {
     const files = buildSandboxSeedMaps({
       seedFiles: { 'skills/x/SKILL.md': 'skill', 'index.html': '<html></html>' },
@@ -46,6 +46,19 @@ describe('agent-bash-sandbox', () => {
       seedFiles: { '/index.html': '<p>x</p>' } as Record<string, string>,
     });
     expect(files[`${SANDBOX_PROJECT_ROOT}/index.html`]).toBe('<p>x</p>');
+  });
+
+  it('uses normalized seed keys when duplicate relative and absolute paths are provided', () => {
+    const files = buildSandboxSeedMaps({
+      seedFiles: { 'index.html': 'first', '/index.html': 'second' },
+    });
+    expect(files[`${SANDBOX_PROJECT_ROOT}/index.html`]).toBe('second');
+  });
+
+  it('preserves empty seeded file content', async () => {
+    const bash = createAgentBashSandbox({ seedFiles: { 'empty.txt': '' } });
+    const map = await extractDesignFiles(bash);
+    expect(map).toHaveProperty('empty.txt', '');
   });
 
   it('extractDesignFiles includes files written after construction', async () => {
@@ -87,6 +100,12 @@ describe('agent-bash-sandbox', () => {
     const seed = { 'index.html': '<old>' };
     const extracted = { 'index.html': '<new>' };
     expect(computeDesignFilesBeyondSeed(extracted, seed)).toEqual({ 'index.html': '<new>' });
+  });
+
+  it('computeDesignFilesBeyondSeed preserves newly created empty files', () => {
+    const seed = { 'index.html': '<html></html>' };
+    const extracted = { ...seed, 'empty.txt': '' };
+    expect(computeDesignFilesBeyondSeed(extracted, seed)).toEqual({ 'empty.txt': '' });
   });
 
   it('computeDesignFilesBeyondSeed returns full map when no seed', () => {

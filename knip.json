@@ -4,6 +4,7 @@
     ".": {
       "entry": [
         "server/app.ts",
+        "server/vercel-entry.ts",
         "scripts/bump-patch-version.ts"
       ],
       "ignore": [

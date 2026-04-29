@@ -8,7 +8,7 @@ import { Type } from '@sinclair/typebox';
 import type { Bash } from 'just-bash';
 import type { ExtensionContext, ToolDefinition } from './pi-sdk/types.ts';
 import { BASH_TOOL_MAX_CHARS } from '../lib/content-limits.ts';
-import { SANDBOX_PROJECT_ROOT, snapshotDesignFiles } from './pi-sdk/index.ts';
+import { SANDBOX_PROJECT_ROOT, snapshotDesignFiles } from './virtual-workspace.ts';
 import { piToolParams } from './pi-tool-params.ts';
 
 const bashParams = Type.Object({

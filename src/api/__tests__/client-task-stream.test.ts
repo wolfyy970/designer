@@ -5,6 +5,7 @@ import {
   generateInternalContext,
 } from '../client-task-stream';
 import { SSE_EVENT_NAMES } from '../../constants/sse-events';
+import { LOST_STREAM_CONNECTION_MESSAGE } from '../client-sse-lifecycle';
 
 function sseResponse(events: { name: string; data: Record<string, unknown> }[]): Response {
   const encoder = new TextEncoder();
@@ -100,5 +101,23 @@ describe('task stream client contract validation', () => {
         },
       }),
     ).rejects.toThrow(/Invalid task result payload/);
+  });
+
+  it('maps fetch/network failure to the lost-connection message', async () => {
+    const onError = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    await expect(
+      generateInputContent(
+        {
+          ...modelFields,
+          inputId: 'research-context',
+          designBrief: 'Improve onboarding.',
+        },
+        { agentic: { onError } },
+      ),
+    ).rejects.toThrow(LOST_STREAM_CONNECTION_MESSAGE);
+
+    expect(onError).toHaveBeenCalledWith(LOST_STREAM_CONNECTION_MESSAGE);
   });
 });

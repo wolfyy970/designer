@@ -7,10 +7,12 @@
 import { createStore, get, set, del, keys, clear } from 'idb-keyval';
 import type { Provenance } from '../types/provider';
 import { STORAGE_KEYS } from '../lib/storage-keys';
+import type { SavedCanvasSnapshot } from '../types/saved-canvas';
 
 const codeStore = createStore(STORAGE_KEYS.IDB_CODE, 'code');
 const provenanceStore = createStore(STORAGE_KEYS.IDB_PROVENANCE, 'provenance');
 const filesStore = createStore(STORAGE_KEYS.IDB_FILES, 'files');
+const canvasSnapshotStore = createStore(STORAGE_KEYS.IDB_CANVAS_SNAPSHOTS, 'snapshots');
 
 // ── Generated code ────────────────────────────────────────────────────
 
@@ -98,6 +100,23 @@ export async function deleteRoundFilesForResult(resultId: string): Promise<void>
 
 export function clearAllFiles(): Promise<void> {
   return clear(filesStore);
+}
+
+// ── Saved canvas snapshots ───────────────────────────────────────────
+
+export function saveCanvasSnapshot(
+  canvasId: string,
+  snapshot: SavedCanvasSnapshot,
+): Promise<void> {
+  return set(canvasId, snapshot, canvasSnapshotStore);
+}
+
+export function loadCanvasSnapshot(canvasId: string): Promise<SavedCanvasSnapshot | undefined> {
+  return get(canvasId, canvasSnapshotStore);
+}
+
+export function deleteCanvasSnapshot(canvasId: string): Promise<void> {
+  return del(canvasId, canvasSnapshotStore);
 }
 
 // ── Garbage collection ────────────────────────────────────────────────

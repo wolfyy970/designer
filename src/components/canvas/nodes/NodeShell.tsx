@@ -7,6 +7,7 @@ import { type NodeStatus } from '../../../constants/canvas';
 import { railClassFor } from './node-shell-rail';
 
 export type NodeBorderStatus = NodeStatus;
+type HandleColor = 'amber' | 'green';
 
 const BORDER_CLASSES: Record<NodeBorderStatus, string> = {
   selected: 'border-accent',
@@ -26,7 +27,9 @@ interface NodeShellProps {
   className?: string;
   hasTarget?: boolean;
   hasSource?: boolean;
-  handleColor?: 'amber' | 'green';
+  handleColor?: HandleColor;
+  targetHandleColor?: HandleColor;
+  sourceHandleColor?: HandleColor;
   targetShape?: 'circle' | 'diamond';
   targetPulse?: boolean;
   leftRail?: 'success' | 'warning' | null;
@@ -43,6 +46,8 @@ export default function NodeShell({
   hasTarget = true,
   hasSource = true,
   handleColor = 'amber',
+  targetHandleColor,
+  sourceHandleColor,
   targetShape = 'circle',
   targetPulse = false,
   leftRail,
@@ -54,8 +59,10 @@ export default function NodeShell({
   const borderClass = selected ? BORDER_CLASSES.selected : BORDER_CLASSES[status];
   const railClass = railClassFor(leftRail);
 
-  const isGreen = handleColor === 'green';
-  const handleFill = isGreen ? '!bg-success' : '!bg-warning';
+  const handleFillFor = (color: HandleColor) =>
+    color === 'green' ? 'canvas-handle-success' : 'canvas-handle-warning';
+  const targetHandleFill = handleFillFor(targetHandleColor ?? handleColor);
+  const sourceHandleFill = handleFillFor(sourceHandleColor ?? handleColor);
 
   let targetGlow = '';
   let sourceGlow = '';
@@ -73,6 +80,8 @@ export default function NodeShell({
   const shapeClass = targetShape === 'diamond' ? 'handle-diamond' : '';
   const pulseClass = targetPulse && !targetGlow ? 'handle-pulse' : '';
 
+  const handleBorder = 'canvas-handle-cutout';
+
   return (
     <div className={`relative ${width} rounded-lg border bg-surface-raised shadow-sm ${borderClass} ${railClass} ${lineageDim} ${className ?? ''}`}>
       {status === 'processing' && !selected && (
@@ -85,7 +94,7 @@ export default function NodeShell({
         <Handle
           type="target"
           position={Position.Left}
-          className={`!h-3 !w-3 !rounded-full !border-2 !border-surface-raised ${handleFill} ${shapeClass} ${pulseClass} ${targetGlow}`}
+          className={`!h-3 !w-3 !rounded-full !border-2 ${handleBorder} ${targetHandleFill} ${shapeClass} ${pulseClass} ${targetGlow}`}
         />
       )}
       {children}
@@ -93,7 +102,7 @@ export default function NodeShell({
         <Handle
           type="source"
           position={Position.Right}
-          className={`!h-3 !w-3 !rounded-full !border-2 !border-surface-raised ${handleFill} ${sourceGlow}`}
+          className={`!h-3 !w-3 !rounded-full !border-2 ${handleBorder} ${sourceHandleFill} ${sourceGlow}`}
         />
       )}
     </div>

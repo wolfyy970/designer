@@ -7,7 +7,7 @@
  * Uses Pi `DefaultResourceLoader` so inline `extensionFactories` run (designer compaction hook).
  * Call `reload()` before `createAgentSession` — the SDK skips `reload` when a loader is injected.
  */
-import { SANDBOX_PROJECT_ROOT } from './agent-bash-sandbox.ts';
+import { SANDBOX_PROJECT_ROOT } from './virtual-workspace.ts';
 import {
   DefaultResourceLoader,
   SettingsManager,

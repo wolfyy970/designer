@@ -3,6 +3,7 @@
  * No environment-specific imports — safe for both client and server.
  */
 import { z } from 'zod';
+import { normalizeOpenRouterCreditError } from './openrouter-budget';
 import type { ProviderModel, ChatResponse, ChatResponseMetadata } from '../types/provider';
 
 const ChatCompletionSuccessSchema = z.object({
@@ -82,6 +83,8 @@ export async function fetchChatCompletion(
 
   if (!response.ok) {
     const errorBody = await response.text();
+    const creditMessage = normalizeOpenRouterCreditError(errorBody || `${providerLabel} ${response.status}`);
+    if (creditMessage) throw new Error(creditMessage);
     const mapped = errorMap[response.status];
     if (mapped) throw new Error(mapped);
     throw new Error(`${providerLabel} API error (${response.status}): ${errorBody}`);

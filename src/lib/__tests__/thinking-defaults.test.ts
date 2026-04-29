@@ -63,6 +63,16 @@ describe('resolveThinkingConfig — capability gate', () => {
 });
 
 describe('resolveThinkingConfig — task defaults', () => {
+  it('matches the shipped Settings reasoning defaults', () => {
+    expect(THINKING_CONFIG_DEFAULTS).toMatchObject({
+      design: { level: 'high', budgetTokens: 20_000 },
+      incubate: { level: 'high', budgetTokens: 20_000 },
+      'internal-context': { level: 'high', budgetTokens: 20_000 },
+      inputs: { level: 'medium', budgetTokens: 5_000 },
+      'design-system': { level: 'high', budgetTokens: 20_000 },
+    });
+  });
+
   for (const task of THINKING_TASKS) {
     it(`returns the default config for task=${task} on a reasoning model`, () => {
       expect(resolveThinkingConfig(task, REASONING_MODEL)).toEqual(

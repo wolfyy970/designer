@@ -16,7 +16,7 @@ import {
   SANDBOX_READ_MAX_LINES,
 } from '../../lib/content-limits.ts';
 import { normalizeError } from '../../../src/lib/error-utils.ts';
-import { SANDBOX_PROJECT_ROOT } from '../agent-bash-sandbox.ts';
+import { SANDBOX_PROJECT_ROOT } from '../virtual-workspace.ts';
 import {
   createReadToolDefinition,
   createWriteToolDefinition,
@@ -49,7 +49,7 @@ import {
  * no `customPrompt` is set. We pass `designer-agentic-system` as `customPrompt`, so that branch is skipped.
  * Tool descriptions still reach the LLM via the API tool schema (JSON function definitions).
  *
- * Keep in sync with [agent-bash-sandbox.ts](../agent-bash-sandbox.ts), `<sandbox_environment>` in prompts/designer-agentic-system/PROMPT.md,
+ * Keep in sync with [virtual-workspace.ts](../virtual-workspace.ts), `<sandbox_environment>` in prompts/designer-agentic-system/PROMPT.md,
  * and [ARCHITECTURE.md § Pi design sandbox](../../../ARCHITECTURE.md#pi-design-sandbox-three-layer-contract) (tool inventory + edit wrapper behavior).
  */
 const SANDBOX_TOOL_OVERRIDES = {

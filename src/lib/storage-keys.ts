@@ -23,6 +23,7 @@ export const STORAGE_KEYS = {
   IDB_CODE: 'auto-designer-code',
   IDB_PROVENANCE: 'auto-designer-provenance',
   IDB_FILES: 'auto-designer-files',
+  IDB_CANVAS_SNAPSHOTS: 'auto-designer-canvas-snapshots',
 } as const;
 
 /** Value stored under `STORAGE_KEYS.CANVAS_OPTIONAL_INPUTS_TIP_DISMISSED` when the tip is dismissed. */
@@ -42,6 +43,9 @@ export const PERSISTED_LOCAL_STORAGE_KEY_NAMES = [
   'MIGRATION_FLAG',
 ] as const satisfies ReadonlyArray<keyof typeof STORAGE_KEYS>;
 
-export const IDB_DATABASE_KEY_NAMES = ['IDB_CODE', 'IDB_PROVENANCE', 'IDB_FILES'] as const satisfies ReadonlyArray<
-  keyof typeof STORAGE_KEYS
->;
+export const IDB_DATABASE_KEY_NAMES = [
+  'IDB_CODE',
+  'IDB_PROVENANCE',
+  'IDB_FILES',
+  'IDB_CANVAS_SNAPSHOTS',
+] as const satisfies ReadonlyArray<keyof typeof STORAGE_KEYS>;

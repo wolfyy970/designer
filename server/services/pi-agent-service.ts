@@ -13,6 +13,7 @@ import type { RunTraceEvent, TodoItem } from '../../src/types/provider.ts';
 import { env } from '../env.ts';
 import { debugAgentIngest } from '../lib/debug-agent-ingest.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
+import { normalizeProviderError } from '../lib/provider-error-normalize.ts';
 import { wrapPiStreamWithLogging, PI_LLM_LOG_PHASE, mapSessionTypeToLlmLogSource } from './pi-llm-log.ts';
 import { getProviderModelContextWindow } from './provider-model-context.ts';
 import { buildModel } from './pi-model.ts';
@@ -21,25 +22,13 @@ import {
   createAgentBashSandbox,
   extractDesignFiles,
   SANDBOX_PROJECT_ROOT,
-} from './agent-bash-sandbox.ts';
-import { createSandboxBashTool } from './pi-bash-tool.ts';
-import {
-  createTodoWriteTool,
-  createUseSkillTool,
-  createValidateHtmlTool,
-  createValidateJsTool,
-} from './pi-app-tools.ts';
-import { createVirtualPiCodingTools } from './pi-sdk/virtual-tools.ts';
+} from './virtual-workspace.ts';
+import { buildAgentToolGroups, flattenAgentToolGroups } from './agent-tool-registry.ts';
 import { subscribePiSessionBridge } from './pi-session-event-bridge.ts';
 import { createSandboxResourceLoader } from './sandbox-resource-loader.ts';
 import { lastAssistantHasAgentError } from '../lib/pi-message-helpers.ts';
 import { runPromptWithUpstreamRetries } from './pi-agent-prompt-retries.ts';
-import type {
-  AgentRunParams,
-  AgentSessionParams,
-  AgentRunEvent,
-  DesignAgentSessionResult,
-} from './pi-agent-run-types.ts';
+import type { AgentRunEvent, AgentSessionParams, DesignAgentSessionResult } from './agent-runtime.ts';
 
 /** Default max context when registry has no entry (non-LM Studio). */
 const FALLBACK_CONTEXT_WINDOW_DEFAULT = 131_072;
@@ -54,17 +43,21 @@ const IDLE_CHECK_MS = 10_000;
 const STALL_DEBUG_MS = 60_000;
 
 export type { ThinkingLevel } from './pi-model.ts';
-export type { AgentRunParams, AgentSessionParams, AgentRunEvent, DesignAgentSessionResult };
+export type { AgentSessionParams, AgentRunEvent, DesignAgentSessionResult };
 
-export async function runDesignAgentSession(
-  params: AgentSessionParams,
-  onEvent: (event: AgentRunEvent) => void | Promise<void>,
-): Promise<DesignAgentSessionResult | null> {
-  const trace = (
-    kind: RunTraceEvent['kind'],
-    label: string,
-    extra: Partial<RunTraceEvent> = {},
-  ): AgentRunEvent => ({
+type AgentEventSink = (event: AgentRunEvent) => void | Promise<void>;
+type TraceFactory = (
+  kind: RunTraceEvent['kind'],
+  label: string,
+  extra?: Partial<RunTraceEvent>,
+) => AgentRunEvent;
+
+function createTraceEvent(
+  kind: RunTraceEvent['kind'],
+  label: string,
+  extra: Partial<RunTraceEvent> = {},
+): AgentRunEvent {
+  return {
     type: 'trace',
     trace: {
       id: crypto.randomUUID(),
@@ -74,25 +67,20 @@ export async function runDesignAgentSession(
       status: 'info',
       ...extra,
     },
-  });
+  };
+}
 
-  await onEvent({
-    type: 'progress',
-    payload: params.initialProgressMessage ?? 'Starting agentic generation...',
-  });
-  await onEvent(
-    trace('run_started', params.initialProgressMessage ?? 'Starting agentic generation...', {
-      phase: 'building',
-    }),
-  );
+async function emitSessionStart(params: AgentSessionParams, onEvent: AgentEventSink): Promise<void> {
+  const message = params.initialProgressMessage ?? 'Starting agentic generation...';
+  await onEvent({ type: 'progress', payload: message });
+  await onEvent(createTraceEvent('run_started', message, { phase: 'building' }));
+}
 
-  const bash = createAgentBashSandbox({
-    seedFiles: params.seedFiles,
-  });
-
-  const todoState: { current: TodoItem[] } = { current: [] };
-  const hasSeed = !!params.seedFiles && Object.keys(params.seedFiles).length > 0;
-
+async function buildPiModelRuntime(params: AgentSessionParams): Promise<{
+  authStorage: AuthStorage;
+  contextWindow: number;
+  model: ReturnType<typeof buildModel>;
+}> {
   const registryCw = await getProviderModelContextWindow(params.providerId, params.modelId);
   const fallbackCw =
     params.providerId === 'lmstudio' ? env.LM_STUDIO_CONTEXT_WINDOW : FALLBACK_CONTEXT_WINDOW_DEFAULT;
@@ -112,46 +100,183 @@ export async function runDesignAgentSession(
     authStorage.setRuntimeApiKey('openrouter', env.OPENROUTER_API_KEY);
   }
 
+  return { authStorage, contextWindow, model };
+}
+
+function createDesignFileEmitter(onEvent: AgentEventSink, trace: TraceFactory): {
+  emittedFilePaths: Set<string>;
+  getFileEventCount: () => number;
+  onDesignFile: (path: string, content: string) => void;
+} {
   let fileEventCount = 0;
   const emittedFilePaths = new Set<string>();
-  const onDesignFile = (path: string, content: string) => {
-    fileEventCount += 1;
-    emittedFilePaths.add(path);
-    emitEvent(onEvent, { type: 'file', path, content });
-    emitEvent(
-      onEvent,
-      trace('file_written', `Saved ${path}`, {
-        phase: 'building',
-        path,
-        status: 'success',
-      }),
-    );
+  return {
+    emittedFilePaths,
+    getFileEventCount: () => fileEventCount,
+    onDesignFile: (path, content) => {
+      fileEventCount += 1;
+      emittedFilePaths.add(path);
+      emitEvent(onEvent, { type: 'file', path, content });
+      emitEvent(
+        onEvent,
+        trace('file_written', `Saved ${path}`, {
+          phase: 'building',
+          path,
+          status: 'success',
+        }),
+      );
+    },
   };
-  const virtualPiTools = createVirtualPiCodingTools(bash, onDesignFile);
-  const bashTool = createSandboxBashTool(bash, onDesignFile);
-  const todoTool = createTodoWriteTool(todoState, (todos) => {
-    emitEvent(onEvent, { type: 'todos', todos });
-  });
-  const validateJsTool = createValidateJsTool(bash);
-  const validateHtmlTool = createValidateHtmlTool(bash);
-  const skillCatalog = params.skillCatalog ?? [];
-  const useSkillTool = createUseSkillTool(skillCatalog, (payload) => {
-    emitEvent(onEvent, {
-      type: 'skill_activated',
-      key: payload.key,
-      name: payload.name,
-      description: payload.description,
-    });
-  });
+}
 
-  const llmTurnLogRef: { current?: string } = {};
-
+async function createSandboxSessionResources(params: AgentSessionParams, contextWindow: number) {
   const { getPromptBody: getPromptBodyFn } = await import('../lib/prompt-resolution.ts');
-  const { resourceLoader, settingsManager } = await createSandboxResourceLoader({
+  return createSandboxResourceLoader({
     systemPrompt: params.systemPrompt.trim(),
     contextWindow,
     getCompactionPromptBody: () => getPromptBodyFn('agent-context-compaction'),
   });
+}
+
+function startSessionHeartbeatTimers(input: {
+  params: AgentSessionParams;
+  onEvent: AgentEventSink;
+  streamActivityAt: { current: number };
+  pendingToolCallsRef: { current: number };
+}): () => void {
+  const idleTimer = setInterval(() => {
+    if (input.params.signal?.aborted) return;
+    const gapSec = Math.floor((Date.now() - input.streamActivityAt.current) / 1000);
+    if (gapSec < IDLE_PROGRESS_GAP_SEC) return;
+    emitEvent(input.onEvent, {
+      type: 'progress',
+      payload: `Still working… ${gapSec}s since last streamed output`,
+    });
+  }, IDLE_CHECK_MS);
+
+  const stallDebugTimer = setInterval(() => {
+    if (input.params.signal?.aborted) return;
+    const idleSec = Math.floor((Date.now() - input.streamActivityAt.current) / 1000);
+    const isRevision = !!input.params.compactionNote?.trim();
+    debugAgentIngest({
+      hypothesisId: 'H6',
+      location: 'pi-agent-service.ts:stall_heartbeat',
+      message: 'agent session stall heartbeat',
+      data: {
+        idleSec,
+        pendingToolCalls: input.pendingToolCallsRef.current,
+        isRevision,
+        userPromptChars: input.params.userPrompt.length,
+        seedFileCount: input.params.seedFiles ? Object.keys(input.params.seedFiles).length : 0,
+      },
+    });
+  }, STALL_DEBUG_MS);
+
+  return () => {
+    clearInterval(idleTimer);
+    clearInterval(stallDebugTimer);
+  };
+}
+
+async function extractSessionResult(input: {
+  bash: ReturnType<typeof createAgentBashSandbox>;
+  params: AgentSessionParams;
+  session: Awaited<ReturnType<typeof createAgentSession>>['session'];
+  todoState: { current: TodoItem[] };
+  emittedFilePaths: Set<string>;
+  fileEventCount: number;
+  contextWindow: number;
+  onEvent: AgentEventSink;
+}): Promise<DesignAgentSessionResult | null> {
+  const files = await extractDesignFiles(input.bash);
+
+  const seedSnapshot = input.params.seedFiles;
+  const hasRevisionSeed = !!seedSnapshot && Object.keys(seedSnapshot).length > 0;
+  /** With no pre-seeded files, the sandbox should only contain agent output. With revision seeds, compare to detect no net new work. */
+  const outputVsSeed = hasRevisionSeed
+    ? computeDesignFilesBeyondSeed(files, seedSnapshot)
+    : files;
+
+  if (env.isDev) {
+    const seedCount = input.params.seedFiles ? Object.keys(input.params.seedFiles).length : 0;
+    console.debug('[pi-agent] session complete', {
+      correlationId: input.params.correlationId,
+      filesExtracted: Object.keys(files).length,
+      beyondSeedCount: Object.keys(outputVsSeed).length,
+      fileNames: Object.keys(files),
+      fileEventsEmitted: input.fileEventCount,
+      hasSeed: !!input.params.seedFiles && Object.keys(input.params.seedFiles).length > 0,
+      seedFileCount: seedCount,
+      todoCount: input.todoState.current.length,
+      aborted: !!input.params.signal?.aborted,
+      provider: input.params.providerId,
+      model: input.params.modelId,
+      contextWindow: input.contextWindow,
+    });
+  }
+
+  if (Object.keys(outputVsSeed).length === 0 && !input.params.signal?.aborted) {
+    if (!lastAssistantHasAgentError(input.session)) {
+      if (env.isDev) {
+        console.warn(
+          '[pi-agent] agent produced no new or changed files vs seed (empty workspace or unchanged revision seed)',
+        );
+      }
+      await input.onEvent({
+        type: 'error',
+        payload:
+          'Agent completed without creating design files in the sandbox. Try a model that supports tool use, or ensure the bash tool runs successfully.',
+      });
+    }
+    return null;
+  }
+
+  return {
+    files,
+    todos: [...input.todoState.current],
+    emittedFilePaths: [...input.emittedFilePaths],
+  };
+}
+
+export async function runDesignAgentSession(
+  params: AgentSessionParams,
+  onEvent: (event: AgentRunEvent) => void | Promise<void>,
+): Promise<DesignAgentSessionResult | null> {
+  const trace = createTraceEvent;
+  await emitSessionStart(params, onEvent);
+
+  const bash = createAgentBashSandbox({
+    seedFiles: params.seedFiles,
+  });
+
+  const todoState: { current: TodoItem[] } = { current: [] };
+  const hasSeed = !!params.seedFiles && Object.keys(params.seedFiles).length > 0;
+
+  const { authStorage, contextWindow, model } = await buildPiModelRuntime(params);
+  const { emittedFilePaths, getFileEventCount, onDesignFile } = createDesignFileEmitter(onEvent, trace);
+  const skillCatalog = params.skillCatalog ?? [];
+  const toolGroups = buildAgentToolGroups({
+    bash,
+    todoState,
+    skillCatalog,
+    onDesignFile,
+    onTodos: (todos) => {
+      emitEvent(onEvent, { type: 'todos', todos });
+    },
+    onSkillActivated: (payload) => {
+      emitEvent(onEvent, {
+        type: 'skill_activated',
+        key: payload.key,
+        name: payload.name,
+        description: payload.description,
+      });
+    },
+  });
+  const customTools = flattenAgentToolGroups(toolGroups);
+
+  const llmTurnLogRef: { current?: string } = {};
+
+  const { resourceLoader, settingsManager } = await createSandboxSessionResources(params, contextWindow);
 
   const { session, modelFallbackMessage } = await createAgentSession({
     authStorage,
@@ -160,14 +285,7 @@ export async function runDesignAgentSession(
       CreateAgentSessionOptions['thinkingLevel']
     >,
     tools: [],
-    customTools: [
-      ...virtualPiTools,
-      bashTool,
-      todoTool,
-      useSkillTool,
-      validateJsTool,
-      validateHtmlTool,
-    ] as ToolDefinition[],
+    customTools: customTools as ToolDefinition[],
     sessionManager: SessionManager.inMemory(),
     cwd: SANDBOX_PROJECT_ROOT,
     settingsManager,
@@ -208,33 +326,12 @@ export async function runDesignAgentSession(
     params.signal.addEventListener('abort', () => session.agent.abort());
   }
 
-  const idleTimer = setInterval(() => {
-    if (params.signal?.aborted) return;
-    const gapSec = Math.floor((Date.now() - streamActivityAt.current) / 1000);
-    if (gapSec < IDLE_PROGRESS_GAP_SEC) return;
-    emitEvent(onEvent, {
-      type: 'progress',
-      payload: `Still working… ${gapSec}s since last streamed output`,
-    });
-  }, IDLE_CHECK_MS);
-
-  const stallDebugTimer = setInterval(() => {
-    if (params.signal?.aborted) return;
-    const idleSec = Math.floor((Date.now() - streamActivityAt.current) / 1000);
-    const isRevision = !!params.compactionNote?.trim();
-    debugAgentIngest({
-      hypothesisId: 'H6',
-      location: 'pi-agent-service.ts:stall_heartbeat',
-      message: 'agent session stall heartbeat',
-      data: {
-        idleSec,
-        pendingToolCalls: pendingToolCallsRef.current,
-        isRevision,
-        userPromptChars: params.userPrompt.length,
-        seedFileCount: params.seedFiles ? Object.keys(params.seedFiles).length : 0,
-      },
-    });
-  }, STALL_DEBUG_MS);
+  const stopHeartbeatTimers = startSessionHeartbeatTimers({
+    params,
+    onEvent,
+    streamActivityAt,
+    pendingToolCallsRef,
+  });
 
   if (env.isDev) {
     const seedKeys = hasSeed ? Object.keys(params.seedFiles!) : [];
@@ -245,7 +342,7 @@ export async function runDesignAgentSession(
       contextWindow,
       seedFileCount: seedKeys.length,
       seedFilePaths: seedKeys.slice(0, 20),
-      toolCount: virtualPiTools.length + 5,
+      toolCount: customTools.length,
       userPromptChars: params.userPrompt.length,
       systemPromptChars: params.systemPrompt.length,
     });
@@ -262,59 +359,21 @@ export async function runDesignAgentSession(
     if (env.isDev) {
       console.error('[pi-agent] session.prompt failed', normalizeError(err), err);
     }
-    await onEvent({ type: 'error', payload: `Agent error: ${normalizeError(err)}` });
+    await onEvent({ type: 'error', payload: `Agent error: ${normalizeProviderError(err)}` });
     return null;
   } finally {
-    clearInterval(idleTimer);
-    clearInterval(stallDebugTimer);
+    stopHeartbeatTimers();
     unsubscribe();
   }
 
-  const files = await extractDesignFiles(bash);
-
-  const seedSnapshot = params.seedFiles;
-  const hasRevisionSeed = !!seedSnapshot && Object.keys(seedSnapshot).length > 0;
-  /** With no pre-seeded files, the sandbox should only contain agent output. With revision seeds, compare to detect no net new work. */
-  const outputVsSeed = hasRevisionSeed
-    ? computeDesignFilesBeyondSeed(files, seedSnapshot)
-    : files;
-
-  if (env.isDev) {
-    const seedCount = params.seedFiles ? Object.keys(params.seedFiles).length : 0;
-    console.debug('[pi-agent] session complete', {
-      correlationId: params.correlationId,
-      filesExtracted: Object.keys(files).length,
-      beyondSeedCount: Object.keys(outputVsSeed).length,
-      fileNames: Object.keys(files),
-      fileEventsEmitted: fileEventCount,
-      hasSeed,
-      seedFileCount: seedCount,
-      todoCount: todoState.current.length,
-      aborted: !!params.signal?.aborted,
-      provider: params.providerId,
-      model: params.modelId,
-    });
-  }
-
-  if (Object.keys(outputVsSeed).length === 0 && !params.signal?.aborted) {
-    if (!lastAssistantHasAgentError(session)) {
-      if (env.isDev) {
-        console.warn(
-          '[pi-agent] agent produced no new or changed files vs seed (empty workspace or unchanged revision seed)',
-        );
-      }
-      await onEvent({
-        type: 'error',
-        payload:
-          'Agent completed without creating design files in the sandbox. Try a model that supports tool use, or ensure the bash tool runs successfully.',
-      });
-    }
-    return null;
-  }
-
-  return {
-    files,
-    todos: [...todoState.current],
-    emittedFilePaths: [...emittedFilePaths],
-  };
+  return extractSessionResult({
+    bash,
+    params,
+    session,
+    todoState,
+    emittedFilePaths,
+    fileEventCount: getFileEventCount(),
+    contextWindow,
+    onEvent,
+  });
 }

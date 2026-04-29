@@ -82,6 +82,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
   const setRunInspectorPreview = useCanvasStore((s) => s.setRunInspectorPreview);
   const closeRunInspector = useCanvasStore((s) => s.closeRunInspector);
   const isWorkspaceOpen = useCanvasStore((s) => s.runInspectorPreviewNodeId === id);
+  const hasInputConnection = useCanvasStore((s) => s.edges.some((edge) => edge.target === id));
 
   const variantName = strategy?.name ?? 'Preview';
 
@@ -208,7 +209,8 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
       width="w-node-variant"
       status={status}
       className={`relative flex h-full min-h-[var(--min-height-variant-node)] flex-col${isArchived ? ' opacity-75' : ''} ${stackClass}`}
-      handleColor={hasCode ? 'green' : 'amber'}
+      targetHandleColor={hasInputConnection ? 'green' : 'amber'}
+      sourceHandleColor={hasCode ? 'green' : 'amber'}
     >
       <VariantToolbar
         variantName={variantName}
@@ -233,8 +235,7 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
         zoomIn={zoomIn}
         zoomOut={zoomOut}
         resetZoom={resetZoom}
-        onDownload={handleDownload}
-        onDownloadDebug={result ? () => setDebugExportOpen(true) : undefined}
+        onDownload={() => setDebugExportOpen(true)}
         onDeleteVersion={confirmDeleteVersion}
         onExpand={() => setExpandedPreview(id)}
         onToggleWorkspace={() =>
@@ -312,6 +313,10 @@ function VariantNode({ id, data, selected }: NodeProps<VariantNodeType>) {
           onClose={() => setDebugExportOpen(false)}
           variantLabel={variantName}
           previewInput={debugExportPreviewInput}
+          onDownloadFiles={() => {
+            handleDownload();
+            setDebugExportOpen(false);
+          }}
           onConfirm={handleConfirmDebugExport}
         />
       ) : null}

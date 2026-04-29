@@ -14,7 +14,7 @@ import { normalizeError } from '../../../src/lib/error-utils.ts';
 import { env } from '../../env.ts';
 import { writeAgenticEvalRunLog } from '../../lib/eval-run-logger.ts';
 import { acquireAgenticSlotOrReject, releaseAgenticSlot } from '../../lib/agentic-concurrency.ts';
-import type { AgentRunEvent } from '../pi-agent-run-types.ts';
+import type { AgentRunEvent } from '../agent-runtime.ts';
 import type { AgenticOrchestratorOptions, AgenticOrchestratorResult } from './types.ts';
 import { MAX_REVISION_ROUNDS_CAP } from './types.ts';
 import { emitOrchestratorEvent, type StreamEmissionContext } from './emit.ts';

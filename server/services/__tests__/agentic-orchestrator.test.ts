@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   runEvaluationWorkers: vi.fn(),
 }));
 
-vi.mock('../pi-agent-service.ts', () => ({
+vi.mock('../agent-runtime.ts', () => ({
   runDesignAgentSession: mocks.runDesignAgentSession,
 }));
 

@@ -14,9 +14,11 @@ import { DEFAULT_RUBRIC_WEIGHTS } from '../types/evaluation';
 import {
   HypothesisPromptBundleResponseSchema,
   ModelsResponseSchema,
+  OpenRouterBudgetStatusResponseSchema,
   ProvidersListResponseSchema,
   AppConfigResponseSchema,
   type AppConfigResponse,
+  type OpenRouterBudgetStatusResponse,
 } from './response-schemas';
 import { API_BASE, getParsedList, INVALID_SERVER_RESPONSE, postParsed } from './client-shared.ts';
 
@@ -54,6 +56,29 @@ export async function fetchAppConfig(signal?: AbortSignal): Promise<AppConfigRes
   if (!r.success) {
     if (import.meta.env.DEV) {
       console.warn('[api] GET /config response shape unexpected', r.error.flatten());
+    }
+    throw new Error(INVALID_SERVER_RESPONSE);
+  }
+  return r.data;
+}
+
+export async function fetchOpenRouterBudgetStatus(
+  signal?: AbortSignal,
+): Promise<OpenRouterBudgetStatusResponse> {
+  const response = await fetch(`${API_BASE}/provider-status/openrouter`, { signal });
+  if (!response.ok) {
+    throw new Error('Failed to load OpenRouter budget status');
+  }
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    throw new Error(INVALID_SERVER_RESPONSE);
+  }
+  const r = OpenRouterBudgetStatusResponseSchema.safeParse(json);
+  if (!r.success) {
+    if (import.meta.env.DEV) {
+      console.warn('[api] GET /provider-status/openrouter response shape unexpected', r.error.flatten());
     }
     throw new Error(INVALID_SERVER_RESPONSE);
   }

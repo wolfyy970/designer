@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   createAgentBashSandbox,
   SANDBOX_PROJECT_ROOT,
-} from '../../agent-bash-sandbox.ts';
+} from '../../virtual-workspace.ts';
 import { createVirtualPiCodingTools } from '../virtual-tools.ts';
 import type { ExtensionContext } from '../types.ts';
 

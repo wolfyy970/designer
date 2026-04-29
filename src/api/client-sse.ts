@@ -14,13 +14,9 @@ import type {
   EvaluatorRubricId,
   EvaluatorWorkerReport,
 } from '../types/evaluation';
-import { normalizeError, parseApiErrorBody } from '../lib/error-utils';
+import { normalizeError } from '../lib/error-utils';
 import { SSE_EVENT_NAMES } from '../constants/sse-events';
 import { readSseEventStream } from '../lib/sse-reader';
-import {
-  attachSseDiagWindow,
-  createSseStreamDiagnostics,
-} from '../lib/sse-diagnostics';
 import type { ZodError } from 'zod';
 import { IncubateResponseSchema } from './response-schemas';
 import { API_BASE, INVALID_SERVER_RESPONSE } from './client-shared.ts';
@@ -30,8 +26,21 @@ import {
   notifyAllHypothesisLanesError,
   type HypothesisLaneSession,
 } from './client-sse-lane-router';
-import { parseHypothesisSseJson, stripLaneIndex } from './client-sse-json';
+import { stripLaneIndex } from './client-sse-json';
 import { dispatchGenerateStreamEvent } from './client-sse-dispatch';
+import {
+  assertOkResponse,
+  createClientSseDiagnostics,
+  invalidServerResponseError,
+  isLikelyStreamConnectionLoss,
+  lostStreamConnectionError,
+  parseSseObject,
+  requireSseReader,
+} from './client-sse-lifecycle';
+import {
+  isOpenRouterCreditExhaustionLike,
+  notifyOpenRouterBudgetRefresh,
+} from '../lib/openrouter-budget';
 
 export { parseHypothesisSseJson } from './client-sse-json';
 export {
@@ -122,31 +131,36 @@ export async function incubateStream(
 ): Promise<IncubateResponse> {
   const opts = normalizeIncubateOptions(second);
   const signal = third;
-  const response = await fetch(`${API_BASE}/incubate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req),
-    signal,
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(parseApiErrorBody(text));
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/incubate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+      signal,
+    });
+  } catch (err) {
+    if (isLikelyStreamConnectionLoss(err, signal)) {
+      const lost = lostStreamConnectionError();
+      opts.incubate?.onError?.(lost.message);
+      opts.agentic?.onError?.(lost.message);
+      throw lost;
+    }
+    throw err;
   }
 
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error('No response body');
+  await assertOkResponse(response, 'Compilation failed');
+  const reader = requireSseReader(response);
 
   let result: IncubateResponse | undefined;
   let streamError: string | undefined;
 
-  const diag = createSseStreamDiagnostics();
-  attachSseDiagWindow(diag);
+  const diag = createClientSseDiagnostics();
 
   try {
     await readSseEventStream(reader, async (currentEvent, raw) => {
       const ev = currentEvent.trim();
-      const parsed = parseHypothesisSseJson(raw);
+      const parsed = parseSseObject(raw, ev);
 
       if (ev === SSE_EVENT_NAMES.error) {
         const msg =
@@ -156,6 +170,9 @@ export async function incubateStream(
               ? raw
               : 'Compilation failed';
         streamError = msg;
+        if (isOpenRouterCreditExhaustionLike(msg)) {
+          notifyOpenRouterBudgetRefresh();
+        }
         opts.incubate?.onError?.(msg);
         opts.agentic?.onError?.(msg);
         return;
@@ -217,6 +234,14 @@ export async function incubateStream(
         console.debug('[api] incubate SSE event (dev: not surfaced)', ev, raw);
       }
     });
+  } catch (err) {
+    if (isLikelyStreamConnectionLoss(err, signal)) {
+      const lost = lostStreamConnectionError();
+      opts.incubate?.onError?.(lost.message);
+      opts.agentic?.onError?.(lost.message);
+      throw lost;
+    }
+    throw err;
   } finally {
     diag.logClose();
   }
@@ -225,7 +250,7 @@ export async function incubateStream(
     throw new Error(normalizeError(streamError, 'Compilation failed'));
   }
   if (!result) {
-    throw new Error(INVALID_SERVER_RESPONSE);
+    throw invalidServerResponseError();
   }
   return result;
 }
@@ -243,27 +268,34 @@ export async function generateHypothesisStream(
   lanes: HypothesisLaneSession[],
   signal?: AbortSignal,
 ): Promise<void> {
-  const response = await fetch(`${API_BASE}/hypothesis/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal,
-  });
+  const finalizedLaneIndices = new Set<number>();
+  const notifyUnfinishedLanesLostConnection = (error: Error) => {
+    lanes.forEach((lane, index) => {
+      if (!finalizedLaneIndices.has(index)) lane.callbacks.onError?.(error.message);
+    });
+  };
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(
-      normalizeError(parseApiErrorBody(text), 'Generation request failed'),
-    );
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/hypothesis/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (err) {
+    if (isLikelyStreamConnectionLoss(err, signal)) {
+      const lost = lostStreamConnectionError();
+      notifyUnfinishedLanesLostConnection(lost);
+      throw lost;
+    }
+    throw err;
   }
 
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error('No response body');
+  await assertOkResponse(response, 'Generation request failed');
+  const reader = requireSseReader(response);
 
-  const diag = createSseStreamDiagnostics();
-  attachSseDiagWindow(diag);
-
-  const finalizedLaneIndices = new Set<number>();
+  const diag = createClientSseDiagnostics();
 
   try {
     await readSseEventStream(reader, async (currentEvent, raw) => {
@@ -273,7 +305,7 @@ export async function generateHypothesisStream(
           diag.recordDrop('empty_event_name', raw.slice(0, 120));
           return;
         }
-        const parsed = parseHypothesisSseJson(raw);
+        const parsed = parseSseObject(raw, currentEvent);
         if (parsed == null) {
           diag.recordDrop('invalid_json', currentEvent);
           if (import.meta.env.DEV) {
@@ -300,6 +332,13 @@ export async function generateHypothesisStream(
           return;
         }
         const { laneIndex, rest } = stripLaneIndex(parsed);
+        if (
+          currentEvent === SSE_EVENT_NAMES.error &&
+          typeof rest.error === 'string' &&
+          isOpenRouterCreditExhaustionLike(rest.error)
+        ) {
+          notifyOpenRouterBudgetRefresh();
+        }
         if (
           typeof laneIndex !== 'number' &&
           lanes.length > 1 &&
@@ -337,6 +376,13 @@ export async function generateHypothesisStream(
         return false;
       }
     });
+  } catch (err) {
+    if (isLikelyStreamConnectionLoss(err, signal)) {
+      const lost = lostStreamConnectionError();
+      notifyUnfinishedLanesLostConnection(lost);
+      throw lost;
+    }
+    throw err;
   } finally {
     diag.logClose();
   }

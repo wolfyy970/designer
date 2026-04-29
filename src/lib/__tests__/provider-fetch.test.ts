@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { extractMessageText, fetchChatCompletion, fetchModelList, parseChatResponse } from '../provider-fetch';
+import { OPENROUTER_CREDIT_EXHAUSTED_MESSAGE } from '../openrouter-budget';
 
 // ── extractMessageText ───────────────────────────────────────────────
 
@@ -162,6 +163,20 @@ describe('fetchChatCompletion', () => {
     await expect(
       fetchChatCompletion('https://api.example.com', {}, { 401: 'Invalid API key.' }, 'TestProvider'),
     ).rejects.toThrow('Invalid API key.');
+  });
+
+  it('normalizes OpenRouter insufficient credit errors', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 402,
+      text: () => Promise.resolve(
+        JSON.stringify({ error: { code: 402, message: 'Your account has insufficient credits.' } }),
+      ),
+    }));
+
+    await expect(
+      fetchChatCompletion('https://api.example.com', {}, {}, 'OpenRouter'),
+    ).rejects.toThrow(OPENROUTER_CREDIT_EXHAUSTED_MESSAGE);
   });
 
   it('throws generic error for unmapped status codes', async () => {

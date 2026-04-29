@@ -54,7 +54,7 @@ Vitest excludes `server/services/__tests__/browser-playwright-evaluator.test.ts`
 
 ### Two-process dev setup
 
-The frontend (Vite, default port **4732** — `strictPort`; override **`VITE_PORT`**) proxies `/api/*` to the API server (Hono/Node.js, default **`PORT`** **4731**). **Both must run together in development.** Prefer `pnpm dev:all` so Vite starts only after `/api/health` responds; otherwise the UI's first `/api/*` calls may get `ECONNREFUSED` until the API is up (hard refresh fixes it). A different Vite port is a **different browser origin** — saved canvas library / active spec localStorage would not carry over; free the port with `pnpm dev:kill` if Vite fails to bind. Avoid `pnpm dev:server & pnpm dev` unless you manage the background job: `**Ctrl+C` may not stop the background API**, leaving **`PORT`** in use (`EADDRINUSE` on the next start). Free it with `lsof -nP -iTCP:$PORT -sTCP:LISTEN` / `kill`, or `jobs` → `fg` → `Ctrl+C`. Defaults live in **`server/dev-defaults.ts`** (keep shell fallbacks in `package.json` / `scripts/kill-dev-servers.sh` aligned). API keys live on the server only — never exposed to the browser.
+The frontend (Vite, default port **4732** — `strictPort`; override **`VITE_PORT`**) proxies `/api/*` to the API server (Hono/Node.js, default **`PORT`** **4731**). **Both must run together in development.** Prefer `pnpm dev:all` so Vite starts only after `/api/health` responds; otherwise the UI's first `/api/*` calls may get `ECONNREFUSED` until the API is up (hard refresh fixes it). A different Vite port is a **different browser origin** — saved canvas library and active workspace browser storage would not carry over; free the port with `pnpm dev:kill` if Vite fails to bind. Avoid `pnpm dev:server & pnpm dev` unless you manage the background job: `**Ctrl+C` may not stop the background API**, leaving **`PORT`** in use (`EADDRINUSE` on the next start). Free it with `lsof -nP -iTCP:$PORT -sTCP:LISTEN` / `kill`, or `jobs` → `fg` → `Ctrl+C`. Defaults live in **`server/dev-defaults.ts`** (keep shell fallbacks in `package.json` / `scripts/kill-dev-servers.sh` aligned). API keys live on the server only — never exposed to the browser.
 
 **Provider concurrency:** OpenRouter runs hypothesis lanes in parallel; LM Studio runs sequentially (returns 500 on concurrent requests).
 
@@ -63,7 +63,7 @@ The frontend (Vite, default port **4732** — `strictPort`; override **`VITE_POR
 - `**NODE_ENV=production`:** `GET`/`POST`/`DELETE` `**/api/logs`** return **404** (no shared in-memory LLM/trace ring).
 - **CORS:** Optional `**ALLOWED_ORIGINS`** (comma-separated) in [server/env.ts](server/env.ts); when unset, only localhost dev origins. Set on Vercel when using a custom domain or preview URL that is not same-origin as `/api`.
 - **Limits:** Request bodies capped at **2MB** (`hono/body-limit` on the API app). Preview map: `**MAX_PREVIEW_SESSIONS`** (default 200), `**MAX_PREVIEW_PAYLOAD_BYTES`** (default 5MB). Agentic: `**MAX_CONCURRENT_AGENTIC_RUNS**` per instance (default 5) → **503**-style error event on overload. `**LLM_LOG_MAX_BODY_CHARS`** defaults to **2000** in production for the NDJSON sink when unset.
-- **Vercel Pro:** `api/[[...route]].ts` sets `**maxDuration = 800`** for long agentic streams.
+- **Vercel Pro:** `api/[[...route]].js` sets `**maxDuration = 800`** for long agentic streams.
 
 ## Critical gotchas
 

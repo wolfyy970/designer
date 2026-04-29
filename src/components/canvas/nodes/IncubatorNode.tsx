@@ -235,7 +235,7 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
       targetPulse={!isReady}
     >
       <NodeHeader
-        description="Synthesizes your inputs into differentiated hypothesis strategies to explore."
+        description="Synthesize inputs into differentiated design hypotheses"
       >
         <h3 className="text-xs font-semibold text-fg">Incubator</h3>
       </NodeHeader>

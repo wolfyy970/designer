@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import { act, render, cleanup, screen } from '@testing-library/react';
+import { describe, it, expect, afterEach } from 'vitest';
+import { render, cleanup, screen } from '@testing-library/react';
 import TaskStreamMonitor from '../TaskStreamMonitor';
 import type { TaskStreamState } from '../../../../hooks/task-stream-state';
 
@@ -114,6 +114,35 @@ describe('TaskStreamMonitor — status row', () => {
     expect(container.textContent).toContain('↓');
   });
 
+  it('does not show a separate post-thinking duration badge', () => {
+    const { container, rerender } = render(
+      <TaskStreamMonitor
+        state={{
+          ...base,
+          streamedModelChars: 1800,
+          streamMode: 'thinking',
+          thinkingTurns: [{ turnId: 0, startedAt: 1, text: 'reasoning…' }],
+        }}
+        elapsed={3}
+      />,
+    );
+
+    rerender(
+      <TaskStreamMonitor
+        state={{
+          ...base,
+          streamedModelChars: 1800,
+          streamMode: 'narrating',
+          thinkingTurns: [{ turnId: 0, startedAt: 1, endedAt: 3001, text: 'done' }],
+        }}
+        elapsed={3}
+      />,
+    );
+
+    expect(container.querySelector('[aria-label*="thought for"]')).toBeNull();
+    expect(container.querySelector('[aria-label="narrating"]')).not.toBeNull();
+  });
+
   it('falls back to the provided label when no progressMessage is set', () => {
     render(<TaskStreamMonitor state={base} fallbackLabel="Incubating…" />);
     expect(screen.queryByText('Incubating…')).not.toBeNull();
@@ -211,80 +240,5 @@ describe('TaskStreamMonitor — suppressed noise', () => {
   it('never shows the agentic phase tag', () => {
     const { container } = render(<TaskStreamMonitor state={richState} elapsed={5} />);
     expect(container.textContent ?? '').not.toMatch(/evaluating/i);
-  });
-});
-
-describe('TaskStreamMonitor — thought-for-Xs badge', () => {
-  afterEach(() => {
-    vi.useRealTimers();
-    cleanup();
-  });
-
-  it('shows "🧠 Xs" badge after a thinking turn closes', () => {
-    vi.useFakeTimers();
-    const tStart = Date.now() - 4000;
-    const tEnd = Date.now();
-    const { rerender, container } = render(
-      <TaskStreamMonitor
-        state={{
-          ...base,
-          streamedModelChars: 1800,
-          streamMode: 'thinking',
-          thinkingTurns: [{ turnId: 0, startedAt: tStart, text: 'reasoning…' }],
-        }}
-        elapsed={4}
-      />,
-    );
-    expect(container.querySelector('[aria-label="thinking"]')).not.toBeNull();
-
-    act(() => {
-      rerender(
-        <TaskStreamMonitor
-          state={{
-            ...base,
-            streamedModelChars: 1800,
-            streamMode: 'narrating',
-            thinkingTurns: [{ turnId: 0, startedAt: tStart, endedAt: tEnd, text: 'done' }],
-          }}
-          elapsed={4}
-        />,
-      );
-    });
-    expect(container.querySelector('[aria-label*="thought for"]')).not.toBeNull();
-    expect(container.textContent).toMatch(/\d+s/);
-  });
-
-  it('dismisses the badge after 3.5 seconds', () => {
-    vi.useFakeTimers();
-    const tStart = Date.now() - 3000;
-    const tEnd = Date.now();
-    const { rerender, container } = render(
-      <TaskStreamMonitor
-        state={{ ...base, streamedModelChars: 1800, thinkingTurns: [{ turnId: 0, startedAt: tStart, text: 'reasoning…' }] }}
-        elapsed={3}
-      />,
-    );
-    act(() => {
-      rerender(
-        <TaskStreamMonitor
-          state={{ ...base, streamedModelChars: 1800, thinkingTurns: [{ turnId: 0, startedAt: tStart, endedAt: tEnd, text: 'done' }] }}
-          elapsed={3}
-        />,
-      );
-    });
-    expect(container.querySelector('[aria-label*="thought for"]')).not.toBeNull();
-
-    act(() => { vi.advanceTimersByTime(3500); });
-    expect(container.querySelector('[aria-label*="thought for"]')).toBeNull();
-  });
-
-  it('does not show the badge when thinking never started', () => {
-    const { container } = render(
-      <TaskStreamMonitor
-        state={{ ...base, streamedModelChars: 1800 }}
-        elapsed={3}
-      />,
-    );
-    expect(container.querySelector('[aria-label*="thought for"]')).toBeNull();
   });
 });

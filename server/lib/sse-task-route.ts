@@ -2,7 +2,7 @@
  * Shared SSE plumbing for task-agent routes (incubate, inputs-generate, design-system extract).
  * Encapsulates write gate, allocId, success tail (phase complete + done), and error tail (error + done).
  */
-import { normalizeError } from '../../src/lib/error-utils.ts';
+import { normalizeProviderError } from './provider-error-normalize.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { createWriteGate, type WriteGate } from './sse-write-gate.ts';
 import { env } from '../env.ts';
@@ -46,7 +46,7 @@ export async function runTaskAgentSseBody(
     await write(SSE_EVENT_NAMES.phase, { phase: 'complete' });
     await write(SSE_EVENT_NAMES.done, {});
   } catch (err) {
-    await write(SSE_EVENT_NAMES.error, { error: normalizeError(err) });
+    await write(SSE_EVENT_NAMES.error, { error: normalizeProviderError(err) });
     await write(SSE_EVENT_NAMES.done, {});
   }
   if (sseWriteAudit) {

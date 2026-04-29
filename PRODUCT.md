@@ -2,7 +2,7 @@
 
 ## North Star
 
-Auto Designer exists to **assist the UX designer**. Think of it as an auto-designer, like a pair programmer. 
+Designer exists to **assist the UX designer**. Think of it as an auto-designer, like a pair programmer.
 
 Given a problem statement and appropriate research, a good designer synthesizes everything — user needs, competitive landscape, behavioral patterns, business constraints — and produces hypotheses that break conventions with something genuinely better. Then they execute those hypotheses into designs where every affordance is clear, every interaction is intuitive, time on task drops, and users never have to think. *Don't Make Me Think*, Nielsen Norman heuristics, information architecture, visual hierarchy — the entire discipline, applied at an expert level.
 
@@ -50,7 +50,7 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 - **Lineage highlighting** — Select a node to highlight its full connected component (siblings, ancestors, descendants). Unconnected nodes dim to 40% opacity.
 - **Edge animations** — Custom DataFlowEdge with status indicators (idle/processing/complete/error)
 - **Full-screen preview** — Expand any preview to full-screen overlay: primary arrows step **other preview nodes on the same hypothesis** (domain `previewSlots`; falls back to canvas-wide if no slot). Inner control steps **version stack** (v1, v2, …) for that hypothesis strategy. **Mark as best** / **Clear best pick** lets the user override evaluator-ranked “best” for that lane (persisted in `generation-store`).
-- **Reset canvas** — Reset button in header clears all nodes and re-initializes with the default template (Design Brief + Model + Incubator)
+- **Reset canvas** — Reset button in header checkpoints the current canvas, then re-initializes with the default template (Design Brief + Model + Incubator)
 - **Stop generation** — Aborts the active SSE / agent session for a hypothesis strategy lane (**Stop** on the hypothesis card while a run is in flight).
 - **Permanent node delete** — Backspace/Delete with confirmation removes selected removable nodes from the canvas graph and keeps domain/incubator state consistent. Design Brief, Model, Incubator, and input ghost nodes are protected.
 - **Screenshot capture** — Connect a preview to Existing Design to automatically capture a screenshot as a reference image for the next iteration
@@ -132,7 +132,6 @@ Do not duplicate the full prompt catalog here — keys and labels live in **`src
 - Generated code and provenance snapshots stored in IndexedDB (avoids localStorage size limits)
 - Agentic multi-file results stored in a separate IndexedDB object store (`files`)
 - In-memory fields (`liveCode`, `liveFiles`, `liveFilesPlan`) are stripped from localStorage persistence
-- Canvas Manager: save, load, duplicate, delete, export/import JSON
+- Canvas Manager: full-workspace save, load, duplicate, delete, and export/import canvas JSON bundles. Replacing actions checkpoint the current canvas first; legacy spec-only imports still load.
 - Canvas state persists across sessions (nodes, edges, viewport, layout preferences)
 - Automatic garbage collection removes orphaned IndexedDB entries (code, provenance, and files stores) on app startup
-

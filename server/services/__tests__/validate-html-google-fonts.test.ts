@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Bash } from 'just-bash';
-import { SANDBOX_PROJECT_ROOT } from '../agent-bash-sandbox.ts';
+import { SANDBOX_PROJECT_ROOT } from '../virtual-workspace.ts';
 import { createValidateHtmlTool } from '../pi-app-tools.ts';
 
 function mockBash(files: Record<string, string>): Bash {

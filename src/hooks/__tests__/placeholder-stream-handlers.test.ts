@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AGENTIC_PHASE } from '../../constants/agentic-stream';
 import { GENERATION_STATUS } from '../../constants/generation';
+import { LOST_STREAM_CONNECTION_MESSAGE } from '../../api/client-sse-lifecycle';
 import { createPlaceholderStreamCallbacks } from '../placeholder-stream-handlers';
 import {
   createInitialPlaceholderSessionState,
@@ -142,6 +143,27 @@ describe('createPlaceholderStreamCallbacks', () => {
     expect(updateResult).toHaveBeenCalledWith(
       'ph-err',
       expect.objectContaining({ status: GENERATION_STATUS.ERROR, error: 'boom' }),
+    );
+  });
+
+  it('onError surfaces lost connection as a generation error', () => {
+    const state = createInitialPlaceholderSessionState();
+    const updateResult = vi.fn();
+    const cbs = createPlaceholderStreamCallbacks({
+      placeholderId: 'ph-lost',
+      traceLimit: 50,
+      updateResult,
+      scheduleTraceServerForward: vi.fn(),
+      state,
+      raf: makeRaf(),
+    });
+    cbs.onError?.(LOST_STREAM_CONNECTION_MESSAGE);
+    expect(updateResult).toHaveBeenCalledWith(
+      'ph-lost',
+      expect.objectContaining({
+        status: GENERATION_STATUS.ERROR,
+        error: LOST_STREAM_CONNECTION_MESSAGE,
+      }),
     );
   });
 });

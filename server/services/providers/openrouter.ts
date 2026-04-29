@@ -60,6 +60,7 @@ export class OpenRouterGenerationProvider implements GenerationProvider {
       requestBody,
       {
         401: 'Invalid OpenRouter API key.',
+        402: 'OpenRouter credits are exhausted. This run cannot continue until the budget resets.',
         429: 'Rate limit exceeded. Wait a moment and try again.',
       },
       'OpenRouter',
@@ -92,6 +93,7 @@ export class OpenRouterGenerationProvider implements GenerationProvider {
         signal: options.signal,
         errorMap: {
           401: 'Invalid OpenRouter API key.',
+          402: 'OpenRouter credits are exhausted. This run cannot continue until the budget resets.',
           429: 'Rate limit exceeded. Wait a moment and try again.',
         },
         providerLabel: 'OpenRouter',

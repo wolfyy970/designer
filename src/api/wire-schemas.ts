@@ -104,6 +104,28 @@ const ProviderInfoSchema = z.object({
 
 export const ProvidersListResponseSchema = z.array(ProviderInfoSchema);
 
+export const OpenRouterBudgetStatusSchema = z.enum([
+  'available',
+  'out_of_credits',
+  'rate_limited',
+  'not_configured',
+  'unknown',
+]);
+
+export const OpenRouterLimitResetSchema = z.enum(['daily', 'weekly', 'monthly']).nullable();
+
+/** GET /api/provider-status/openrouter */
+export const OpenRouterBudgetStatusResponseSchema = z.object({
+  status: OpenRouterBudgetStatusSchema,
+  limit: z.number().nullable().optional(),
+  limitRemaining: z.number().nullable().optional(),
+  limitReset: OpenRouterLimitResetSchema.optional(),
+  usageDaily: z.number().optional(),
+  resetAt: z.string().optional(),
+  checkedAt: z.string(),
+  message: z.string(),
+});
+
 /** POST /api/design-system/extract */
 export const DesignSystemExtractResponseSchema = z.object({
   result: z.string(),
@@ -165,6 +187,9 @@ export type HypothesisPromptBundleWireResponse = z.infer<
 >;
 export type ModelsWireResponse = z.infer<typeof ModelsResponseSchema>;
 export type ProvidersListWireResponse = z.infer<typeof ProvidersListResponseSchema>;
+export type OpenRouterBudgetStatusResponse = z.infer<
+  typeof OpenRouterBudgetStatusResponseSchema
+>;
 export type DesignSystemExtractWireResponse = z.infer<typeof DesignSystemExtractResponseSchema>;
 export type InputsGenerateWireResponse = z.infer<typeof InputsGenerateResponseSchema>;
 export type InternalContextGenerateWireResponse = z.infer<

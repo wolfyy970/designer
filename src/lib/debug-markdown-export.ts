@@ -38,8 +38,11 @@ export function downloadTextFile(filename: string, text: string, mime = 'text/ma
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export function findPlanForStrategy(

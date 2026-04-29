@@ -66,6 +66,7 @@ function ExportCheckboxRow({
 }
 
 type ArtifactMode = 'omit' | 'sizes' | 'full';
+type DownloadMode = 'files' | 'debug' | 'full';
 
 function getArtifactMode(o: DesignDebugExportOptions): ArtifactMode {
   if (o.artifactFullSources) return 'full';
@@ -73,7 +74,7 @@ function getArtifactMode(o: DesignDebugExportOptions): ArtifactMode {
   return 'omit';
 }
 
-function PresetButton({
+function DownloadModeButton({
   label,
   hint,
   active,
@@ -92,14 +93,14 @@ function PresetButton({
       disabled={disabled}
       onClick={onClick}
       title={hint}
-      className={`nodrag flex flex-1 flex-col items-start gap-0.5 rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-40 ${
+      className={`nodrag flex flex-1 flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition-colors disabled:opacity-40 ${
         active
           ? 'border-accent bg-accent-surface text-fg'
           : 'border-border-subtle bg-surface text-fg-secondary hover:border-border hover:bg-surface-hover'
       }`}
     >
-      <span className="text-xs font-semibold">{label}</span>
-      <span className="text-nano leading-snug text-fg-muted">{hint}</span>
+      <span className="text-sm font-semibold">{label}</span>
+      <span className="text-micro leading-snug text-fg-muted">{hint}</span>
     </button>
   );
 }
@@ -154,11 +155,78 @@ function ArtifactChoice({
   );
 }
 
+function PresetSummary({
+  mode,
+  activePreset,
+  options,
+  artifactMode,
+}: {
+  mode: DownloadMode;
+  activePreset: DesignDebugExportPreset | 'custom';
+  options: DesignDebugExportOptions;
+  artifactMode: ArtifactMode;
+}) {
+  if (mode === 'files') {
+    return (
+      <div className="rounded-lg border border-border-subtle bg-surface px-3 py-3">
+        <p className="text-sm font-semibold text-fg">Design files</p>
+        <p className="mt-0.5 text-micro leading-snug text-fg-muted">
+          Downloads the generated artifact only: a ZIP for multi-file designs or a single HTML file.
+        </p>
+      </div>
+    );
+  }
+
+  const presetLabel =
+    activePreset === 'quick' ? 'Light' : activePreset === 'balanced' ? 'Recommended' : activePreset === 'full' ? 'Everything' : 'Custom';
+  const included: string[] = [];
+  if (options.runSummary && options.strategySnapshot && options.progressHarness) included.push('run details');
+  if (options.thinking) included.push('thinking');
+  if (options.runTrace) included.push('activity log');
+  if (options.assistantOutput) included.push('full model reply');
+  if (options.evaluationFromResult || options.provenanceEvaluation) included.push('evaluation');
+  if (
+    options.provenanceHypothesisSnapshot ||
+    options.provenanceDesignSystem ||
+    options.provenanceRequestMeta ||
+    options.provenanceCheckpoint
+  ) {
+    included.push('saved context');
+  }
+  if (options.provenanceCompiledPrompt) included.push('merged prompt');
+  if (artifactMode === 'sizes') included.push('file list');
+  if (artifactMode === 'full') included.push('full source');
+
+  const artifactLabel =
+    artifactMode === 'omit'
+      ? 'Generated files skipped'
+      : artifactMode === 'sizes'
+        ? 'Generated files listed by name and size'
+        : 'Generated source included';
+
+  return (
+    <div className="rounded-lg border border-border-subtle bg-surface px-3 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-fg">{presetLabel} export</p>
+          <p className="mt-0.5 text-micro leading-snug text-fg-muted">
+            {included.length > 0 ? `Includes ${included.join(', ')}.` : 'Includes only the minimum run identifiers.'}
+          </p>
+        </div>
+        <span className="rounded-full border border-border-subtle bg-surface-raised px-2 py-1 text-nano font-medium text-fg-muted">
+          {artifactLabel}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export interface DesignDebugExportDialogProps {
   open: boolean;
   onClose: () => void;
   variantLabel: string;
   previewInput: DesignRunDebugExportInput;
+  onDownloadFiles: () => void | Promise<void>;
   onConfirm: (options: DesignDebugExportOptions) => void | Promise<void>;
 }
 
@@ -167,17 +235,20 @@ export function DesignDebugExportDialog({
   onClose,
   variantLabel,
   previewInput,
+  onDownloadFiles,
   onConfirm,
 }: DesignDebugExportDialogProps) {
   const [options, setOptions] = useState<DesignDebugExportOptions>(() =>
     getDefaultDesignDebugExportOptions(previewInput),
   );
+  const [downloadMode, setDownloadMode] = useState<DownloadMode>('files');
   const [activePreset, setActivePreset] = useState<DesignDebugExportPreset | 'custom'>('balanced');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setOptions(getDefaultDesignDebugExportOptions(previewInput));
+    setDownloadMode('files');
     setActivePreset('balanced');
     setBusy(false);
   }, [open, previewInput]);
@@ -207,6 +278,18 @@ export function DesignDebugExportDialog({
     setOptions(buildDesignDebugExportOptionsFromPreset(previewInput, preset));
     setActivePreset(preset);
   }, [previewInput]);
+
+  const chooseDownloadMode = useCallback(
+    (mode: DownloadMode) => {
+      setDownloadMode(mode);
+      if (mode === 'debug') {
+        applyPreset('balanced');
+      } else if (mode === 'full') {
+        applyPreset('full');
+      }
+    },
+    [applyPreset],
+  );
 
   const runContextOn =
     options.runSummary && options.strategySnapshot && options.progressHarness;
@@ -255,17 +338,26 @@ export function DesignDebugExportDialog({
 
   const handleReset = () => {
     setOptions(getDefaultDesignDebugExportOptions(previewInput));
+    setDownloadMode('files');
     setActivePreset('balanced');
   };
 
   const handleConfirm = async () => {
     setBusy(true);
     try {
-      await onConfirm(options);
+      if (downloadMode === 'files') {
+        await onDownloadFiles();
+      } else {
+        await onConfirm(options);
+      }
     } finally {
       setBusy(false);
     }
   };
+
+  const primaryLabel = busy
+    ? downloadMode === 'files' ? 'Downloading...' : 'Exporting...'
+    : downloadMode === 'files' ? 'Download Files' : 'Export Markdown';
 
   return (
     <Modal
@@ -273,37 +365,37 @@ export function DesignDebugExportDialog({
       onClose={() => {
         if (!busy) onClose();
       }}
-      title={`Export debug — ${variantLabel}`}
+      title={`Download — ${variantLabel}`}
       size="lg"
+      zIndexClass="z-[120]"
     >
       <div className="flex max-h-[var(--max-height-debug-export)] flex-col overflow-hidden">
         <p className="mb-3 shrink-0 text-xs text-fg-secondary">
-          Download a Markdown file you can share or archive. Pick a preset, then tweak what goes in. Anything marked
-          “large” can make the file huge.
+          Choose whether to download only the generated design or include debugging context in a Markdown snapshot.
         </p>
 
         <div className="mb-4 shrink-0 space-y-2">
-          <p className="text-nano font-semibold uppercase tracking-wider text-fg-faint">Start from</p>
+          <p className="text-nano font-semibold uppercase tracking-wider text-fg-faint">Download type</p>
           <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-            <PresetButton
-              label="Light"
-              hint="Identifiers, strategy text, scores; light saved context. No streams or source."
-              active={activePreset === 'quick'}
-              onClick={() => applyPreset('quick')}
+            <DownloadModeButton
+              label="Design files"
+              hint="Just the generated HTML, CSS, JavaScript, and assets."
+              active={downloadMode === 'files'}
+              onClick={() => chooseDownloadMode('files')}
               disabled={busy}
             />
-            <PresetButton
-              label="Recommended"
-              hint="Adds thinking, trace, and richer saved context when available."
-              active={activePreset === 'balanced'}
-              onClick={() => applyPreset('balanced')}
+            <DownloadModeButton
+              label="Debug snapshot"
+              hint="Markdown with the useful run context for diagnosis."
+              active={downloadMode === 'debug'}
+              onClick={() => chooseDownloadMode('debug')}
               disabled={busy}
             />
-            <PresetButton
+            <DownloadModeButton
               label="Everything"
-              hint="Transcript, full merged prompt, and all source. Expect a big file."
-              active={activePreset === 'full'}
-              onClick={() => applyPreset('full')}
+              hint="Markdown with transcript, prompt, and source. Can be large."
+              active={downloadMode === 'full'}
+              onClick={() => chooseDownloadMode('full')}
               disabled={busy}
             />
           </div>
@@ -311,96 +403,111 @@ export function DesignDebugExportDialog({
 
         <div className={`${RF_INTERACTIVE} min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch]`}>
           <div className="space-y-5 pb-1">
-            <section>
-              <h3 className="mb-2 text-nano font-semibold uppercase tracking-wider text-fg-faint">Include in the file</h3>
-              <div className="space-y-2">
-                <ExportCheckboxRow
-                  id="exp-run-bundle"
-                  label="Run details and strategy"
-                  description="Status, model, IDs, hypothesis text, and agent progress (tasks, file plan)."
-                  checked={runContextOn}
-                  onChange={setRunContext}
-                />
-                <ExportCheckboxRow
-                  id="exp-thinking"
-                  label="Thinking stream"
-                  description="Extended reasoning from the model, when available."
-                  checked={options.thinking}
-                  disabled={!hasThinking}
-                  onChange={(v) => patch({ thinking: v })}
-                />
-                <ExportCheckboxRow
-                  id="exp-assistant"
-                  label="Full model reply (large)"
-                  description="Everything the assistant streamed into chat. Often the biggest section."
-                  checked={options.assistantOutput}
-                  disabled={!hasAssistant}
-                  onChange={(v) => patch({ assistantOutput: v })}
-                />
-                <ExportCheckboxRow
-                  id="exp-trace"
-                  label="Structured activity log"
-                  description="Step-by-step trace lines (tools, phases, etc.)."
-                  checked={options.runTrace}
-                  disabled={!hasTrace}
-                  onChange={(v) => patch({ runTrace: v })}
-                />
-                <ExportCheckboxRow
-                  id="exp-eval"
-                  label="Evaluation and scores"
-                  description="Rubric results and summaries from this run."
-                  checked={options.evaluationFromResult}
-                  disabled={!hasEval}
-                  onChange={(v) => patch({ evaluationFromResult: v })}
-                />
-                <ExportCheckboxRow
-                  id="exp-saved-core"
-                  label="Saved request context"
-                  description="From browser storage (loaded when you export): hypothesis, design-system text, provider line, checkpoint."
-                  checked={savedCoreAll}
-                  indeterminate={savedCoreSome && !savedCoreAll}
-                  onChange={setSavedCore}
-                />
-                <div className="ml-6 space-y-2 border-l border-border-subtle pl-3">
-                  <ExportCheckboxRow
-                    id="exp-compiled"
-                    label="Also include the full merged prompt (very large)"
-                    description="The entire text sent to the model (spec, rules, etc.). Turn on only if you need an exact replay."
-                    checked={options.provenanceCompiledPrompt}
-                    disabled={!savedCoreSome}
-                    onChange={(v) => patch({ provenanceCompiledPrompt: v })}
-                  />
+            <PresetSummary
+              mode={downloadMode}
+              activePreset={activePreset}
+              options={options}
+              artifactMode={getArtifactMode(options)}
+            />
+
+            {downloadMode !== 'files' ? (
+              <details className="rounded-lg border border-border-subtle bg-surface-nested/30 px-3 py-2 text-xs">
+                <summary className="cursor-pointer select-none font-medium text-fg-secondary">
+                  Advanced: choose exact sections
+                </summary>
+                <div className="mt-3 space-y-5">
+                  <section>
+                    <h3 className="mb-2 text-nano font-semibold uppercase tracking-wider text-fg-faint">
+                      Generated design
+                    </h3>
+                    <ArtifactChoice
+                      mode={getArtifactMode(options)}
+                      disabled={!hasArtifacts || busy}
+                      onChange={setArtifactMode}
+                    />
+                    {!hasArtifacts ? (
+                      <p className="mt-2 text-micro text-fg-muted">No HTML or multi-file output for this run — these choices are disabled.</p>
+                    ) : null}
+                  </section>
+
+                <section>
+                  <h3 className="mb-2 text-nano font-semibold uppercase tracking-wider text-fg-faint">Run context</h3>
+                  <div className="space-y-2">
+                    <ExportCheckboxRow
+                      id="exp-run-bundle"
+                      label="Run details and strategy"
+                      description="Status, model, IDs, hypothesis text, and agent progress."
+                      checked={runContextOn}
+                      onChange={setRunContext}
+                    />
+                    <ExportCheckboxRow
+                      id="exp-thinking"
+                      label="Thinking stream"
+                      description="Extended reasoning from the model, when available."
+                      checked={options.thinking}
+                      disabled={!hasThinking}
+                      onChange={(v) => patch({ thinking: v })}
+                    />
+                    <ExportCheckboxRow
+                      id="exp-assistant"
+                      label="Full model reply (large)"
+                      description="Everything the assistant streamed into chat."
+                      checked={options.assistantOutput}
+                      disabled={!hasAssistant}
+                      onChange={(v) => patch({ assistantOutput: v })}
+                    />
+                    <ExportCheckboxRow
+                      id="exp-trace"
+                      label="Structured activity log"
+                      description="Step-by-step trace lines, tools, and phases."
+                      checked={options.runTrace}
+                      disabled={!hasTrace}
+                      onChange={(v) => patch({ runTrace: v })}
+                    />
+                    <ExportCheckboxRow
+                      id="exp-eval"
+                      label="Evaluation and scores"
+                      description="Rubric results and summaries from this run."
+                      checked={options.evaluationFromResult}
+                      disabled={!hasEval}
+                      onChange={(v) => patch({ evaluationFromResult: v })}
+                    />
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className="mb-2 text-nano font-semibold uppercase tracking-wider text-fg-faint">Saved context</h3>
+                  <div className="space-y-2">
+                    <ExportCheckboxRow
+                      id="exp-saved-core"
+                      label="Saved request context"
+                      description="Hypothesis, design-system text, provider line, and checkpoint."
+                      checked={savedCoreAll}
+                      indeterminate={savedCoreSome && !savedCoreAll}
+                      onChange={setSavedCore}
+                    />
+                    <div className="ml-6 space-y-2 border-l border-border-subtle pl-3">
+                      <ExportCheckboxRow
+                        id="exp-compiled"
+                        label="Full merged prompt (very large)"
+                        description="The exact prompt text sent to the model."
+                        checked={options.provenanceCompiledPrompt}
+                        disabled={!savedCoreSome}
+                        onChange={(v) => patch({ provenanceCompiledPrompt: v })}
+                      />
+                      <ExportCheckboxRow
+                        id="exp-prov-dup-eval"
+                        label="Duplicate evaluation from storage"
+                        description="Usually unnecessary; kept for deep provenance checks."
+                        checked={options.provenanceEvaluation}
+                        onChange={(v) => patch({ provenanceEvaluation: v })}
+                      />
+                    </div>
+                  </div>
+                </section>
                 </div>
-              </div>
-            </section>
-
-            <section>
-              <h3 className="mb-2 text-nano font-semibold uppercase tracking-wider text-fg-faint">
-                Generated design (what you preview in the iframe)
-              </h3>
-              <ArtifactChoice
-                mode={getArtifactMode(options)}
-                disabled={!hasArtifacts || busy}
-                onChange={setArtifactMode}
-              />
-              {!hasArtifacts ? (
-                <p className="mt-2 text-micro text-fg-muted">No HTML or multi-file output for this run — these choices are disabled.</p>
-              ) : null}
-            </section>
-
-            <details className="rounded-lg border border-border-subtle bg-surface-nested/30 px-3 py-2 text-xs">
-              <summary className="cursor-pointer select-none font-medium text-fg-secondary">Advanced — duplicate evaluation block</summary>
-              <p className="mb-2 mt-2 text-micro text-fg-muted">
-                Normally one evaluation section is enough. Turn this on only if you need the copy that was stored
-                separately inside provenance.
-              </p>
-              <ExportCheckboxRow
-                id="exp-prov-dup-eval"
-                label="Second copy of evaluation from storage"
-                checked={options.provenanceEvaluation}
-                onChange={(v) => patch({ provenanceEvaluation: v })}
-              />
-            </details>
+              </details>
+            ) : null}
           </div>
         </div>
 
@@ -412,7 +519,7 @@ export function DesignDebugExportDialog({
             disabled={busy}
             onClick={handleReset}
           >
-            Use recommended defaults
+            Reset choices
           </Button>
           <Button
             variant="ghost"
@@ -430,7 +537,7 @@ export function DesignDebugExportDialog({
             disabled={busy}
             onClick={() => void handleConfirm()}
           >
-            {busy ? 'Exporting…' : 'Export Markdown'}
+            {primaryLabel}
           </Button>
         </div>
       </div>

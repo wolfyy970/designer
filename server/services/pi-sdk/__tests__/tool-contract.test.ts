@@ -1,16 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import type { TodoItem } from '../../../../src/types/provider.ts';
 import type { SkillCatalogEntry } from '../../../lib/skill-schema.ts';
-import { createAgentBashSandbox, SANDBOX_PROJECT_ROOT } from '../../agent-bash-sandbox.ts';
-import { createSandboxBashTool } from '../../pi-bash-tool.ts';
 import {
-  createTodoWriteTool,
-  createUseSkillTool,
-  createValidateHtmlTool,
-  createValidateJsTool,
-} from '../../pi-app-tools.ts';
+  buildAgentToolGroups,
+  buildAgentTools,
+  flattenAgentToolGroups,
+} from '../../agent-tool-registry.ts';
+import { createAgentBashSandbox, SANDBOX_PROJECT_ROOT } from '../../virtual-workspace.ts';
 import { createVirtualPiCodingTools } from '../virtual-tools.ts';
-import type { ToolDefinition } from '../types.ts';
 
 function catalogEntry(overrides: Partial<SkillCatalogEntry> = {}): SkillCatalogEntry {
   return {
@@ -27,16 +23,16 @@ function catalogEntry(overrides: Partial<SkillCatalogEntry> = {}): SkillCatalogE
 
 function buildPiSandboxToolset(skillEntries: SkillCatalogEntry[] = [
   catalogEntry(),
-]): ToolDefinition[] {
+]): ReturnType<typeof buildAgentTools> {
   const bash = createAgentBashSandbox({});
-  const todoState: { current: TodoItem[] } = { current: [] };
-  const virtual = createVirtualPiCodingTools(bash, () => {});
-  const bashTool = createSandboxBashTool(bash, () => {});
-  const todo = createTodoWriteTool(todoState, () => {});
-  const useSkill = createUseSkillTool(skillEntries, () => {});
-  const vjs = createValidateJsTool(bash);
-  const vhtml = createValidateHtmlTool(bash);
-  return [...virtual, bashTool, todo, useSkill, vjs, vhtml] as ToolDefinition[];
+  return buildAgentTools({
+    bash,
+    todoState: { current: [] },
+    skillCatalog: skillEntries,
+    onDesignFile: () => {},
+    onTodos: () => {},
+    onSkillActivated: () => {},
+  });
 }
 
 describe('Pi sandbox tool contracts (model-facing)', () => {
@@ -55,6 +51,33 @@ describe('Pi sandbox tool contracts (model-facing)', () => {
       'validate_js',
       'validate_html',
     ]);
+  });
+
+  it('groups capabilities without changing flattened tool order', () => {
+    const bash = createAgentBashSandbox({});
+    const groups = buildAgentToolGroups({
+      bash,
+      todoState: { current: [] },
+      skillCatalog: [catalogEntry()],
+      onDesignFile: () => {},
+      onTodos: () => {},
+      onSkillActivated: () => {},
+    });
+
+    expect(groups.virtualFileTools.map((t) => t.name)).toEqual([
+      'read',
+      'write',
+      'edit',
+      'ls',
+      'find',
+      'grep',
+    ]);
+    expect(groups.bashTool.name).toBe('bash');
+    expect(groups.appTools.map((t) => t.name)).toEqual(['todo_write', 'use_skill']);
+    expect(groups.validationTools.map((t) => t.name)).toEqual(['validate_js', 'validate_html']);
+    expect(flattenAgentToolGroups(groups).map((t) => t.name)).toEqual(
+      buildPiSandboxToolset().map((t) => t.name),
+    );
   });
 
   it.each(['read', 'write', 'edit', 'ls', 'find', 'grep'] as const)(

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { IncubateRequest } from '../types';
 import { incubate, incubateStream } from '../client';
 import { SSE_EVENT_NAMES } from '../../constants/sse-events';
+import { LOST_STREAM_CONNECTION_MESSAGE } from '../client-sse-lifecycle';
 
 function sseResponse(events: { name: string; data: Record<string, unknown> }[]): Response {
   const encoder = new TextEncoder();
@@ -144,6 +145,17 @@ describe('incubateStream', () => {
       /Incubation failed|Compilation failed/,
     );
     expect(onError).toHaveBeenCalledWith('Incubation failed');
+  });
+
+  it('maps fetch/network failure to the lost-connection message', async () => {
+    const onError = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    await expect(incubateStream(minimalReq, { onError })).rejects.toThrow(
+      LOST_STREAM_CONNECTION_MESSAGE,
+    );
+
+    expect(onError).toHaveBeenCalledWith(LOST_STREAM_CONNECTION_MESSAGE);
   });
 
   it('throws when stream ends without incubate_result', async () => {

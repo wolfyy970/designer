@@ -26,11 +26,12 @@ import {
 import type { CanvasStore } from './canvas-store-types';
 import {
   commitAddNodeTransaction,
+  commitEdgeChangesTransaction,
   commitConnectionTransaction,
   commitEdgeRemovalTransaction,
   commitNodeDataTransaction,
+  commitOptionalInputMaterializationTransaction,
   commitRemoveNodeTransaction,
-  commitSpecMaterializeTransaction,
 } from './canvas-graph-transaction';
 
 export const createGraphSlice: StateCreator<
@@ -66,9 +67,7 @@ export const createGraphSlice: StateCreator<
   onEdgesChange: (changes) => {
     const prev = get().edges;
     const next = applyWorkspaceEdgeChanges(changes, prev);
-    const nextIds = new Set(next.map((e) => e.id));
-    const removed = prev.filter((e) => !nextIds.has(e.id));
-    commitEdgeRemovalTransaction({ removedEdges: removed, nextEdges: next }, get().nodes, set);
+    commitEdgeChangesTransaction(prev, next, get().nodes, set);
   },
 
   isValidConnection: (connection) => {
@@ -114,12 +113,13 @@ export const createGraphSlice: StateCreator<
   },
 
   materializeOptionalInputNodesFromSpec: (spec: DesignSpec) => {
-    for (const slot of planOptionalInputMaterialization(spec, get().nodes)) {
-      get().addNode(slot);
-    }
-    const nodes = get().nodes;
-    const edges = get().edges;
-    commitSpecMaterializeTransaction(nodes, edges, get().applyAutoLayout);
+    commitOptionalInputMaterializationTransaction({
+      slots: planOptionalInputMaterialization(spec, get().nodes),
+      addNode: get().addNode,
+      getNodes: () => get().nodes,
+      getEdges: () => get().edges,
+      applyAutoLayout: get().applyAutoLayout,
+    });
   },
 
   removeNode: (nodeId) => {

@@ -4,7 +4,7 @@ import { getProvider } from '../services/providers/registry.ts';
 import { executeGenerateStreamSafe } from '../services/generate-execution.ts';
 import { createWriteGate } from '../lib/sse-write-gate.ts';
 import { GenerateStreamBodySchema } from '../lib/generate-stream-schema.ts';
-import { normalizeError } from '../../src/lib/error-utils.ts';
+import { normalizeProviderError } from '../lib/provider-error-normalize.ts';
 import { clampEvaluatorOptional } from '../lib/lockdown-model.ts';
 import { buildHypothesisWorkspaceBundle } from '../services/hypothesis-workspace.ts';
 import {
@@ -137,7 +137,7 @@ hypothesis.post('/generate', async (c) => {
     } catch (err) {
       await gate.enqueue(async () => {
         await stream.writeSSE({
-          data: JSON.stringify({ error: normalizeError(err) }),
+          data: JSON.stringify({ error: normalizeProviderError(err) }),
           event: SSE_EVENT_NAMES.error,
           id: allocId(),
         });

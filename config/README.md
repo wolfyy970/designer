@@ -1,6 +1,6 @@
 # `config/` — human-editable application knobs
 
-This directory contains the numeric configuration for auto-designer. All files are JSON, validated by Zod at server boot. **Edit a file, run `pnpm build` (or `pnpm test`), and the new values apply everywhere — server routes, client UI, and evaluation workers.**
+This directory contains Designer's checked-in product configuration. All files are JSON, validated by Zod at server boot. **Edit a file, run `pnpm build` (or `pnpm test`), and the new values apply everywhere — server routes, client UI, and evaluation workers.**
 
 No TypeScript knowledge required. If you type the wrong thing (e.g. a string where a number is expected), the app refuses to start and the error names the exact path.
 
@@ -63,8 +63,8 @@ Both apply only when the chosen model **supports reasoning**. The capability gat
 | `off` | 0 | No extended reasoning. |
 | `minimal` | 1024 | Format correctness matters; deep planning doesn't. |
 | `low` | 2048 | Structured extraction. |
-| `medium` | 8192 | Balanced — default for hypothesis / incubate. |
-| `high` | 16384 | Long deliberation — default for creative agentic builds. |
+| `medium` | 5000 | Balanced default for lighter node tasks. |
+| `high` | 20000 | Long deliberation — default for core design and synthesis tasks. |
 | `xhigh` | 32768 | Maximum effort. Use sparingly. |
 
 `budgetByLevel` doubles as the placeholder shown in Settings → Reasoning when a user picks a level but leaves the budget field blank.
@@ -73,11 +73,11 @@ Both apply only when the chosen model **supports reasoning**. The capability gat
 
 | Task | When it runs | Default |
 |---|---|---|
-| `design` | Agentic build pipeline (hypothesis → generate → evaluate) | high / 16384 |
-| `incubate` | `/api/incubate` and hypothesis auto-generation | medium / 8192 |
-| `inputs` | `/api/inputs/generate` (spec facets from a brief) | low / 2048 |
-| `internal-context` | `/api/internal-context/generate` (design specification from connected inputs) | medium / 8192 |
-| `design-system` | `/api/design-system/extract` (text/images → DESIGN.md) | low / 2048 |
+| `design` | Agentic build pipeline (hypothesis → generate → evaluate) | high / 20000 |
+| `incubate` | `/api/incubate` and hypothesis auto-generation | high / 20000 |
+| `inputs` | `/api/inputs/generate` (spec facets from a brief) | medium / 5000 |
+| `internal-context` | `/api/internal-context/generate` (design specification from connected inputs) | high / 20000 |
+| `design-system` | `/api/design-system/extract` (text/images → DESIGN.md) | high / 20000 |
 | `evaluator` | Per-rubric eval workers (design, strategy, implementation, browser) | low / 2048 |
 
 ### Budget bounds
@@ -182,7 +182,7 @@ Truncation caps used across server code. Four groups:
 Some settings belong in `.env.local` (gitignored) rather than `config/`:
 
 - **Secrets** — `OPENROUTER_API_KEY`, `OPENROUTER_API_KEY_TESTS`. JSON is checked into git.
-- **Environment-specific values** — `DATABASE_URL`, `PORT`, `VITE_PORT`, `VITE_LMSTUDIO_URL`. Each developer's machine / deploy target differs.
+- **Environment-specific values** — `PORT`, `VITE_PORT`, `VITE_LMSTUDIO_URL`. Each developer's machine / deploy target differs.
 - **Test-only flags** — `RUN_SANDBOX_LLM_TESTS`, `RUN_META_HARNESS_LIVE_TESTS`, legacy aliases, and `MODEL_SELECTOR`. These gate opt-in live integration tests; they're not product config.
 
 The meta-harness CLI has its own config at [`../meta-harness/config.json`](../meta-harness/config.json) — separate surface, different lifecycle.

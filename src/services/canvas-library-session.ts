@@ -1,6 +1,6 @@
 /**
- * Orchestration for the saved spec library vs the active session (spec + incubator + generation + canvas).
- * Keeps persistence and Zustand `getState()` calls out of React components.
+ * Orchestration for the saved canvas library vs the active session.
+ * Saved canvases are full workspace snapshots; legacy spec-only entries still restore.
  */
 import type { DesignSpec } from '../types/spec';
 import { useSpecStore } from '../stores/spec-store';
@@ -8,17 +8,47 @@ import { useIncubatorStore } from '../stores/incubator-store';
 import { useGenerationStore } from '../stores/generation-store';
 import { useCanvasStore } from '../stores/canvas-store';
 import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
-import { saveSpecToLibrary, getSavedSpec, importCanvas } from './persistence';
+import { GENERATION_STATUS } from '../constants/generation';
+import {
+  exportSnapshot,
+  getSavedCanvasSnapshot,
+  getSavedSpec,
+  importCanvasSnapshotOrSpec,
+  saveSnapshotToLibrary,
+} from './persistence';
+import { captureCurrentCanvasSnapshot, restoreCanvasSnapshot } from './canvas-snapshots';
+import { abortAllGenerations } from '../lib/generation-abort-registry';
+import { abortCanvasOperationsForReplacement } from '../lib/canvas-session-guard';
 import { generateId, now } from '../lib/utils';
 
-function checkpointCurrentSpec(): void {
-  saveSpecToLibrary(useSpecStore.getState().spec);
+function stopActiveWork(): void {
+  abortCanvasOperationsForReplacement();
+  abortAllGenerations();
+  useGenerationStore.setState((state) => ({
+    isGenerating: false,
+    results: state.results.map((result) =>
+      result.status === GENERATION_STATUS.GENERATING
+        ? { ...result, status: GENERATION_STATUS.ERROR, error: 'Generation stopped.' }
+        : result,
+    ),
+  }));
+  useIncubatorStore.setState({ isCompiling: false });
+}
+
+export async function saveCurrentCanvasSnapshot(options?: { stopActiveWork?: boolean }): Promise<void> {
+  if (options?.stopActiveWork) stopActiveWork();
+  await saveSnapshotToLibrary(await captureCurrentCanvasSnapshot());
 }
 
 function resetSessionStores(): void {
   useWorkspaceDomainStore.getState().reset();
   useIncubatorStore.getState().reset();
-  useGenerationStore.getState().reset();
+  useGenerationStore.setState({
+    results: [],
+    isGenerating: false,
+    selectedVersions: {},
+    userBestOverrides: {},
+  });
   useCanvasStore.getState().resetCanvas();
 }
 
@@ -26,7 +56,7 @@ export type ActivateSavedSpecResult =
   | { ok: true }
   | { ok: false; reason: 'not_found' };
 
-/** Apply a DesignSpec to the active session (normalizes sections in spec-store). */
+/** Apply a legacy DesignSpec to the active session (normalizes sections in spec-store). */
 function applySpecToActiveSession(spec: DesignSpec): void {
   useSpecStore.getState().loadCanvas(spec);
   useCanvasStore.getState().materializeOptionalInputNodesFromSpec(spec);
@@ -34,61 +64,92 @@ function applySpecToActiveSession(spec: DesignSpec): void {
 
 /**
  * @param options.skipCheckpoint - Use when reloading the active library entry from disk without
- *   persisting the current (possibly dirty) spec first—otherwise checkpoint would overwrite the saved copy.
+ *   persisting the current dirty state first; otherwise checkpoint would overwrite the saved copy.
  */
-export function activateSavedSpecById(
+export async function activateSavedSpecById(
   specId: string,
   options?: { skipCheckpoint?: boolean },
-): ActivateSavedSpecResult {
+): Promise<ActivateSavedSpecResult> {
   if (!options?.skipCheckpoint) {
-    checkpointCurrentSpec();
+    await saveCurrentCanvasSnapshot({ stopActiveWork: true });
+  } else {
+    stopActiveWork();
   }
-  const spec = getSavedSpec(specId);
-  if (!spec) return { ok: false, reason: 'not_found' };
+
+  const snapshot = await getSavedCanvasSnapshot(specId);
+  if (snapshot) {
+    resetSessionStores();
+    await restoreCanvasSnapshot(snapshot);
+    return { ok: true };
+  }
+
+  const legacySpec = getSavedSpec(specId);
+  if (!legacySpec) return { ok: false, reason: 'not_found' };
   resetSessionStores();
-  applySpecToActiveSession(spec);
+  applySpecToActiveSession(legacySpec);
   return { ok: true };
 }
 
 export async function activateImportedSpecFile(file: File): Promise<void> {
-  checkpointCurrentSpec();
-  const spec = await importCanvas(file);
+  await saveCurrentCanvasSnapshot({ stopActiveWork: true });
+  const imported = await importCanvasSnapshotOrSpec(file);
   resetSessionStores();
-  applySpecToActiveSession(spec);
+  if ('schemaVersion' in imported) {
+    await restoreCanvasSnapshot(imported);
+  } else {
+    applySpecToActiveSession(imported);
+  }
 }
 
-export function startNewCanvasAfterCheckpoint(title?: string): void {
-  checkpointCurrentSpec();
+export async function startNewCanvasAfterCheckpoint(title?: string): Promise<void> {
+  await saveCurrentCanvasSnapshot({ stopActiveWork: true });
   resetSessionStores();
   useSpecStore.getState().createNewCanvas(title);
 }
 
-/** Copy of current spec with new id; resets session so graph aligns with duplicated spec sections. */
-export function duplicateCurrentSpec(): void {
-  checkpointCurrentSpec();
-  const spec = useSpecStore.getState().spec;
-  const dup: DesignSpec = {
-    ...spec,
-    id: generateId(),
-    title: `${spec.title} (copy)`,
-    createdAt: now(),
-    lastModified: now(),
+/** Copy of current canvas with new id; preserves the full current workspace under the new id. */
+export async function duplicateCurrentSpec(): Promise<void> {
+  await saveCurrentCanvasSnapshot({ stopActiveWork: true });
+  const snapshot = await captureCurrentCanvasSnapshot();
+  const duplicated = {
+    ...snapshot,
+    savedAt: now(),
+    spec: {
+      ...snapshot.spec,
+      id: generateId(),
+      title: `${snapshot.spec.title} (copy)`,
+      createdAt: now(),
+      lastModified: now(),
+    },
   };
-  saveSpecToLibrary(dup);
+  await saveSnapshotToLibrary(duplicated);
   resetSessionStores();
-  applySpecToActiveSession(dup);
+  await restoreCanvasSnapshot(duplicated);
+}
+
+export async function exportCurrentCanvas(): Promise<void> {
+  exportSnapshot(await captureCurrentCanvasSnapshot());
+}
+
+export async function resetCanvasAfterCheckpoint(): Promise<void> {
+  await saveCurrentCanvasSnapshot({ stopActiveWork: true });
+  resetSessionStores();
 }
 
 let titleLibrarySyncTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** If this spec id is already in the library, persist the latest doc (e.g. after header rename). Debounced. */
+/** If this spec id is already in the library, persist the latest full snapshot after header rename. */
 export function scheduleLibraryTitleSyncIfEntryExists(debounceMs = 400): void {
   if (titleLibrarySyncTimer) clearTimeout(titleLibrarySyncTimer);
   titleLibrarySyncTimer = setTimeout(() => {
     titleLibrarySyncTimer = null;
-    const s = useSpecStore.getState().spec;
-    if (getSavedSpec(s.id) != null) {
-      saveSpecToLibrary({ ...s, lastModified: now() });
+    const spec = useSpecStore.getState().spec;
+    if (getSavedSpec(spec.id) != null) {
+      void saveCurrentCanvasSnapshot();
+      return;
     }
+    void getSavedCanvasSnapshot(spec.id).then((snapshot) => {
+      if (snapshot) void saveCurrentCanvasSnapshot();
+    });
   }, debounceMs);
 }
