@@ -44,7 +44,6 @@ export const InputsGenerateTargetSchema = z.enum([
 export const InputsGenerateRequestSchema = z.object({
   inputId: InputsGenerateTargetSchema,
   designBrief: z.string().min(1),
-  existingDesign: z.string().optional(),
   researchContext: z.string().optional(),
   objectivesMetrics: z.string().optional(),
   designConstraints: z.string().optional(),

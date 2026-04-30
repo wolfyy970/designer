@@ -99,7 +99,6 @@ The canvas (`/canvas`) is the default interface. Nodes connect left-to-right. Yo
 The canvas starts with a **Design Brief**, a **Model**, and an **Incubator** — all pre-connected. Optional input facets appear as ghost cards; use the circular **Add to canvas** control on a ghost to materialize that input node.
 
 - **Design Brief** — The primary directive. What are you designing and why?
-- **Existing Design** — Describe what exists today. Drag-and-drop screenshots as reference images.
 - **Research Context** — User research, behavioral insights, qualitative findings.
 - **Objectives & Metrics** — Success criteria, KPIs, evaluation measures.
 - **Design Constraints** — Non-negotiable boundaries + exploration ranges.
@@ -180,7 +179,6 @@ Preview nodes render the generated code in sandboxed iframes. Open the **run wor
 
 To iterate on results:
 
-- **Screenshot feedback** — Drag a connection from a preview's right handle to the Existing Design node. This captures a screenshot and adds it as a reference image.
 - **Reference code** — Connect a preview to an Incubator to pass the prior design into the next **incubate** run as a **reference design** in the prompt.
 - **Re-incubate** — The Incubator reads **reference designs** (and input-node facets from the spec) from its connected nodes, producing improved hypotheses. In **agentic** mode, evaluator feedback and revision passes are built into the generation run (see the preview run workspace scorecard).
 

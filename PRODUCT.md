@@ -6,7 +6,7 @@ Designer exists to **assist the UX designer**. Think of it as an auto-designer, 
 
 Given a problem statement and appropriate research, a good designer synthesizes everything — user needs, competitive landscape, behavioral patterns, business constraints — and produces hypotheses that break conventions with something genuinely better. Then they execute those hypotheses into designs where every affordance is clear, every interaction is intuitive, time on task drops, and users never have to think. *Don't Make Me Think*, Nielsen Norman heuristics, information architecture, visual hierarchy — the entire discipline, applied at an expert level.
 
-That is what this application must do autonomously. The ambition is not parity with existing design; it is to **surpass** it. Every feature, every prompt, every evaluation rubric, and every architectural decision exists to deliver against that standard. If a capability does not move the system closer to producing work a brilliant designer would be proud of, it does not belong here.
+That is what this application must do autonomously. The ambition is not parity with the current UI; it is to **surpass** it. Every feature, every prompt, every evaluation rubric, and every architectural decision exists to deliver against that standard. If a capability does not move the system closer to producing work a brilliant designer would be proud of, it does not belong here.
 
 **Concretely, the pipeline has two jobs:**
 
@@ -31,7 +31,6 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 | Node                 | Type       | Purpose                                                                                                                                                                                                                                                                                                                                                        |
 | -------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Design Brief         | Input      | Primary directive for the design exploration                                                                                                                                                                                                                                                                                                                   |
-| Existing Design      | Input      | What exists today — text + reference images (drag-and-drop)                                                                                                                                                                                                                                                                                                    |
 | Research Context     | Input      | User research, behavioral insights                                                                                                                                                                                                                                                                                                                             |
 | Objectives & Metrics | Input      | Success criteria and evaluation measures                                                                                                                                                                                                                                                                                                                       |
 | Design Constraints   | Input      | Non-negotiable boundaries + exploration ranges                                                                                                                                                                                                                                                                                                                 |
@@ -53,7 +52,6 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 - **Reset canvas** — Reset button in header checkpoints the current canvas, then re-initializes with the default template (Design Brief + Model + Incubator)
 - **Stop generation** — Aborts the active SSE / agent session for a hypothesis strategy lane (**Stop** on the hypothesis card while a run is in flight).
 - **Permanent node delete** — Backspace/Delete with confirmation removes selected removable nodes from the canvas graph and keeps domain/incubator state consistent. Design Brief, Model, Incubator, and input ghost nodes are protected.
-- **Screenshot capture** — Connect a preview to Existing Design to automatically capture a screenshot as a reference image for the next iteration
 - **Version stacking** — Results accumulate across generation runs. Each preview shows version badges (v1, v2, ...) with ChevronLeft/Right navigation to browse previous versions.
 - **Agentic eval rounds (workspace)** — When a run has multiple evaluation rounds (build + revisions), the **preview run workspace** (overlay dock) can show **Eval round** on **Design** and **Evaluation** tabs; per-round file trees are stored in IndexedDB (`{resultId}:round:{n}`) so earlier revisions remain viewable without bloating localStorage metadata.
 - **Inputs auto-generate** — On **Research Context**, **Objectives & Metrics**, and **Design Constraints**, optional **LLM-assisted drafting** from the Design Brief (and other filled **spec** facets) via **`POST /api/inputs/generate`**, using credentials from the **first Model** node when lockdown is off.
@@ -62,10 +60,10 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 
 ### Iteration Loop
 
-Previews can connect to **Existing Design** (screenshot reference) or **Incubator** (prior output as reference code). This creates a feedback loop:
+Previews can connect to **Incubator** as prior output reference code. This creates a feedback loop:
 
 1. Generate designs
-2. Connect a strong preview → Existing Design and/or wire a preview → Incubator
+2. Connect a strong preview → Incubator
 3. Re-incubate with the new context
 4. Generate improved designs
 

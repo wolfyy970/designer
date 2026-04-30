@@ -29,7 +29,6 @@ const activeSpec: DesignSpec = {
   version: 1,
   sections: {
     'design-brief': { id: 'design-brief', content: '', images: [], lastModified: '2024-01-01' },
-    'existing-design': { id: 'existing-design', content: '', images: [], lastModified: '2024-01-01' },
     'research-context': { id: 'research-context', content: '', images: [], lastModified: '2024-01-01' },
     'objectives-metrics': { id: 'objectives-metrics', content: '', images: [], lastModified: '2024-01-01' },
     'design-constraints': { id: 'design-constraints', content: '', images: [], lastModified: '2024-01-01' },

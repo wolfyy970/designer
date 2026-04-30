@@ -3,12 +3,11 @@ import type { SpecSectionId } from '../../src/types/spec.ts';
 import { DEFAULT_HYPOTHESIS_COUNT, NO_BEST_SENTINEL, SECTION_KEYS } from '../constants.ts';
 
 describe('meta-harness constants alignment', () => {
-  it('SECTION_KEYS matches the five active DesignSpec canvas section ids (excludes legacy design-system)', () => {
-    expect(SECTION_KEYS).toHaveLength(5);
+  it('SECTION_KEYS matches the four active DesignSpec canvas section ids', () => {
+    expect(SECTION_KEYS).toHaveLength(4);
     const satisfies: SpecSectionId[] = [...SECTION_KEYS];
     expect(satisfies).toEqual([
       'design-brief',
-      'existing-design',
       'research-context',
       'objectives-metrics',
       'design-constraints',

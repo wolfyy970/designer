@@ -12,9 +12,9 @@ import {
 } from '../canvas';
 
 describe('NODE_TYPES', () => {
-  it('contains all 11 expected node types', () => {
+  it('contains all expected active node types', () => {
     const expected = [
-      'designBrief', 'existingDesign', 'researchContext',
+      'designBrief', 'researchContext',
       'objectivesMetrics', 'designConstraints', 'designSystem',
       'incubator', 'hypothesis', 'preview', 'model',
     ];

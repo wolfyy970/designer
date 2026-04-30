@@ -32,13 +32,14 @@ function interpolate(template, vars) {
     (match, key) => key in vars ? vars[key] : match
   );
 }
+const LEGACY_EXISTING_DESIGN_SECTION_ID = "existing-design";
 function getSectionContent(spec, sectionId) {
   const section = spec.sections[sectionId];
   if (!section) return "(Not provided)";
   return section.content.trim() || "(Not provided)";
 }
 function collectImageLines(spec) {
-  return Object.values(spec.sections).flatMap((s) => s.images).filter((img) => img.description.trim()).map((img) => `- [${img.filename}]: ${img.description}`);
+  return Object.values(spec.sections).filter((s) => s.id !== LEGACY_EXISTING_DESIGN_SECTION_ID).flatMap((s) => s.images).filter((img) => img.description.trim()).map((img) => `- [${img.filename}]: ${img.description}`);
 }
 function imageBlock(spec) {
   const lines = collectImageLines(spec);
@@ -93,7 +94,6 @@ function buildIncubatorUserPrompt(spec, incubatorUserTemplate, referenceDesigns,
   return interpolate(incubatorUserTemplate, {
     SPEC_TITLE: spec.title,
     DESIGN_BRIEF: getSectionContent(spec, "design-brief"),
-    EXISTING_DESIGN: getSectionContent(spec, "existing-design"),
     RESEARCH_CONTEXT: getSectionContent(spec, "research-context"),
     OBJECTIVES_METRICS: getSectionContent(spec, "objectives-metrics"),
     DESIGN_CONSTRAINTS: getSectionContent(spec, "design-constraints"),
@@ -429,10 +429,6 @@ const INCUBATOR_USER_INPUTS_TEMPLATE = `Analyze the following design specificati
 <design_brief>
 {{DESIGN_BRIEF}}
 </design_brief>
-
-<existing_design>
-{{EXISTING_DESIGN}}
-</existing_design>
 
 <research_context>
 {{RESEARCH_CONTEXT}}
@@ -4567,7 +4563,6 @@ const InputsGenerateTargetSchema = z.enum([
 const InputsGenerateRequestSchema = z.object({
   inputId: InputsGenerateTargetSchema,
   designBrief: z.string().min(1),
-  existingDesign: z.string().optional(),
   researchContext: z.string().optional(),
   objectivesMetrics: z.string().optional(),
   designConstraints: z.string().optional(),
@@ -7272,13 +7267,7 @@ function evaluationPayloadFromHypothesisContext(ctx) {
   };
 }
 function buildHypothesisPrompt(spec, strategy2, hypothesisTemplate, designSystemOverride) {
-  const imageDescriptions = collectImageLines(spec).join("\n");
   const dimensionValuesList = Object.entries(strategy2.dimensionValues).map(([dim, val]) => `- ${dim}: ${val}`).join("\n");
-  const imageBlock2 = imageDescriptions ? `### Existing Design Reference
-${getSectionContent(spec, "existing-design")}
-
-Reference images:
-${imageDescriptions}` : "";
   return interpolate(hypothesisTemplate, {
     STRATEGY_NAME: strategy2.name,
     HYPOTHESIS: strategy2.hypothesis,
@@ -7287,7 +7276,7 @@ ${imageDescriptions}` : "";
     DIMENSION_VALUES: dimensionValuesList || "(Use your judgment within the exploration space ranges)",
     DESIGN_BRIEF: getSectionContent(spec, "design-brief"),
     RESEARCH_CONTEXT: getSectionContent(spec, "research-context"),
-    IMAGE_BLOCK: imageBlock2,
+    IMAGE_BLOCK: "",
     OBJECTIVES_METRICS: getSectionContent(spec, "objectives-metrics"),
     DESIGN_CONSTRAINTS: getSectionContent(spec, "design-constraints"),
     DESIGN_SYSTEM: designSystemOverride ?? getSectionContent(spec, "design-system")
@@ -7863,7 +7852,6 @@ function buildInputsGenerateUserMessage(input) {
 ${input.designBrief.trim()}
 </design_brief>`
   ];
-  appendBlock$1(lines, "existing_design", input.existingDesign);
   if (input.targetInput !== "research-context") {
     appendBlock$1(lines, "research_context", input.researchContext);
   }
@@ -7891,7 +7879,6 @@ inputsGenerate.post("/generate", async (c) => {
   const contextMessage = buildInputsGenerateUserMessage({
     targetInput: body.inputId,
     designBrief: body.designBrief,
-    existingDesign: body.existingDesign,
     researchContext: body.researchContext,
     objectivesMetrics: body.objectivesMetrics,
     designConstraints: body.designConstraints
@@ -7927,7 +7914,6 @@ ${contextMessage}`;
 });
 const SOURCE_SECTION_IDS = [
   "design-brief",
-  "existing-design",
   "research-context",
   "objectives-metrics",
   "design-constraints"
@@ -7959,7 +7945,6 @@ function buildInternalContextUserMessage(spec) {
     `<canvas_title>${spec.title}</canvas_title>`
   ];
   appendBlock(lines, "design_brief", spec.sections["design-brief"]?.content);
-  appendBlock(lines, "existing_design", spec.sections["existing-design"]?.content);
   appendBlock(lines, "research_context", spec.sections["research-context"]?.content);
   appendBlock(lines, "objectives_metrics", spec.sections["objectives-metrics"]?.content);
   appendBlock(lines, "design_constraints", spec.sections["design-constraints"]?.content);

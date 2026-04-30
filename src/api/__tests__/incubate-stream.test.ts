@@ -47,12 +47,6 @@ const minimalReq = {
         images: [],
         lastModified: '',
       },
-      'existing-design': {
-        id: 'existing-design' as const,
-        content: '',
-        images: [],
-        lastModified: '',
-      },
       'research-context': {
         id: 'research-context' as const,
         content: '',

@@ -4,6 +4,7 @@ import {
   type SavedCanvasExportBundle,
   type SavedCanvasListEntry,
   type SavedCanvasSnapshot,
+  SavedCanvasExportBundleSchema,
 } from '../types/saved-canvas';
 import {
   deleteCanvasSnapshot,
@@ -169,8 +170,12 @@ export async function importCanvasSnapshotOrSpec(file: File): Promise<SavedCanva
     throw new Error('Invalid canvas file: could not parse JSON');
   }
 
-  if (isRecord(parsed) && parsed.kind === 'designer.canvas' && isRecord(parsed.snapshot)) {
-    return parsed.snapshot as unknown as SavedCanvasSnapshot;
+  if (isRecord(parsed) && parsed.kind === 'designer.canvas') {
+    const result = SavedCanvasExportBundleSchema.safeParse(parsed);
+    if (!result.success) {
+      throw new Error('Invalid canvas file: missing required fields');
+    }
+    return result.data.snapshot;
   }
 
   const result = DesignSpecSchema.safeParse(parsed);

@@ -166,7 +166,7 @@ If all edits get a corrected `oldText` that differs from the model’s version, 
 ```mermaid
 flowchart TB
   ui["UI Layer — React components, Canvas"]
-  spec["1. Spec Model — DesignSpec, 5 SpecSections, images, types/spec.ts"]
+  spec["1. Spec Model — DesignSpec, active input facets, images, types/spec.ts"]
   api["2. API client — per-hypothesis prompt assembly via compileVariantPrompts() (code name); incubate + hypothesis generate on server"]
   storage["3. Storage Abstraction — StoragePort interface, BrowserStorage, IndexedDB"]
   output["4. Output Rendering — iframe preview (URL-backed VFS or bundled fallback); preview node (React: VariantNode.tsx)"]

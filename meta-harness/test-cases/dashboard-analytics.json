@@ -7,7 +7,6 @@
       "design-brief": {
         "content": "Design a single-page operational dashboard for on-call engineers. Shows incident volume, MTTR trend, and a sortable recent incidents table. Primary job: scan health in under 10 seconds, then drill into one row.\n\nInclude: top summary KPI row (4 metrics), a simple trend strip (can be CSS-only chart metaphor), filters row (time range + severity), table with 8+ placeholder rows, and an empty state for the table when filters match nothing."
       },
-      "existing-design": { "content": "Internal tool aesthetic; no consumer fluff." },
       "research-context": { "content": "Users are interrupted and stressed; contrast and legibility beat decoration." },
       "objectives-metrics": { "content": "Reduce time to identify worst incident. Emphasize sort affordances and severity color system consistent with status." },
       "design-constraints": { "content": "Static HTML/CSS/JS. No chart libraries — use div-based or CSS gradients for trends. WCAG-minded contrast for severity badges." }

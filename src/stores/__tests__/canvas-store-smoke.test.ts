@@ -23,7 +23,6 @@ function minimalSpec(sections: Partial<DesignSpec['sections']>): DesignSpec {
       'research-context': section('research-context'),
       'objectives-metrics': section('objectives-metrics'),
       'design-constraints': section('design-constraints'),
-      'existing-design': section('existing-design'),
       'design-system': section('design-system'),
       ...sections,
     },
@@ -95,7 +94,7 @@ describe('canvas-store smoke', () => {
 
     expect(designSystem).toBeDefined();
     expect(nodes.some((node) => node.type === 'inputGhost' && node.data.targetType === NODE_TYPES.DESIGN_SYSTEM)).toBe(false);
-    expect(edges.some((edge) => edge.source === model?.id && edge.target === designSystem?.id)).toBe(true);
+    expect(edges.some((edge) => edge.source === model?.id && edge.target === designSystem?.id)).toBe(false);
     expect(edges.some((edge) => edge.source === designSystem?.id && edge.target === incubator?.id)).toBe(true);
     expect(useWorkspaceDomainStore.getState().incubatorWirings[incubator!.id]?.designSystemNodeIds).toEqual([designSystem!.id]);
   });

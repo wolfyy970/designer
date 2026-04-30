@@ -20,7 +20,6 @@ export function promptKeyForInputsGenerate(target: InputsGenerateTargetSpecId): 
 export interface InputsGenerateUserMessageInput {
   targetInput: InputsGenerateTargetSpecId;
   designBrief: string;
-  existingDesign?: string;
   researchContext?: string;
   objectivesMetrics?: string;
   designConstraints?: string;
@@ -42,7 +41,6 @@ export function buildInputsGenerateUserMessage(input: InputsGenerateUserMessageI
     `<design_brief>\n${input.designBrief.trim()}\n</design_brief>`,
   ];
 
-  appendBlock(lines, 'existing_design', input.existingDesign);
   if (input.targetInput !== 'research-context') {
     appendBlock(lines, 'research_context', input.researchContext);
   }

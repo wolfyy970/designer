@@ -1,7 +1,7 @@
 import type { DesignSpec } from '../../types/spec';
 import type { HypothesisStrategy } from '../../types/incubator';
 import { interpolate } from '../utils';
-import { getSectionContent, collectImageLines } from './helpers';
+import { getSectionContent } from './helpers';
 
 export function buildHypothesisPrompt(
   spec: DesignSpec,
@@ -9,15 +9,9 @@ export function buildHypothesisPrompt(
   hypothesisTemplate: string,
   designSystemOverride?: string,
 ): string {
-  const imageDescriptions = collectImageLines(spec).join('\n');
-
   const dimensionValuesList = Object.entries(strategy.dimensionValues)
     .map(([dim, val]) => `- ${dim}: ${val}`)
     .join('\n');
-
-  const imageBlock = imageDescriptions
-    ? `### Existing Design Reference\n${getSectionContent(spec, 'existing-design')}\n\nReference images:\n${imageDescriptions}`
-    : '';
 
   return interpolate(hypothesisTemplate, {
     STRATEGY_NAME: strategy.name,
@@ -27,7 +21,7 @@ export function buildHypothesisPrompt(
     DIMENSION_VALUES: dimensionValuesList || '(Use your judgment within the exploration space ranges)',
     DESIGN_BRIEF: getSectionContent(spec, 'design-brief'),
     RESEARCH_CONTEXT: getSectionContent(spec, 'research-context'),
-    IMAGE_BLOCK: imageBlock,
+    IMAGE_BLOCK: '',
     OBJECTIVES_METRICS: getSectionContent(spec, 'objectives-metrics'),
     DESIGN_CONSTRAINTS: getSectionContent(spec, 'design-constraints'),
     DESIGN_SYSTEM: designSystemOverride ?? getSectionContent(spec, 'design-system'),

@@ -16,10 +16,9 @@ import type {
 } from '../types/evaluation';
 import { normalizeError } from '../lib/error-utils';
 import { SSE_EVENT_NAMES } from '../constants/sse-events';
-import { readSseEventStream } from '../lib/sse-reader';
 import type { ZodError } from 'zod';
 import { IncubateResponseSchema } from './response-schemas';
-import { API_BASE, INVALID_SERVER_RESPONSE } from './client-shared.ts';
+import { INVALID_SERVER_RESPONSE } from './client-shared.ts';
 import {
   callbacksForHypothesisLane,
   finalizeMissingHypothesisLanes,
@@ -29,14 +28,10 @@ import {
 import { stripLaneIndex } from './client-sse-json';
 import { dispatchGenerateStreamEvent } from './client-sse-dispatch';
 import {
-  assertOkResponse,
-  createClientSseDiagnostics,
   invalidServerResponseError,
-  isLikelyStreamConnectionLoss,
-  lostStreamConnectionError,
   parseSseObject,
-  requireSseReader,
 } from './client-sse-lifecycle';
+import { runSseStream } from './client-sse-runner';
 import {
   isOpenRouterCreditExhaustionLike,
   notifyOpenRouterBudgetRefresh,
@@ -131,34 +126,19 @@ export async function incubateStream(
 ): Promise<IncubateResponse> {
   const opts = normalizeIncubateOptions(second);
   const signal = third;
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE}/incubate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req),
-      signal,
-    });
-  } catch (err) {
-    if (isLikelyStreamConnectionLoss(err, signal)) {
-      const lost = lostStreamConnectionError();
-      opts.incubate?.onError?.(lost.message);
-      opts.agentic?.onError?.(lost.message);
-      throw lost;
-    }
-    throw err;
-  }
-
-  await assertOkResponse(response, 'Compilation failed');
-  const reader = requireSseReader(response);
-
   let result: IncubateResponse | undefined;
   let streamError: string | undefined;
 
-  const diag = createClientSseDiagnostics();
-
-  try {
-    await readSseEventStream(reader, async (currentEvent, raw) => {
+  await runSseStream({
+    path: '/incubate',
+    body: req,
+    signal,
+    fallbackError: 'Compilation failed',
+    onConnectionLoss: (lost) => {
+      opts.incubate?.onError?.(lost.message);
+      opts.agentic?.onError?.(lost.message);
+    },
+    onEvent: (currentEvent, raw, diag) => {
       const ev = currentEvent.trim();
       const parsed = parseSseObject(raw, ev);
 
@@ -233,18 +213,8 @@ export async function incubateStream(
       if (import.meta.env.DEV) {
         console.debug('[api] incubate SSE event (dev: not surfaced)', ev, raw);
       }
-    });
-  } catch (err) {
-    if (isLikelyStreamConnectionLoss(err, signal)) {
-      const lost = lostStreamConnectionError();
-      opts.incubate?.onError?.(lost.message);
-      opts.agentic?.onError?.(lost.message);
-      throw lost;
-    }
-    throw err;
-  } finally {
-    diag.logClose();
-  }
+    },
+  });
 
   if (streamError) {
     throw new Error(normalizeError(streamError, 'Compilation failed'));
@@ -275,30 +245,13 @@ export async function generateHypothesisStream(
     });
   };
 
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE}/hypothesis/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal,
-    });
-  } catch (err) {
-    if (isLikelyStreamConnectionLoss(err, signal)) {
-      const lost = lostStreamConnectionError();
-      notifyUnfinishedLanesLostConnection(lost);
-      throw lost;
-    }
-    throw err;
-  }
-
-  await assertOkResponse(response, 'Generation request failed');
-  const reader = requireSseReader(response);
-
-  const diag = createClientSseDiagnostics();
-
-  try {
-    await readSseEventStream(reader, async (currentEvent, raw) => {
+  await runSseStream({
+    path: '/hypothesis/generate',
+    body,
+    signal,
+    fallbackError: 'Generation request failed',
+    onConnectionLoss: notifyUnfinishedLanesLostConnection,
+    onEvent: async (currentEvent, raw, diag) => {
       let notifyError: GenerateStreamCallbacks | undefined;
       try {
         if (currentEvent.trim() === '') {
@@ -375,17 +328,8 @@ export async function generateHypothesisStream(
         }
         return false;
       }
-    });
-  } catch (err) {
-    if (isLikelyStreamConnectionLoss(err, signal)) {
-      const lost = lostStreamConnectionError();
-      notifyUnfinishedLanesLostConnection(lost);
-      throw lost;
-    }
-    throw err;
-  } finally {
-    diag.logClose();
-  }
+    },
+  });
 
   await finalizeMissingHypothesisLanes(lanes, finalizedLaneIndices);
 }

@@ -12,7 +12,6 @@ function spec(): DesignSpec {
     title: 'Spec',
     sections: {
       'design-brief': section('design-brief', 'Brief'),
-      'existing-design': section('existing-design'),
       'research-context': section('research-context'),
       'objectives-metrics': section('objectives-metrics'),
       'design-constraints': section('design-constraints'),

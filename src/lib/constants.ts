@@ -13,12 +13,6 @@ export const SPEC_SECTIONS: SpecSectionMeta[] = [
     required: true,
   },
   {
-    id: 'existing-design',
-    title: 'Existing Design',
-    description: 'What works, what fails in the current design. Optional screenshots.',
-    required: false,
-  },
-  {
     id: 'research-context',
     title: 'Research & Context',
     description: 'Related research and/or context.',

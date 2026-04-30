@@ -32,6 +32,8 @@ Two product-level on/off switches. Use `1` to enable, `0` to disable.
 
 Both flags are read at server boot (Zod-validated). Changes take effect on the next app start.
 
+These flags do not control canvas node availability. The retired Existing Design node is not configurable, and the Design System node is canonical and always available. `thinking-defaults.json` controls the Design System extraction model budget only; it does not toggle the node.
+
 ---
 
 ## `provider-defaults.json`

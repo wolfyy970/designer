@@ -103,7 +103,7 @@ describe('computeDefaultPosition', () => {
 
   it('stacks input nodes vertically', () => {
     const existing = [makeNode('n1', 'designBrief', { x: 0, y: 200 })];
-    const pos = computeDefaultPosition('existingDesign', existing, col);
+    const pos = computeDefaultPosition('researchContext', existing, col);
     expect(pos.y).toBeGreaterThan(200);
   });
 
@@ -296,14 +296,13 @@ describe('reconcileInputGhostNodes', () => {
   it('adds ghosts when optional node slots are absent', () => {
     const nodes = [makeNode('b', 'designBrief')];
     const out = reconcileInputGhostNodes(nodes as WorkspaceNode[]);
-    expect(out).toHaveLength(6);
+    expect(out).toHaveLength(5);
     const ghosts = out.filter((n) => n.type === 'inputGhost');
-    expect(ghosts).toHaveLength(5);
+    expect(ghosts).toHaveLength(4);
     expect(ghosts.map((g) => (g.data as { targetType: string }).targetType)).toEqual([
       'researchContext',
       'objectivesMetrics',
       'designConstraints',
-      'existingDesign',
       'designSystem',
     ]);
   });
@@ -312,42 +311,42 @@ describe('reconcileInputGhostNodes', () => {
     const nodes = [
       makeNode('b', 'designBrief'),
       {
-        id: 'ghost-input-existingDesign',
+        id: 'ghost-input-researchContext',
         type: 'inputGhost',
         position: { x: 0, y: 0 },
-        data: { targetType: 'existingDesign' },
+        data: { targetType: 'researchContext' },
       },
-      makeNode('e', 'existingDesign'),
+      makeNode('r', 'researchContext'),
     ] as WorkspaceNode[];
     const out = reconcileInputGhostNodes(nodes);
-    expect(out.some((n) => n.id === 'ghost-input-existingDesign')).toBe(false);
-    expect(out.filter((n) => n.type === 'inputGhost')).toHaveLength(4);
+    expect(out.some((n) => n.id === 'ghost-input-researchContext')).toBe(false);
+    expect(out.filter((n) => n.type === 'inputGhost')).toHaveLength(3);
   });
 });
 
 describe('layoutTypeOrder', () => {
-  it('orders ghosts research before existing design', () => {
+  it('orders ghosts by optional input sequence', () => {
     const ghostResearch: WorkspaceNode = {
       id: 'g1',
       type: 'inputGhost',
       position: { x: 0, y: 0 },
       data: { targetType: 'researchContext' },
     };
-    const ghostExisting: WorkspaceNode = {
+    const ghostObjectives: WorkspaceNode = {
       id: 'g2',
       type: 'inputGhost',
       position: { x: 0, y: 0 },
-      data: { targetType: 'existingDesign' },
+      data: { targetType: 'objectivesMetrics' },
     };
-    expect(layoutTypeOrder(ghostResearch)).toBeLessThan(layoutTypeOrder(ghostExisting));
+    expect(layoutTypeOrder(ghostResearch)).toBeLessThan(layoutTypeOrder(ghostObjectives));
   });
 
-  it('orders the design-system ghost after existing design', () => {
-    const ghostExisting: WorkspaceNode = {
+  it('orders the design-system ghost after design constraints', () => {
+    const ghostConstraints: WorkspaceNode = {
       id: 'g1',
       type: 'inputGhost',
       position: { x: 0, y: 0 },
-      data: { targetType: 'existingDesign' },
+      data: { targetType: 'designConstraints' },
     };
     const ghostDesignSystem: WorkspaceNode = {
       id: 'g2',
@@ -355,7 +354,7 @@ describe('layoutTypeOrder', () => {
       position: { x: 0, y: 0 },
       data: { targetType: 'designSystem' },
     };
-    expect(layoutTypeOrder(ghostExisting)).toBeLessThan(layoutTypeOrder(ghostDesignSystem));
+    expect(layoutTypeOrder(ghostConstraints)).toBeLessThan(layoutTypeOrder(ghostDesignSystem));
   });
 
   it('places real optional inputs before ghosts and model last in layer 0', () => {

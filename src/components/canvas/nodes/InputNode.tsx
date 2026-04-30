@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@ds/components/ui/badge';
 import { type NodeProps, type Node } from '@xyflow/react';
-import { Loader2, Wand2, X } from 'lucide-react';
+import { Wand2, X } from 'lucide-react';
 import { useSpecStore } from '../../../stores/spec-store';
 import {
   NODE_TYPE_TO_SECTION,
@@ -19,7 +19,6 @@ import { generateInputContent } from '../../../api/client';
 import { createTaskStreamSession } from '../../../hooks/task-stream-session';
 import { createInitialTaskStreamState, type TaskStreamState } from '../../../hooks/task-stream-state';
 import type { InputsGenerateTargetApiId } from '../../../api/types';
-import ReferenceImageUpload from '../../shared/ReferenceImageUpload';
 import TaskStreamMonitor from './TaskStreamMonitor';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
@@ -41,14 +40,10 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
   const meta = SPEC_SECTIONS.find((s) => s.id === sectionId)!;
   const section = useSpecStore((s) => s.spec.sections[sectionId]);
   const updateSection = useSpecStore((s) => s.updateSection);
-  const capturingImage = useSpecStore((s) => s.capturingImage);
   const content = section?.content ?? '';
   const isDesignBrief = type === 'designBrief';
   const deleteCopy = useMemo(() => inputCardDeleteCopy(meta.title), [meta.title]);
   const onRemove = useCanvasNodePermanentRemove(id, deleteCopy);
-  const isExistingDesign = type === 'existingDesign';
-  const hasImages = isExistingDesign;
-  const isCapturing = isExistingDesign && capturingImage === sectionId;
 
   const generateApiId = GENERATE_INPUT_API_ID[type as CanvasNodeType];
   const designBriefContent =
@@ -97,7 +92,6 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
         {
           inputId: apiId,
           designBrief: brief,
-          existingDesign: spec['existing-design']?.content,
           researchContext: spec['research-context']?.content,
           objectivesMetrics: spec['objectives-metrics']?.content,
           designConstraints: spec['design-constraints']?.content,
@@ -133,7 +127,6 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
       selected={!!selected}
       width="w-node"
       status={status}
-      hasTarget={isExistingDesign}
       handleColor={content.trim() ? 'green' : 'amber'}
       leftRail={content.trim() ? 'success' : (meta.required ? 'warning' : null)}
     >
@@ -203,19 +196,6 @@ function InputNode({ id, type, selected }: NodeProps<InputNodeFlowType>) {
               )}
             </div>
             {generateError && <NodeErrorBlock message={generateError} />}
-          </div>
-        )}
-
-        {/* Reference images for existing design */}
-        {hasImages && (
-          <div className={`${RF_INTERACTIVE} mt-2`}>
-            <ReferenceImageUpload sectionId={sectionId} />
-            {isCapturing && (
-              <div className="mt-2 flex items-center gap-2 rounded-md border border-dashed border-accent bg-info-subtle px-3 py-2.5">
-                <Loader2 size={14} className="animate-spin text-info" />
-                <span className="text-micro text-info">Capturing screenshot...</span>
-              </div>
-            )}
           </div>
         )}
       </div>

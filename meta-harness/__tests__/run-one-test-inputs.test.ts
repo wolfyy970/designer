@@ -27,7 +27,6 @@ const testCase: SimplifiedMetaHarnessTestCase = {
     title: 'T',
     sections: {
       'design-brief': 'Build a dashboard for analytics',
-      'existing-design': '',
       'research-context': '',
       'objectives-metrics': '',
       'design-constraints': '',

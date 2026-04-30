@@ -578,6 +578,28 @@ function migrateV28ToV29(s: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
+/** v29 → v30: retire Existing Design as an active canvas node and ghost target. */
+function migrateV29ToV30(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = Array.isArray(s.nodes) ? (s.nodes as Array<Record<string, unknown>>) : [];
+  const removedIds = new Set<string>();
+  const nextNodes = nodes.filter((n) => {
+    const type = n.type as string | undefined;
+    const data = (n.data as Record<string, unknown> | undefined) ?? {};
+    const targetType = data.targetType as string | undefined;
+    const remove = type === 'existingDesign' || (type === 'inputGhost' && targetType === 'existingDesign');
+    if (remove && typeof n.id === 'string') removedIds.add(n.id);
+    return !remove;
+  });
+  const edges = Array.isArray(s.edges) ? (s.edges as Array<Record<string, unknown>>) : [];
+  return {
+    ...s,
+    nodes: nextNodes,
+    edges: edges.filter(
+      (e) => !removedIds.has(String(e.source)) && !removedIds.has(String(e.target)),
+    ),
+  };
+}
+
 // ── Top-level migration runner ────────────────────────────────────────
 
 /**
@@ -621,6 +643,7 @@ export function migrateCanvasState(
   if (fromVersion < 27) s = migrateV26ToV27(s);
   if (fromVersion < 28) s = migrateV27ToV28(s);
   if (fromVersion < 29) s = migrateV28ToV29(s);
+  if (fromVersion < 30) s = migrateV29ToV30(s);
 
   return normalizeMigratedCanvasState(s);
 }
@@ -631,14 +654,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function normalizeMigratedCanvasState(state: Record<string, unknown>): Record<string, unknown> {
   const viewport = isRecord(state.viewport) ? state.viewport : FRESH_STATE.viewport;
+  const migrated = migrateV29ToV30(state);
   return {
-    ...state,
-    nodes: Array.isArray(state.nodes) ? state.nodes : [],
-    edges: Array.isArray(state.edges) ? state.edges : [],
+    ...migrated,
+    nodes: Array.isArray(migrated.nodes) ? migrated.nodes : [],
+    edges: Array.isArray(migrated.edges) ? migrated.edges : [],
     viewport,
-    showMiniMap: typeof state.showMiniMap === 'boolean' ? state.showMiniMap : FRESH_STATE.showMiniMap,
-    colGap: typeof state.colGap === 'number' && Number.isFinite(state.colGap)
-      ? state.colGap
+    showMiniMap: typeof migrated.showMiniMap === 'boolean' ? migrated.showMiniMap : FRESH_STATE.showMiniMap,
+    colGap: typeof migrated.colGap === 'number' && Number.isFinite(migrated.colGap)
+      ? migrated.colGap
       : FRESH_STATE.colGap,
   };
 }

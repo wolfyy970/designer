@@ -25,7 +25,6 @@ inputsGenerate.post('/generate', async (c) => {
   const contextMessage = buildInputsGenerateUserMessage({
     targetInput: body.inputId,
     designBrief: body.designBrief,
-    existingDesign: body.existingDesign,
     researchContext: body.researchContext,
     objectivesMetrics: body.objectivesMetrics,
     designConstraints: body.designConstraints,

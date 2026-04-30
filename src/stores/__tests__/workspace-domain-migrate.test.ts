@@ -44,6 +44,27 @@ describe('migrateWorkspaceDomainPersist', () => {
     expect(out).toEqual(v9);
   });
 
+  it('v10 → v11 strips retired existing design input wiring', () => {
+    const v10 = {
+      hypotheses: {},
+      modelProfiles: {},
+      previewSlots: {},
+      designSystems: {},
+      incubatorModelNodeIds: {},
+      incubatorWirings: {
+        inc1: {
+          inputNodeIds: ['designBrief-1', 'existingDesign-legacy'],
+          previewNodeIds: ['preview-1'],
+          designSystemNodeIds: ['designSystem-1'],
+        },
+      },
+    };
+    const out = migrateWorkspaceDomainPersist(v10, 10) as {
+      incubatorWirings: Record<string, { inputNodeIds: string[] }>;
+    };
+    expect(out.incubatorWirings.inc1!.inputNodeIds).toEqual(['designBrief-1']);
+  });
+
   it('normalizes malformed top-level collections to empty records', () => {
     const out = migrateWorkspaceDomainPersist(
       {

@@ -73,8 +73,6 @@ export async function runInputsGeneratePipeline(
     throw new Error('Inputs pipeline requires a non-empty design-brief in the test case');
   }
 
-  const existingDesign = normalizeFlexContent(testCase.spec.sections['existing-design'] ?? '');
-
   const generated: Partial<Record<InputsFacetTarget, string>> = {};
   const perFacet: InputsPipelinePerFacet[] = [];
 
@@ -92,7 +90,6 @@ export async function runInputsGeneratePipeline(
         providerId: inputsGenerateProviderId,
         modelId: inputsGenerateModelId,
       };
-      if (existingDesign.trim()) body.existingDesign = existingDesign;
       if (generated['research-context']) body.researchContext = generated['research-context'];
       if (generated['objectives-metrics']) body.objectivesMetrics = generated['objectives-metrics'];
       if (generated['design-constraints']) body.designConstraints = generated['design-constraints'];

@@ -8,6 +8,7 @@ import type {
   SpecSectionId,
 } from '../types/spec';
 import { createEmptySections } from '../lib/constants';
+import { stripLegacyExistingDesignSection } from '../lib/spec-legacy';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 import { generateId, now } from '../lib/utils';
 
@@ -167,17 +168,18 @@ export const useSpecStore = create<SpecStore>()(
         }),
 
       loadCanvas: (spec) => {
+        const activeSpec = stripLegacyExistingDesignSection(spec);
         // Ensure all required sections exist when loading a spec
         const normalizedSections: Record<SpecSectionId, SpecSection> = {
           ...createEmptySections(),
         };
-        Object.keys(spec.sections).forEach((key) => {
+        Object.keys(activeSpec.sections).forEach((key) => {
           const sectionId = key as SpecSectionId;
-          if (spec.sections[sectionId]) {
-            normalizedSections[sectionId] = spec.sections[sectionId];
+          if (activeSpec.sections[sectionId]) {
+            normalizedSections[sectionId] = activeSpec.sections[sectionId];
           }
         });
-        set({ spec: { ...spec, sections: normalizedSections } });
+        set({ spec: { ...activeSpec, sections: normalizedSections } });
       },
     }),
     {
@@ -187,9 +189,12 @@ export const useSpecStore = create<SpecStore>()(
       migrate: (persisted: unknown) => {
         const state = persisted as { spec?: DesignSpec };
         if (state?.spec?.sections) {
-          // Ensure all section keys exist (handles new sections like design-system)
+          // Ensure active section keys exist; retired legacy sections are dropped on load.
           const emptySections = createEmptySections();
-          state.spec.sections = { ...emptySections, ...state.spec.sections };
+          state.spec = stripLegacyExistingDesignSection({
+            ...state.spec,
+            sections: { ...emptySections, ...state.spec.sections },
+          });
         }
         return state;
       },

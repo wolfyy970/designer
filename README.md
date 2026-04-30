@@ -39,14 +39,14 @@ Product flags such as lockdown and Auto-improve now live in [config/feature-flag
 
 The primary working interface is a visual node-graph canvas (`/canvas`):
 
-1. **Input nodes** (left) — Design Brief, Existing Design, Research Context, Objectives & Metrics, Design Constraints. On a fresh canvas, optional inputs may appear as **ghost placeholders**; opening **Canvas Manager** → **Load** restores a full canvas snapshot and materializes real **input nodes** when a legacy saved spec already has text or images for those **facets**. **Research Context**, **Objectives & Metrics**, and **Design Constraints** offer an optional **auto-generate** control (from the Design Brief and other filled facets) using the **first Model node** on the canvas and `POST /api/inputs/generate` — details in [USER_GUIDE.md](USER_GUIDE.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
+1. **Input nodes** (left) — Design Brief, Research Context, Objectives & Metrics, Design Constraints. On a fresh canvas, optional inputs may appear as **ghost placeholders**; opening **Canvas Manager** → **Load** restores a full canvas snapshot and materializes real **input nodes** when a legacy saved spec already has text or images for those **facets**. **Research Context**, **Objectives & Metrics**, and **Design Constraints** offer an optional **auto-generate** control (from the Design Brief and other filled facets) using the **first Model node** on the canvas and `POST /api/inputs/generate` — details in [USER_GUIDE.md](USER_GUIDE.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
 2. **Model node** — Connect to the Incubator or to Hypotheses. Each **Hypothesis** accepts **one** active model connection at a time (a new connection replaces the previous one). The **Incubator** may still have multiple models for different workflows.
 3. **Incubator** — Connect input nodes and a Model node, then click Generate to produce hypothesis strategies
 4. **Hypotheses** — Editable strategy cards. Connect a Model node and use **Design** to run the **agentic** Pi build (**Auto-improve** off = one build with no evaluator; **on** = evaluation + optional revision rounds)
 5. **Design System node** — Included on new canvases; fill it when tokens, components, or patterns should guide generation
 6. **Previews** — Rendered design previews with zoom, version navigation, full-screen (hypothesis-scoped design stepping when domain preview slots exist), and optional **mark as best** vs evaluator ranking. Agentic results include a file explorer, zip download, **run workspace** overlay (timeline, tasks, tabs) with multi-round eval preview when applicable, and (when the run finishes) an evaluation scorecard plus optional headless-browser thumbnail.
 
-Nodes connect left-to-right. Auto-layout arranges everything based on connections. Previews can connect back to Existing Design for iterative feedback loops.
+Nodes connect left-to-right. Auto-layout arranges everything based on connections. Previews can connect back to the Incubator as reference designs for iterative feedback loops.
 
 The header also opens **Settings** (General preferences). In **development**, a **design tokens kitchen sink** modal is on the General tab. Token semantics live in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 

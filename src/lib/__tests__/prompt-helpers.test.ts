@@ -77,8 +77,8 @@ describe('collectImageLines', () => {
     const spec = makeSpec({
       sections: {
         ...makeSpec().sections,
-        'existing-design': makeSection({
-          id: 'existing-design',
+        'research-context': makeSection({
+          id: 'research-context',
           images: [
             { id: 'img1', filename: 'photo.png', dataUrl: 'data:...', description: 'A screenshot', createdAt: '2024-01-01' },
           ],
@@ -93,8 +93,8 @@ describe('collectImageLines', () => {
     const spec = makeSpec({
       sections: {
         ...makeSpec().sections,
-        'existing-design': makeSection({
-          id: 'existing-design',
+        'research-context': makeSection({
+          id: 'research-context',
           images: [
             { id: 'img1', filename: 'a.png', dataUrl: 'data:...', description: 'Has desc', createdAt: '2024-01-01' },
             { id: 'img2', filename: 'b.png', dataUrl: 'data:...', description: '', createdAt: '2024-01-01' },
@@ -118,8 +118,8 @@ describe('collectImageLines', () => {
             { id: 'img1', filename: 'brief.png', dataUrl: 'data:...', description: 'Brief image', createdAt: '2024-01-01' },
           ],
         }),
-        'existing-design': makeSection({
-          id: 'existing-design',
+        'objectives-metrics': makeSection({
+          id: 'objectives-metrics',
           images: [
             { id: 'img2', filename: 'existing.png', dataUrl: 'data:...', description: 'Existing image', createdAt: '2024-01-01' },
           ],
@@ -128,5 +128,20 @@ describe('collectImageLines', () => {
     });
     const lines = collectImageLines(spec);
     expect(lines).toHaveLength(2);
+  });
+
+  it('ignores retired legacy existing-design images', () => {
+    const spec = makeSpec({
+      sections: {
+        ...makeSpec().sections,
+        'existing-design': makeSection({
+          id: 'existing-design',
+          images: [
+            { id: 'img1', filename: 'legacy.png', dataUrl: 'data:...', description: 'Legacy image', createdAt: '2024-01-01' },
+          ],
+        }),
+      },
+    });
+    expect(collectImageLines(spec)).toEqual([]);
   });
 });

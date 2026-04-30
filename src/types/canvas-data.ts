@@ -9,19 +9,17 @@ import type { DesignMdDocument, ThinkingLevel } from './workspace-domain';
 /** Base constraint required by React Flow */
 type NodeData<T> = Record<string, unknown> & T;
 
-/** Input nodes (designBrief, existingDesign, etc.) store data in spec-store */
+/** Input nodes (designBrief, researchContext, etc.) store data in spec-store */
 export type InputNodeData = NodeData<Record<string, never>>;
 
 /** Placeholder cards for optional input nodes not yet on the canvas */
 export type InputGhostTargetType =
-  | 'existingDesign'
   | 'researchContext'
   | 'objectivesMetrics'
   | 'designConstraints'
   | 'designSystem';
 
 const INPUT_GHOST_TARGET_TYPE_SET = new Set<string>([
-  'existingDesign',
   'researchContext',
   'objectivesMetrics',
   'designConstraints',

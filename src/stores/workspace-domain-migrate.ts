@@ -198,6 +198,17 @@ export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: n
     }
     p = { ...p, incubatorWirings };
   }
+  if (fromVersion < 11) {
+    const rawW = (p.incubatorWirings as Record<string, DomainIncubatorWiring>) ?? {};
+    const incubatorWirings: Record<string, DomainIncubatorWiring> = {};
+    for (const [k, w] of Object.entries(rawW)) {
+      incubatorWirings[k] = {
+        ...w,
+        inputNodeIds: w.inputNodeIds.filter((id) => !id.startsWith('existingDesign')),
+      };
+    }
+    p = { ...p, incubatorWirings };
+  }
   return normalizeWorkspaceDomainPersistShape(p);
 }
 

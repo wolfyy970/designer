@@ -83,13 +83,6 @@ export const createLayoutSlice: StateCreator<
           data: { status: EDGE_STATUS.IDLE },
         },
         {
-          id: buildEdgeId(modelId, designSystemId),
-          source: modelId,
-          target: designSystemId,
-          type: EDGE_TYPES.DATA_FLOW,
-          data: { status: EDGE_STATUS.IDLE },
-        },
-        {
           id: buildEdgeId(designSystemId, incubatorId),
           source: designSystemId,
           target: incubatorId,

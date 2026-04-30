@@ -58,7 +58,7 @@ describe('meta-harness test-case-hydrator', () => {
       name: 'c1',
       spec: {
         title: 'T',
-        sections: { 'design-brief': 'brief', 'existing-design': '', 'research-context': '', 'objectives-metrics': '', 'design-constraints': '' },
+        sections: { 'design-brief': 'brief', 'research-context': '', 'objectives-metrics': '', 'design-constraints': '' },
       },
       model: { providerId: 'openrouter', modelId: 'x/y' },
       incubate: { hypothesisCount: 3 },
@@ -90,7 +90,6 @@ describe('meta-harness test-case-hydrator', () => {
         title: 'T',
         sections: {
           'design-brief': 'b',
-          'existing-design': '',
           'research-context': '',
           'objectives-metrics': '',
           'design-constraints': '',
@@ -113,7 +112,6 @@ describe('meta-harness test-case-hydrator', () => {
         title: 'T',
         sections: {
           'design-brief': 'b',
-          'existing-design': '',
           'research-context': '',
           'objectives-metrics': '',
           'design-constraints': '',
@@ -153,7 +151,6 @@ describe('meta-harness test-case-hydrator', () => {
         title: 'T',
         sections: {
           'design-brief': 'b',
-          'existing-design': '',
           'research-context': '',
           'objectives-metrics': '',
           'design-constraints': '',

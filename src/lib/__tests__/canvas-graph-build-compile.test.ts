@@ -23,7 +23,6 @@ function makeSpec(): DesignSpec {
     title: 'T',
     sections: {
       'design-brief': makeSection('design-brief', 'CONNECTED_BRIEF'),
-      'existing-design': makeSection('existing-design', 'EXISTING'),
       'research-context': makeSection('research-context', ''),
       'objectives-metrics': makeSection('objectives-metrics', 'OBJ'),
       'design-constraints': makeSection('design-constraints', ''),

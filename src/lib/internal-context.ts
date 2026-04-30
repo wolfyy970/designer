@@ -3,7 +3,6 @@ import { hashDocumentSource, imageFingerprint } from './document-fingerprint';
 
 const SOURCE_SECTION_IDS: SpecSectionId[] = [
   'design-brief',
-  'existing-design',
   'research-context',
   'objectives-metrics',
   'design-constraints',
@@ -63,7 +62,6 @@ export function buildInternalContextUserMessage(spec: DesignSpec): string {
   ];
 
   appendBlock(lines, 'design_brief', spec.sections['design-brief']?.content);
-  appendBlock(lines, 'existing_design', spec.sections['existing-design']?.content);
   appendBlock(lines, 'research_context', spec.sections['research-context']?.content);
   appendBlock(lines, 'objectives_metrics', spec.sections['objectives-metrics']?.content);
   appendBlock(lines, 'design_constraints', spec.sections['design-constraints']?.content);

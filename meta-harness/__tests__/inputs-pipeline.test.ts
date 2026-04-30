@@ -32,7 +32,6 @@ const testCase: SimplifiedMetaHarnessTestCase = {
     title: 'Checkout Redesign',
     sections: {
       'design-brief': 'Redesign the checkout flow to reduce cart abandonment.',
-      'existing-design': 'Current multi-step form',
       'research-context': '',
       'objectives-metrics': '',
       'design-constraints': '',

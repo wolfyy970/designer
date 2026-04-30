@@ -41,20 +41,25 @@ describe('optionalInputSlotsWithSpecMaterial', () => {
 
   it('includes multiple slots in OPTIONAL_INPUT_SLOTS order', () => {
     const spec = minimalSpec({
-      'existing-design': { content: 'x' },
       'research-context': { content: 'y' },
+      'objectives-metrics': { content: 'x' },
       'design-system': { content: 'z' },
     });
-    expect(optionalInputSlotsWithSpecMaterial(spec)).toEqual(['researchContext', 'existingDesign', 'designSystem']);
+    expect(optionalInputSlotsWithSpecMaterial(spec)).toEqual(['researchContext', 'objectivesMetrics', 'designSystem']);
   });
 
   it('includes a slot when the facet has images but empty text', () => {
     const spec = minimalSpec({});
-    spec.sections['existing-design'] = {
-      ...spec.sections['existing-design'],
+    spec.sections['design-system'] = {
+      ...spec.sections['design-system'],
       content: '',
       images: [{ id: 'i1', filename: 'x.png', dataUrl: 'data:', description: '', createdAt: '2024-01-01' }],
     };
-    expect(optionalInputSlotsWithSpecMaterial(spec)).toEqual(['existingDesign']);
+    expect(optionalInputSlotsWithSpecMaterial(spec)).toEqual(['designSystem']);
+  });
+
+  it('ignores retired legacy existing-design material', () => {
+    const spec = minimalSpec({ 'existing-design': { content: 'Legacy' } });
+    expect(optionalInputSlotsWithSpecMaterial(spec)).toEqual([]);
   });
 });

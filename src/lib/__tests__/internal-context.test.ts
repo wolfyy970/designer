@@ -59,7 +59,7 @@ describe('internal context helpers', () => {
     expect(computeInternalContextSourceHash(a)).toBe(computeInternalContextSourceHash(b));
   });
 
-  it('changes hash when reference image metadata or content changes', () => {
+  it('changes hash when active reference image metadata or content changes', () => {
     const img: ReferenceImage = {
       id: 'img1',
       filename: 'screen.png',
@@ -68,15 +68,33 @@ describe('internal context helpers', () => {
       createdAt: '2026-01-01T00:00:00Z',
     };
     const a = spec({
-      sections: { ...spec().sections, 'existing-design': section('existing-design', '', [img]) },
+      sections: { ...spec().sections, 'research-context': section('research-context', '', [img]) },
     });
     const b = spec({
       sections: {
         ...spec().sections,
-        'existing-design': section('existing-design', '', [{ ...img, dataUrl: 'data:image/png;base64,bbb' }]),
+        'research-context': section('research-context', '', [{ ...img, dataUrl: 'data:image/png;base64,bbb' }]),
       },
     });
     expect(computeInternalContextSourceHash(a)).not.toBe(computeInternalContextSourceHash(b));
+  });
+
+  it('ignores retired legacy existing-design content and images', () => {
+    const img: ReferenceImage = {
+      id: 'img1',
+      filename: 'screen.png',
+      dataUrl: 'data:image/png;base64,aaa',
+      description: 'Screen',
+      createdAt: '2026-01-01T00:00:00Z',
+    };
+    const a = spec();
+    const b = spec({
+      sections: {
+        ...a.sections,
+        'existing-design': section('existing-design', 'Old checkout', [img]),
+      },
+    });
+    expect(computeInternalContextSourceHash(a)).toBe(computeInternalContextSourceHash(b));
   });
 
   it('detects stale documents by source hash', () => {
@@ -114,12 +132,12 @@ describe('internal context helpers', () => {
       spec({
         sections: {
           ...spec().sections,
-          'existing-design': section('existing-design', 'Old checkout', [img]),
+          'research-context': section('research-context', 'Market notes', [img]),
         },
       }),
     );
     expect(body).toContain('<design_brief>');
-    expect(body).toContain('Old checkout');
+    expect(body).toContain('Market notes');
     expect(body).toContain('<reference_images>');
     expect(body).toContain('screen.png');
   });

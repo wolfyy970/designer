@@ -18,17 +18,16 @@ describe('inputs-generate helpers', () => {
       const msg = buildInputsGenerateUserMessage({
         targetInput: 'research-context',
         designBrief: '  Brief here  ',
-        existingDesign: 'Existing',
         researchContext: 'Draft research',
         objectivesMetrics: 'Goals',
         designConstraints: 'Rules',
       });
       expect(msg).toContain('<target_input>research-context</target_input>');
       expect(msg).toContain('<design_brief>\nBrief here\n</design_brief>');
-      expect(msg).toContain('<existing_design>\nExisting\n</existing_design>');
       expect(msg).toContain('<objectives_metrics>\nGoals\n</objectives_metrics>');
       expect(msg).toContain('<design_constraints>\nRules\n</design_constraints>');
       expect(msg).not.toContain('<research_context>');
+      expect(msg).not.toContain('existing_design');
       expect(msg).toContain('<current_input_draft>\nDraft research\n</current_input_draft>');
     });
 

@@ -20,10 +20,6 @@ export const INCUBATOR_USER_INPUTS_TEMPLATE = `Analyze the following design spec
 {{DESIGN_BRIEF}}
 </design_brief>
 
-<existing_design>
-{{EXISTING_DESIGN}}
-</existing_design>
-
 <research_context>
 {{RESEARCH_CONTEXT}}
 </research_context>

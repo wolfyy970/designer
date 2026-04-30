@@ -6,11 +6,11 @@ This document is the **narrative** companion to [ARCHITECTURE.md](ARCHITECTURE.m
 
 ## What the user does on the canvas
 
-1. **Spec inputs (left column)** — Five **input nodes** hold structured text and images (the document’s `spec.sections` facets); content is mirrored into the **spec store** and fed into **incubate**.
+1. **Spec inputs (left column)** — Four active **input nodes** hold structured text and images (Design Brief, Research Context, Objectives & Metrics, Design Constraints); content is mirrored into the **spec store** and fed into **incubate**.
 2. **Incubator** — Connects **input nodes**, optional **preview → incubator** reference designs, optional **design-system** inputs, and a **model** node. Before strategy generation it can synthesize a design specification and refresh missing/stale connected DESIGN.md documents; **Incubate** then calls the server LLM to produce an **incubation plan** (hypothesis strategies).
 3. **Hypothesis nodes** — Each card is one strategy. A **model** connection sets provider/model. **Design** always runs the multi-file Pi loop with tools; **Auto-improve** toggles evaluator-driven revision passes after the first build + scorecard. Domain state (wiring, models, design systems, revision defaults) lives in `workspace-domain-store`; the graph is a **projection** kept in sync via `domain-commands`.
 4. **Design system node** — Optional; stores source text/images and a generated Google DESIGN.md document, then injects that document into prompts when wired to the Incubator or hypotheses.
-5. **Preview nodes** — Show iframe previews (URL-backed virtual FS for agentic multi-file); zip, evaluation summary. Versions stack per strategy; **Existing design** feedback loops can capture screenshots from previews.
+5. **Preview nodes** — Show iframe previews (URL-backed virtual FS for agentic multi-file), zip downloads, and evaluation summaries. Versions stack per strategy; previews can feed the Incubator as prior-output reference designs.
 
 Multi-model runs per hypothesis use **`/api/hypothesis/generate`**: one SSE stream multiplexed with `laneIndex` and `lane_done` per model. V1 hosted deployment keeps these synchronous SSE streams as the production path; the browser connection must stay open until the run finishes.
 

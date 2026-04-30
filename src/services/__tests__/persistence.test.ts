@@ -6,8 +6,10 @@ import {
   deleteSpecFromLibrary,
   getCanvasList,
   importCanvas,
+  importCanvasSnapshotOrSpec,
 } from '../persistence';
 import type { DesignSpec, SpecSection, SpecSectionId } from '../../types/spec';
+import type { SavedCanvasSnapshot } from '../../types/saved-canvas';
 
 // Mock localStorage
 const storage = new Map<string, string>();
@@ -32,12 +34,55 @@ function makeSpec(overrides: Partial<DesignSpec> & { id: string }): DesignSpec {
     version: 1,
     sections: {
       'design-brief': makeSection('design-brief'),
-      'existing-design': makeSection('existing-design'),
       'research-context': makeSection('research-context'),
       'objectives-metrics': makeSection('objectives-metrics'),
       'design-constraints': makeSection('design-constraints'),
       'design-system': makeSection('design-system'),
     },
+    ...overrides,
+  };
+}
+
+function makeSnapshot(overrides: Partial<SavedCanvasSnapshot> = {}): SavedCanvasSnapshot {
+  const spec = makeSpec({ id: 'canvas-1', title: 'Full Canvas' });
+  return {
+    schemaVersion: 1,
+    savedAt: '2026-01-01T00:00:00.000Z',
+    spec,
+    canvas: {
+      nodes: [
+        {
+          id: 'design-brief-node',
+          type: 'designBrief',
+          position: { x: 0, y: 0 },
+          data: { refId: 'design-brief' },
+        },
+      ],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+      showMiniMap: true,
+      colGap: 420,
+    },
+    workspaceDomain: {
+      incubatorWirings: {},
+      incubatorModelNodeIds: {},
+      hypotheses: {},
+      modelProfiles: {},
+      designSystems: {},
+      previewSlots: {},
+    },
+    incubator: {
+      incubationPlans: {},
+      compiledPrompts: [],
+      selectedProvider: 'openrouter',
+      selectedModel: 'model-1',
+    },
+    generation: {
+      results: [],
+      selectedVersions: {},
+      userBestOverrides: {},
+    },
+    artifacts: {},
     ...overrides,
   };
 }
@@ -163,5 +208,32 @@ describe('importCanvas', () => {
   it('rejects unparseable JSON', async () => {
     const file = makeFile('not json');
     await expect(importCanvas(file)).rejects.toThrow('could not parse JSON');
+  });
+
+  it('accepts a full saved canvas bundle', async () => {
+    const snapshot = makeSnapshot();
+    const file = makeFile(JSON.stringify({ kind: 'designer.canvas', snapshot }));
+
+    const result = await importCanvasSnapshotOrSpec(file);
+
+    expect('schemaVersion' in result).toBe(true);
+    if ('schemaVersion' in result) {
+      expect(result.spec.id).toBe('canvas-1');
+      expect(result.canvas.nodes[0].type).toBe('designBrief');
+    }
+  });
+
+  it('rejects malformed full saved canvas bundles before restore', async () => {
+    const snapshot = makeSnapshot({
+      canvas: {
+        viewport: { x: 0, y: 0, zoom: 1 },
+        edges: [],
+        showMiniMap: true,
+        colGap: 420,
+      } as unknown as SavedCanvasSnapshot['canvas'],
+    });
+    const file = makeFile(JSON.stringify({ kind: 'designer.canvas', snapshot }));
+
+    await expect(importCanvasSnapshotOrSpec(file)).rejects.toThrow('missing required fields');
   });
 });

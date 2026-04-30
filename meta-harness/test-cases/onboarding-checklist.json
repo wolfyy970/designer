@@ -7,7 +7,6 @@
       "design-brief": {
         "content": "First-run onboarding for a bookkeeping web app used by solo founders and tiny teams. One page: welcome, 4-step checklist (connect bank, categorize expenses, invite accountant, set tax year), inline tips, and a persistent 'resume later' secondary action.\n\nTone: calm, encouraging, plain language. Visual: light background, soft green accent for completed steps, clear disabled vs active states."
       },
-      "existing-design": { "content": "Competitors use modal wizards; we want inline checklist on one scrollable page." },
       "research-context": { "content": "Users abandon when they feel rushed; progressive disclosure + saved progress reduces drop-off." },
       "objectives-metrics": { "content": "Increase completion of step 1 and 2 in first session. Success: users understand what 'connect bank' entails before clicking." },
       "design-constraints": { "content": "Static prototype only. Simulate checklist state with simple JS or CSS :checked patterns; no real OAuth." }

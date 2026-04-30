@@ -9,7 +9,6 @@ import ModelNode from './ModelNode';
 export const nodeTypes = {
   inputGhost: InputGhostNode,
   designBrief: InputNode,
-  existingDesign: InputNode,
   researchContext: InputNode,
   objectivesMetrics: InputNode,
   designConstraints: InputNode,

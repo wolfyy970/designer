@@ -521,10 +521,10 @@ describe('v16 → v17: strip ghost placeholder nodes', () => {
       nodes: [
         makeNode('b', 'designBrief'),
         {
-          id: 'ghost-section-existingDesign',
+          id: 'ghost-section-researchContext',
           type: 'sectionGhost',
           position: { x: 0, y: 0 },
-          data: { targetType: 'existingDesign' },
+          data: { targetType: 'researchContext' },
         },
       ],
       edges: [],
@@ -551,7 +551,7 @@ describe('v18 → v19: remove legacy ghost-dismiss persistence', () => {
     const state = {
       nodes: [makeNode('b', 'designBrief')],
       edges: [],
-      dismissedSectionGhostSlots: ['researchContext', 'not-a-slot', 'existingDesign', ''],
+      dismissedSectionGhostSlots: ['researchContext', 'not-a-slot', 'objectivesMetrics', ''],
     };
     const result = migrateCanvasState(state, 18);
     expect(result).not.toHaveProperty('dismissedSectionGhostSlots');
@@ -824,11 +824,41 @@ describe('v28 → v29: remove ghost-dismiss state', () => {
         nodes: [],
         edges: [],
         dismissedInputGhostSlots: ['researchContext'],
-        dismissedSectionGhostSlots: ['existingDesign'],
+        dismissedSectionGhostSlots: ['researchContext'],
       },
       28,
     );
     expect(result).not.toHaveProperty('dismissedInputGhostSlots');
     expect(result).not.toHaveProperty('dismissedSectionGhostSlots');
+  });
+});
+
+describe('v29 → v30: retire existing design nodes', () => {
+  it('strips legacy existing design nodes, ghosts, and touching edges', () => {
+    const result = migrateCanvasState(
+      {
+        nodes: [
+          makeNode('brief', 'designBrief'),
+          makeNode('old-existing', 'existingDesign'),
+          {
+            id: 'ghost-input-existingDesign',
+            type: 'inputGhost',
+            position: { x: 0, y: 0 },
+            data: { targetType: 'existingDesign' },
+          },
+          makeNode('inc', 'incubator'),
+        ],
+        edges: [
+          makeEdge('e1', 'brief', 'inc'),
+          makeEdge('e2', 'old-existing', 'inc'),
+          makeEdge('e3', 'ghost-input-existingDesign', 'inc'),
+        ],
+      },
+      29,
+    );
+    const nodes = result.nodes as Array<Record<string, unknown>>;
+    const edges = result.edges as Array<Record<string, unknown>>;
+    expect(nodes.map((n) => n.id).sort()).toEqual(['brief', 'inc']);
+    expect(edges.map((e) => e.id)).toEqual(['e1']);
   });
 });

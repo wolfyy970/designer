@@ -38,7 +38,7 @@ describe('buildAutoConnectEdges', () => {
   it('connects all existing sections to new compiler (first compiler)', () => {
     const existing = [
       makeNode('s1', 'designBrief'),
-      makeNode('s2', 'existingDesign'),
+      makeNode('s2', 'researchContext'),
       makeNode('h1', 'hypothesis'),
     ];
     const edges = buildAutoConnectEdges('c1', 'incubator', existing);
@@ -60,12 +60,12 @@ describe('buildAutoConnectEdges', () => {
       makeNode('c1', 'incubator'),
     ];
     const edges = buildAutoConnectEdges('ds1', 'designSystem', existing);
-    expect(edges).toHaveLength(2);
+    expect(edges).toHaveLength(3);
     expect(edges.every((e) => e.source === 'ds1')).toBe(true);
-    expect(edges.map((e) => e.target).sort()).toEqual(['h1', 'h2']);
+    expect(edges.map((e) => e.target).sort()).toEqual(['c1', 'h1', 'h2']);
   });
 
-  it('connects all existing designSystems to new hypothesis and sole compiler', () => {
+  it('connects current designSystems to new hypothesis and sole compiler', () => {
     const existing = [
       makeNode('ds1', 'designSystem'),
       makeNode('ds2', 'designSystem'),
@@ -119,11 +119,10 @@ describe('buildModelEdgeForNode', () => {
     expect(edges[0]).toMatchObject({ source: 'm1', target: 'h1' });
   });
 
-  it('connects first model to new designSystem', () => {
+  it('does not auto-connect a model to new designSystem', () => {
     const existing = [makeNode('m1', 'model')];
     const edges = buildModelEdgeForNode('ds1', 'designSystem', existing);
-    expect(edges).toHaveLength(1);
-    expect(edges[0]).toMatchObject({ source: 'm1', target: 'ds1' });
+    expect(edges).toHaveLength(0);
   });
 
   it('returns empty when no model exists', () => {
@@ -200,8 +199,8 @@ describe('findMissingPrerequisite', () => {
     expect(findMissingPrerequisite('hypothesis', [])).toBe('model');
   });
 
-  it('returns "model" for designSystem when no model exists', () => {
-    expect(findMissingPrerequisite('designSystem', [])).toBe('model');
+  it('does not require a model before adding designSystem', () => {
+    expect(findMissingPrerequisite('designSystem', [])).toBeNull();
   });
 
   it('returns null when model already exists', () => {

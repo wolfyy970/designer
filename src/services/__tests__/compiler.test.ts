@@ -21,7 +21,6 @@ function makeSpec(overrides: Partial<DesignSpec> = {}): DesignSpec {
     title: 'Test Spec',
     sections: {
       'design-brief': makeSection('design-brief', 'A SaaS onboarding flow'),
-      'existing-design': makeSection('existing-design'),
       'research-context': makeSection('research-context'),
       'objectives-metrics': makeSection('objectives-metrics'),
       'design-constraints': makeSection('design-constraints'),
@@ -98,7 +97,6 @@ describe('compileVariantPrompts', () => {
     const spec = makeSpec({
       sections: {
         'design-brief': { ...makeSection('design-brief'), images: [img] },
-        'existing-design': makeSection('existing-design'),
         'research-context': makeSection('research-context'),
         'objectives-metrics': makeSection('objectives-metrics'),
         'design-constraints': makeSection('design-constraints'),
@@ -123,7 +121,6 @@ describe('compileVariantPrompts', () => {
     const spec = makeSpec({
       sections: {
         'design-brief': { ...makeSection('design-brief'), images: [specImg] },
-        'existing-design': makeSection('existing-design'),
         'research-context': makeSection('research-context'),
         'objectives-metrics': makeSection('objectives-metrics'),
         'design-constraints': makeSection('design-constraints'),

@@ -69,7 +69,6 @@ export function buildIncubatorUserPrompt(
   return interpolate(incubatorUserTemplate, {
     SPEC_TITLE: spec.title,
     DESIGN_BRIEF: getSectionContent(spec, 'design-brief'),
-    EXISTING_DESIGN: getSectionContent(spec, 'existing-design'),
     RESEARCH_CONTEXT: getSectionContent(spec, 'research-context'),
     OBJECTIVES_METRICS: getSectionContent(spec, 'objectives-metrics'),
     DESIGN_CONSTRAINTS: getSectionContent(spec, 'design-constraints'),

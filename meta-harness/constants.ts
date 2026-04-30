@@ -2,10 +2,9 @@
  * Shared literals for meta-harness (URLs, timeouts, filenames).
  */
 
-/** Canonical spec section ids for simplified benchmarks + incubate-mode rubric context (must stay aligned with `SpecSectionId`). */
+/** Canonical active spec section ids for simplified benchmarks + incubate-mode rubric context. */
 export const SECTION_KEYS = [
   'design-brief',
-  'existing-design',
   'research-context',
   'objectives-metrics',
   'design-constraints',

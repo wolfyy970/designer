@@ -73,7 +73,6 @@ describe('runTestCasesEvaluation JSON guard', () => {
           title: 'T',
           sections: {
             'design-brief': 'b',
-            'existing-design': '',
             'research-context': '',
             'objectives-metrics': '',
             'design-constraints': '',

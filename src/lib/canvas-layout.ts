@@ -8,13 +8,12 @@ export { INPUT_NODE_TYPES };
 
 /**
  * Canonical vertical order for optional nodes (ghosts + real input nodes in layer 0).
- * Research → objectives → constraints → existing design → design system.
+ * Research → objectives → constraints → design system.
  */
 export const OPTIONAL_INPUT_SLOTS: readonly InputGhostTargetType[] = [
   'researchContext',
   'objectivesMetrics',
   'designConstraints',
-  'existingDesign',
   'designSystem',
 ];
 
@@ -103,8 +102,7 @@ export function layoutTypeOrder(n: CanvasNode): number {
   if (
     n.type === 'researchContext' ||
     n.type === 'objectivesMetrics' ||
-    n.type === 'designConstraints' ||
-    n.type === 'existingDesign'
+    n.type === 'designConstraints'
   ) {
     return LAYER0_REAL_OPTIONAL_BASE + optionalInputSlotIndex(n.type);
   }

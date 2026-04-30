@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export type SpecSectionId =
   | 'design-brief'
+  /** @deprecated Existing Design is retired; accepted only so old specs can be stripped safely. */
   | 'existing-design'
   | 'research-context'
   | 'objectives-metrics'

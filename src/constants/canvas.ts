@@ -1,7 +1,6 @@
 /** Canvas node type string literals — single source of truth */
 export const NODE_TYPES = {
   DESIGN_BRIEF: 'designBrief',
-  EXISTING_DESIGN: 'existingDesign',
   RESEARCH_CONTEXT: 'researchContext',
   OBJECTIVES_METRICS: 'objectivesMetrics',
   DESIGN_CONSTRAINTS: 'designConstraints',
@@ -23,7 +22,6 @@ export const INPUT_GHOST_NODE_TYPE = 'inputGhost' as const;
  */
 export const INPUT_NODE_TYPES = new Set<string>([
   NODE_TYPES.DESIGN_BRIEF,
-  NODE_TYPES.EXISTING_DESIGN,
   NODE_TYPES.RESEARCH_CONTEXT,
   NODE_TYPES.OBJECTIVES_METRICS,
   NODE_TYPES.DESIGN_CONSTRAINTS,

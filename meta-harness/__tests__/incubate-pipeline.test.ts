@@ -69,7 +69,6 @@ describe('runIncubatePipeline', () => {
         title: 'T',
         sections: {
           'design-brief': 'brief',
-          'existing-design': '',
           'research-context': '',
           'objectives-metrics': '',
           'design-constraints': '',
@@ -114,7 +113,6 @@ describe('runIncubatePipeline', () => {
         title: 'T',
         sections: {
           'design-brief': 'b',
-          'existing-design': '',
           'research-context': '',
           'objectives-metrics': '',
           'design-constraints': '',

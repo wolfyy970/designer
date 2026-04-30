@@ -9,7 +9,6 @@ import type { EdgeStatus } from '../constants/canvas';
 
 export type CanvasNodeType =
   | 'designBrief'
-  | 'existingDesign'
   | 'researchContext'
   | 'objectivesMetrics'
   | 'designConstraints'
@@ -56,7 +55,6 @@ export interface WorkspaceViewport {
 /** Map canvas node types to their spec section IDs */
 export const NODE_TYPE_TO_SECTION: Partial<Record<CanvasNodeType, SpecSectionId>> = {
   designBrief: 'design-brief',
-  existingDesign: 'existing-design',
   researchContext: 'research-context',
   objectivesMetrics: 'objectives-metrics',
   designConstraints: 'design-constraints',

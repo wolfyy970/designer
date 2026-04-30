@@ -55,8 +55,8 @@ describe('canvas mutation planner', () => {
     });
   });
 
-  it('plans prerequisite insertion before adding a dependent node', () => {
-    const ids = ['design-system-id', 'model-id'];
+  it('adds design system without inserting a model prerequisite', () => {
+    const ids = ['design-system-id'];
     const plan = planAddNodeMutation({
       type: NODE_TYPES.DESIGN_SYSTEM,
       nodes: [node('inc-1', NODE_TYPES.INCUBATOR)],
@@ -66,12 +66,9 @@ describe('canvas mutation planner', () => {
     });
 
     expect(plan?.nodeId).toBe('designSystem-design-system-id');
-    expect(plan?.prerequisiteNode).toMatchObject({
-      id: 'model-model-id',
-      type: NODE_TYPES.MODEL,
-    });
+    expect(plan?.prerequisiteNode).toBeUndefined();
     expect(plan?.nextNodes.map((candidate) => candidate.id)).toEqual(
-      expect.arrayContaining(['model-model-id', 'designSystem-design-system-id']),
+      expect.arrayContaining(['designSystem-design-system-id']),
     );
   });
 

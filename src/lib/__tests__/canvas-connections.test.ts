@@ -5,7 +5,6 @@ describe('isValidConnection', () => {
   it('allows section types to connect to compiler', () => {
     const sectionTypes = [
       'designBrief',
-      'existingDesign',
       'researchContext',
       'objectivesMetrics',
       'designConstraints',
@@ -28,9 +27,9 @@ describe('isValidConnection', () => {
     expect(isValidConnection('hypothesis', 'preview')).toBe(true);
   });
 
-  it('allows preview to connect to compiler and existingDesign', () => {
+  it('allows preview to connect to compiler only', () => {
     expect(isValidConnection('preview', 'incubator')).toBe(true);
-    expect(isValidConnection('preview', 'existingDesign')).toBe(true);
+    expect(isValidConnection('preview', 'designSystem')).toBe(false);
   });
 
   it('rejects reverse connections', () => {
@@ -68,6 +67,6 @@ describe('isValidConnection', () => {
 
   it('covers all defined source types', () => {
     const definedSources = Object.keys(VALID_CONNECTIONS);
-    expect(definedSources.length).toBeGreaterThanOrEqual(10);
+    expect(definedSources.length).toBeGreaterThanOrEqual(9);
   });
 });
