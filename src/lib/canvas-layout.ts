@@ -8,13 +8,12 @@ export { INPUT_NODE_TYPES };
 
 /**
  * Canonical vertical order for optional nodes (ghosts + real input nodes in layer 0).
- * Research → objectives → constraints → design system.
+ * Design System is required, so it is not represented as a ghost slot.
  */
 export const OPTIONAL_INPUT_SLOTS: readonly InputGhostTargetType[] = [
   'researchContext',
   'objectivesMetrics',
   'designConstraints',
-  'designSystem',
 ];
 
 /** Prefix for stable input-ghost node ids; keep in sync with onNodesChange remove guard. */
@@ -33,6 +32,7 @@ function inputGhostStableId(slot: InputGhostTargetType): string {
 
 /** Unknown slot / missing targetType sorts after known slots in a tier. */
 const OPTIONAL_SLOT_UNKNOWN = 99;
+const REQUIRED_DESIGN_SYSTEM_SLOT_INDEX = OPTIONAL_INPUT_SLOTS.length;
 
 /** Auto-layout layer 0: explicit tiers (brief &lt; reals &lt; ghosts &lt; model). */
 const LAYER0_ORDER_BRIEF = 1;
@@ -42,6 +42,7 @@ const LAYER0_MODEL = 1000;
 const LAYER0_FALLBACK = 500;
 
 function optionalInputSlotIndex(type: string): number {
+  if (type === 'designSystem') return REQUIRED_DESIGN_SYSTEM_SLOT_INDEX;
   const i = (OPTIONAL_INPUT_SLOTS as readonly string[]).indexOf(type);
   return i === -1 ? OPTIONAL_SLOT_UNKNOWN : i;
 }
@@ -136,6 +137,47 @@ export function reconcileEphemeralGhostNodes(
   nodes: WorkspaceNode[],
 ): WorkspaceNode[] {
   return reconcileInputGhostNodes(nodes);
+}
+
+/**
+ * Reconcile ghosts when restoring a saved canvas snapshot without relaying out
+ * the user's saved graph. Saved snapshots intentionally omit ephemeral ghost
+ * cards, so place missing ghosts at the bottom of the input column as visible
+ * affordances while preserving all persisted node positions.
+ */
+export function reconcileEphemeralGhostNodesForRestore(
+  nodes: WorkspaceNode[],
+  colGap: number,
+): WorkspaceNode[] {
+  const base = nodes.filter((n) => n.type !== INPUT_GHOST_NODE_TYPE);
+  const have = new Set(base.map((n) => n.type));
+  const missingSlots = OPTIONAL_INPUT_SLOTS.filter((slot) => !have.has(slot));
+  if (missingSlots.length === 0) return base;
+
+  const inputColumnNodes = base.filter((node) =>
+    node.type === 'designBrief'
+    || node.type === 'researchContext'
+    || node.type === 'objectivesMetrics'
+    || node.type === 'designConstraints'
+    || node.type === 'designSystem'
+    || node.type === INPUT_GHOST_NODE_TYPE,
+  );
+  const x = inputColumnNodes[0]?.position.x ?? columnX(colGap).inputs;
+  const bottomY = inputColumnNodes.reduce(
+    (bottom, node) => Math.max(bottom, node.position.y + nodeH(node)),
+    DEFAULT_CANVAS_Y,
+  );
+  const ghosts = missingSlots.map((slot, index) => ({
+    id: inputGhostStableId(slot),
+    type: INPUT_GHOST_NODE_TYPE,
+    position: snap({
+      x,
+      y: bottomY + NODE_SPACING + index * (FALLBACK_H.inputGhost + NODE_SPACING),
+    }),
+    data: { targetType: slot },
+  }));
+
+  return [...base, ...ghosts];
 }
 
 function nodeWidth(node: CanvasNode): number {

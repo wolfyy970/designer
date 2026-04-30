@@ -22,7 +22,7 @@ import {
   LOCKDOWN_PROVIDER_ID,
 } from '../lib/lockdown-model';
 import { THINKING_LEVELS } from '../lib/thinking-defaults';
-import { formatDesignSystemSourceMarkdown } from '../lib/design-md';
+import { formatDesignSystemSourceMarkdown } from '../lib/design-md-core';
 
 export type { WorkspaceGraphSnapshot };
 

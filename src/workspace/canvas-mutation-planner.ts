@@ -21,6 +21,7 @@ import type { CanvasNodeType, WorkspaceEdge, WorkspaceNode } from '../types/work
 export const REMOVE_PROTECTED_NODE_TYPES = new Set<string>([
   NODE_TYPES.DESIGN_BRIEF,
   NODE_TYPES.MODEL,
+  NODE_TYPES.DESIGN_SYSTEM,
   NODE_TYPES.INCUBATOR,
   INPUT_GHOST_NODE_TYPE,
 ]);

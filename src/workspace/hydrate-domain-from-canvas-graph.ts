@@ -5,6 +5,7 @@
 import { NODE_TYPES } from '../constants/canvas';
 import { DEFAULT_INCUBATOR_PROVIDER } from '../lib/constants';
 import { getDesignSystemNodeData, getModelNodeData } from '../lib/canvas-node-data';
+import { designSystemSourceFromNodeData, getDesignSystemSourceMode } from '../lib/design-md';
 import type { CanvasNodeType } from '../types/workspace-graph';
 import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
 import { applyHydrateEdgeRules } from './edge-domain-rules';
@@ -32,11 +33,13 @@ export function hydrateDomainFromCanvasGraph(input: {
     if (n.type === NODE_TYPES.DESIGN_SYSTEM) {
       const d = getDesignSystemNodeData(snapshotNodeToWorkspace(n));
       if (d) {
+        const source = designSystemSourceFromNodeData(d);
         store.upsertDesignSystem(n.id, {
-          title: d.title ?? '',
-          content: d.content ?? '',
-          images: d.images ?? [],
-          markdownSources: d.markdownSources ?? [],
+          title: source.title ?? d.title ?? '',
+          content: source.content ?? '',
+          sourceMode: getDesignSystemSourceMode(d),
+          images: [...(source.images ?? [])],
+          markdownSources: [...(source.markdownSources ?? [])],
           designMdDocument: d.designMdDocument,
           providerMigration: d.providerId,
           modelMigration: d.modelId,

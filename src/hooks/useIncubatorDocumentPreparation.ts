@@ -15,8 +15,7 @@ import type { WorkspaceNode } from '../types/workspace-graph';
 import { normalizeError } from '../lib/error-utils';
 import {
   computeDesignMdSourceHash,
-  designMdSourceHasInput,
-  designSystemSourceFromNodeData,
+  getDesignSystemEffectiveState,
   isDesignMdDocumentStale,
 } from '../lib/design-md';
 import {
@@ -118,8 +117,9 @@ export function useIncubatorDocumentPreparation({
       throw new Error('Design System node is no longer available');
     }
     const data = (currentNode.data ?? {}) as DesignSystemNodeData;
-    const source = designSystemSourceFromNodeData(data);
-    if (!designMdSourceHasInput(source)) throw new Error('Design System node has no source content');
+    const state = getDesignSystemEffectiveState(data);
+    if (!state.hasEffectiveSourceInput) throw new Error('Design System node has no source content');
+    const source = state.source;
     const sourceHash = computeDesignMdSourceHash(source);
     setDesignMdGeneratingNodeId(nodeId);
     setTaskStreamState({ ...createInitialTaskStreamState(), status: 'streaming' });
@@ -189,8 +189,9 @@ export function useIncubatorDocumentPreparation({
     for (const node of candidates) {
       if (!node || node.type !== NODE_TYPES.DESIGN_SYSTEM) continue;
       let data = (node.data ?? {}) as DesignSystemNodeData;
-      const source = designSystemSourceFromNodeData(data);
-      if (!designMdSourceHasInput(source)) continue;
+      const state = getDesignSystemEffectiveState(data, { document: data.designMdDocument });
+      if (!state.hasEffectiveSourceInput) continue;
+      const source = state.source;
       if (!data.designMdDocument?.content || data.designMdDocument.error || isDesignMdDocumentStale(source, data.designMdDocument)) {
         await refreshDesignMdDocument(node.id);
         data = ((useCanvasStore.getState().nodes.find((n) => n.id === node.id)?.data ?? {}) as DesignSystemNodeData);

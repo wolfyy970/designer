@@ -12,3 +12,18 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+declare module '*.md?raw' {
+  const content: string;
+  export default content;
+}
+
+declare module '*?raw' {
+  const content: string;
+  export default content;
+}
+
+declare module '../assets/default-wireframe-design.md?raw' {
+  const content: string;
+  export default content;
+}

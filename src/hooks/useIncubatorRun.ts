@@ -87,12 +87,23 @@ export function useIncubatorRun({
 
     let session: ReturnType<typeof createTaskStreamSession> | undefined;
     try {
-      let internalContextDocument =
+      const existingInternalContextDocument =
         useSpecStore.getState().spec.internalContextDocument?.content ?? '';
-      if (needsInternalContextRefresh()) {
-        internalContextDocument = await refreshInternalContext();
+      const internalContextPromise = needsInternalContextRefresh()
+        ? refreshInternalContext()
+        : Promise.resolve(existingInternalContextDocument);
+      const [internalContextResult, designSystemDocumentsResult] = await Promise.allSettled([
+        internalContextPromise,
+        ensureDesignSystemDocuments(),
+      ]);
+      if (internalContextResult.status === 'rejected') {
+        throw internalContextResult.reason;
       }
-      const designSystemDocumentsForPrompt = await ensureDesignSystemDocuments();
+      if (designSystemDocumentsResult.status === 'rejected') {
+        throw designSystemDocumentsResult.reason;
+      }
+      const internalContextDocument = internalContextResult.value;
+      const designSystemDocumentsForPrompt = designSystemDocumentsResult.value;
 
       const runInputs = await buildIncubatorRunInputs({
         snapshot: {

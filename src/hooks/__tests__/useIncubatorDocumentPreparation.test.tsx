@@ -188,6 +188,111 @@ describe('useIncubatorDocumentPreparation', () => {
     );
   });
 
+  it('skips Design System preparation when the node mode is none', async () => {
+    useCanvasStore.setState({
+      nodes: [
+        { id: 'inc-1', type: NODE_TYPES.INCUBATOR, position: { x: 0, y: 0 }, data: {} },
+        {
+          id: 'ds-1',
+          type: NODE_TYPES.DESIGN_SYSTEM,
+          position: { x: 0, y: 0 },
+          data: {
+            sourceMode: 'none',
+            title: 'Brand DS',
+            content: 'Ignored tokens',
+            images: [],
+          },
+        },
+      ],
+      edges: [
+        { id: 'e-ds-inc', source: 'ds-1', target: 'inc-1', type: 'dataFlow', data: { status: 'idle' } },
+      ],
+    });
+    const { result } = renderPreparationHook();
+
+    let docs: Awaited<ReturnType<typeof result.current.ensureDesignSystemDocuments>> = [];
+    await act(async () => {
+      docs = await result.current.ensureDesignSystemDocuments();
+    });
+
+    expect(apiMocks.extractDesignSystem).not.toHaveBeenCalled();
+    expect(docs).toEqual([]);
+  });
+
+  it('does not refresh or use an old DESIGN.md when custom style has no source material', async () => {
+    useCanvasStore.setState({
+      nodes: [
+        { id: 'inc-1', type: NODE_TYPES.INCUBATOR, position: { x: 0, y: 0 }, data: {} },
+        {
+          id: 'ds-1',
+          type: NODE_TYPES.DESIGN_SYSTEM,
+          position: { x: 0, y: 0 },
+          data: {
+            sourceMode: 'custom',
+            title: 'Brand DS',
+            content: '',
+            images: [],
+            markdownSources: [],
+            designMdDocument: {
+              content: '# Old',
+              sourceHash: 'old',
+              generatedAt: '2026-01-01T00:00:00Z',
+              providerId: 'openrouter',
+              modelId: 'old-model',
+            },
+          },
+        },
+      ],
+      edges: [
+        { id: 'e-ds-inc', source: 'ds-1', target: 'inc-1', type: 'dataFlow', data: { status: 'idle' } },
+      ],
+    });
+    const { result } = renderPreparationHook();
+
+    let docs: Awaited<ReturnType<typeof result.current.ensureDesignSystemDocuments>> = [];
+    await act(async () => {
+      docs = await result.current.ensureDesignSystemDocuments();
+    });
+
+    expect(apiMocks.extractDesignSystem).not.toHaveBeenCalled();
+    expect(docs).toEqual([]);
+  });
+
+  it('passes the built-in wireframe source into DESIGN.md preparation by default', async () => {
+    useCanvasStore.setState({
+      nodes: [
+        { id: 'inc-1', type: NODE_TYPES.INCUBATOR, position: { x: 0, y: 0 }, data: {} },
+        {
+          id: 'ds-1',
+          type: NODE_TYPES.DESIGN_SYSTEM,
+          position: { x: 0, y: 0 },
+          data: {},
+        },
+      ],
+      edges: [
+        { id: 'e-ds-inc', source: 'ds-1', target: 'inc-1', type: 'dataFlow', data: { status: 'idle' } },
+      ],
+    });
+    const { result } = renderPreparationHook();
+
+    await act(async () => {
+      await result.current.ensureDesignSystemDocuments();
+    });
+
+    expect(apiMocks.extractDesignSystem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Wireframe',
+        markdownSources: [
+          expect.objectContaining({
+            filename: 'DESIGN.md',
+            content: expect.stringContaining('name: Wireframe'),
+          }),
+        ],
+      }),
+      expect.anything(),
+    );
+  });
+
   it('exports the same initial task state shape expected by callers', () => {
     expect(createInitialTaskStreamState('idle').status).toBe('idle');
   });

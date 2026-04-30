@@ -5,6 +5,7 @@
 import type { ReferenceImage } from './spec';
 import type { DesignSystemMarkdownSource } from './design-system-source';
 import type { ThinkingLevel } from '../lib/thinking-defaults';
+import type { DesignSystemSourceMode } from './design-system-mode';
 
 export type { ThinkingLevel };
 
@@ -68,6 +69,8 @@ export interface DomainDesignSystemContent {
   readonly nodeId: string;
   title: string;
   content: string;
+  /** `off` is accepted only for saved canvases from the short-lived pre-None mode. */
+  sourceMode?: DesignSystemSourceMode | 'off';
   images: ReferenceImage[];
   markdownSources?: DesignSystemMarkdownSource[];
   designMdDocument?: DesignMdDocument;

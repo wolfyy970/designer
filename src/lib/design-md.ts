@@ -1,69 +1,87 @@
 import type { DesignSystemNodeData } from '../types/canvas-data';
-import type { DesignSystemMarkdownSource } from '../types/design-system-source';
-import type { ReferenceImage } from '../types/spec';
 import type { DesignMdDocument } from '../types/workspace-domain';
-import { hashDocumentSource, imageFingerprint } from './document-fingerprint';
+import {
+  DEFAULT_DESIGN_SYSTEM_SOURCE_MODE,
+  isDesignSystemSourceMode,
+  type DesignSystemSourceMode,
+} from '../types/design-system-mode';
+import {
+  DEFAULT_WIREFRAME_DESIGN_SYSTEM_MARKDOWN_SOURCE,
+  DEFAULT_WIREFRAME_DESIGN_SYSTEM_TITLE,
+} from './default-wireframe-design-system';
+import {
+  designMdSourceHasInput,
+  getDesignMdStatus,
+  type DesignMdSource,
+  type DesignMdStatus,
+} from './design-md-core';
+export {
+  computeDesignMdSourceHash,
+  designMdSourcePayload,
+  formatDesignSystemSourceMarkdown,
+  isDesignMdDocumentStale,
+  designMdSourceHasInput,
+  getDesignMdStatus,
+  type DesignMdSource,
+  type DesignMdStatus,
+} from './design-md-core';
 
-export type DesignMdSource = {
-  title?: string;
-  content?: string;
-  images?: readonly ReferenceImage[];
-  markdownSources?: readonly DesignSystemMarkdownSource[];
+export type DesignSystemInactiveReason = 'none' | 'custom-empty';
+
+export type DesignSystemEffectiveState = {
+  mode: DesignSystemSourceMode;
+  customSourceCount: number;
+  hasCustomSourceInput: boolean;
+  source: DesignMdSource;
+  hasEffectiveSourceInput: boolean;
+  inactiveReason?: DesignSystemInactiveReason;
+  designMdStatus?: DesignMdStatus;
 };
 
-export type DesignMdStatus = 'missing' | 'ready' | 'stale' | 'generating' | 'error';
-
-function markdownSourceFingerprint(source: DesignSystemMarkdownSource) {
-  return {
-    id: source.id,
-    filename: source.filename,
-    content: source.content,
-    sizeBytes: source.sizeBytes,
-  };
-}
-
-export function designMdSourcePayload(source: DesignMdSource): unknown {
-  return {
-    title: source.title ?? '',
-    content: source.content ?? '',
-    images: (source.images ?? []).map(imageFingerprint),
-    markdownSources: (source.markdownSources ?? []).map(markdownSourceFingerprint),
-  };
-}
-
-export function computeDesignMdSourceHash(source: DesignMdSource): string {
-  return hashDocumentSource(designMdSourcePayload(source));
-}
-
-export function isDesignMdDocumentStale(
-  source: DesignMdSource,
-  doc?: DesignMdDocument,
-): boolean {
-  if (!doc) return true;
-  return doc.sourceHash !== computeDesignMdSourceHash(source);
-}
-
-export function designMdSourceHasInput(source: DesignMdSource): boolean {
+export function hasCustomDesignSystemInput(data: DesignSystemNodeData): boolean {
   return (
-    Boolean(source.content?.trim()) ||
-    Boolean(source.images?.length) ||
-    Boolean(source.markdownSources?.some((asset) => asset.content.trim()))
+    Boolean(data.content?.trim()) ||
+    Boolean(data.images?.length) ||
+    Boolean(data.markdownSources?.some((asset) => asset.content.trim()))
   );
 }
 
-export function getDesignMdStatus(
-  source: DesignMdSource,
-  generating: boolean,
-  doc?: DesignMdDocument,
-): DesignMdStatus {
-  if (generating) return 'generating';
-  if (doc?.error) return 'error';
-  if (!doc?.content?.trim()) return 'missing';
-  return isDesignMdDocumentStale(source, doc) ? 'stale' : 'ready';
+export function countCustomDesignSystemInputs(data: DesignSystemNodeData): number {
+  return (
+    (data.content?.trim() ? 1 : 0) +
+    (data.images?.length ?? 0) +
+    (data.markdownSources?.filter((asset) => asset.content.trim()).length ?? 0)
+  );
+}
+
+export function getDesignSystemSourceMode(data: DesignSystemNodeData): DesignSystemSourceMode {
+  if (isDesignSystemSourceMode(data.sourceMode)) return data.sourceMode;
+  if (data.sourceMode === 'off') return 'none';
+  return hasCustomDesignSystemInput(data) ? 'custom' : DEFAULT_DESIGN_SYSTEM_SOURCE_MODE;
 }
 
 export function designSystemSourceFromNodeData(data: DesignSystemNodeData): DesignMdSource {
+  const mode = getDesignSystemSourceMode(data);
+  if (mode === 'none') {
+    return {
+      mode,
+      title: data.title || 'Design System',
+      content: '',
+      images: [],
+      markdownSources: [],
+    };
+  }
+  if (mode === 'wireframe') {
+    return {
+      mode,
+      title: DEFAULT_WIREFRAME_DESIGN_SYSTEM_TITLE,
+      content: '',
+      images: [],
+      markdownSources: [DEFAULT_WIREFRAME_DESIGN_SYSTEM_MARKDOWN_SOURCE],
+    };
+  }
   return {
+    mode,
     title: data.title,
     content: data.content,
     images: data.images ?? [],
@@ -71,12 +89,33 @@ export function designSystemSourceFromNodeData(data: DesignSystemNodeData): Desi
   };
 }
 
-export function formatDesignSystemSourceMarkdown(source: DesignMdSource): string {
-  const parts: string[] = [];
-  if (source.content?.trim()) parts.push(source.content.trim());
-  for (const asset of source.markdownSources ?? []) {
-    if (!asset.content.trim()) continue;
-    parts.push(`## Markdown source: ${asset.filename}\n${asset.content.trim()}`);
+export function getDesignSystemEffectiveState(
+  data: DesignSystemNodeData,
+  options: { generating?: boolean; document?: DesignMdDocument } = {},
+): DesignSystemEffectiveState {
+  const mode = getDesignSystemSourceMode(data);
+  const source = designSystemSourceFromNodeData(data);
+  const customSourceCount = countCustomDesignSystemInputs(data);
+  const hasCustomSourceInput = customSourceCount > 0;
+  const hasEffectiveSourceInput = designMdSourceHasInput(source);
+
+  if (!hasEffectiveSourceInput) {
+    return {
+      mode,
+      customSourceCount,
+      hasCustomSourceInput,
+      source,
+      hasEffectiveSourceInput: false,
+      inactiveReason: mode === 'none' ? 'none' : 'custom-empty',
+    };
   }
-  return parts.join('\n\n---\n\n');
+
+  return {
+    mode,
+    customSourceCount,
+    hasCustomSourceInput,
+    source,
+    hasEffectiveSourceInput: true,
+    designMdStatus: getDesignMdStatus(source, Boolean(options.generating), options.document),
+  };
 }

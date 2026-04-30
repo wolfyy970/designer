@@ -1,6 +1,7 @@
 import type { ReferenceImage } from './spec';
 import type { DesignMdDocument, ThinkingLevel } from './workspace-domain';
 import type { DesignSystemMarkdownSource } from './design-system-source';
+import type { DesignSystemSourceMode } from './design-system-mode';
 
 // ── Per-node data interfaces ────────────────────────────────────────
 // These provide type safety within node components, eliminating `as` casts.
@@ -17,14 +18,12 @@ export type InputNodeData = NodeData<Record<string, never>>;
 export type InputGhostTargetType =
   | 'researchContext'
   | 'objectivesMetrics'
-  | 'designConstraints'
-  | 'designSystem';
+  | 'designConstraints';
 
 const INPUT_GHOST_TARGET_TYPE_SET = new Set<string>([
   'researchContext',
   'objectivesMetrics',
   'designConstraints',
-  'designSystem',
 ]);
 
 export function isInputGhostTargetType(v: string): v is InputGhostTargetType {
@@ -54,6 +53,8 @@ export type PreviewNodeData = NodeData<{
 
 export type DesignSystemNodeData = NodeData<{
   title?: string;
+  /** `off` is accepted only for saved canvases from the short-lived pre-None mode. */
+  sourceMode?: DesignSystemSourceMode | 'off';
   content?: string;
   images?: ReferenceImage[];
   markdownSources?: DesignSystemMarkdownSource[];

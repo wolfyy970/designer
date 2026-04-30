@@ -128,12 +128,13 @@ Hypothesis nodes appear to the right of the Incubator. Each represents a hypothe
 
 Edit these before generation. Remove strategies not worth exploring.
 
-### 5. Design System (Optional)
+### 5. Design System
 
-Use a **Design System** node when a run should follow an existing brand or component language. It behaves like the other source inputs: connect Design System nodes to the Incubator and/or hypotheses when you want that source included. It does not connect directly to Model nodes; model choice is implicit through the Incubator or Hypothesis doing the generation.
+The **Design System** node is a required source input. It starts in **Wireframe** mode, using Designer's built-in low-fidelity `DESIGN.md` source so early runs stay draft-like. It behaves like the other source inputs: connect it to the Incubator and/or hypotheses when you want that source included. It does not connect directly to Model nodes; model choice is implicit through the Incubator or Hypothesis doing the generation.
 
-- Type or paste DESIGN.md, tokens, style-guide prose, or brand notes into the content area
-- Drag-and-drop screenshots, reference images, or Markdown files when source material matters
+- Switch to **Custom** to type or paste DESIGN.md, tokens, style-guide prose, or brand notes
+- Drag-and-drop screenshots, reference images, or Markdown files when custom source material matters
+- Switch to **None** to keep the node on the canvas but exclude design-system guidance
 - The Incubator prepares the linted Google DESIGN.md document from connected Design System sources before incubation; the Design System node itself stays focused on source material
 
 ### 6. Generate Designs

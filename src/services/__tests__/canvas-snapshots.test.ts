@@ -48,12 +48,15 @@ vi.mock('../../stores/generation-store.ts', () => ({
   useGenerationStore: { getState: mocks.mockGenerationState, setState: vi.fn() },
 }));
 
-import { captureCurrentCanvasSnapshot, restoreSnapshotArtifacts } from '../canvas-snapshots';
+import { captureCurrentCanvasSnapshot, restoreCanvasSnapshot, restoreSnapshotArtifacts } from '../canvas-snapshots';
+import { useCanvasStore } from '../../stores/canvas-store';
 
 describe('canvas-snapshots', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal('localStorage', { setItem: vi.fn() });
     mocks.mockSpecState.mockReturnValue({
+      loadCanvas: vi.fn(),
       spec: {
         id: 'canvas-1',
         title: 'Canvas',
@@ -138,5 +141,94 @@ describe('canvas-snapshots', () => {
     expect(mocks.mockSaveCode).toHaveBeenCalledWith('r1', '<html />');
     expect(mocks.mockSaveFiles).toHaveBeenCalledWith('r1', { 'index.html': '<html />' });
     expect(mocks.mockSaveRoundFiles).toHaveBeenCalledWith('r1', 1, { 'index.html': '<html />' });
+  });
+
+  it('recreates missing optional input ghosts when restoring a full snapshot', async () => {
+    await restoreCanvasSnapshot({
+      schemaVersion: 1,
+      savedAt: '2024-01-01',
+      spec: mocks.mockSpecState().spec,
+      canvas: {
+        nodes: [
+          { id: 'brief', type: 'designBrief', position: { x: 40, y: 100 }, data: {} },
+          { id: 'research', type: 'researchContext', position: { x: 40, y: 560 }, data: {} },
+          { id: 'design-system', type: 'designSystem', position: { x: 40, y: 1020 }, data: {} },
+          { id: 'inc', type: 'incubator', position: { x: 520, y: 560 }, data: {} },
+        ],
+        edges: [{ id: 'e-brief-inc', source: 'brief', target: 'inc', type: 'dataFlow', data: { status: 'idle' } }],
+        viewport: { x: 10, y: 20, zoom: 0.8 },
+        showMiniMap: true,
+        colGap: 160,
+      },
+      workspaceDomain: {
+        incubatorWirings: { inc: { inputNodeIds: ['brief', 'research'], previewNodeIds: [], designSystemNodeIds: ['design-system'] } },
+        incubatorModelNodeIds: {},
+        hypotheses: {},
+        modelProfiles: {},
+        designSystems: {},
+        previewSlots: {},
+      },
+      incubator: { incubationPlans: {}, compiledPrompts: [], selectedProvider: 'openrouter', selectedModel: 'm' },
+      generation: { results: [], selectedVersions: {}, userBestOverrides: {} },
+      artifacts: {},
+    });
+
+    const restored = vi.mocked(useCanvasStore.setState).mock.calls.at(-1)?.[0] as {
+      nodes: Array<{ id: string; type: string; position: { x: number; y: number }; data: { targetType?: string } }>;
+    };
+    const ghosts = restored.nodes.filter((node) => node.type === 'inputGhost');
+    expect(ghosts.map((node) => node.data.targetType)).toEqual(['objectivesMetrics', 'designConstraints']);
+    expect(ghosts.every((node) => node.position.x === 40)).toBe(true);
+    expect(ghosts.every((node) => node.position.y > 1020)).toBe(true);
+    expect(restored.nodes.some((node) => node.type === 'researchContext')).toBe(true);
+  });
+
+  it('restores a design system with uploaded custom material as Custom style', async () => {
+    await restoreCanvasSnapshot({
+      schemaVersion: 1,
+      savedAt: '2024-01-01',
+      spec: mocks.mockSpecState().spec,
+      canvas: {
+        nodes: [
+          {
+            id: 'design-system',
+            type: 'designSystem',
+            position: { x: 40, y: 1020 },
+            data: {
+              sourceMode: 'wireframe',
+              markdownSources: [
+                {
+                  id: 'md-1',
+                  filename: 'DESIGN.md',
+                  content: '# Uploaded design system',
+                  sizeBytes: 24,
+                  createdAt: '2026-01-01T00:00:00Z',
+                },
+              ],
+            },
+          },
+        ],
+        edges: [],
+        viewport: { x: 10, y: 20, zoom: 0.8 },
+        showMiniMap: true,
+        colGap: 160,
+      },
+      workspaceDomain: {
+        incubatorWirings: {},
+        incubatorModelNodeIds: {},
+        hypotheses: {},
+        modelProfiles: {},
+        designSystems: {},
+        previewSlots: {},
+      },
+      incubator: { incubationPlans: {}, compiledPrompts: [], selectedProvider: 'openrouter', selectedModel: 'm' },
+      generation: { results: [], selectedVersions: {}, userBestOverrides: {} },
+      artifacts: {},
+    });
+
+    const restored = vi.mocked(useCanvasStore.setState).mock.calls.at(-1)?.[0] as {
+      nodes: Array<{ id: string; type: string; data: { sourceMode?: string } }>;
+    };
+    expect(restored.nodes.find((node) => node.id === 'design-system')?.data.sourceMode).toBe('custom');
   });
 });

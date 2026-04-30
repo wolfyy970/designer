@@ -31,10 +31,6 @@ vi.mock('react-dropzone', () => ({
   },
 }));
 
-vi.mock('../../../../hooks/useCanvasNodePermanentRemove', () => ({
-  useCanvasNodePermanentRemove: () => () => {},
-}));
-
 function props(data: Record<string, unknown> = {}): NodeProps<{ data: Record<string, unknown>; id: string; type: string }> {
   return {
     id: 'ds-1',
@@ -61,8 +57,61 @@ describe('DesignSystemNode', () => {
   afterEach(() => cleanup());
 
   it('prompts users for design-system source material', () => {
-    render(<DesignSystemNode {...props()} />);
+    render(<DesignSystemNode {...props({ sourceMode: 'custom' })} />);
     expect(screen.getByPlaceholderText(/Paste tokens, component guidance, patterns/)).toBeTruthy();
+    expect(screen.getByText('Add custom notes, images, or Markdown.')).toBeTruthy();
+  });
+
+  it('defaults to the built-in Wireframe source and has no delete affordance', () => {
+    render(<DesignSystemNode {...props()} />);
+    expect(screen.getAllByText('Wireframe').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Using built-in Wireframe DESIGN\.md/)).toBeTruthy();
+    expect(screen.queryByTitle('Delete from canvas')).toBeNull();
+  });
+
+  it('can switch to custom source mode without discarding custom source data', () => {
+    const data = {
+      sourceMode: 'wireframe',
+      content: 'Use calm blue.',
+      markdownSources: [
+        {
+          id: 'md-1',
+          filename: 'tokens.md',
+          content: '# Tokens',
+          sizeBytes: 8,
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    };
+    useCanvasStore.setState({
+      nodes: [{ id: 'ds-1', type: 'designSystem', position: { x: 0, y: 0 }, data }],
+      edges: [],
+    });
+    render(<DesignSystemNode {...props(data)} />);
+
+    expect(screen.getByText('Using Wireframe. Custom sources are saved.')).toBeTruthy();
+    expect(screen.getByText('Style')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Design system style'), {
+      target: { value: 'custom' },
+    });
+
+    expect(useCanvasStore.getState().nodes.find((n) => n.id === 'ds-1')?.data.sourceMode).toBe('custom');
+  });
+
+  it('switches to custom source mode when the user edits source text', () => {
+    useCanvasStore.setState({
+      nodes: [{ id: 'ds-1', type: 'designSystem', position: { x: 0, y: 0 }, data: {} }],
+      edges: [],
+    });
+    render(<DesignSystemNode {...props()} />);
+
+    fireEvent.change(screen.getByPlaceholderText(/Paste tokens, component guidance, patterns/), {
+      target: { value: 'Use soft neutral surfaces.' },
+    });
+
+    const node = useCanvasStore.getState().nodes.find((n) => n.id === 'ds-1');
+    expect(node?.data.sourceMode).toBe('custom');
+    expect(node?.data.content).toBe('Use soft neutral surfaces.');
   });
 
   it('does not expose DESIGN.md generation controls on the Design System node', () => {
@@ -89,7 +138,7 @@ describe('DesignSystemNode', () => {
       nodes: [{ id: 'ds-1', type: 'designSystem', position: { x: 0, y: 0 }, data: {} }],
       edges: [],
     });
-    render(<DesignSystemNode {...props()} />);
+    render(<DesignSystemNode {...props({ sourceMode: 'custom' })} />);
     const file = new File(['# Brand\nUse the calm blue palette.'], 'DESIGN.md', {
       type: 'text/markdown',
     });
@@ -100,6 +149,7 @@ describe('DesignSystemNode', () => {
 
     await waitFor(() => {
       const node = useCanvasStore.getState().nodes.find((n) => n.id === 'ds-1');
+      expect(node?.data.sourceMode).toBe('custom');
       expect(node?.data.markdownSources).toEqual([
         expect.objectContaining({
           filename: 'DESIGN.md',
@@ -117,6 +167,7 @@ describe('DesignSystemNode', () => {
           type: 'designSystem',
           position: { x: 0, y: 0 },
           data: {
+            sourceMode: 'custom',
             markdownSources: [
               {
                 id: 'md-1',
@@ -132,6 +183,7 @@ describe('DesignSystemNode', () => {
       edges: [],
     });
     render(<DesignSystemNode {...props({
+      sourceMode: 'custom',
       markdownSources: [
         {
           id: 'md-1',
@@ -150,7 +202,7 @@ describe('DesignSystemNode', () => {
   });
 
   it('shows a clear rejection message for unsupported dropped files', () => {
-    render(<DesignSystemNode {...props()} />);
+    render(<DesignSystemNode {...props({ sourceMode: 'custom' })} />);
 
     act(() => {
       latestDropzoneOptions.onDropRejected?.();

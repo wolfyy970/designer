@@ -10,29 +10,31 @@ import {
   readFileAsDesignSystemMarkdownSource,
   readFileAsReferenceImage,
 } from '../../../lib/image-utils';
-import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
-import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
 import { filledOrEmpty } from '../../../lib/node-status';
 import {
-  designMdSourceHasInput,
-  designSystemSourceFromNodeData,
+  getDesignSystemEffectiveState,
+  getDesignSystemSourceMode,
 } from '../../../lib/design-md';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
 import type { DesignSystemMarkdownSource } from '../../../types/design-system-source';
 import type { ReferenceImage } from '../../../types/spec';
+import {
+  DESIGN_SYSTEM_SOURCE_MODES,
+  type DesignSystemSourceMode,
+} from '../../../types/design-system-mode';
 
 type DesignSystemNodeType = Node<DesignSystemNodeData, 'designSystem'>;
 
 function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType>) {
-  const onRemove = useCanvasNodePermanentRemove(id, STATIC_NODE_DELETE_COPY.designSystem);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
 
   const title = data.title || 'Design System';
   const content = data.content || '';
   const images = useMemo(() => data.images ?? [], [data.images]);
   const markdownSources = useMemo(() => data.markdownSources ?? [], [data.markdownSources]);
-  const designMdSource = useMemo(() => designSystemSourceFromNodeData(data), [data]);
+  const sourceMode = getDesignSystemSourceMode(data);
+  const designSystemState = useMemo(() => getDesignSystemEffectiveState(data), [data]);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const update = useCallback(
@@ -51,6 +53,18 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
         | DesignSystemMarkdownSource[]
         | undefined) || [],
     [id],
+  );
+
+  const switchToCustom = useCallback(
+    () => updateNodeData(id, { sourceMode: 'custom' }),
+    [id, updateNodeData],
+  );
+
+  const updateCustomContent = useCallback(
+    (value: string) => {
+      updateNodeData(id, { content: value, sourceMode: 'custom' });
+    },
+    [id, updateNodeData],
   );
 
   const onDrop = useCallback(
@@ -76,6 +90,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
       }
       if (newImages.length === 0 && newMarkdownSources.length === 0) return;
       updateNodeData(id, {
+        sourceMode: 'custom',
         images: [...getCurrentImages(), ...newImages],
         markdownSources: [...getCurrentMarkdownSources(), ...newMarkdownSources],
       });
@@ -85,7 +100,10 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
 
   const removeImage = useCallback(
     (imageId: string) => {
-      updateNodeData(id, { images: getCurrentImages().filter((img) => img.id !== imageId) });
+      updateNodeData(id, {
+        images: getCurrentImages().filter((img) => img.id !== imageId),
+        sourceMode: 'custom',
+      });
     },
     [id, updateNodeData, getCurrentImages],
   );
@@ -93,6 +111,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
   const updateImageDescription = useCallback(
     (imageId: string, description: string) => {
       updateNodeData(id, {
+        sourceMode: 'custom',
         images: getCurrentImages().map((img) =>
           img.id === imageId ? { ...img, description } : img,
         ),
@@ -104,6 +123,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
   const removeMarkdownSource = useCallback(
     (sourceId: string) => {
       updateNodeData(id, {
+        sourceMode: 'custom',
         markdownSources: getCurrentMarkdownSources().filter((source) => source.id !== sourceId),
       });
     },
@@ -120,9 +140,17 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
     },
   });
 
-  const hasSourceInput = designMdSourceHasInput(designMdSource);
+  const setSourceMode = useCallback(
+    (mode: DesignSystemSourceMode) => updateNodeData(id, { sourceMode: mode }),
+    [id, updateNodeData],
+  );
 
-  const status = filledOrEmpty(hasSourceInput);
+  const status = filledOrEmpty(designSystemState.hasEffectiveSourceInput);
+  const sourceModeLabels: Record<DesignSystemSourceMode, string> = {
+    wireframe: 'Wireframe',
+    custom: 'Custom',
+    none: 'None',
+  };
 
   return (
     <NodeShell
@@ -131,10 +159,10 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
       selected={!!selected}
       width="w-node"
       status={status}
-      handleColor={hasSourceInput ? 'green' : 'amber'}
+      handleColor={designSystemState.hasEffectiveSourceInput ? 'green' : 'amber'}
+      leftRail={designSystemState.hasEffectiveSourceInput ? 'success' : 'warning'}
     >
       <NodeHeader
-        onRemove={onRemove}
         description="Design tokens, components, and patterns"
       >
         <input
@@ -145,17 +173,47 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
         />
       </NodeHeader>
 
-      {/* Content */}
       <div className="px-3 py-2.5">
+        <div className={`${RF_INTERACTIVE} mb-2 flex items-center justify-between gap-2`}>
+          <span className="text-nano font-medium text-fg-muted">Style</span>
+          <select
+            value={sourceMode}
+            onPointerDown={(e) => e.stopPropagation()}
+            onChange={(e) => setSourceMode(e.target.value as DesignSystemSourceMode)}
+            className="nodrag nowheel rounded border border-border bg-bg px-2 py-1 text-nano font-semibold text-fg-secondary outline-none input-focus"
+            aria-label="Design system style"
+          >
+            {DESIGN_SYSTEM_SOURCE_MODES.map((mode) => (
+              <option key={mode} value={mode}>
+                {sourceModeLabels[mode]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="mb-2 text-nano leading-snug text-fg-muted">
+          {sourceMode === 'wireframe'
+            ? designSystemState.hasCustomSourceInput
+              ? 'Using Wireframe. Custom sources are saved.'
+              : 'Using built-in Wireframe DESIGN.md.'
+            : sourceMode === 'none'
+              ? designSystemState.hasCustomSourceInput
+                ? 'Design-system guidance is excluded. Custom sources are saved.'
+                : 'Design-system guidance is excluded.'
+              : designSystemState.hasCustomSourceInput
+                ? 'Using custom notes, images, and Markdown.'
+                : 'Add custom notes, images, or Markdown.'}
+        </div>
+
         <textarea
           value={content}
-          onChange={(e) => update('content', e.target.value)}
+          onFocus={switchToCustom}
+          onChange={(e) => updateCustomContent(e.target.value)}
           placeholder="Paste tokens, component guidance, patterns, brand notes, or visual-system references..."
           rows={4}
           className={`${RF_INTERACTIVE} w-full resize-none rounded border border-border px-2.5 py-2 text-xs text-fg-secondary placeholder:text-fg-faint outline-none input-focus`}
         />
 
-        {/* Image upload */}
         <div className={`${RF_INTERACTIVE} mt-2`}>
           {(images.length > 0 || markdownSources.length > 0) && (
             <div className="mb-2 grid gap-2">

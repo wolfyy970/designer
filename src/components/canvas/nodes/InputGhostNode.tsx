@@ -12,7 +12,7 @@ type InputGhostFlowNode = Node<InputGhostData, typeof INPUT_GHOST_NODE_TYPE>;
 
 function InputGhostNode({ data }: NodeProps<InputGhostFlowNode>) {
   const { targetType } = data;
-  const sectionId = targetType === 'designSystem' ? 'design-system' : NODE_TYPE_TO_SECTION[targetType]!;
+  const sectionId = NODE_TYPE_TO_SECTION[targetType]!;
   const meta = SPEC_SECTIONS.find((s) => s.id === sectionId)!;
 
   const onAdd = useCallback(

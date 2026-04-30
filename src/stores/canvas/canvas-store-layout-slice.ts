@@ -2,10 +2,42 @@ import type { StateCreator } from 'zustand';
 import type { CanvasNodeType } from '../../types/workspace-graph';
 import { generateId } from '../../lib/utils';
 import { columnX, computeAutoLayout, reconcileEphemeralGhostNodes, snap } from '../../lib/canvas-layout';
-import { buildEdgeId, EDGE_TYPES, EDGE_STATUS } from '../../constants/canvas';
+import { buildEdgeId, EDGE_TYPES, EDGE_STATUS, NODE_TYPES } from '../../constants/canvas';
 import { PREREQUISITE_DEFAULTS } from '../../lib/constants';
+import { DEFAULT_DESIGN_SYSTEM_SOURCE_MODE } from '../../types/design-system-mode';
 import { hydrateDomainFromCanvasGraph } from '../../workspace/hydrate-domain-from-canvas-graph';
 import type { CanvasStore } from './canvas-store-types';
+
+function ensureRequiredDesignSystem(state: Pick<CanvasStore, 'nodes' | 'edges' | 'colGap'>) {
+  const nodesWithoutGhosts = reconcileEphemeralGhostNodes(state.nodes);
+  const designSystem = nodesWithoutGhosts.find((node) => node.type === NODE_TYPES.DESIGN_SYSTEM);
+  if (designSystem) {
+    return { nodes: nodesWithoutGhosts, edges: state.edges };
+  }
+
+  const col = columnX(state.colGap);
+  const designSystemId = `designSystem-${generateId()}`;
+  const designSystemNode = {
+    id: designSystemId,
+    type: NODE_TYPES.DESIGN_SYSTEM,
+    position: snap({ x: col.inputs, y: 1180 }),
+    data: { sourceMode: DEFAULT_DESIGN_SYSTEM_SOURCE_MODE },
+  };
+  const incubatorEdges = nodesWithoutGhosts
+    .filter((node) => node.type === NODE_TYPES.INCUBATOR)
+    .map((node) => ({
+      id: buildEdgeId(designSystemId, node.id),
+      source: designSystemId,
+      target: node.id,
+      type: EDGE_TYPES.DATA_FLOW,
+      data: { status: EDGE_STATUS.IDLE },
+    }));
+
+  return {
+    nodes: [...nodesWithoutGhosts, designSystemNode],
+    edges: [...state.edges, ...incubatorEdges],
+  };
+}
 
 export const createLayoutSlice: StateCreator<
   CanvasStore,
@@ -22,12 +54,11 @@ export const createLayoutSlice: StateCreator<
   initializeCanvas: () => {
     const state = get();
     if (state.nodes.length > 0) {
+      const ensured = ensureRequiredDesignSystem(state);
+      set(ensured);
       hydrateDomainFromCanvasGraph({
-        nodes: state.nodes as { id: string; type: CanvasNodeType; data: Record<string, unknown> }[],
-        edges: state.edges,
-      });
-      set({
-        nodes: reconcileEphemeralGhostNodes(get().nodes),
+        nodes: get().nodes as { id: string; type: CanvasNodeType; data: Record<string, unknown> }[],
+        edges: get().edges,
       });
       get().applyAutoLayout();
       return;
@@ -56,7 +87,7 @@ export const createLayoutSlice: StateCreator<
         id: designSystemId,
         type: 'designSystem' as const,
         position: snap({ x: col.inputs, y: 1180 }),
-        data: {},
+        data: { sourceMode: DEFAULT_DESIGN_SYSTEM_SOURCE_MODE },
       },
       {
         id: incubatorId,

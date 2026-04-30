@@ -56,6 +56,7 @@ describe('canvas-store smoke', () => {
     const required: WorkspaceNode[] = [
       { id: 'brief-1', type: NODE_TYPES.DESIGN_BRIEF, position: { x: 0, y: 0 }, data: {} },
       { id: 'model-1', type: NODE_TYPES.MODEL, position: { x: 0, y: 0 }, data: {} },
+      { id: 'ds-1', type: NODE_TYPES.DESIGN_SYSTEM, position: { x: 0, y: 0 }, data: {} },
       { id: 'inc-1', type: NODE_TYPES.INCUBATOR, position: { x: 0, y: 0 }, data: {} },
       { id: 'ghost-input-researchContext', type: 'inputGhost', position: { x: 0, y: 0 }, data: { targetType: 'researchContext' } },
     ];
@@ -93,10 +94,29 @@ describe('canvas-store smoke', () => {
     const incubator = nodes.find((node) => node.type === NODE_TYPES.INCUBATOR);
 
     expect(designSystem).toBeDefined();
+    expect(designSystem?.data.sourceMode).toBe('wireframe');
     expect(nodes.some((node) => node.type === 'inputGhost' && node.data.targetType === NODE_TYPES.DESIGN_SYSTEM)).toBe(false);
     expect(edges.some((edge) => edge.source === model?.id && edge.target === designSystem?.id)).toBe(false);
     expect(edges.some((edge) => edge.source === designSystem?.id && edge.target === incubator?.id)).toBe(true);
     expect(useWorkspaceDomainStore.getState().incubatorWirings[incubator!.id]?.designSystemNodeIds).toEqual([designSystem!.id]);
+  });
+
+  it('adds the required Design System node when initializing an older canvas without one', () => {
+    useCanvasStore.setState({
+      nodes: [
+        { id: 'brief-1', type: NODE_TYPES.DESIGN_BRIEF, position: { x: 0, y: 0 }, data: {} },
+        { id: 'inc-1', type: NODE_TYPES.INCUBATOR, position: { x: 0, y: 0 }, data: {} },
+      ],
+      edges: [],
+    });
+
+    useCanvasStore.getState().initializeCanvas();
+
+    const { nodes, edges } = useCanvasStore.getState();
+    const designSystem = nodes.find((node) => node.type === NODE_TYPES.DESIGN_SYSTEM);
+    expect(designSystem?.data.sourceMode).toBe('wireframe');
+    expect(nodes.some((node) => node.type === 'inputGhost' && node.data.targetType === NODE_TYPES.DESIGN_SYSTEM)).toBe(false);
+    expect(edges.some((edge) => edge.source === designSystem?.id && edge.target === 'inc-1')).toBe(true);
   });
 
   it('records and consumes an ephemeral node focus request', () => {

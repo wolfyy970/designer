@@ -197,7 +197,7 @@ describe('IncubatorNode', () => {
 
   it('shows ready scoped DESIGN.md as green-dot-only with view action', () => {
     useSpecStore.getState().updateSection('design-brief', 'Ship a calmer onboarding.');
-    const source = { title: 'Brand DS', content: 'Use red buttons.', images: [] };
+    const source = { mode: 'custom' as const, title: 'Brand DS', content: 'Use red buttons.', images: [] };
     useCanvasStore.setState({
       nodes: [
         { id: 'inc-1', type: 'incubator', position: { x: 0, y: 0 }, data: {} },
@@ -224,6 +224,75 @@ describe('IncubatorNode', () => {
     expect(container.querySelector('.bg-success')).toBeTruthy();
     expect(screen.queryByText('ready')).toBeNull();
     expect(screen.getByRole('button', { name: 'View DESIGN.md' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Refresh DESIGN.md' })).toBeNull();
+  });
+
+  it('does not show stale DESIGN.md for custom style with no source material', () => {
+    useSpecStore.getState().updateSection('design-brief', 'Ship a calmer onboarding.');
+    useCanvasStore.setState({
+      nodes: [
+        { id: 'inc-1', type: 'incubator', position: { x: 0, y: 0 }, data: {} },
+        {
+          id: 'ds-1',
+          type: 'designSystem',
+          position: { x: 0, y: 0 },
+          data: {
+            sourceMode: 'custom',
+            content: '',
+            images: [],
+            markdownSources: [],
+            designMdDocument: {
+              content: '---\nname: Old\n---\n# Old',
+              sourceHash: 'old',
+              generatedAt: '2026-01-01T00:00:00Z',
+              providerId: 'openrouter',
+              modelId: 'test-model',
+            },
+          },
+        },
+      ],
+      edges: [{ id: 'e-ds-inc', source: 'ds-1', target: 'inc-1', type: 'dataFlow', data: { status: 'idle' } }],
+    });
+
+    render(<IncubatorNode {...minimalIncubatorProps()} />);
+
+    expect(screen.queryByText('stale')).toBeNull();
+    expect(screen.getByText('optional')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'View DESIGN.md' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Refresh DESIGN.md' })).toBeNull();
+  });
+
+  it('does not show stale DESIGN.md when style is none even if saved sources exist', () => {
+    useSpecStore.getState().updateSection('design-brief', 'Ship a calmer onboarding.');
+    useCanvasStore.setState({
+      nodes: [
+        { id: 'inc-1', type: 'incubator', position: { x: 0, y: 0 }, data: {} },
+        {
+          id: 'ds-1',
+          type: 'designSystem',
+          position: { x: 0, y: 0 },
+          data: {
+            sourceMode: 'none',
+            content: 'Saved custom notes.',
+            images: [],
+            designMdDocument: {
+              content: '---\nname: Old\n---\n# Old',
+              sourceHash: 'old',
+              generatedAt: '2026-01-01T00:00:00Z',
+              providerId: 'openrouter',
+              modelId: 'test-model',
+            },
+          },
+        },
+      ],
+      edges: [{ id: 'e-ds-inc', source: 'ds-1', target: 'inc-1', type: 'dataFlow', data: { status: 'idle' } }],
+    });
+
+    render(<IncubatorNode {...minimalIncubatorProps()} />);
+
+    expect(screen.queryByText('stale')).toBeNull();
+    expect(screen.getByText('none')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'View DESIGN.md' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Refresh DESIGN.md' })).toBeNull();
   });
 

@@ -128,10 +128,21 @@ describe('canvas mutation planner', () => {
   });
 
   it('blocks protected node removals and ephemeral input ghost removals', () => {
-    const nodes = [node('brief-1', NODE_TYPES.DESIGN_BRIEF)];
+    const nodes = [
+      node('brief-1', NODE_TYPES.DESIGN_BRIEF),
+      node('ds-1', NODE_TYPES.DESIGN_SYSTEM),
+    ];
 
     expect(planRemoveNodeMutation({
       nodeId: 'brief-1',
+      nodes,
+      edges: [],
+      previewNodeIdMap: new Map(),
+      runInspectorPreviewNodeId: null,
+      expandedPreviewId: null,
+    })).toBeUndefined();
+    expect(planRemoveNodeMutation({
+      nodeId: 'ds-1',
       nodes,
       edges: [],
       previewNodeIdMap: new Map(),

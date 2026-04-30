@@ -3,10 +3,8 @@ import { Button } from '@ds/components/ui/button';
 import { StatusPanel, type StatusPanelTone } from '@ds/components/ui/status-panel';
 import { getDesignSystemNodeData } from '../../../lib/canvas-node-data';
 import {
-  designMdSourceHasInput,
-  designSystemSourceFromNodeData,
+  getDesignSystemEffectiveState,
   type DesignMdStatus,
-  getDesignMdStatus,
 } from '../../../lib/design-md';
 import type { DesignSpec } from '../../../types/spec';
 import type { WorkspaceNode } from '../../../types/workspace-graph';
@@ -117,17 +115,22 @@ export function IncubatorDocumentStatusPanels({
         />
       ) : scopedDesignSystemNodes.map((node) => {
         const ds = getDesignSystemNodeData(node);
-        const source = ds ? designSystemSourceFromNodeData(ds) : {};
         const doc = ds?.designMdDocument;
-        const hasSourceInput = designMdSourceHasInput(source);
-        const dsStatus = getDesignMdStatus(source, designMdGeneratingNodeId === node.id, doc);
-        const optional =
-          !hasSourceInput && !doc?.content && dsStatus !== 'generating' && dsStatus !== 'error';
-        const docHasContent = Boolean(doc?.content?.trim());
+        const dsState = getDesignSystemEffectiveState(ds ?? {}, {
+          generating: designMdGeneratingNodeId === node.id,
+          document: doc,
+        });
+        const dsStatus = dsState.designMdStatus;
+        const inactive = !dsState.hasEffectiveSourceInput;
+        const statusLabel = inactive
+          ? dsState.inactiveReason === 'none'
+            ? 'none'
+            : 'optional'
+          : documentStatusLabel(designMdStatusLabel(dsStatus ?? 'missing'));
+        const docHasContent = dsState.hasEffectiveSourceInput && Boolean(doc?.content?.trim());
         const canRefreshDesignMd =
           canRunDocumentTask &&
-          !optional &&
-          hasSourceInput &&
+          dsState.hasEffectiveSourceInput &&
           (dsStatus === 'missing' ||
             dsStatus === 'stale' ||
             dsStatus === 'error' ||
@@ -136,8 +139,8 @@ export function IncubatorDocumentStatusPanels({
           <StatusPanel
             key={node.id}
             title="DESIGN.md"
-            status={optional ? 'optional' : documentStatusLabel(designMdStatusLabel(dsStatus))}
-            tone={optional ? 'neutral' : designMdStatusTone(dsStatus)}
+            status={statusLabel}
+            tone={inactive ? 'neutral' : designMdStatusTone(dsStatus ?? 'missing')}
             animated={dsStatus === 'generating'}
             density="compact"
             actions={docHasContent || canRefreshDesignMd ? (
@@ -170,7 +173,7 @@ export function IncubatorDocumentStatusPanels({
               </>
             ) : undefined}
           >
-            {doc?.error && dsStatus !== 'generating' ? (
+            {dsState.hasEffectiveSourceInput && doc?.error && dsStatus !== 'generating' ? (
               <span className="text-error">{doc.error}</span>
             ) : null}
           </StatusPanel>

@@ -79,7 +79,7 @@ Both apply only when the chosen model **supports reasoning**. The capability gat
 | `incubate` | `/api/incubate` and hypothesis auto-generation | high / 20000 |
 | `inputs` | `/api/inputs/generate` (spec facets from a brief) | medium / 5000 |
 | `internal-context` | `/api/internal-context/generate` (design specification from connected inputs) | high / 20000 |
-| `design-system` | `/api/design-system/extract` (text/images → DESIGN.md) | high / 20000 |
+| `design-system` | `/api/design-system/extract` (text/Markdown/images → DESIGN.md) | high / 20000 |
 | `evaluator` | Per-rubric eval workers (design, strategy, implementation, browser) | low / 2048 |
 
 ### Budget bounds

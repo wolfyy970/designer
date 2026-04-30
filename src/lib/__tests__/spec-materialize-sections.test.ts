@@ -45,17 +45,17 @@ describe('optionalInputSlotsWithSpecMaterial', () => {
       'objectives-metrics': { content: 'x' },
       'design-system': { content: 'z' },
     });
-    expect(optionalInputSlotsWithSpecMaterial(spec)).toEqual(['researchContext', 'objectivesMetrics', 'designSystem']);
+    expect(optionalInputSlotsWithSpecMaterial(spec)).toEqual(['researchContext', 'objectivesMetrics']);
   });
 
-  it('includes a slot when the facet has images but empty text', () => {
+  it('does not materialize design-system as an optional ghost slot', () => {
     const spec = minimalSpec({});
     spec.sections['design-system'] = {
       ...spec.sections['design-system'],
       content: '',
       images: [{ id: 'i1', filename: 'x.png', dataUrl: 'data:', description: '', createdAt: '2024-01-01' }],
     };
-    expect(optionalInputSlotsWithSpecMaterial(spec)).toEqual(['designSystem']);
+    expect(optionalInputSlotsWithSpecMaterial(spec)).toEqual([]);
   });
 
   it('ignores retired legacy existing-design material', () => {

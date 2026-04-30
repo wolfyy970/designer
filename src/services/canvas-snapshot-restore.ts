@@ -1,13 +1,37 @@
 import { STORAGE_KEYS } from '../lib/storage-keys';
+import { reconcileEphemeralGhostNodesForRestore } from '../lib/canvas-layout';
 import { useCanvasStore } from '../stores/canvas-store';
 import { useGenerationStore } from '../stores/generation-store';
 import { useIncubatorStore } from '../stores/incubator-store';
 import { useSpecStore } from '../stores/spec-store';
 import { useWorkspaceDomainStore } from '../stores/workspace-domain-store';
+import type { DesignSystemNodeData } from '../types/canvas-data';
 import type { SavedCanvasSnapshot } from '../types/saved-canvas';
+import type { WorkspaceNode } from '../types/workspace-graph';
 import { restoreSnapshotArtifacts } from './canvas-snapshot-artifacts';
 import { stripLegacyExistingDesignGraph, stripLegacyExistingDesignSpec } from './canvas-snapshot-legacy';
 import { snapshotClone } from './canvas-snapshot-serialization';
+
+function hasCustomDesignSystemSource(data: DesignSystemNodeData): boolean {
+  return (
+    Boolean(data.content?.trim()) ||
+    Boolean(data.images?.length) ||
+    Boolean(data.markdownSources?.some((source) => source.content.trim()))
+  );
+}
+
+function normalizeRestoredDesignSystemNode(node: WorkspaceNode): WorkspaceNode {
+  if (node.type !== 'designSystem') return node;
+  const data = (node.data ?? {}) as DesignSystemNodeData;
+  if (data.sourceMode !== 'wireframe' || !hasCustomDesignSystemSource(data)) return node;
+  return {
+    ...node,
+    data: {
+      ...data,
+      sourceMode: 'custom',
+    },
+  };
+}
 
 export async function restoreCanvasSnapshot(snapshot: SavedCanvasSnapshot): Promise<void> {
   const spec = stripLegacyExistingDesignSpec(snapshot.spec);
@@ -15,9 +39,13 @@ export async function restoreCanvasSnapshot(snapshot: SavedCanvasSnapshot): Prom
     snapshotClone(snapshot.canvas.nodes),
     snapshotClone(snapshot.canvas.edges),
   );
+  const restoredNodes = reconcileEphemeralGhostNodesForRestore(
+    graph.nodes.map(normalizeRestoredDesignSystemNode),
+    snapshot.canvas.colGap,
+  );
   useSpecStore.getState().loadCanvas(spec);
   useCanvasStore.setState({
-    nodes: graph.nodes,
+    nodes: restoredNodes,
     edges: graph.edges,
     viewport: snapshotClone(snapshot.canvas.viewport),
     showMiniMap: snapshot.canvas.showMiniMap,

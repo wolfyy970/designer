@@ -11,9 +11,9 @@ describe('canvas-keyboard-delete', () => {
     expect(KEYBOARD_DELETE_PROTECTED_NODE_TYPES.has('designBrief')).toBe(true);
     expect(KEYBOARD_DELETE_PROTECTED_NODE_TYPES.has('model')).toBe(true);
     expect(KEYBOARD_DELETE_PROTECTED_NODE_TYPES.has('inputGhost')).toBe(true);
+    expect(KEYBOARD_DELETE_PROTECTED_NODE_TYPES.has('designSystem')).toBe(true);
     expect(KEYBOARD_DELETE_PROTECTED_NODE_TYPES.has('researchContext')).toBe(false);
     expect(KEYBOARD_DELETE_PROTECTED_NODE_TYPES.has('hypothesis')).toBe(false);
-    expect(KEYBOARD_DELETE_PROTECTED_NODE_TYPES.has('designSystem')).toBe(false);
   });
 
   it('removableWorkspaceNodesFromFlowSelection keeps deletable types and drops protected', () => {
@@ -34,7 +34,7 @@ describe('canvas-keyboard-delete', () => {
       { id: 'h-1' },
     ];
     const removable = removableWorkspaceNodesFromFlowSelection(flowSelected, store);
-    expect(removable.map((n) => n.id)).toEqual(['ds-1', 'research-1', 'h-1']);
+    expect(removable.map((n) => n.id)).toEqual(['research-1', 'h-1']);
   });
 
   it('drops ids missing from store', () => {

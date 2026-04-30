@@ -8,6 +8,7 @@ import type { CanvasNodeType, WorkspaceEdge, WorkspaceNode } from '../types/work
 import { NODE_TYPE_TO_SECTION } from '../types/workspace-graph';
 import { NODE_TYPES, INPUT_NODE_TYPES } from '../constants/canvas';
 import { getDesignSystemNodeData, getModelNodeData } from '../lib/canvas-node-data';
+import { designSystemSourceFromNodeData, getDesignSystemSourceMode } from '../lib/design-md';
 import { generateId, now } from '../lib/utils';
 import { useIncubatorStore } from '../stores/incubator-store';
 import { useSpecStore } from '../stores/spec-store';
@@ -116,11 +117,13 @@ export function syncNodeDataToWorkspaceDomain(
   if (node.type === 'designSystem') {
     const ds = getDesignSystemNodeData(mergedNode);
     if (ds) {
+      const source = designSystemSourceFromNodeData(ds);
       dom.upsertDesignSystem(node.id, {
-        title: ds.title ?? '',
-        content: ds.content ?? '',
-        images: ds.images ?? [],
-        markdownSources: ds.markdownSources ?? [],
+        title: source.title ?? ds.title ?? '',
+        content: source.content ?? '',
+        sourceMode: getDesignSystemSourceMode(ds),
+        images: [...(source.images ?? [])],
+        markdownSources: [...(source.markdownSources ?? [])],
         designMdDocument: ds.designMdDocument,
         providerMigration: ds.providerId,
         modelMigration: ds.modelId,
