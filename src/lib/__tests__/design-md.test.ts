@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import type { ReferenceImage } from '../../types/spec';
 import {
   computeDesignMdSourceHash,
+  designMdSourceHasInput,
+  formatDesignSystemSourceMarkdown,
   getDesignMdStatus,
   isDesignMdDocumentStale,
 } from '../design-md';
@@ -25,6 +27,57 @@ describe('DESIGN.md helpers', () => {
     });
     expect(a).not.toBe(b);
     expect(a).not.toBe(c);
+  });
+
+  it('changes source hash for uploaded Markdown source content', () => {
+    const base = {
+      title: 'DS',
+      content: '',
+      markdownSources: [
+        {
+          id: 'md1',
+          filename: 'DESIGN.md',
+          content: '# Brand',
+          sizeBytes: 7,
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    };
+    const a = computeDesignMdSourceHash(base);
+    const b = computeDesignMdSourceHash({
+      ...base,
+      markdownSources: [{ ...base.markdownSources[0], content: '# Changed brand' }],
+    });
+    expect(a).not.toBe(b);
+  });
+
+  it('treats Markdown-only design-system source as valid input', () => {
+    expect(designMdSourceHasInput({
+      markdownSources: [
+        {
+          id: 'md1',
+          filename: 'tokens.md',
+          content: '# Tokens',
+          sizeBytes: 8,
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    })).toBe(true);
+  });
+
+  it('formats raw design-system fallback from text and Markdown sources', () => {
+    expect(formatDesignSystemSourceMarkdown({
+      content: 'Brand notes',
+      markdownSources: [
+        {
+          id: 'md1',
+          filename: 'DESIGN.md',
+          content: '# Tokens',
+          sizeBytes: 8,
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    })).toContain('## Markdown source: DESIGN.md\n# Tokens');
   });
 
   it('is stable for unrelated generated-document fields', () => {
@@ -63,4 +116,3 @@ describe('DESIGN.md helpers', () => {
     })).toBe('error');
   });
 });
-

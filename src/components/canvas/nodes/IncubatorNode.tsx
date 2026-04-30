@@ -375,7 +375,7 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
       <Modal
         open={Boolean(designMdModalNodeId)}
         onClose={() => setDesignMdModalNodeId(null)}
-        title={activeDesignMdModalData?.title ? `${activeDesignMdModalData.title} DESIGN.md` : 'DESIGN.md'}
+        title="DESIGN.md"
         size="lg"
       >
         <DocumentViewer

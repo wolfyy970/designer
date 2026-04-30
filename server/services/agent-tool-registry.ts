@@ -9,10 +9,13 @@ import type { TodoItem } from '../../src/types/provider.ts';
 import type { SkillCatalogEntry } from '../lib/skill-schema.ts';
 import { createSandboxBashTool } from './pi-bash-tool.ts';
 import {
+  createListSkillResourcesTool,
+  createReadSkillResourceTool,
   createTodoWriteTool,
   createUseSkillTool,
   createValidateHtmlTool,
   createValidateJsTool,
+  type SkillActivationState,
 } from './pi-app-tools.ts';
 import { createVirtualPiCodingTools } from './pi-sdk/virtual-tools.ts';
 
@@ -20,6 +23,8 @@ type VirtualFileToolDefinition = ReturnType<typeof createVirtualPiCodingTools>[n
 type BashToolDefinition = ReturnType<typeof createSandboxBashTool>;
 type TodoToolDefinition = ReturnType<typeof createTodoWriteTool>;
 type UseSkillToolDefinition = ReturnType<typeof createUseSkillTool>;
+type ListSkillResourcesToolDefinition = ReturnType<typeof createListSkillResourcesTool>;
+type ReadSkillResourceToolDefinition = ReturnType<typeof createReadSkillResourceTool>;
 type ValidateJsToolDefinition = ReturnType<typeof createValidateJsTool>;
 type ValidateHtmlToolDefinition = ReturnType<typeof createValidateHtmlTool>;
 type AgentToolDefinition =
@@ -27,6 +32,8 @@ type AgentToolDefinition =
   | BashToolDefinition
   | TodoToolDefinition
   | UseSkillToolDefinition
+  | ListSkillResourcesToolDefinition
+  | ReadSkillResourceToolDefinition
   | ValidateJsToolDefinition
   | ValidateHtmlToolDefinition;
 
@@ -42,17 +49,20 @@ export interface AgentToolRegistryInput {
 export interface AgentToolGroups {
   virtualFileTools: VirtualFileToolDefinition[];
   bashTool: BashToolDefinition;
-  appTools: Array<TodoToolDefinition | UseSkillToolDefinition>;
+  appTools: Array<TodoToolDefinition | UseSkillToolDefinition | ListSkillResourcesToolDefinition | ReadSkillResourceToolDefinition>;
   validationTools: Array<ValidateJsToolDefinition | ValidateHtmlToolDefinition>;
 }
 
 export function buildAgentToolGroups(input: AgentToolRegistryInput): AgentToolGroups {
+  const skillActivationState: SkillActivationState = { current: new Set() };
   return {
     virtualFileTools: createVirtualPiCodingTools(input.bash, input.onDesignFile),
     bashTool: createSandboxBashTool(input.bash, input.onDesignFile),
     appTools: [
       createTodoWriteTool(input.todoState, input.onTodos),
-      createUseSkillTool(input.skillCatalog, input.onSkillActivated),
+      createUseSkillTool(input.skillCatalog, input.onSkillActivated, skillActivationState),
+      createListSkillResourcesTool(input.skillCatalog, skillActivationState),
+      createReadSkillResourceTool(input.skillCatalog, skillActivationState),
     ],
     validationTools: [
       createValidateJsTool(input.bash),

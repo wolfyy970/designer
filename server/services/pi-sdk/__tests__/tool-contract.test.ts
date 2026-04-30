@@ -17,6 +17,7 @@ function catalogEntry(overrides: Partial<SkillCatalogEntry> = {}): SkillCatalogE
     tags: [],
     when: 'auto',
     bodyMarkdown: '# body',
+    resources: [],
     ...overrides,
   };
 }
@@ -36,7 +37,7 @@ function buildPiSandboxToolset(skillEntries: SkillCatalogEntry[] = [
 }
 
 describe('Pi sandbox tool contracts (model-facing)', () => {
-  it('exposes exactly 11 tools in agent order', () => {
+  it('exposes exactly 13 tools in agent order', () => {
     const tools = buildPiSandboxToolset();
     expect(tools.map((t) => t.name)).toEqual([
       'read',
@@ -48,6 +49,8 @@ describe('Pi sandbox tool contracts (model-facing)', () => {
       'bash',
       'todo_write',
       'use_skill',
+      'list_skill_resources',
+      'read_skill_resource',
       'validate_js',
       'validate_html',
     ]);
@@ -73,7 +76,12 @@ describe('Pi sandbox tool contracts (model-facing)', () => {
       'grep',
     ]);
     expect(groups.bashTool.name).toBe('bash');
-    expect(groups.appTools.map((t) => t.name)).toEqual(['todo_write', 'use_skill']);
+    expect(groups.appTools.map((t) => t.name)).toEqual([
+      'todo_write',
+      'use_skill',
+      'list_skill_resources',
+      'read_skill_resource',
+    ]);
     expect(groups.validationTools.map((t) => t.name)).toEqual(['validate_js', 'validate_html']);
     expect(flattenAgentToolGroups(groups).map((t) => t.name)).toEqual(
       buildPiSandboxToolset().map((t) => t.name),
@@ -147,6 +155,16 @@ describe('Pi sandbox tool contracts (model-facing)', () => {
     const tools = buildPiSandboxToolset([]);
     const us = tools.find((t) => t.name === 'use_skill')!;
     expect(us.description).toMatch(/No repo skills/i);
+  });
+
+  it('skill resource tools explain host-backed package resources', () => {
+    const tools = buildPiSandboxToolset([catalogEntry()]);
+    const list = tools.find((t) => t.name === 'list_skill_resources')!;
+    const read = tools.find((t) => t.name === 'read_skill_resource')!;
+    expect(list.description).toContain('use_skill');
+    expect(list.description).toContain('host-backed');
+    expect(read.description).toContain('not executable');
+    expect(JSON.stringify(read.parameters)).toContain('path');
   });
 
   it('validate_js parameters require path', () => {

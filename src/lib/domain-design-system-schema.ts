@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ReferenceImageSchema } from '../types/spec';
+import { DesignSystemMarkdownSourceSchema } from '../types/design-system-source';
 
 export const DesignMdLintFindingSchema = z.object({
   severity: z.enum(['error', 'warning', 'info']),
@@ -29,6 +30,7 @@ export const DomainDesignSystemContentSchema = z.object({
   title: z.string(),
   content: z.string(),
   images: z.array(ReferenceImageSchema),
+  markdownSources: z.array(DesignSystemMarkdownSourceSchema).optional(),
   designMdDocument: DesignMdDocumentSchema.optional(),
   providerMigration: z.string().optional(),
   modelMigration: z.string().optional(),

@@ -22,6 +22,7 @@ import {
   LOCKDOWN_PROVIDER_ID,
 } from '../lib/lockdown-model';
 import { THINKING_LEVELS } from '../lib/thinking-defaults';
+import { formatDesignSystemSourceMarkdown } from '../lib/design-md';
 
 export type { WorkspaceGraphSnapshot };
 
@@ -129,7 +130,7 @@ function collectDesignSystemFromDomain(
   for (const dsId of hypothesis.designSystemNodeIds) {
     const ds = designSystems[dsId];
     if (!ds) continue;
-    const c = ds.designMdDocument?.content || ds.content || '';
+    const c = ds.designMdDocument?.content || formatDesignSystemSourceMarkdown(ds) || '';
     const t = ds.title || 'Design System';
     if (c.trim()) parts.push(`## ${t}\n${c}`);
     images.push(...(ds.images ?? []));
@@ -155,7 +156,7 @@ function collectDesignSystemFromGraph(
     .map((n) => {
       const data = getDesignSystemNodeData(n);
       const t = data?.title || 'Design System';
-      const c = data?.designMdDocument?.content || data?.content || '';
+      const c = data?.designMdDocument?.content || (data ? formatDesignSystemSourceMarkdown(data) : '') || '';
       return c.trim() ? `## ${t}\n${c}` : '';
     })
     .filter(Boolean);

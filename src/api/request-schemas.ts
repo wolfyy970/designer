@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DesignSpecSchema } from '../types/spec';
+import { DesignSystemMarkdownSourceSchema } from '../types/design-system-source';
 import { ThinkingOverrideSchema } from '../lib/thinking-defaults';
 import { HypothesisStrategySchema } from './hypothesis-request-schemas';
 
@@ -19,12 +20,17 @@ export const DesignSystemExtractRequestSchema = z
         }).passthrough(),
       )
       .optional(),
+    markdownSources: z.array(DesignSystemMarkdownSourceSchema).optional(),
     providerId: z.string().min(1),
     modelId: z.string().min(1),
     thinking: ThinkingOverrideSchema.optional(),
   })
-  .refine((body) => Boolean(body.content?.trim()) || Boolean(body.images?.length), {
-    message: 'Provide design-system text, reference images, or both.',
+  .refine((body) => (
+    Boolean(body.content?.trim()) ||
+    Boolean(body.images?.length) ||
+    Boolean(body.markdownSources?.some((source) => source.content.trim()))
+  ), {
+    message: 'Provide design-system text, Markdown sources, reference images, or a combination.',
   });
 
 export const InternalContextGenerateRequestSchema = z.object({

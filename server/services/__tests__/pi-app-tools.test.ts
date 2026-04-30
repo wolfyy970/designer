@@ -1,9 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import {
+  createListSkillResourcesTool,
+  createReadSkillResourceTool,
   createTodoWriteTool,
   createUseSkillTool,
   createValidateHtmlTool,
   createValidateJsTool,
+  type SkillActivationState,
 } from '../pi-app-tools.ts';
 import { createAgentBashSandbox } from '../virtual-workspace.ts';
 import type { SkillCatalogEntry } from '../../lib/skill-schema.ts';
@@ -18,12 +24,17 @@ const entry: SkillCatalogEntry = {
   tags: [],
   when: 'auto',
   bodyMarkdown: 'Body text\n',
+  resources: [
+    { path: 'references/example.md', sizeBytes: 15, kind: 'text' },
+    { path: 'assets/logo.png', sizeBytes: 10, kind: 'binary' },
+  ],
 };
 
 describe('createUseSkillTool', () => {
   it('returns skill body and calls onActivate', async () => {
     const onActivate = vi.fn();
-    const tool = createUseSkillTool([entry], onActivate);
+    const state: SkillActivationState = { current: new Set() };
+    const tool = createUseSkillTool([entry], onActivate, state);
     const res = await tool.execute(
       'call-1',
       { name: 'demo' },
@@ -40,6 +51,8 @@ describe('createUseSkillTool', () => {
     expect(first?.type).toBe('text');
     expect(first && first.type === 'text' ? first.text : '').toContain('Body text');
     expect(first && first.type === 'text' ? first.text : '').toContain('# Demo');
+    expect(first && first.type === 'text' ? first.text : '').toContain('references/example.md');
+    expect(state.current.has('demo')).toBe(true);
   });
 
   it('returns error text for unknown skill key', async () => {
@@ -55,6 +68,61 @@ describe('createUseSkillTool', () => {
     const errText = errChunk && errChunk.type === 'text' ? errChunk.text : '';
     expect(errText).toMatch(/Unknown skill/);
     expect(errText).toContain('demo');
+  });
+});
+
+describe('skill package resource tools', () => {
+  it('requires use_skill before listing resources', async () => {
+    const state: SkillActivationState = { current: new Set() };
+    const tool = createListSkillResourcesTool([entry], state);
+    const res = await tool.execute('list-1', { name: 'demo' }, undefined as never, undefined as never, ext);
+    expect(toolText(res)).toMatch(/Call use_skill/);
+  });
+
+  it('lists resources after activation', async () => {
+    const state: SkillActivationState = { current: new Set(['demo']) };
+    const tool = createListSkillResourcesTool([entry], state);
+    const res = await tool.execute('list-2', { name: 'demo' }, undefined as never, undefined as never, ext);
+    expect(toolText(res)).toContain('references/example.md');
+    expect(toolText(res)).toContain('assets/logo.png');
+  });
+
+  it('reads text resources after activation', async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'ad-skill-tool-'));
+    await fs.mkdir(path.join(tmp, 'references'), { recursive: true });
+    await fs.writeFile(path.join(tmp, 'references', 'example.md'), 'resource body\n', 'utf8');
+    const state: SkillActivationState = { current: new Set(['demo']) };
+    const resourceEntry: SkillCatalogEntry = {
+      ...entry,
+      dir: tmp,
+      resources: [{ path: 'references/example.md', sizeBytes: 15, kind: 'text' }],
+    };
+    try {
+      const tool = createReadSkillResourceTool([resourceEntry], state);
+      const res = await tool.execute(
+        'read-1',
+        { name: 'demo', path: 'references/example.md' },
+        undefined as never,
+        undefined as never,
+        ext,
+      );
+      expect(toolText(res)).toContain('resource body');
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('does not read binary resources as text', async () => {
+    const state: SkillActivationState = { current: new Set(['demo']) };
+    const tool = createReadSkillResourceTool([entry], state);
+    const res = await tool.execute(
+      'read-2',
+      { name: 'demo', path: 'assets/logo.png' },
+      undefined as never,
+      undefined as never,
+      ext,
+    );
+    expect(toolText(res)).toMatch(/binary/);
   });
 });
 

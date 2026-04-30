@@ -173,10 +173,10 @@ describe('IncubatorNode', () => {
     });
     render(<IncubatorNode {...minimalIncubatorProps()} />);
 
-    expect(screen.getByText('Brand DS DESIGN.md')).toBeTruthy();
+    expect(screen.getByText('DESIGN.md')).toBeTruthy();
     expect(screen.getByText('needs generation')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Refresh Brand DS DESIGN.md' }) as HTMLButtonElement).disabled).toBe(false);
-    expect(screen.queryByRole('button', { name: 'View Brand DS DESIGN.md' })).toBeNull();
+    expect((screen.getByRole('button', { name: 'Refresh DESIGN.md' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByRole('button', { name: 'View DESIGN.md' })).toBeNull();
   });
 
   it('shows error design specification status when the last refresh failed', () => {
@@ -220,11 +220,11 @@ describe('IncubatorNode', () => {
       edges: [{ id: 'e-ds-inc', source: 'ds-1', target: 'inc-1', type: 'dataFlow', data: { status: 'idle' } }],
     });
     const { container } = render(<IncubatorNode {...minimalIncubatorProps()} />);
-    expect(screen.getByText('Brand DS DESIGN.md')).toBeTruthy();
+    expect(screen.getByText('DESIGN.md')).toBeTruthy();
     expect(container.querySelector('.bg-success')).toBeTruthy();
     expect(screen.queryByText('ready')).toBeNull();
-    expect(screen.getByRole('button', { name: 'View Brand DS DESIGN.md' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Refresh Brand DS DESIGN.md' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'View DESIGN.md' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Refresh DESIGN.md' })).toBeNull();
   });
 
   it('shows stale and error states for scoped design-system DESIGN.md documents', () => {
@@ -278,8 +278,9 @@ describe('IncubatorNode', () => {
     expect(screen.getByText('stale')).toBeTruthy();
     expect(screen.getByText('error')).toBeTruthy();
     expect(screen.getByText('DESIGN.md failed')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Refresh Stale DS DESIGN.md' }) as HTMLButtonElement).disabled).toBe(false);
-    expect((screen.getByRole('button', { name: 'Refresh Error DS DESIGN.md' }) as HTMLButtonElement).disabled).toBe(false);
+    const refreshButtons = screen.getAllByRole('button', { name: 'Refresh DESIGN.md' }) as HTMLButtonElement[];
+    expect(refreshButtons).toHaveLength(2);
+    expect(refreshButtons.every((button) => button.disabled === false)).toBe(true);
   });
 
   it('shows generating state while refreshing a scoped DESIGN.md document', async () => {
@@ -302,7 +303,7 @@ describe('IncubatorNode', () => {
     });
     render(<IncubatorNode {...minimalIncubatorProps()} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh Brand DS DESIGN.md' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh DESIGN.md' }));
     expect(await screen.findByText('generating...')).toBeTruthy();
     resolveExtract({
       result: '---\nname: Generated\n---\n# Generated',

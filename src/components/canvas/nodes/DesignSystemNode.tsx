@@ -1,36 +1,26 @@
-import { memo, useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { type NodeProps, type Node } from '@xyflow/react';
 import { useDropzone } from 'react-dropzone';
-import { ImagePlus, Sparkles, Loader2, X } from 'lucide-react';
+import { FileText, ImagePlus, X } from 'lucide-react';
 import { useCanvasStore } from '../../../stores/canvas-store';
 import type { DesignSystemNodeData } from '../../../types/canvas-data';
-import { extractDesignSystem } from '../../../api/client';
 import { RF_INTERACTIVE } from '../../../constants/canvas';
-import { readFileAsReferenceImage } from '../../../lib/image-utils';
-import { useConnectedModel } from '../../../hooks/useConnectedModel';
-import { Button } from '@ds/components/ui/button';
-import { DocumentViewer } from '@ds/components/ui/document-viewer';
-import { StatusPanel, type StatusPanelTone } from '@ds/components/ui/status-panel';
+import {
+  isDesignSystemMarkdownFile,
+  readFileAsDesignSystemMarkdownSource,
+  readFileAsReferenceImage,
+} from '../../../lib/image-utils';
 import { useCanvasNodePermanentRemove } from '../../../hooks/useCanvasNodePermanentRemove';
 import { STATIC_NODE_DELETE_COPY } from '../../../lib/canvas-permanent-delete-copy';
 import { filledOrEmpty } from '../../../lib/node-status';
 import {
-  computeDesignMdSourceHash,
   designMdSourceHasInput,
   designSystemSourceFromNodeData,
-  getDesignMdStatus,
-  isDesignMdDocumentStale,
 } from '../../../lib/design-md';
-import {
-  buildDesignMdDocument,
-  buildFailedDesignMdDocument,
-} from '../../../lib/design-md-document';
 import NodeShell from './NodeShell';
 import NodeHeader from './NodeHeader';
-import { NodeErrorBlock } from './shared/NodeErrorBlock';
+import type { DesignSystemMarkdownSource } from '../../../types/design-system-source';
 import type { ReferenceImage } from '../../../types/spec';
-import { useThinkingDefaultsStore } from '../../../stores/thinking-defaults-store';
-import Modal from '../../shared/Modal';
 
 type DesignSystemNodeType = Node<DesignSystemNodeData, 'designSystem'>;
 
@@ -41,20 +31,9 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
   const title = data.title || 'Design System';
   const content = data.content || '';
   const images = useMemo(() => data.images ?? [], [data.images]);
-  const designMdDocument = data.designMdDocument;
+  const markdownSources = useMemo(() => data.markdownSources ?? [], [data.markdownSources]);
   const designMdSource = useMemo(() => designSystemSourceFromNodeData(data), [data]);
-
-  const { providerId, modelId, supportsVision } = useConnectedModel(id);
-
-  const [extracting, setExtracting] = useState(false);
-  const [extractError, setExtractError] = useState<string | null>(null);
-  const [documentModalOpen, setDocumentModalOpen] = useState(false);
-  const abortExtractRef = useRef<AbortController | null>(null);
-  useEffect(() => {
-    return () => {
-      abortExtractRef.current?.abort();
-    };
-  }, []);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const update = useCallback(
     (field: string, value: unknown) => updateNodeData(id, { [field]: value }),
@@ -66,15 +45,42 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
     [id],
   );
 
+  const getCurrentMarkdownSources = useCallback(
+    () =>
+      (useCanvasStore.getState().nodes.find((n) => n.id === id)?.data.markdownSources as
+        | DesignSystemMarkdownSource[]
+        | undefined) || [],
+    [id],
+  );
+
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
-      const newImages = await Promise.all(
-        acceptedFiles.map((file) => readFileAsReferenceImage(file)),
+      setUploadError(null);
+      const imageFiles = acceptedFiles.filter((file) => !isDesignSystemMarkdownFile(file));
+      const markdownFiles = acceptedFiles.filter(isDesignSystemMarkdownFile);
+      const [imageResults, markdownResults] = await Promise.all([
+        Promise.allSettled(imageFiles.map((file) => readFileAsReferenceImage(file))),
+        Promise.allSettled(markdownFiles.map((file) => readFileAsDesignSystemMarkdownSource(file))),
+      ]);
+      const newImages = imageResults
+        .filter((result): result is PromiseFulfilledResult<ReferenceImage> => result.status === 'fulfilled')
+        .map((result) => result.value);
+      const newMarkdownSources = markdownResults
+        .filter((result): result is PromiseFulfilledResult<DesignSystemMarkdownSource> => result.status === 'fulfilled')
+        .map((result) => result.value);
+      const firstError = [...imageResults, ...markdownResults].find(
+        (result): result is PromiseRejectedResult => result.status === 'rejected',
       );
-      if (newImages.length === 0) return;
-      updateNodeData(id, { images: [...getCurrentImages(), ...newImages] });
+      if (firstError) {
+        setUploadError(firstError.reason instanceof Error ? firstError.reason.message : 'Some files could not be read.');
+      }
+      if (newImages.length === 0 && newMarkdownSources.length === 0) return;
+      updateNodeData(id, {
+        images: [...getCurrentImages(), ...newImages],
+        markdownSources: [...getCurrentMarkdownSources(), ...newMarkdownSources],
+      });
     },
-    [id, updateNodeData, getCurrentImages],
+    [id, updateNodeData, getCurrentImages, getCurrentMarkdownSources],
   );
 
   const removeImage = useCallback(
@@ -95,75 +101,28 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
     [id, updateNodeData, getCurrentImages],
   );
 
-  const handleExtract = useCallback(async () => {
-    const currentNode = useCanvasStore.getState().nodes.find((n) => n.id === id);
-    const currentData = (currentNode?.data ?? data) as DesignSystemNodeData;
-    const source = designSystemSourceFromNodeData(currentData);
-    if (!designMdSourceHasInput(source) || !modelId) return;
-    const ac = new AbortController();
-    abortExtractRef.current?.abort();
-    abortExtractRef.current = ac;
-    setExtracting(true);
-    setExtractError(null);
-    const sourceHash = computeDesignMdSourceHash(source);
-    try {
-      const thinkingOverride = useThinkingDefaultsStore.getState().overrides['design-system'];
-      const response = await extractDesignSystem(
-        {
-          title: source.title,
-          content: source.content,
-          images: [...(source.images ?? [])],
-          sourceHash,
-          providerId: providerId!,
-          modelId: modelId!,
-          thinking: thinkingOverride,
-        },
-        { signal: ac.signal },
-      );
-      if (!response || ac.signal.aborted) return;
-      update('designMdDocument', buildDesignMdDocument({
-        content: response.result,
-        sourceHash,
-        providerId: providerId!,
-        modelId: modelId!,
-        lint: response.lint,
-      }));
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return;
-      if (err instanceof Error && err.name === 'AbortError') return;
-      const message = err instanceof Error ? err.message : 'DESIGN.md generation failed';
-      setExtractError(message);
-      update('designMdDocument', buildFailedDesignMdDocument({
-        existing: designMdDocument,
-        sourceHash,
-        providerId: providerId!,
-        modelId: modelId!,
-        error: message,
-      }));
-    } finally {
-      setExtracting(false);
-    }
-  }, [data, designMdDocument, id, modelId, providerId, update]);
+  const removeMarkdownSource = useCallback(
+    (sourceId: string) => {
+      updateNodeData(id, {
+        markdownSources: getCurrentMarkdownSources().filter((source) => source.id !== sourceId),
+      });
+    },
+    [id, updateNodeData, getCurrentMarkdownSources],
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp'] },
+    onDropRejected: () => setUploadError('Use image files or Markdown files ending in .md or .markdown.'),
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp'],
+      'text/markdown': ['.md', '.markdown'],
+      'text/plain': ['.md', '.markdown'],
+    },
   });
 
-  const designMdStatus = getDesignMdStatus(designMdSource, extracting, designMdDocument);
-  const designMdStatusLabel = designMdStatus === 'generating' ? 'generating…' : designMdStatus;
-  const designMdStatusTone: StatusPanelTone =
-    designMdStatus === 'ready'
-      ? 'success'
-      : designMdStatus === 'error'
-        ? 'error'
-        : designMdStatus === 'generating'
-          ? 'accent'
-          : 'warning';
-  const designMdStale = isDesignMdDocumentStale(designMdSource, designMdDocument);
   const hasSourceInput = designMdSourceHasInput(designMdSource);
 
-  const status = filledOrEmpty(hasSourceInput || Boolean(designMdDocument?.content?.trim()));
+  const status = filledOrEmpty(hasSourceInput);
 
   return (
     <NodeShell
@@ -172,7 +131,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
       selected={!!selected}
       width="w-node"
       status={status}
-      handleColor={hasSourceInput || designMdDocument?.content?.trim() ? 'green' : 'amber'}
+      handleColor={hasSourceInput ? 'green' : 'amber'}
     >
       <NodeHeader
         onRemove={onRemove}
@@ -191,14 +150,14 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
         <textarea
           value={content}
           onChange={(e) => update('content', e.target.value)}
-          placeholder="Preferred format: DESIGN.md. Paste DESIGN.md, tokens, style-guide prose, or brand notes..."
+          placeholder="Paste tokens, component guidance, patterns, brand notes, or visual-system references..."
           rows={4}
           className={`${RF_INTERACTIVE} w-full resize-none rounded border border-border px-2.5 py-2 text-xs text-fg-secondary placeholder:text-fg-faint outline-none input-focus`}
         />
 
         {/* Image upload */}
         <div className={`${RF_INTERACTIVE} mt-2`}>
-          {images.length > 0 && (
+          {(images.length > 0 || markdownSources.length > 0) && (
             <div className="mb-2 grid gap-2">
               {images.map((img) => (
                 <div
@@ -231,6 +190,29 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
                   </button>
                 </div>
               ))}
+              {markdownSources.map((source) => (
+                <div
+                  key={source.id}
+                  className="group relative flex items-center gap-2 rounded-lg border border-border bg-surface p-2"
+                >
+                  <FileText size={14} className="shrink-0 text-accent" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-nano font-medium text-fg-secondary">
+                      {source.filename}
+                    </div>
+                    <div className="text-[10px] text-fg-muted">
+                      {Math.max(1, Math.round(source.sizeBytes / 1024))} KB Markdown source
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => removeMarkdownSource(source.id)}
+                    className="absolute -right-1.5 -top-1.5 hidden rounded-full bg-fg p-0.5 text-bg hover:bg-error group-hover:block"
+                    aria-label={`Remove ${source.filename}`}
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              ))}
             </div>
           )}
 
@@ -245,97 +227,14 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
             <input {...getInputProps()} />
             <ImagePlus size={16} className="mx-auto mb-0.5 text-fg-muted" />
             <p className="text-nano text-fg-secondary">
-              {isDragActive ? 'Drop images here' : 'Drop reference images or click'}
+              {isDragActive ? 'Drop files here' : 'Drop images or Markdown files'}
             </p>
           </div>
-        </div>
-
-        {/* DESIGN.md controls */}
-        <div className={`${RF_INTERACTIVE} mt-2.5 space-y-2 border-t border-border-subtle pt-2.5`}>
-          {!extracting && !modelId && (
-            <p className="text-center text-nano text-fg-muted">Connect a Model node</p>
-          )}
-          <StatusPanel
-            title="DESIGN.md"
-            status={designMdStatusLabel}
-            tone={designMdStatusTone}
-            animated={designMdStatus === 'generating'}
-            actions={(
-              <>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={!designMdDocument?.content}
-                  onClick={() => setDocumentModalOpen(true)}
-                >
-                  View
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={extracting || !modelId || !hasSourceInput}
-                  onClick={handleExtract}
-                >
-                  Refresh
-                </Button>
-              </>
-            )}
-          >
-            {designMdDocument?.error && !extracting ? (
-              <span className="text-error">{designMdDocument.error}</span>
-            ) : null}
-          </StatusPanel>
-          <Button
-            variant="primary"
-            size="sm"
-            className="w-full"
-            onClick={handleExtract}
-            disabled={extracting || !modelId || !hasSourceInput}
-          >
-            {extracting ? (
-              <Loader2 size={12} className="animate-spin" />
-            ) : (
-              <Sparkles size={12} />
-            )}
-            {extracting ? 'Generating...' : 'Generate DESIGN.md'}
-          </Button>
-
-          {!supportsVision && images.length > 0 && modelId && (
-            <p className="text-nano text-warning">
-              Model may not support vision.
-            </p>
-          )}
-
-          {extractError && <NodeErrorBlock message={extractError} />}
+          {uploadError ? (
+            <p className="mt-1.5 text-nano text-error">{uploadError}</p>
+          ) : null}
         </div>
       </div>
-      <Modal
-        open={documentModalOpen}
-        onClose={() => setDocumentModalOpen(false)}
-        title="DESIGN.md"
-        size="lg"
-      >
-        <DocumentViewer
-          content={designMdDocument?.content}
-          emptyMessage="No DESIGN.md document has been generated yet."
-          metadata={
-            designMdDocument ? (
-              <>
-                <div>Generated: {designMdDocument.generatedAt}</div>
-                <div>Model: {designMdDocument.providerId} / {designMdDocument.modelId}</div>
-                <div>Source: {designMdStale ? 'stale' : 'current'}</div>
-                {designMdDocument.lint ? (
-                  <div>
-                    Lint: {designMdDocument.lint.errors} errors, {designMdDocument.lint.warnings} warnings, {designMdDocument.lint.infos} info
-                  </div>
-                ) : null}
-              </>
-            ) : null
-          }
-        />
-      </Modal>
     </NodeShell>
   );
 }

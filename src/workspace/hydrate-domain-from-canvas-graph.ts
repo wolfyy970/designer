@@ -36,6 +36,7 @@ export function hydrateDomainFromCanvasGraph(input: {
           title: d.title ?? '',
           content: d.content ?? '',
           images: d.images ?? [],
+          markdownSources: d.markdownSources ?? [],
           designMdDocument: d.designMdDocument,
           providerMigration: d.providerId,
           modelMigration: d.modelId,

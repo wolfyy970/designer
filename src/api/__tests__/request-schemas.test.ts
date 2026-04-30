@@ -68,6 +68,20 @@ describe('shared request schemas', () => {
       modelId: 'model',
     }).success).toBe(true);
 
+    expect(DesignSystemExtractRequestSchema.safeParse({
+      markdownSources: [
+        {
+          id: 'md1',
+          filename: 'DESIGN.md',
+          content: '# Brand',
+          sizeBytes: 7,
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+      providerId: 'openrouter',
+      modelId: 'model',
+    }).success).toBe(true);
+
     expect(IncubateRequestSchema.safeParse({
       spec,
       providerId: 'openrouter',
@@ -94,6 +108,15 @@ describe('shared request schemas', () => {
     }).success).toBe(false);
 
     expect(DesignSystemExtractRequestSchema.safeParse({
+      markdownSources: [
+        {
+          id: 'md1',
+          filename: 'empty.md',
+          content: '   ',
+          sizeBytes: 3,
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
       providerId: 'openrouter',
       modelId: 'model',
     }).success).toBe(false);

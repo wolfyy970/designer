@@ -113,9 +113,9 @@ describe('computeDefaultPosition', () => {
     expect(pos.y).toBe(300);
   });
 
-  it('places designSystem in incubator column', () => {
+  it('places designSystem in the inputs column', () => {
     const pos = computeDefaultPosition('designSystem', [], col);
-    expect(pos.x).toBe(col.incubator);
+    expect(pos.x).toBe(col.inputs);
   });
 
   it('places hypothesis at hypothesis column', () => {
@@ -212,7 +212,7 @@ describe('computeAutoLayout', () => {
       .toBeLessThan(result.find((n) => n.id === 'hyp')!.position.x);
   });
 
-  it('forces designSystem to incubator rank', () => {
+  it('keeps designSystem in the input rank while it feeds downstream nodes', () => {
     const nodes = [
       makeNode('brief', 'designBrief'),
       makeNode('comp', 'incubator'),
@@ -225,9 +225,11 @@ describe('computeAutoLayout', () => {
       makeEdge('ds', 'hyp'),
     ];
     const result = computeAutoLayout(nodes, edges, DEFAULT_COL_GAP);
+    const briefX = result.find((n) => n.id === 'brief')!.position.x;
     const compX = result.find((n) => n.id === 'comp')!.position.x;
     const dsX = result.find((n) => n.id === 'ds')!.position.x;
-    expect(dsX).toBe(compX);
+    expect(dsX).toBe(briefX);
+    expect(dsX).toBeLessThan(compX);
   });
 
   it('normalizes topmost node to y≈100', () => {
@@ -360,6 +362,7 @@ describe('layoutTypeOrder', () => {
   it('places real optional inputs before ghosts and model last in layer 0', () => {
     const brief = makeNode('b', 'designBrief') as WorkspaceNode;
     const real = makeNode('r', 'researchContext') as WorkspaceNode;
+    const designSystem = makeNode('ds', 'designSystem') as WorkspaceNode;
     const ghost: WorkspaceNode = {
       id: 'g',
       type: 'inputGhost',
@@ -369,6 +372,7 @@ describe('layoutTypeOrder', () => {
     const model = makeNode('m', 'model') as WorkspaceNode;
     expect(layoutTypeOrder(brief)).toBeLessThan(layoutTypeOrder(real));
     expect(layoutTypeOrder(real)).toBeLessThan(layoutTypeOrder(ghost));
+    expect(layoutTypeOrder(designSystem)).toBeLessThan(layoutTypeOrder(ghost));
     expect(layoutTypeOrder(ghost)).toBeLessThan(layoutTypeOrder(model));
   });
 });

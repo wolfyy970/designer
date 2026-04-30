@@ -147,6 +147,47 @@ describe('useIncubatorDocumentPreparation', () => {
     ]);
   });
 
+  it('passes uploaded Markdown sources into DESIGN.md preparation', async () => {
+    const markdownSource = {
+      id: 'md1',
+      filename: 'DESIGN.md',
+      content: '# Uploaded design language',
+      sizeBytes: 26,
+      createdAt: '2026-01-01T00:00:00Z',
+    };
+    useCanvasStore.setState({
+      nodes: [
+        { id: 'inc-1', type: NODE_TYPES.INCUBATOR, position: { x: 0, y: 0 }, data: {} },
+        {
+          id: 'ds-1',
+          type: NODE_TYPES.DESIGN_SYSTEM,
+          position: { x: 0, y: 0 },
+          data: {
+            title: 'Brand DS',
+            content: '',
+            images: [],
+            markdownSources: [markdownSource],
+          },
+        },
+      ],
+      edges: [
+        { id: 'e-ds-inc', source: 'ds-1', target: 'inc-1', type: 'dataFlow', data: { status: 'idle' } },
+      ],
+    });
+    const { result } = renderPreparationHook();
+
+    await act(async () => {
+      await result.current.ensureDesignSystemDocuments();
+    });
+
+    expect(apiMocks.extractDesignSystem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        markdownSources: [markdownSource],
+      }),
+      expect.anything(),
+    );
+  });
+
   it('exports the same initial task state shape expected by callers', () => {
     expect(createInitialTaskStreamState('idle').status).toBe('idle');
   });

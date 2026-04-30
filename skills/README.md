@@ -1,14 +1,16 @@
 # Skills
 
-Each directory here is a repo-backed Agent Skill package. The live prompt body is
-`skills/<key>/SKILL.md` with YAML frontmatter followed by Markdown. These files
-are loaded by the server from disk and exposed to Pi sessions through the
-host-backed `use_skill` tool; they are not copied into the virtual workspace.
+Each directory here is a repo-backed Agent Skill package. The live instructions
+start in `skills/<key>/SKILL.md` with YAML frontmatter followed by Markdown.
+Optional sibling resources can live next to it. Packages are loaded by the
+server from disk and exposed to Pi sessions through host-backed skill tools;
+they are not copied into the virtual workspace.
 
 ## Format
 
-Use the Codex Agent Skills format: a skill is a directory with a required
-`SKILL.md`. The file starts with YAML frontmatter, then a concise Markdown body.
+Use the Agent Skills package shape: a skill is a directory with a required
+`SKILL.md`, plus optional `references/`, `scripts/`, `assets/`, or `templates/`
+files. `SKILL.md` starts with YAML frontmatter, then a concise Markdown body.
 
 ```md
 ---
@@ -27,7 +29,9 @@ Task instructions go here.
 `name` and `description` are the required Agent Skills fields. This app also
 uses `tags` to select skills for each Pi session (`design`, `incubation`,
 `internal-context`, `evaluation`, `inputs-gen`, `design-system`) and `when` to
-exclude manual-only skills from auto catalogs.
+exclude manual-only skills from auto catalogs. `allowed-tools` and
+`dependencies` may be present for compatibility/documentation, but Designer does
+not enforce tool restrictions or install/run dependencies from skill metadata.
 
 House style:
 
@@ -37,8 +41,15 @@ House style:
   `Quality bar` when they make the prompt easier to scan.
 - Preserve task-specific output contracts exactly where the consuming code
   depends on them.
-- Put large examples, scripts, references, or assets in optional sibling
-  folders only when the skill actually needs them.
+- Put large examples, references, templates, scripts, or assets in optional
+  sibling folders only when the skill actually needs them.
+- Skill resources are host-backed. After `use_skill`, the agent can call
+  `list_skill_resources` and `read_skill_resource` for UTF-8 text resources.
+  Binary assets are listed but not read as text.
+- Scripts under `scripts/` are readable source material only; Designer does not
+  execute skill scripts.
+- `_versions/`, hidden files, and hidden directories are history/private state
+  and are never exposed as runtime skill resources.
 
 ## Versioning
 

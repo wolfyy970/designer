@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { DesignSpec } from './spec';
 import { DesignSpecSchema, ReferenceImageSchema } from './spec';
+import { DesignSystemMarkdownSourceSchema } from './design-system-source';
 import type { GenerationResult, Provenance } from './provider';
 import type { IncubationPlan, CompiledPrompt } from './incubator';
 import type { WorkspaceEdge, WorkspaceNode, WorkspaceViewport } from './workspace-graph';
@@ -175,6 +176,7 @@ const DesignSystemContentSchema = z
     title: z.string(),
     content: z.string(),
     images: z.array(ReferenceImageSchema),
+    markdownSources: z.array(DesignSystemMarkdownSourceSchema).optional(),
     designMdDocument: DesignMdDocumentSchema.optional(),
     providerMigration: z.string().optional(),
     modelMigration: z.string().optional(),

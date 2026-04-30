@@ -1,5 +1,5 @@
 /**
- * Runtime discovery of repo-backed Agent Skills (skills/<key>/SKILL.md per package).
+ * Runtime discovery of repo-backed Agent Skills (skills/<key>/SKILL.md plus optional resources).
  * Skills are **optional** catalog entries: invalid YAML or schema failures omit the skill (see dev warnings).
  * Contrast `prompt-discovery.ts`: the system `PROMPT.md` is required and throws when invalid.
  */
@@ -8,11 +8,39 @@ import path from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { env } from '../env.ts';
 import { splitYamlFrontmatter } from './frontmatter.ts';
-import { skillFrontmatterSchema, type LoadedSkillSummary, type SkillCatalogEntry } from './skill-schema.ts';
+import {
+  skillFrontmatterSchema,
+  type LoadedSkillSummary,
+  type SkillCatalogEntry,
+  type SkillResourceEntry,
+  type SkillResourceKind,
+} from './skill-schema.ts';
 
-export type { SkillCatalogEntry };
+export type { SkillCatalogEntry, SkillResourceEntry };
 
 export const SKILL_FILENAME = 'SKILL.md';
+export const SKILL_RESOURCE_READ_MAX_BYTES = 50 * 1024;
+
+const TEXT_RESOURCE_EXTENSIONS = new Set([
+  '.css',
+  '.csv',
+  '.html',
+  '.js',
+  '.json',
+  '.jsx',
+  '.md',
+  '.markdown',
+  '.mjs',
+  '.py',
+  '.sh',
+  '.svg',
+  '.ts',
+  '.tsx',
+  '.txt',
+  '.xml',
+  '.yaml',
+  '.yml',
+]);
 
 export type SessionType =
   | 'design'
@@ -78,7 +106,115 @@ async function safeReadSkillDir(skillsRoot: string, name: string): Promise<Skill
     key: name,
     dir,
     bodyMarkdown: split.body,
+    resources: await discoverSkillResources(dir),
   };
+}
+
+async function discoverSkillResources(skillDir: string): Promise<SkillResourceEntry[]> {
+  const resources: SkillResourceEntry[] = [];
+
+  async function walk(absDir: string, relDir: string): Promise<void> {
+    let entries: string[];
+    try {
+      entries = await fs.readdir(absDir);
+    } catch {
+      return;
+    }
+
+    for (const name of entries) {
+      if (shouldSkipResourceSegment(name)) continue;
+      const relPath = relDir ? `${relDir}/${name}` : name;
+      if (relPath === SKILL_FILENAME) continue;
+
+      const absPath = path.join(absDir, name);
+      let stat;
+      try {
+        stat = await fs.lstat(absPath);
+      } catch {
+        continue;
+      }
+      if (stat.isSymbolicLink()) continue;
+      if (stat.isDirectory()) {
+        await walk(absPath, relPath);
+        continue;
+      }
+      if (!stat.isFile()) continue;
+
+      const normalized = normalizeSkillResourcePath(relPath);
+      if (!normalized) continue;
+      resources.push({
+        path: normalized,
+        sizeBytes: stat.size,
+        kind: classifySkillResource(normalized),
+      });
+    }
+  }
+
+  await walk(skillDir, '');
+  return resources.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function classifySkillResource(resourcePath: string): SkillResourceKind {
+  return TEXT_RESOURCE_EXTENSIONS.has(path.posix.extname(resourcePath).toLowerCase()) ? 'text' : 'binary';
+}
+
+function shouldSkipResourceSegment(segment: string): boolean {
+  return segment === '_versions' || segment.startsWith('.');
+}
+
+export function normalizeSkillResourcePath(resourcePath: string): string | null {
+  const raw = resourcePath.trim().replace(/\\/g, '/');
+  if (!raw || raw.startsWith('/')) return null;
+
+  const normalized = path.posix.normalize(raw);
+  if (
+    !normalized ||
+    normalized === '.' ||
+    normalized === SKILL_FILENAME ||
+    normalized.startsWith('../') ||
+    normalized === '..'
+  ) {
+    return null;
+  }
+  if (normalized.split('/').some((segment) => !segment || shouldSkipResourceSegment(segment))) return null;
+  return normalized;
+}
+
+export function findSkillResource(entry: SkillCatalogEntry, resourcePath: string): SkillResourceEntry | null {
+  const normalized = normalizeSkillResourcePath(resourcePath);
+  if (!normalized) return null;
+  return entry.resources.find((resource) => resource.path === normalized) ?? null;
+}
+
+export async function readSkillResourceText(
+  entry: SkillCatalogEntry,
+  resourcePath: string,
+): Promise<
+  | { ok: true; resource: SkillResourceEntry; text: string }
+  | { ok: false; reason: 'missing' | 'binary' | 'too_large'; resource?: SkillResourceEntry }
+> {
+  const resource = findSkillResource(entry, resourcePath);
+  if (!resource) return { ok: false, reason: 'missing' };
+  if (resource.kind !== 'text') return { ok: false, reason: 'binary', resource };
+
+  const absPath = path.resolve(entry.dir, resource.path);
+  const rootWithSeparator = `${path.resolve(entry.dir)}${path.sep}`;
+  if (!absPath.startsWith(rootWithSeparator)) return { ok: false, reason: 'missing' };
+
+  let stat;
+  try {
+    stat = await fs.lstat(absPath);
+  } catch {
+    return { ok: false, reason: 'missing' };
+  }
+  if (stat.isSymbolicLink() || !stat.isFile()) return { ok: false, reason: 'missing' };
+
+  const currentResource = { ...resource, sizeBytes: stat.size };
+  if (stat.size > SKILL_RESOURCE_READ_MAX_BYTES) {
+    return { ok: false, reason: 'too_large', resource: currentResource };
+  }
+
+  return { ok: true, resource: currentResource, text: await fs.readFile(absPath, 'utf8') };
 }
 
 /**
@@ -163,11 +299,12 @@ const skillBodyCache = new Map<string, string>();
 
 /** Read a skill's markdown body by key (directory name under skills/). Cached. */
 export async function getSkillBody(key: string, skillsRoot?: string): Promise<string> {
-  const cached = skillBodyCache.get(key);
-  if (cached !== undefined) return cached;
   const root = resolveSkillsRoot(skillsRoot);
+  const cacheKey = `${root}:${key}`;
+  const cached = skillBodyCache.get(cacheKey);
+  if (cached !== undefined) return cached;
   const entry = await safeReadSkillDir(root, key);
   if (!entry) throw new Error(`Skill "${key}" not found under ${root}`);
-  skillBodyCache.set(key, entry.bodyMarkdown);
+  skillBodyCache.set(cacheKey, entry.bodyMarkdown);
   return entry.bodyMarkdown;
 }

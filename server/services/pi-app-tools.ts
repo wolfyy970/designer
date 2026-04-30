@@ -8,7 +8,11 @@ import type { ExtensionContext, ToolDefinition } from './pi-sdk/types.ts';
 import type { TodoItem } from '../../src/types/provider.ts';
 import { sandboxProjectAbsPath } from './virtual-workspace.ts';
 import { normalizeError } from '../../src/lib/error-utils.ts';
-import { buildUseSkillToolDescription } from '../lib/skill-discovery.ts';
+import {
+  buildUseSkillToolDescription,
+  readSkillResourceText,
+  SKILL_RESOURCE_READ_MAX_BYTES,
+} from '../lib/skill-discovery.ts';
 import { validateHtmlWorkspaceContent } from './html-validation.ts';
 import { piToolParams } from './pi-tool-params.ts';
 import type { SkillCatalogEntry } from '../lib/skill-schema.ts';
@@ -85,6 +89,8 @@ export function createTodoWriteTool(
 
 // ── use_skill (repo Agent Skills; catalog in tool description) ─────────────
 
+export type SkillActivationState = { current: Set<string> };
+
 const useSkillSchema = Type.Object({
   name: Type.String({
     description: 'Skill key — directory name under skills/ (matches <skill key="..."> in this tool description).',
@@ -94,6 +100,7 @@ const useSkillSchema = Type.Object({
 export function createUseSkillTool(
   entries: SkillCatalogEntry[],
   onActivate: (payload: { key: string; name: string; description: string }) => void,
+  activationState: SkillActivationState = { current: new Set() },
 ): ToolDefinition {
   const byKey = new Map(entries.map((e) => [e.key, e]));
   const rows = entries.map((e) => ({
@@ -125,12 +132,129 @@ export function createUseSkillTool(
         name: skill.name,
         description: skill.description,
       });
+      activationState.current.add(skill.key);
       const header = `# ${skill.name}\n\n`;
+      const resources = formatSkillResourceManifest(skill);
       return {
-        content: [{ type: 'text', text: header + skill.bodyMarkdown }],
+        content: [{ type: 'text', text: header + skill.bodyMarkdown + resources }],
         details: null,
       };
     },
+  };
+}
+
+const listSkillResourcesSchema = Type.Object({
+  name: Type.String({
+    description: 'Skill key already loaded with use_skill.',
+  }),
+});
+
+export function createListSkillResourcesTool(
+  entries: SkillCatalogEntry[],
+  activationState: SkillActivationState,
+): ToolDefinition {
+  const byKey = new Map(entries.map((e) => [e.key, e]));
+
+  return {
+    name: 'list_skill_resources',
+    label: 'list_skill_resources',
+    description:
+      'List non-SKILL.md files bundled with a loaded Skill package. ' +
+      'Call use_skill first. Resources are host-backed, not files in the design sandbox.',
+    promptSnippet: 'List resources bundled with a loaded Skill package',
+    parameters: listSkillResourcesSchema,
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx: ExtensionContext) {
+      const { name } = piToolParams<{ name: string }>(params);
+      const skill = lookupActivatedSkill(byKey, activationState, name);
+      if ('error' in skill) return toolText(skill.error);
+      return toolText(formatSkillResourceList(skill));
+    },
+  };
+}
+
+const readSkillResourceSchema = Type.Object({
+  name: Type.String({
+    description: 'Skill key already loaded with use_skill.',
+  }),
+  path: Type.String({
+    description: 'Resource path from list_skill_resources, relative to the skill package.',
+  }),
+});
+
+export function createReadSkillResourceTool(
+  entries: SkillCatalogEntry[],
+  activationState: SkillActivationState,
+): ToolDefinition {
+  const byKey = new Map(entries.map((e) => [e.key, e]));
+
+  return {
+    name: 'read_skill_resource',
+    label: 'read_skill_resource',
+    description:
+      'Read a UTF-8 text resource bundled with a loaded Skill package. Call use_skill first. ' +
+      `Scripts are readable for reasoning only and are not executable. Maximum ${SKILL_RESOURCE_READ_MAX_BYTES} bytes.`,
+    promptSnippet: 'Read a text resource bundled with a loaded Skill package',
+    parameters: readSkillResourceSchema,
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx: ExtensionContext) {
+      const { name, path } = piToolParams<{ name: string; path: string }>(params);
+      const skill = lookupActivatedSkill(byKey, activationState, name);
+      if ('error' in skill) return toolText(skill.error);
+
+      const result = await readSkillResourceText(skill, path);
+      if (!result.ok) {
+        if (result.reason === 'binary') {
+          return toolText(`Skill resource is binary and cannot be read as text: ${path}`);
+        }
+        if (result.reason === 'too_large') {
+          return toolText(
+            `Skill resource is too large to read: ${path} (${result.resource?.sizeBytes ?? 0} bytes, max ${SKILL_RESOURCE_READ_MAX_BYTES})`,
+          );
+        }
+        return toolText(`Skill resource not found or not readable: ${path}`);
+      }
+
+      return toolText(`# ${skill.key}/${result.resource.path}\n\n${result.text}`);
+    },
+  };
+}
+
+function lookupActivatedSkill(
+  byKey: Map<string, SkillCatalogEntry>,
+  activationState: SkillActivationState,
+  rawKey: string,
+): SkillCatalogEntry | { error: string } {
+  const key = rawKey.trim();
+  const skill = byKey.get(key);
+  if (!skill) {
+    const available = [...byKey.keys()].sort().join(', ') || '(none)';
+    return { error: `Unknown skill: ${key}. Available: ${available}` };
+  }
+  if (!activationState.current.has(skill.key)) {
+    return { error: `Skill "${skill.key}" has not been loaded. Call use_skill with name "${skill.key}" first.` };
+  }
+  return skill;
+}
+
+function formatSkillResourceManifest(skill: SkillCatalogEntry): string {
+  return `\n\n## Package resources\n${formatSkillResourceList(skill)}`;
+}
+
+function formatSkillResourceList(skill: SkillCatalogEntry): string {
+  if (skill.resources.length === 0) {
+    return 'No additional package resources.';
+  }
+  return [
+    'Additional package resources are available through list_skill_resources and read_skill_resource. They are not files in the design sandbox.',
+    ...skill.resources.map(
+      (resource) => `- ${resource.path} (${resource.kind}, ${resource.sizeBytes} bytes)`,
+    ),
+  ].join('\n');
+}
+
+function toolText(text: string) {
+  return {
+    content: [{ type: 'text' as const, text }],
+    details: null,
   };
 }
 

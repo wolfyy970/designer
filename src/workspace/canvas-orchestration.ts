@@ -120,6 +120,7 @@ export function syncNodeDataToWorkspaceDomain(
         title: ds.title ?? '',
         content: ds.content ?? '',
         images: ds.images ?? [],
+        markdownSources: ds.markdownSources ?? [],
         designMdDocument: ds.designMdDocument,
         providerMigration: ds.providerId,
         modelMigration: ds.modelId,

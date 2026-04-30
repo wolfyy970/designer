@@ -135,7 +135,7 @@ export function IncubatorDocumentStatusPanels({
         return (
           <StatusPanel
             key={node.id}
-            title={`${ds?.title || 'Design System'} DESIGN.md`}
+            title="DESIGN.md"
             status={optional ? 'optional' : documentStatusLabel(designMdStatusLabel(dsStatus))}
             tone={optional ? 'neutral' : designMdStatusTone(dsStatus)}
             animated={dsStatus === 'generating'}
@@ -147,8 +147,8 @@ export function IncubatorDocumentStatusPanels({
                     type="button"
                     variant="secondary"
                     size="iconSm"
-                    aria-label={`View ${ds?.title || 'Design System'} DESIGN.md`}
-                    title={`View ${ds?.title || 'Design System'} DESIGN.md`}
+                    aria-label="View DESIGN.md"
+                    title="View DESIGN.md"
                     onClick={() => onViewDesignMdDocument(node.id)}
                   >
                     <Eye size={11} aria-hidden />
@@ -160,8 +160,8 @@ export function IncubatorDocumentStatusPanels({
                     variant="secondary"
                     size="iconSm"
                     disabled={isCompiling || contextGenerating || Boolean(designMdGeneratingNodeId)}
-                    aria-label={`Refresh ${ds?.title || 'Design System'} DESIGN.md`}
-                    title={`Refresh ${ds?.title || 'Design System'} DESIGN.md`}
+                    aria-label="Refresh DESIGN.md"
+                    title="Refresh DESIGN.md"
                     onClick={() => onRefreshDesignMdDocument(node.id)}
                   >
                     <RefreshCw size={11} aria-hidden />

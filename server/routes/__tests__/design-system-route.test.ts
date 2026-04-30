@@ -82,6 +82,27 @@ describe('POST /api/design-system/extract', () => {
     expect(res.status).toBe(200);
   });
 
+  it('accepts Markdown-only requests as source evidence', async () => {
+    const res = await app.request('http://localhost/api/design-system/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        markdownSources: [
+          {
+            id: 'md1',
+            filename: 'DESIGN.md',
+            content: '# Existing design language',
+            sizeBytes: 26,
+            createdAt: '2026-01-01T00:00:00Z',
+          },
+        ],
+        providerId: 'openrouter',
+        modelId: 'minimax/minimax-m2.5',
+      }),
+    });
+    expect(res.status).toBe(200);
+  });
+
   it('prompts the agent to load the authoritative DESIGN.md extraction skill', async () => {
     const res = await app.request('http://localhost/api/design-system/extract', {
       method: 'POST',
@@ -98,6 +119,9 @@ describe('POST /api/design-system/extract', () => {
     expect(taskOptions?.userPrompt).toContain('use_skill');
     expect(taskOptions?.userPrompt).toContain('authoritative contract');
     expect(taskOptions?.userPrompt).toContain('Google/Stitch DESIGN.md schema');
+    expect(taskOptions?.userPrompt).toContain('<markdown_sources>');
+    expect(taskOptions?.userPrompt).toContain('source evidence');
+    expect(taskOptions?.userPrompt).toContain('Do not assume they are already canonical or lint-clean');
     expect(taskOptions?.userPrompt).toContain('write the complete Markdown document to `DESIGN.md`');
     expect(taskOptions?.userPrompt).not.toContain(
       'version, name, description, colors, typography, rounded, spacing, components',

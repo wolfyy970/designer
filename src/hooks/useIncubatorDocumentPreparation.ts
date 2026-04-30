@@ -137,6 +137,7 @@ export function useIncubatorDocumentPreparation({
           title: source.title,
           content: source.content,
           images: [...(source.images ?? [])],
+          markdownSources: [...(source.markdownSources ?? [])],
           sourceHash,
           providerId,
           modelId,

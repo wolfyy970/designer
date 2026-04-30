@@ -3,6 +3,7 @@
  * Canvas nodes/edges are a projection; semantic relations live here.
  */
 import type { ReferenceImage } from './spec';
+import type { DesignSystemMarkdownSource } from './design-system-source';
 import type { ThinkingLevel } from '../lib/thinking-defaults';
 
 export type { ThinkingLevel };
@@ -68,6 +69,7 @@ export interface DomainDesignSystemContent {
   title: string;
   content: string;
   images: ReferenceImage[];
+  markdownSources?: DesignSystemMarkdownSource[];
   designMdDocument?: DesignMdDocument;
   providerMigration?: string;
   modelMigration?: string;

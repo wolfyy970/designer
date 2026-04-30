@@ -8,6 +8,13 @@ import { DesignSystemExtractRequestSchema } from '../../src/api/request-schemas.
 
 const designSystem = new Hono();
 
+function escapePromptAttribute(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;');
+}
+
 designSystem.post('/extract', async (c) => {
   const parsed = await parseRequestJson(c, DesignSystemExtractRequestSchema);
   if (!parsed.ok) return parsed.response;
@@ -20,13 +27,23 @@ designSystem.post('/extract', async (c) => {
       return `Image ${i + 1}: ${name}${img.description ? ` — ${img.description}` : ''}`;
     })
     .join('\n');
+  const markdownSources = (body.markdownSources ?? [])
+    .filter((source) => source.content.trim())
+    .map((source) =>
+      `<markdown_source filename="${escapePromptAttribute(source.filename)}" sizeBytes="${source.sizeBytes}">
+${source.content.trim()}
+</markdown_source>`,
+    )
+    .join('\n\n');
 
   const agentUserPrompt = `<task>
 Create a Google DESIGN.md document from the provided design-system source material.
 
 Use the \`use_skill\` tool to load the relevant DESIGN.md extraction skill before beginning. Treat that skill as the authoritative contract for the Google/Stitch DESIGN.md schema, section order, inference policy, and lint-friendly output.
 
-Analyze the written source material and any UI screenshots, then write the complete Markdown document to \`DESIGN.md\` in the workspace root.
+Analyze the written source material, uploaded Markdown sources, and any UI screenshots, then write the complete Markdown document to \`DESIGN.md\` in the workspace root.
+
+Uploaded Markdown sources, including files already named \`DESIGN.md\`, are source evidence. Do not assume they are already canonical or lint-clean. Preserve their intent, repair schema/section/token issues where needed, normalize them into the current Google/Stitch DESIGN.md format, and produce one complete lint-friendly \`DESIGN.md\`.
 </task>
 
 <design_system_title>
@@ -40,6 +57,10 @@ ${body.sourceHash ?? '(not provided)'}
 <written_source>
 ${body.content?.trim() ?? ''}
 </written_source>
+
+<markdown_sources>
+${markdownSources}
+</markdown_sources>
 
 <screenshots>
 ${imageDescriptions}

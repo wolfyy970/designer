@@ -76,6 +76,7 @@ export function createWorkspaceDomainEntitiesSlice(set: DomainSet): Pick<
           title: '',
           content: '',
           images: [],
+          markdownSources: [],
         };
         return {
           designSystems: {
@@ -85,6 +86,7 @@ export function createWorkspaceDomainEntitiesSlice(set: DomainSet): Pick<
               ...partial,
               nodeId,
               images: partial.images ?? cur.images,
+              markdownSources: partial.markdownSources ?? cur.markdownSources,
             },
           },
         };

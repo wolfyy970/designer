@@ -2,8 +2,9 @@
  * Fresh agentic system prompt + skill catalog from disk-backed skills and PROMPT.md.
  * Call once per PI session boundary so skill edits apply to the next build or revision.
  *
- * Skills are **not** copied into the just-bash virtual filesystem; the agent loads them via `use_skill`
- * (host-backed catalog). The returned `sandboxSeedFiles` is always empty unless callers add seeds
+ * Skills are **not** copied into the just-bash virtual filesystem; the agent loads SKILL.md via
+ * `use_skill` and optional sibling resources through host-backed skill resource tools.
+ * The returned `sandboxSeedFiles` is always empty unless callers add seeds
  * (e.g. revision rounds merge prior design files in the orchestrator).
  */
 import type { LoadedSkillSummary, SkillCatalogEntry } from './skill-schema.ts';

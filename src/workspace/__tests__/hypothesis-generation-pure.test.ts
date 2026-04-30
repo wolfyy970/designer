@@ -202,6 +202,95 @@ describe('hypothesis-generation-pure', () => {
     expect(ctx!.designSystemContent).toContain('Body');
   });
 
+  it('uses uploaded Markdown source as design-system fallback when no prepared DESIGN.md exists', () => {
+    const ctx = buildHypothesisGenerationContextFromInputs({
+      hypothesisNodeId: 'hyp1',
+      hypothesisStrategy: strategy,
+      spec: minimalSpec,
+      snapshot: { nodes: [], edges: [] },
+      domainHypothesis: {
+        id: 'hyp1',
+        incubatorId: 'c1',
+        strategyId: 'vs1',
+        modelNodeIds: ['mod1'],
+        designSystemNodeIds: ['ds1'],
+        placeholder: false,
+      },
+      modelProfiles: {
+        mod1: { nodeId: 'mod1', providerId: 'openrouter', modelId: 'x' },
+      },
+      designSystems: {
+        ds1: {
+          nodeId: 'ds1',
+          title: 'T',
+          content: '',
+          images: [],
+          markdownSources: [
+            {
+              id: 'md1',
+              filename: 'DESIGN.md',
+              content: '# Uploaded tokens',
+              sizeBytes: 17,
+              createdAt: '2026-01-01T00:00:00Z',
+            },
+          ],
+        },
+      },
+      defaultIncubatorProvider: 'openrouter',
+    });
+    expect(ctx).not.toBeNull();
+    expect(ctx!.designSystemContent).toContain('## Markdown source: DESIGN.md');
+    expect(ctx!.designSystemContent).toContain('# Uploaded tokens');
+  });
+
+  it('prefers prepared DESIGN.md content over raw uploaded Markdown source', () => {
+    const ctx = buildHypothesisGenerationContextFromInputs({
+      hypothesisNodeId: 'hyp1',
+      hypothesisStrategy: strategy,
+      spec: minimalSpec,
+      snapshot: { nodes: [], edges: [] },
+      domainHypothesis: {
+        id: 'hyp1',
+        incubatorId: 'c1',
+        strategyId: 'vs1',
+        modelNodeIds: ['mod1'],
+        designSystemNodeIds: ['ds1'],
+        placeholder: false,
+      },
+      modelProfiles: {
+        mod1: { nodeId: 'mod1', providerId: 'openrouter', modelId: 'x' },
+      },
+      designSystems: {
+        ds1: {
+          nodeId: 'ds1',
+          title: 'T',
+          content: '',
+          images: [],
+          markdownSources: [
+            {
+              id: 'md1',
+              filename: 'DESIGN.md',
+              content: '# Raw uploaded tokens',
+              sizeBytes: 21,
+              createdAt: '2026-01-01T00:00:00Z',
+            },
+          ],
+          designMdDocument: {
+            content: '# Prepared DESIGN.md',
+            sourceHash: 'hash',
+            generatedAt: '2026-01-01T00:00:00Z',
+            providerId: 'openrouter',
+            modelId: 'model',
+          },
+        },
+      },
+      defaultIncubatorProvider: 'openrouter',
+    });
+    expect(ctx).not.toBeNull();
+    expect(ctx!.designSystemContent).toContain('# Prepared DESIGN.md');
+    expect(ctx!.designSystemContent).not.toContain('Raw uploaded tokens');
+  });
+
   it('falls back to graph when domain lists no models', () => {
     const snapshot = {
       nodes: [

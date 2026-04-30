@@ -83,7 +83,6 @@ function nodeH(node: CanvasNode): number {
 /** Fallback sort for layer 0; input + model ordering is owned by `layoutTypeOrder` tiers, not this map. */
 const TYPE_ORDER_LAYER: Record<string, number> = {
   incubator: 6,
-  designSystem: 7,
   hypothesis: 8,
   preview: 9,
 };
@@ -102,7 +101,8 @@ export function layoutTypeOrder(n: CanvasNode): number {
   if (
     n.type === 'researchContext' ||
     n.type === 'objectivesMetrics' ||
-    n.type === 'designConstraints'
+    n.type === 'designConstraints' ||
+    n.type === 'designSystem'
   ) {
     return LAYER0_REAL_OPTIONAL_BASE + optionalInputSlotIndex(n.type);
   }
@@ -181,10 +181,10 @@ export function computeDefaultPosition(
   existingNodes: CanvasNode[],
   col: ReturnType<typeof columnX>
 ): { x: number; y: number } {
-  // Model and Design System are processing nodes — place in the incubator column
-  if (type === 'model' || type === 'designSystem') {
+  // Model is a processing-control node — place in the incubator column.
+  if (type === 'model') {
     const processingNodes = existingNodes.filter((n) =>
-      n.type === 'incubator' || n.type === 'designSystem' || n.type === 'model'
+      n.type === 'incubator' || n.type === 'model'
     );
     let y = 200;
     for (const pn of processingNodes) {
@@ -192,9 +192,9 @@ export function computeDefaultPosition(
     }
     return snap({ x: col.incubator, y });
   }
-  if (INPUT_NODE_TYPES.has(type)) {
+  if (INPUT_NODE_TYPES.has(type) || type === 'designSystem') {
     const inputNodes = existingNodes.filter((n) =>
-      INPUT_NODE_TYPES.has(n.type as CanvasNodeType)
+      INPUT_NODE_TYPES.has(n.type as CanvasNodeType) || n.type === 'designSystem'
     );
     let y = 200;
     for (const inode of inputNodes) {
@@ -279,16 +279,11 @@ export function computeAutoLayout(
 
   for (const n of nodes) dfs(n.id);
 
-  // 2b. Force designSystem nodes to the same rank as incubator (processing column)
-  //     DesignSystem has no incoming edges — only outgoing to hypotheses — so DFS gives rank 0.
+  // 2b. Incubator rank is used as the fallback for disconnected model nodes.
+  //     Design System intentionally remains rank 0 with input/context nodes.
   const compilerRank = Math.max(1, ...nodes
     .filter((n) => n.type === 'incubator')
     .map((n) => rank.get(n.id) ?? 1));
-  for (const n of nodes) {
-    if (n.type === 'designSystem') {
-      rank.set(n.id, compilerRank);
-    }
-  }
 
   // 2c. Recompute Model node ranks based on outgoing edges
   //     Model nodes have no incoming edges — DFS gives rank 0.

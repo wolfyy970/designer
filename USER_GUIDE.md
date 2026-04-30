@@ -132,8 +132,8 @@ Edit these before generation. Remove strategies not worth exploring.
 Use a **Design System** node when a run should follow an existing brand or component language. The default canvas includes the core pipeline; connect Design System nodes to the Incubator and/or hypotheses when you want that source included.
 
 - Type or paste DESIGN.md, tokens, style-guide prose, or brand notes into the content area
-- Drag-and-drop screenshots or reference images when visual source material matters
-- Click **Generate DESIGN.md** to create a linted Google DESIGN.md document from the text/images; the Incubator shows connected document status and refreshes missing or stale documents before incubation
+- Drag-and-drop screenshots, reference images, or Markdown files when source material matters
+- The Incubator prepares the linted Google DESIGN.md document from connected Design System sources before incubation; the Design System node itself stays focused on source material
 
 ### 6. Generate Designs
 

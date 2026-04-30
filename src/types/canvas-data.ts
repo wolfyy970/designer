@@ -1,5 +1,6 @@
 import type { ReferenceImage } from './spec';
 import type { DesignMdDocument, ThinkingLevel } from './workspace-domain';
+import type { DesignSystemMarkdownSource } from './design-system-source';
 
 // ── Per-node data interfaces ────────────────────────────────────────
 // These provide type safety within node components, eliminating `as` casts.
@@ -55,6 +56,7 @@ export type DesignSystemNodeData = NodeData<{
   title?: string;
   content?: string;
   images?: ReferenceImage[];
+  markdownSources?: DesignSystemMarkdownSource[];
   designMdDocument?: DesignMdDocument;
   providerId?: string;
   modelId?: string;
