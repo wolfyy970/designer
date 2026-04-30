@@ -18,7 +18,6 @@ describe('canvas edge contracts', () => {
       'designSystem->incubator',
       'hypothesis->preview',
       'incubator->hypothesis',
-      'model->designSystem',
       'model->hypothesis',
       'model->incubator',
       'objectivesMetrics->incubator',
@@ -34,10 +33,10 @@ describe('canvas edge contracts', () => {
     }
   });
 
-  it('keeps design-system model edges manual-only', () => {
-    const contract = CANVAS_EDGE_CONTRACTS.find((entry) => entry.id === 'model-designSystem');
-    expect(contract?.match(NODE_TYPES.MODEL, NODE_TYPES.DESIGN_SYSTEM)).toBe(true);
-    expect(contract?.paletteModelTarget).toBeUndefined();
-    expect(contract?.structuralAutoConnect).toBeUndefined();
+  it('keeps Design System as source material with implicit model access through Incubator', () => {
+    const contract = CANVAS_EDGE_CONTRACTS.find((entry) =>
+      entry.match(NODE_TYPES.MODEL, NODE_TYPES.DESIGN_SYSTEM),
+    );
+    expect(contract).toBeUndefined();
   });
 });

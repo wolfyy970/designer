@@ -862,3 +862,25 @@ describe('v29 → v30: retire existing design nodes', () => {
     expect(edges.map((e) => e.id)).toEqual(['e1']);
   });
 });
+
+describe('v30 → v31: remove direct model links to Design System', () => {
+  it('strips model→designSystem edges while preserving input and incubator model links', () => {
+    const result = migrateCanvasState(
+      {
+        nodes: [
+          makeNode('model', 'model'),
+          makeNode('ds', 'designSystem'),
+          makeNode('inc', 'incubator'),
+        ],
+        edges: [
+          makeEdge('model-ds', 'model', 'ds'),
+          makeEdge('model-inc', 'model', 'inc'),
+          makeEdge('ds-inc', 'ds', 'inc'),
+        ],
+      },
+      30,
+    );
+    const edges = result.edges as Array<Record<string, unknown>>;
+    expect(edges.map((e) => e.id).sort()).toEqual(['ds-inc', 'model-inc']);
+  });
+});

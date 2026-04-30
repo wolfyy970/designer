@@ -48,10 +48,10 @@ describe('isValidConnection', () => {
     expect(isValidConnection('designBrief', 'unknown')).toBe(false);
   });
 
-  it('allows model to connect to compiler, hypothesis, and designSystem', () => {
+  it('allows model to connect to compiler and hypothesis only', () => {
     expect(isValidConnection('model', 'incubator')).toBe(true);
     expect(isValidConnection('model', 'hypothesis')).toBe(true);
-    expect(isValidConnection('model', 'designSystem')).toBe(true);
+    expect(isValidConnection('model', 'designSystem')).toBe(false);
   });
 
   it('rejects model connecting to sections or previews', () => {

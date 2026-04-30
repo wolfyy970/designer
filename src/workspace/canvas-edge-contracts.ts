@@ -184,12 +184,6 @@ export const CANVAS_EDGE_CONTRACTS: readonly CanvasEdgeContract[] = [
     },
   }),
   makeContract({
-    id: 'model-designSystem',
-    sourceTypes: [NODE_TYPES.MODEL],
-    targetTypes: [NODE_TYPES.DESIGN_SYSTEM],
-    manual: true,
-  }),
-  makeContract({
     id: 'compiler-hypothesis',
     sourceTypes: [NODE_TYPES.INCUBATOR],
     targetTypes: [NODE_TYPES.HYPOTHESIS],

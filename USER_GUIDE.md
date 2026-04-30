@@ -96,16 +96,17 @@ The canvas (`/canvas`) is the default interface. Nodes connect left-to-right. Yo
 
 ### 1. Fill in Input Nodes
 
-The canvas starts with a **Design Brief**, a **Model**, and an **Incubator** — all pre-connected. Optional input facets appear as ghost cards; use the circular **Add to canvas** control on a ghost to materialize that input node.
+The canvas starts with a **Design Brief**, a **Design System**, a **Model**, and an **Incubator**. Source nodes connect into the Incubator; the Model is connected to the Incubator, not to each input. Optional input facets appear as ghost cards; use the circular **Add to canvas** control on a ghost to materialize that input node.
 
 - **Design Brief** — The primary directive. What are you designing and why?
 - **Research Context** — User research, behavioral insights, qualitative findings.
 - **Objectives & Metrics** — Success criteria, KPIs, evaluation measures.
 - **Design Constraints** — Non-negotiable boundaries + exploration ranges.
+- **Design System** — Tokens, components, patterns, brand notes, screenshots, and Markdown source files.
 
 Write in prose, not bullets. Precision is the product.
 
-**Optional inputs:** The default template focuses on Design Brief + Model + Incubator. Other sections may show as **ghost** prompts on the canvas until you add them from the ghost card (or load a saved canvas whose spec already fills that section—see **Managing Canvases**). Ghost cards are persistent affordances and reappear if you remove the optional input node.
+**Optional inputs:** The default template focuses on Design Brief + Design System + Model + Incubator. Other sections may show as **ghost** prompts on the canvas until you add them from the ghost card (or load a saved canvas whose spec already fills that section—see **Managing Canvases**). Ghost cards are persistent affordances and reappear if you remove the optional input node; when you activate one, the viewport tracks the newly created node after it moves into the input group.
 
 **Auto-generate (Research / Objectives / Constraints):** On those three input nodes, an **auto-generate** action (when shown) drafts or refines the spec facet body from your **Design Brief** and any other spec sections you have already filled in. It uses the **first Model node** on the canvas (document order—the same fallback as auto-connect). **Lockdown** still pins provider/model server-side. The server resolves copy from the `**inputs-gen-research-context`**, `**inputs-gen-objectives-metrics`**, and `**inputs-gen-design-constraints**` skill packages under `**skills/**` (see [ARCHITECTURE.md](ARCHITECTURE.md)).
 
@@ -129,7 +130,7 @@ Edit these before generation. Remove strategies not worth exploring.
 
 ### 5. Design System (Optional)
 
-Use a **Design System** node when a run should follow an existing brand or component language. The default canvas includes the core pipeline; connect Design System nodes to the Incubator and/or hypotheses when you want that source included.
+Use a **Design System** node when a run should follow an existing brand or component language. It behaves like the other source inputs: connect Design System nodes to the Incubator and/or hypotheses when you want that source included. It does not connect directly to Model nodes; model choice is implicit through the Incubator or Hypothesis doing the generation.
 
 - Type or paste DESIGN.md, tokens, style-guide prose, or brand notes into the content area
 - Drag-and-drop screenshots, reference images, or Markdown files when source material matters

@@ -3,6 +3,7 @@ import {
   scheduleCanvasFocusToNode,
   scheduleCanvasFitView,
   scheduleCanvasFitViewToNodes,
+  NODE_FOCUS_MIN_ZOOM,
   SUBSET_FIT_VIEW_MAX_ZOOM,
   variantInspectorDockWidthPx,
   fitViewOptionsWithInspectorDock,
@@ -90,32 +91,52 @@ describe('scheduleCanvasFocusToNode', () => {
     vi.useRealTimers();
   });
 
-  it('focuses a single node with the shared subset zoom cap', () => {
-    const fitView = vi.fn();
+  it('centers a single node at readable zoom instead of fitting it', () => {
+    const setCenter = vi.fn();
     const afterFocus = vi.fn();
-    scheduleCanvasFocusToNode(fitView, 'node-1', afterFocus);
+    scheduleCanvasFocusToNode(
+      setCenter,
+      'node-1',
+      () => ({ id: 'node-1', position: { x: 100, y: 200 }, measured: { width: 400, height: 160 } }),
+      () => 0.35,
+      afterFocus,
+    );
     vi.runAllTimers();
-    expect(fitView).toHaveBeenCalledTimes(1);
-    expect(fitView.mock.calls[0][0]?.nodes).toEqual([{ id: 'node-1' }]);
-    expect(fitView.mock.calls[0][0]?.maxZoom).toBe(SUBSET_FIT_VIEW_MAX_ZOOM);
+    expect(setCenter).toHaveBeenCalledTimes(1);
+    expect(setCenter).toHaveBeenCalledWith(300, 280, {
+      duration: 400,
+      zoom: NODE_FOCUS_MIN_ZOOM,
+    });
     expect(afterFocus).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the current zoom when the user is already closer than the minimum', () => {
+    const setCenter = vi.fn();
+    scheduleCanvasFocusToNode(
+      setCenter,
+      'node-1',
+      () => ({ id: 'node-1', position: { x: 0, y: 0 }, width: 200, height: 100 }),
+      () => 1.1,
+    );
+    vi.runAllTimers();
+    expect(setCenter.mock.calls[0][2]?.zoom).toBe(1.1);
+  });
+
   it('consumes an empty focus request without moving the viewport', () => {
-    const fitView = vi.fn();
+    const setCenter = vi.fn();
     const afterFocus = vi.fn();
-    const timerId = scheduleCanvasFocusToNode(fitView, ' ', afterFocus);
+    const timerId = scheduleCanvasFocusToNode(setCenter, ' ', vi.fn(), vi.fn(), afterFocus);
     expect(timerId).toBeUndefined();
-    expect(fitView).not.toHaveBeenCalled();
+    expect(setCenter).not.toHaveBeenCalled();
     expect(afterFocus).toHaveBeenCalledTimes(1);
   });
 
   it('consumes a missing-node focus request without moving the viewport', () => {
-    const fitView = vi.fn();
+    const setCenter = vi.fn();
     const afterFocus = vi.fn();
-    scheduleCanvasFocusToNode(fitView, 'missing-node', afterFocus, () => false);
+    scheduleCanvasFocusToNode(setCenter, 'missing-node', () => undefined, () => 1, afterFocus);
     vi.runAllTimers();
-    expect(fitView).not.toHaveBeenCalled();
+    expect(setCenter).not.toHaveBeenCalled();
     expect(afterFocus).toHaveBeenCalledTimes(1);
   });
 });

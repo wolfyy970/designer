@@ -55,7 +55,7 @@ export const createLayoutSlice: StateCreator<
       {
         id: designSystemId,
         type: 'designSystem' as const,
-        position: snap({ x: col.incubator, y: 280 }),
+        position: snap({ x: col.inputs, y: 1180 }),
         data: {},
       },
       {

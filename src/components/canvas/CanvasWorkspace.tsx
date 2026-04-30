@@ -45,7 +45,7 @@ import { useTheme } from '@ds/lib/use-theme';
 function CanvasInner() {
   useCanvasOrchestrator();
   const theme = useTheme();
-  const { setCenter, getNodes, getEdges, fitView } = useReactFlow();
+  const { setCenter, getNodes, getEdges, getViewport, fitView } = useReactFlow();
   const rfStore = useStoreApi();
   useNodeDeletion({ getNodes, getEdges });
   useSyncEvaluatorDefaultsFromConfig();
@@ -135,15 +135,16 @@ function CanvasInner() {
   useEffect(() => {
     if (!pendingFocusNodeId) return;
     const id = scheduleCanvasFocusToNode(
-      fitView,
+      setCenter,
       pendingFocusNodeId,
+      (nodeId) => getNodes().find((node) => node.id === nodeId),
+      () => getViewport().zoom,
       consumePendingNodeFocus,
-      (nodeId) => getNodes().some((node) => node.id === nodeId),
     );
     return () => {
       if (id != null) window.clearTimeout(id);
     };
-  }, [pendingFocusNodeId, fitView, getNodes, consumePendingNodeFocus]);
+  }, [pendingFocusNodeId, setCenter, getNodes, getViewport, consumePendingNodeFocus]);
 
   const runInspectorFitPrevRef = useRef<string | null>(null);
   useEffect(() => {

@@ -72,7 +72,7 @@ export function buildAutoConnectEdges(
  */
 /**
  * Build model→child edges scoped to a specific parent.
- * Uses the **first** model wired to the parent only — a hypothesis (or design system)
+ * Uses the **first** model wired to the parent only — a hypothesis
  * may only have one model edge; incubators may still have multiple models upstream.
  * Falls back to the first model on the canvas if the parent has none.
  */

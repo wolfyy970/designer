@@ -63,7 +63,7 @@ export const useCanvasStore = create<CanvasStore>()(
     }),
     {
       name: STORAGE_KEYS.CANVAS,
-      version: 30,
+      version: 31,
       migrate: (persistedState: unknown, version: number) => {
         try {
           if (typeof persistedState === 'string') {

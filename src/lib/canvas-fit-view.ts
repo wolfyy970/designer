@@ -50,6 +50,7 @@ export const DEFAULT_FIT_VIEW_OPTIONS = {
  * high zoom; cap so the graph stays readable.
  */
 export const SUBSET_FIT_VIEW_MAX_ZOOM = 1.4;
+export const NODE_FOCUS_MIN_ZOOM = 0.85;
 
 /**
  * Debounced `fitView` limited to the given node ids (hypothesis + preview lanes, etc.).
@@ -75,15 +76,24 @@ export function scheduleCanvasFitViewToNodes(
   }, FIT_VIEW_DELAY_MS);
 }
 
+interface FocusableCanvasNode {
+  id: string;
+  position: { x: number; y: number };
+  measured?: { width?: number; height?: number };
+  width?: number;
+  height?: number;
+}
+
 /**
- * Focus one node after layout settles. Missing/empty ids consume the request without moving
- * the viewport; callers can pass `hasNode` when the target may have been removed.
+ * Focus one node after layout settles by centering it, not fitting it. This keeps continuity
+ * when optional inputs reorder: the viewport tracks the activated node instead of zooming out.
  */
 export function scheduleCanvasFocusToNode(
-  fitView: (options?: FitViewOptions) => void | Promise<boolean>,
+  setCenter: (x: number, y: number, options?: { zoom?: number; duration?: number }) => void,
   nodeId: string | null | undefined,
+  getNode: (nodeId: string) => FocusableCanvasNode | undefined,
+  getZoom: () => number,
   afterFocus?: () => void,
-  hasNode?: (nodeId: string) => boolean,
 ): ReturnType<typeof setTimeout> | undefined {
   const id = nodeId?.trim();
   if (!id) {
@@ -91,14 +101,16 @@ export function scheduleCanvasFocusToNode(
     return undefined;
   }
   return setTimeout(() => {
-    if (hasNode?.(id) === false) {
+    const node = getNode(id);
+    if (!node) {
       afterFocus?.();
       return;
     }
-    void fitView({
-      ...DEFAULT_FIT_VIEW_OPTIONS,
-      nodes: [{ id }],
-      maxZoom: SUBSET_FIT_VIEW_MAX_ZOOM,
+    const width = node.measured?.width ?? node.width ?? 320;
+    const height = node.measured?.height ?? node.height ?? 200;
+    setCenter(node.position.x + width / 2, node.position.y + height / 2, {
+      zoom: Math.max(getZoom(), NODE_FOCUS_MIN_ZOOM),
+      duration: FIT_VIEW_DURATION_MS,
     });
     afterFocus?.();
   }, FIT_VIEW_DELAY_MS);

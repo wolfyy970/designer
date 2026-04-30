@@ -372,7 +372,7 @@ The primary interface is a node-graph canvas built on `@xyflow/react` v12.
 
 ### Node Types
 
-9 node types in 3 categories: 4 input nodes rendered by shared `InputNode.tsx`, plus `ModelNode`, `DesignSystemNode`, `IncubatorNode`, `HypothesisNode`, and **preview** nodes (canvas type `preview`; React component still named `VariantNode.tsx` for history). `ModelNode` centralizes provider/model selection. Design System is self-contained (data in `node.data`, not spec store). Each node uses a typed data interface from `types/canvas-data.ts`.
+9 node types in 3 categories: 5 source/input nodes (4 spec facets rendered by shared `InputNode.tsx`, plus `DesignSystemNode`), `ModelNode`, `IncubatorNode`, `HypothesisNode`, and **preview** nodes (canvas type `preview`; React component still named `VariantNode.tsx` for history). `ModelNode` centralizes provider/model selection for Incubator/Hypothesis work; Design System has no direct model edge and is self-contained source data in `node.data`, not the spec store. Each node uses a typed data interface from `types/canvas-data.ts`.
 
 ### HypothesisNode — Generation Controls
 

@@ -600,6 +600,21 @@ function migrateV29ToV30(s: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
+/** v30 -> v31: Design System uses the implicit Incubator model, not a direct model edge. */
+function migrateV30ToV31(s: Record<string, unknown>): Record<string, unknown> {
+  const nodes = Array.isArray(s.nodes) ? (s.nodes as Array<Record<string, unknown>>) : [];
+  const nodeTypeById = new Map(nodes.map((n) => [String(n.id), n.type]));
+  const edges = Array.isArray(s.edges) ? (s.edges as Array<Record<string, unknown>>) : [];
+  return {
+    ...s,
+    edges: edges.filter((e) => {
+      const sourceType = nodeTypeById.get(String(e.source));
+      const targetType = nodeTypeById.get(String(e.target));
+      return !(sourceType === NODE_TYPES.MODEL && targetType === NODE_TYPES.DESIGN_SYSTEM);
+    }),
+  };
+}
+
 // ── Top-level migration runner ────────────────────────────────────────
 
 /**
@@ -644,6 +659,7 @@ export function migrateCanvasState(
   if (fromVersion < 28) s = migrateV27ToV28(s);
   if (fromVersion < 29) s = migrateV28ToV29(s);
   if (fromVersion < 30) s = migrateV29ToV30(s);
+  if (fromVersion < 31) s = migrateV30ToV31(s);
 
   return normalizeMigratedCanvasState(s);
 }
@@ -654,7 +670,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function normalizeMigratedCanvasState(state: Record<string, unknown>): Record<string, unknown> {
   const viewport = isRecord(state.viewport) ? state.viewport : FRESH_STATE.viewport;
-  const migrated = migrateV29ToV30(state);
+  const migrated = migrateV30ToV31(migrateV29ToV30(state));
   return {
     ...migrated,
     nodes: Array.isArray(migrated.nodes) ? migrated.nodes : [],
