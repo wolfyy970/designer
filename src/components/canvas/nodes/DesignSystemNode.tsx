@@ -34,6 +34,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
   const images = useMemo(() => data.images ?? [], [data.images]);
   const markdownSources = useMemo(() => data.markdownSources ?? [], [data.markdownSources]);
   const sourceMode = getDesignSystemSourceMode(data);
+  const isCustomMode = sourceMode === 'custom';
   const designSystemState = useMemo(() => getDesignSystemEffectiveState(data), [data]);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -132,7 +133,7 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    onDropRejected: () => setUploadError('Use image files or Markdown files ending in .md or .markdown.'),
+    onDropRejected: () => setUploadError('Use image files or a DESIGN.md file.'),
     accept: {
       'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp'],
       'text/markdown': ['.md', '.markdown'],
@@ -201,97 +202,101 @@ function DesignSystemNode({ id, data, selected }: NodeProps<DesignSystemNodeType
                 ? 'Design-system guidance is excluded. Custom sources are saved.'
                 : 'Design-system guidance is excluded.'
               : designSystemState.hasCustomSourceInput
-                ? 'Using custom notes, images, and Markdown.'
-                : 'Add custom notes, images, or Markdown.'}
+                ? 'Using custom notes, images, and DESIGN.md.'
+                : 'Add custom notes, images, or DESIGN.md.'}
         </div>
 
-        <textarea
-          value={content}
-          onFocus={switchToCustom}
-          onChange={(e) => updateCustomContent(e.target.value)}
-          placeholder="Paste tokens, component guidance, patterns, brand notes, or visual-system references..."
-          rows={4}
-          className={`${RF_INTERACTIVE} w-full resize-none rounded border border-border px-2.5 py-2 text-xs text-fg-secondary placeholder:text-fg-faint outline-none input-focus`}
-        />
+        {isCustomMode ? (
+          <>
+            <textarea
+              value={content}
+              onFocus={switchToCustom}
+              onChange={(e) => updateCustomContent(e.target.value)}
+              placeholder="Paste tokens, component guidance, patterns, brand notes, or visual-system references..."
+              rows={4}
+              className={`${RF_INTERACTIVE} w-full resize-none rounded border border-border px-2.5 py-2 text-xs text-fg-secondary placeholder:text-fg-faint outline-none input-focus`}
+            />
 
-        <div className={`${RF_INTERACTIVE} mt-2`}>
-          {(images.length > 0 || markdownSources.length > 0) && (
-            <div className="mb-2 grid gap-2">
-              {images.map((img) => (
-                <div
-                  key={img.id}
-                  className="group relative flex gap-2 rounded-lg border border-border bg-surface p-2"
-                >
-                  <img
-                    src={img.dataUrl}
-                    alt={img.filename}
-                    className="h-16 w-16 shrink-0 rounded border border-border object-cover"
-                  />
-                  <div className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="truncate text-nano font-medium text-fg-secondary">
-                      {img.filename}
-                    </span>
-                    <textarea
-                      value={img.description}
-                      onChange={(e) => updateImageDescription(img.id, e.target.value)}
-                      placeholder="Describe what this image shows..."
-                      rows={2}
-                      className="w-full resize-none rounded border border-border bg-bg px-2 py-1 text-nano text-fg-secondary placeholder-fg-muted input-focus"
-                    />
-                  </div>
-                  <button
-                    onClick={() => removeImage(img.id)}
-                    className="absolute -right-1.5 -top-1.5 hidden rounded-full bg-fg p-0.5 text-bg hover:bg-error group-hover:block"
-                    aria-label="Remove image"
-                  >
-                    <X size={10} />
-                  </button>
-                </div>
-              ))}
-              {markdownSources.map((source) => (
-                <div
-                  key={source.id}
-                  className="group relative flex items-center gap-2 rounded-lg border border-border bg-surface p-2"
-                >
-                  <FileText size={14} className="shrink-0 text-accent" aria-hidden />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-nano font-medium text-fg-secondary">
-                      {source.filename}
+            <div className={`${RF_INTERACTIVE} mt-2`}>
+              {(images.length > 0 || markdownSources.length > 0) && (
+                <div className="mb-2 grid gap-2">
+                  {images.map((img) => (
+                    <div
+                      key={img.id}
+                      className="group relative flex gap-2 rounded-lg border border-border bg-surface p-2"
+                    >
+                      <img
+                        src={img.dataUrl}
+                        alt={img.filename}
+                        className="h-16 w-16 shrink-0 rounded border border-border object-cover"
+                      />
+                      <div className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="truncate text-nano font-medium text-fg-secondary">
+                          {img.filename}
+                        </span>
+                        <textarea
+                          value={img.description}
+                          onChange={(e) => updateImageDescription(img.id, e.target.value)}
+                          placeholder="Describe what this image shows..."
+                          rows={2}
+                          className="w-full resize-none rounded border border-border bg-bg px-2 py-1 text-nano text-fg-secondary placeholder-fg-muted input-focus"
+                        />
+                      </div>
+                      <button
+                        onClick={() => removeImage(img.id)}
+                        className="absolute -right-1.5 -top-1.5 hidden rounded-full bg-fg p-0.5 text-bg hover:bg-error group-hover:block"
+                        aria-label="Remove image"
+                      >
+                        <X size={10} />
+                      </button>
                     </div>
-                    <div className="text-[10px] text-fg-muted">
-                      {Math.max(1, Math.round(source.sizeBytes / 1024))} KB Markdown source
+                  ))}
+                  {markdownSources.map((source) => (
+                    <div
+                      key={source.id}
+                      className="group relative flex items-center gap-2 rounded-lg border border-border bg-surface p-2"
+                    >
+                      <FileText size={14} className="shrink-0 text-accent" aria-hidden />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-nano font-medium text-fg-secondary">
+                          {source.filename}
+                        </div>
+                        <div className="text-[10px] text-fg-muted">
+                          {Math.max(1, Math.round(source.sizeBytes / 1024))} KB DESIGN.md source
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removeMarkdownSource(source.id)}
+                        className="absolute -right-1.5 -top-1.5 hidden rounded-full bg-fg p-0.5 text-bg hover:bg-error group-hover:block"
+                        aria-label={`Remove ${source.filename}`}
+                      >
+                        <X size={10} />
+                      </button>
                     </div>
-                  </div>
-                  <button
-                    onClick={() => removeMarkdownSource(source.id)}
-                    className="absolute -right-1.5 -top-1.5 hidden rounded-full bg-fg p-0.5 text-bg hover:bg-error group-hover:block"
-                    aria-label={`Remove ${source.filename}`}
-                  >
-                    <X size={10} />
-                  </button>
+                  ))}
                 </div>
-              ))}
+              )}
+
+              <div
+                {...getRootProps()}
+                className={`cursor-pointer rounded-lg border-2 border-dashed p-3 text-center transition-colors ${
+                  isDragActive
+                    ? 'border-accent bg-surface'
+                    : 'border-border hover:border-border hover:bg-surface'
+                }`}
+              >
+                <input {...getInputProps()} />
+                <ImagePlus size={16} className="mx-auto mb-0.5 text-fg-muted" />
+                <p className="text-nano text-fg-secondary">
+                  {isDragActive ? 'Drop files here' : 'Drop images or DESIGN.md'}
+                </p>
+              </div>
+              {uploadError ? (
+                <p className="mt-1.5 text-nano text-error">{uploadError}</p>
+              ) : null}
             </div>
-          )}
-
-          <div
-            {...getRootProps()}
-            className={`cursor-pointer rounded-lg border-2 border-dashed p-3 text-center transition-colors ${
-              isDragActive
-                ? 'border-accent bg-surface'
-                : 'border-border hover:border-border hover:bg-surface'
-            }`}
-          >
-            <input {...getInputProps()} />
-            <ImagePlus size={16} className="mx-auto mb-0.5 text-fg-muted" />
-            <p className="text-nano text-fg-secondary">
-              {isDragActive ? 'Drop files here' : 'Drop images or Markdown files'}
-            </p>
-          </div>
-          {uploadError ? (
-            <p className="mt-1.5 text-nano text-error">{uploadError}</p>
-          ) : null}
-        </div>
+          </>
+        ) : null}
       </div>
     </NodeShell>
   );

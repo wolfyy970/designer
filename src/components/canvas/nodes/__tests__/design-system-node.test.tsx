@@ -59,13 +59,15 @@ describe('DesignSystemNode', () => {
   it('prompts users for design-system source material', () => {
     render(<DesignSystemNode {...props({ sourceMode: 'custom' })} />);
     expect(screen.getByPlaceholderText(/Paste tokens, component guidance, patterns/)).toBeTruthy();
-    expect(screen.getByText('Add custom notes, images, or Markdown.')).toBeTruthy();
+    expect(screen.getByText('Add custom notes, images, or DESIGN.md.')).toBeTruthy();
   });
 
   it('defaults to the built-in Wireframe source and has no delete affordance', () => {
     render(<DesignSystemNode {...props()} />);
     expect(screen.getAllByText('Wireframe').length).toBeGreaterThan(0);
     expect(screen.getByText(/Using built-in Wireframe DESIGN\.md/)).toBeTruthy();
+    expect(screen.queryByPlaceholderText(/Paste tokens, component guidance, patterns/)).toBeNull();
+    expect(screen.queryByText('Drop images or DESIGN.md')).toBeNull();
     expect(screen.queryByTitle('Delete from canvas')).toBeNull();
   });
 
@@ -98,12 +100,33 @@ describe('DesignSystemNode', () => {
     expect(useCanvasStore.getState().nodes.find((n) => n.id === 'ds-1')?.data.sourceMode).toBe('custom');
   });
 
-  it('switches to custom source mode when the user edits source text', () => {
+  it('hides saved custom controls outside custom mode', () => {
+    const data = {
+      sourceMode: 'wireframe',
+      content: 'Use calm blue.',
+      markdownSources: [
+        {
+          id: 'md-1',
+          filename: 'tokens.md',
+          content: '# Tokens',
+          sizeBytes: 8,
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    };
+    render(<DesignSystemNode {...props(data)} />);
+
+    expect(screen.getByText('Using Wireframe. Custom sources are saved.')).toBeTruthy();
+    expect(screen.queryByDisplayValue('Use calm blue.')).toBeNull();
+    expect(screen.queryByText('tokens.md')).toBeNull();
+  });
+
+  it('keeps custom source mode when the user edits source text', () => {
     useCanvasStore.setState({
-      nodes: [{ id: 'ds-1', type: 'designSystem', position: { x: 0, y: 0 }, data: {} }],
+      nodes: [{ id: 'ds-1', type: 'designSystem', position: { x: 0, y: 0 }, data: { sourceMode: 'custom' } }],
       edges: [],
     });
-    render(<DesignSystemNode {...props()} />);
+    render(<DesignSystemNode {...props({ sourceMode: 'custom' })} />);
 
     fireEvent.change(screen.getByPlaceholderText(/Paste tokens, component guidance, patterns/), {
       target: { value: 'Use soft neutral surfaces.' },
@@ -208,6 +231,6 @@ describe('DesignSystemNode', () => {
       latestDropzoneOptions.onDropRejected?.();
     });
 
-    expect(screen.getByText(/Use image files or Markdown files/)).toBeTruthy();
+    expect(screen.getByText(/Use image files or a DESIGN\.md file/)).toBeTruthy();
   });
 });
