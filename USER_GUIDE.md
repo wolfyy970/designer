@@ -118,6 +118,8 @@ Use the **Model** node connected to the Incubator. Select your provider and mode
 
 Connect input nodes to the **Incubator** (edges auto-connect on add). With a **Model** connected and at least a minimal **Design Brief** written, click **Generate** and choose how many new hypotheses to create. The Incubator sends your connected inputs to the LLM and produces that many hypothesis strategy cards. **blank hypothesis** does the same readiness check (brief + model) but adds a single empty strategy card without calling the LLM, for hand-editing.
 
+The Incubator shows generated-document readiness before it runs. **Design specification** moves from **missing** to **ready to generate** once the Design Brief has content, then to **needs update** if connected input content changes after a document exists. **DESIGN.md** follows the active Design System style: Wireframe is already ready, Custom only participates when custom source material exists, and None is ignored.
+
 ### 4. Edit Hypotheses
 
 Hypothesis nodes appear to the right of the Incubator. Each represents a hypothesis strategy with:

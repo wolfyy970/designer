@@ -119,6 +119,9 @@ export function useIncubatorDocumentPreparation({
     const data = (currentNode.data ?? {}) as DesignSystemNodeData;
     const state = getDesignSystemEffectiveState(data);
     if (!state.hasEffectiveSourceInput) throw new Error('Design System node has no source content');
+    if (state.activeDesignMdDocument && state.designMdStatus === 'ready') {
+      return state.activeDesignMdDocument.content;
+    }
     const source = state.source;
     const sourceHash = computeDesignMdSourceHash(source);
     setDesignMdGeneratingNodeId(nodeId);
@@ -192,11 +195,18 @@ export function useIncubatorDocumentPreparation({
       const state = getDesignSystemEffectiveState(data, { document: data.designMdDocument });
       if (!state.hasEffectiveSourceInput) continue;
       const source = state.source;
-      if (!data.designMdDocument?.content || data.designMdDocument.error || isDesignMdDocumentStale(source, data.designMdDocument)) {
+      if (
+        !state.activeDesignMdDocument?.content ||
+        state.activeDesignMdDocument.error ||
+        isDesignMdDocumentStale(source, state.activeDesignMdDocument)
+      ) {
         await refreshDesignMdDocument(node.id);
         data = ((useCanvasStore.getState().nodes.find((n) => n.id === node.id)?.data ?? {}) as DesignSystemNodeData);
       }
-      const content = data.designMdDocument?.content?.trim();
+      const activeDocument = getDesignSystemEffectiveState(data, {
+        document: data.designMdDocument,
+      }).activeDesignMdDocument;
+      const content = activeDocument?.content?.trim();
       if (content) {
         out.push({ nodeId: node.id, title: data.title || 'Design System', content });
       }

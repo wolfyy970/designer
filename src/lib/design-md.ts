@@ -10,6 +10,7 @@ import {
   DEFAULT_WIREFRAME_DESIGN_SYSTEM_TITLE,
 } from './default-wireframe-design-system';
 import {
+  computeDesignMdSourceHash,
   designMdSourceHasInput,
   getDesignMdStatus,
   type DesignMdSource,
@@ -36,7 +37,27 @@ export type DesignSystemEffectiveState = {
   hasEffectiveSourceInput: boolean;
   inactiveReason?: DesignSystemInactiveReason;
   designMdStatus?: DesignMdStatus;
+  activeDesignMdDocument?: DesignMdDocument;
 };
+
+export type DesignSystemDocumentStatus =
+  | 'none'
+  | 'optional'
+  | 'ready-to-generate'
+  | 'generating'
+  | 'ready'
+  | 'needs-update'
+  | 'error';
+
+export interface DesignSystemDocumentUiState {
+  status: DesignSystemDocumentStatus;
+  statusLabel?: string;
+  tone: 'neutral' | 'success' | 'warning' | 'error' | 'accent';
+  canView: boolean;
+  canGenerate: boolean;
+  actionLabel?: string;
+  error?: string;
+}
 
 export function hasCustomDesignSystemInput(data: DesignSystemNodeData): boolean {
   return (
@@ -89,6 +110,31 @@ export function designSystemSourceFromNodeData(data: DesignSystemNodeData): Desi
   };
 }
 
+export function defaultWireframeDesignMdDocument(): DesignMdDocument {
+  const source = designSystemSourceFromNodeData({ sourceMode: 'wireframe' });
+  return {
+    content: DEFAULT_WIREFRAME_DESIGN_SYSTEM_MARKDOWN_SOURCE.content,
+    sourceHash: computeDesignMdSourceHash(source),
+    generatedAt: 'built-in',
+    providerId: 'built-in',
+    modelId: 'wireframe',
+    lint: {
+      errors: 0,
+      warnings: 0,
+      infos: 0,
+    },
+  };
+}
+
+export function activeDesignMdDocumentForDesignSystem(
+  data: DesignSystemNodeData,
+  document = data.designMdDocument,
+): DesignMdDocument | undefined {
+  return getDesignSystemSourceMode(data) === 'wireframe'
+    ? defaultWireframeDesignMdDocument()
+    : document;
+}
+
 export function getDesignSystemEffectiveState(
   data: DesignSystemNodeData,
   options: { generating?: boolean; document?: DesignMdDocument } = {},
@@ -110,12 +156,84 @@ export function getDesignSystemEffectiveState(
     };
   }
 
+  const activeDesignMdDocument = activeDesignMdDocumentForDesignSystem(data, options.document);
   return {
     mode,
     customSourceCount,
     hasCustomSourceInput,
     source,
     hasEffectiveSourceInput: true,
-    designMdStatus: getDesignMdStatus(source, Boolean(options.generating), options.document),
+    activeDesignMdDocument,
+    designMdStatus: getDesignMdStatus(
+      source,
+      Boolean(options.generating),
+      activeDesignMdDocument,
+    ),
   };
+}
+
+export function getDesignSystemDocumentUiState(
+  data: DesignSystemNodeData,
+  options: { generating?: boolean; document?: DesignMdDocument } = {},
+): DesignSystemDocumentUiState {
+  const state = getDesignSystemEffectiveState(data, options);
+
+  if (!state.hasEffectiveSourceInput) {
+    return {
+      status: state.inactiveReason === 'none' ? 'none' : 'optional',
+      statusLabel: state.inactiveReason === 'none' ? 'none' : 'optional',
+      tone: 'neutral',
+      canView: false,
+      canGenerate: false,
+    };
+  }
+
+  const canView = Boolean(state.activeDesignMdDocument?.content?.trim());
+  switch (state.designMdStatus) {
+    case 'ready':
+      return {
+        status: 'ready',
+        tone: 'success',
+        canView,
+        canGenerate: false,
+      };
+    case 'generating':
+      return {
+        status: 'generating',
+        statusLabel: 'generating...',
+        tone: 'accent',
+        canView,
+        canGenerate: true,
+        actionLabel: canView ? 'Regenerate DESIGN.md' : 'Generate DESIGN.md',
+      };
+    case 'error':
+      return {
+        status: 'error',
+        statusLabel: 'error',
+        tone: 'error',
+        canView,
+        canGenerate: true,
+        actionLabel: 'Retry DESIGN.md',
+        error: options.document?.error ?? data.designMdDocument?.error,
+      };
+    case 'stale':
+      return {
+        status: 'needs-update',
+        statusLabel: 'needs update',
+        tone: 'warning',
+        canView,
+        canGenerate: true,
+        actionLabel: 'Regenerate DESIGN.md',
+      };
+    case 'missing':
+    default:
+      return {
+        status: 'ready-to-generate',
+        statusLabel: 'ready to generate',
+        tone: 'warning',
+        canView: false,
+        canGenerate: true,
+        actionLabel: 'Generate DESIGN.md',
+      };
+  }
 }

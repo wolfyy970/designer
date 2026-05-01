@@ -388,7 +388,7 @@ When a result has files (agentic output), the preview UI (`VariantNode` / canvas
 
 ### Preview run workspace (`VariantRunInspector`)
 
-`runInspectorPreviewNodeId` in `canvas-store` selects which preview’s workspace to show. `CanvasWorkspace` mounts `VariantRunInspector` as an **overlay** on the canvas column (not a layout sibling). A dim backdrop uses **`pointer-events-none`** so pan/zoom still hit React Flow. **`src/lib/canvas-fit-view.ts`** supplies debounced **`fitView`**: extra **right padding in px** when the dock opens (matches `--width-variant-inspector`), and **`scheduleCanvasFitViewToNodes`** after hypothesis **Design** syncs placeholders so the camera fits the **hypothesis + its preview node(s)** instead of the whole graph.
+`runInspectorPreviewNodeId` in `canvas-store` selects which preview’s workspace to show. `CanvasWorkspace` mounts `VariantRunInspector` as an **overlay** on the canvas column (not a layout sibling). A dim backdrop uses **`pointer-events-none`** so pan/zoom still hit React Flow. **`src/lib/canvas-fit-view.ts`** owns shared camera commands: starter-canvas framing, single-node focus, subset fit, full fit, and inspector-dock padding. The starter command uses the actual React Flow pane size to keep the Design Brief + Design System readable while leaving the Incubator visible; hypothesis **Design** syncs use subset fit for the **hypothesis + its preview node(s)** instead of the whole graph.
 
 ### Auto-Connection Logic (`canvas-connections.ts`)
 

@@ -5,6 +5,7 @@ import {
   designMdSourceHasInput,
   designSystemSourceFromNodeData,
   formatDesignSystemSourceMarkdown,
+  getDesignSystemDocumentUiState,
   getDesignSystemEffectiveState,
   getDesignMdStatus,
   isDesignMdDocumentStale,
@@ -156,7 +157,10 @@ describe('DESIGN.md helpers', () => {
     const wireframe = getDesignSystemEffectiveState({});
     expect(wireframe.mode).toBe('wireframe');
     expect(wireframe.hasEffectiveSourceInput).toBe(true);
-    expect(wireframe.designMdStatus).toBe('missing');
+    expect(wireframe.designMdStatus).toBe('ready');
+    expect(wireframe.activeDesignMdDocument?.providerId).toBe('built-in');
+    expect(wireframe.activeDesignMdDocument?.modelId).toBe('wireframe');
+    expect(wireframe.activeDesignMdDocument?.content).toContain('name: Wireframe');
     expect(wireframe.source.markdownSources?.[0]?.filename).toBe('DESIGN.md');
 
     const customEmpty = getDesignSystemEffectiveState({
@@ -209,5 +213,103 @@ describe('DESIGN.md helpers', () => {
     expect(none.hasEffectiveSourceInput).toBe(false);
     expect(none.inactiveReason).toBe('none');
     expect(none.designMdStatus).toBeUndefined();
+  });
+
+  it('derives DESIGN.md UI state from effective source and document state', () => {
+    expect(getDesignSystemDocumentUiState({})).toMatchObject({
+      status: 'ready',
+      tone: 'success',
+      canView: true,
+      canGenerate: false,
+    });
+
+    expect(getDesignSystemDocumentUiState({
+      sourceMode: 'custom',
+      content: '',
+      images: [],
+      markdownSources: [],
+      designMdDocument: {
+        content: '# Old',
+        sourceHash: 'old',
+        generatedAt: '2026-01-01T00:00:00Z',
+        providerId: 'p',
+        modelId: 'm',
+      },
+    })).toMatchObject({
+      status: 'optional',
+      statusLabel: 'optional',
+      tone: 'neutral',
+      canView: false,
+      canGenerate: false,
+    });
+
+    expect(getDesignSystemDocumentUiState({
+      sourceMode: 'none',
+      content: 'Saved custom notes',
+      designMdDocument: {
+        content: '# Old',
+        sourceHash: 'old',
+        generatedAt: '2026-01-01T00:00:00Z',
+        providerId: 'p',
+        modelId: 'm',
+      },
+    })).toMatchObject({
+      status: 'none',
+      statusLabel: 'none',
+      tone: 'neutral',
+      canView: false,
+      canGenerate: false,
+    });
+
+    expect(getDesignSystemDocumentUiState({
+      sourceMode: 'custom',
+      content: 'Use measured contrast.',
+    })).toMatchObject({
+      status: 'ready-to-generate',
+      statusLabel: 'ready to generate',
+      tone: 'warning',
+      canView: false,
+      canGenerate: true,
+      actionLabel: 'Generate DESIGN.md',
+    });
+
+    expect(getDesignSystemDocumentUiState({
+      sourceMode: 'custom',
+      content: 'Use measured contrast.',
+      designMdDocument: {
+        content: '# Old',
+        sourceHash: 'old',
+        generatedAt: '2026-01-01T00:00:00Z',
+        providerId: 'p',
+        modelId: 'm',
+      },
+    })).toMatchObject({
+      status: 'needs-update',
+      statusLabel: 'needs update',
+      canView: true,
+      canGenerate: true,
+      actionLabel: 'Regenerate DESIGN.md',
+    });
+
+    expect(getDesignSystemDocumentUiState({
+      sourceMode: 'custom',
+      content: 'Use measured contrast.',
+      designMdDocument: {
+        content: '',
+        sourceHash: 'old',
+        generatedAt: '2026-01-01T00:00:00Z',
+        providerId: 'p',
+        modelId: 'm',
+        error: 'failed',
+      },
+    })).toMatchObject({
+      status: 'error',
+      statusLabel: 'error',
+      tone: 'error',
+      canView: false,
+      canGenerate: true,
+      actionLabel: 'Retry DESIGN.md',
+      error: 'failed',
+    });
   });
 });

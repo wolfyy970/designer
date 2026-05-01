@@ -16,10 +16,12 @@ import type { IncubatorNodeData } from '../../../types/canvas-data';
 import type { WorkspaceNode } from '../../../types/workspace-graph';
 import { getDesignSystemNodeData } from '../../../lib/canvas-node-data';
 import {
+  activeDesignMdDocumentForDesignSystem,
   designSystemSourceFromNodeData,
   isDesignMdDocumentStale,
 } from '../../../lib/design-md';
 import {
+  getInternalContextUiState,
   isInternalContextDocumentStale,
 } from '../../../lib/internal-context';
 import { useWorkspaceDomainStore } from '../../../stores/workspace-domain-store';
@@ -47,12 +49,6 @@ const COUNT_OPTIONS = [1, 2, 3, 5];
 const DEFAULT_COUNT = 3;
 
 type IncubatorNodeFlowType = Node<IncubatorNodeData, 'incubator'>;
-
-function documentStatusLabel(status: string): string | undefined {
-  if (status === 'ready') return undefined;
-  if (status === 'generating') return 'generating...';
-  return status;
-}
 
 function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>) {
   const { fitView } = useReactFlow();
@@ -82,24 +78,20 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
   const [designMdModalNodeId, setDesignMdModalNodeId] = useState<string | null>(null);
   const internalContextDoc = spec.internalContextDocument;
   const internalContextStale = isInternalContextDocumentStale(spec, internalContextDoc);
-  const internalContextStatus = contextGenerating
-    ? 'generating'
-    : internalContextDoc?.error
-      ? 'error'
-      : !internalContextDoc
-        ? 'missing'
-        : internalContextStale
-          ? 'stale'
-          : 'ready';
-  const internalContextStatusLabel = documentStatusLabel(internalContextStatus);
+  const internalContextUiState = getInternalContextUiState(spec, {
+    generating: contextGenerating,
+    document: internalContextDoc,
+  });
+  const internalContextStatus = internalContextUiState.status;
+  const internalContextStatusLabel = internalContextUiState.statusLabel;
   const internalContextStatusTone: StatusPanelTone =
     internalContextStatus === 'ready'
       ? 'success'
-      : internalContextStatus === 'stale' || internalContextStatus === 'missing'
-        ? 'warning'
-        : internalContextStatus === 'error'
+      : internalContextStatus === 'error'
           ? 'error'
-          : 'accent';
+          : internalContextStatus === 'generating'
+            ? 'accent'
+            : 'warning';
 
   const scopedDesignSystemNodes = useMemo((): WorkspaceNode[] => {
     const nodeById = new Map(nodes.map((n) => [n.id, n] as const));
@@ -215,13 +207,14 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
   const activeDesignMdModalData = activeDesignMdModalNode
     ? getDesignSystemNodeData(activeDesignMdModalNode)
     : undefined;
+  const activeDesignMdModalDocument = activeDesignMdModalData
+    ? activeDesignMdDocumentForDesignSystem(activeDesignMdModalData)
+    : undefined;
   const canRunDocumentTask = Boolean(providerId && modelId);
-  const internalContextCanView = Boolean(internalContextDoc?.content?.trim());
+  const internalContextCanView = internalContextUiState.canView;
   const internalContextCanRefresh =
     canRunDocumentTask &&
-    (internalContextStatus === 'stale' ||
-      internalContextStatus === 'error' ||
-      internalContextStatus === 'generating');
+    internalContextUiState.canGenerate;
 
   return (
     <NodeShell
@@ -267,6 +260,7 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
             internalContextStatusTone={internalContextStatusTone}
             internalContextCanView={internalContextCanView}
             internalContextCanRefresh={internalContextCanRefresh}
+            internalContextRefreshLabel={internalContextUiState.actionLabel}
             contextGenerating={contextGenerating}
             isCompiling={isCompiling}
             scopedDesignSystemNodes={scopedDesignSystemNodes}
@@ -379,22 +373,22 @@ function IncubatorNode({ id, data, selected }: NodeProps<IncubatorNodeFlowType>)
         size="lg"
       >
         <DocumentViewer
-          content={activeDesignMdModalData?.designMdDocument?.content}
+          content={activeDesignMdModalDocument?.content}
           emptyMessage="No DESIGN.md document has been generated yet."
           metadata={
-            activeDesignMdModalData?.designMdDocument ? (
+            activeDesignMdModalData && activeDesignMdModalDocument ? (
               <>
-                <div>Generated: {activeDesignMdModalData.designMdDocument.generatedAt}</div>
-                <div>Model: {activeDesignMdModalData.designMdDocument.providerId} / {activeDesignMdModalData.designMdDocument.modelId}</div>
+                <div>Generated: {activeDesignMdModalDocument.generatedAt}</div>
+                <div>Model: {activeDesignMdModalDocument.providerId} / {activeDesignMdModalDocument.modelId}</div>
                 <div>
                   Source: {isDesignMdDocumentStale(
                     designSystemSourceFromNodeData(activeDesignMdModalData),
-                    activeDesignMdModalData.designMdDocument,
+                    activeDesignMdModalDocument,
                   ) ? 'stale' : 'current'}
                 </div>
-                {activeDesignMdModalData.designMdDocument.lint ? (
+                {activeDesignMdModalDocument.lint ? (
                   <div>
-                    Lint: {activeDesignMdModalData.designMdDocument.lint.errors} errors, {activeDesignMdModalData.designMdDocument.lint.warnings} warnings, {activeDesignMdModalData.designMdDocument.lint.infos} info
+                    Lint: {activeDesignMdModalDocument.lint.errors} errors, {activeDesignMdModalDocument.lint.warnings} warnings, {activeDesignMdModalDocument.lint.infos} info
                   </div>
                 ) : null}
               </>

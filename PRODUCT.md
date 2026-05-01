@@ -49,7 +49,7 @@ A visual node-graph workspace built on @xyflow/react v12. Nodes connect left-to-
 - **Lineage highlighting** — Select a node to highlight its full connected component (siblings, ancestors, descendants). Unconnected nodes dim to 40% opacity.
 - **Edge animations** — Custom DataFlowEdge with status indicators (idle/processing/complete/error)
 - **Full-screen preview** — Expand any preview to full-screen overlay: primary arrows step **other preview nodes on the same hypothesis** (domain `previewSlots`; falls back to canvas-wide if no slot). Inner control steps **version stack** (v1, v2, …) for that hypothesis strategy. **Mark as best** / **Clear best pick** lets the user override evaluator-ranked “best” for that lane (persisted in `generation-store`).
-- **Reset canvas** — Reset button in header checkpoints the current canvas, then re-initializes with the default template (Design Brief + Design System + Model + Incubator)
+- **Reset canvas** — Reset button in header checkpoints the current canvas, then re-initializes with the default template (Design Brief + Design System + Model + Incubator) and frames the starter workflow at a readable zoom.
 - **Stop generation** — Aborts the active SSE / agent session for a hypothesis strategy lane (**Stop** on the hypothesis card while a run is in flight).
 - **Permanent node delete** — Backspace/Delete with confirmation removes selected removable nodes from the canvas graph and keeps domain/incubator state consistent. Design Brief, Design System, Model, Incubator, and input ghost nodes are protected.
 - **Version stacking** — Results accumulate across generation runs. Each preview shows version badges (v1, v2, ...) with ChevronLeft/Right navigation to browse previous versions.

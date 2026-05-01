@@ -4,29 +4,10 @@ import { StatusPanel, type StatusPanelTone } from '@ds/components/ui/status-pane
 import { getDesignSystemNodeData } from '../../../lib/canvas-node-data';
 import {
   getDesignSystemEffectiveState,
-  type DesignMdStatus,
+  getDesignSystemDocumentUiState,
 } from '../../../lib/design-md';
 import type { DesignSpec } from '../../../types/spec';
 import type { WorkspaceNode } from '../../../types/workspace-graph';
-
-function designMdStatusLabel(status: DesignMdStatus): string {
-  if (status === 'missing') return 'needs generation';
-  if (status === 'generating') return 'generating...';
-  return status;
-}
-
-function documentStatusLabel(status: string): string | undefined {
-  if (status === 'ready') return undefined;
-  if (status === 'generating') return 'generating...';
-  return status;
-}
-
-function designMdStatusTone(status: DesignMdStatus): StatusPanelTone {
-  if (status === 'ready') return 'success';
-  if (status === 'error') return 'error';
-  if (status === 'generating') return 'accent';
-  return 'warning';
-}
 
 interface IncubatorDocumentStatusPanelsProps {
   internalContextDoc: DesignSpec['internalContextDocument'];
@@ -35,6 +16,7 @@ interface IncubatorDocumentStatusPanelsProps {
   internalContextStatusTone: StatusPanelTone;
   internalContextCanView: boolean;
   internalContextCanRefresh: boolean;
+  internalContextRefreshLabel?: string;
   contextGenerating: boolean;
   isCompiling: boolean;
   scopedDesignSystemNodes: WorkspaceNode[];
@@ -53,6 +35,7 @@ export function IncubatorDocumentStatusPanels({
   internalContextStatusTone,
   internalContextCanView,
   internalContextCanRefresh,
+  internalContextRefreshLabel,
   contextGenerating,
   isCompiling,
   scopedDesignSystemNodes,
@@ -91,8 +74,8 @@ export function IncubatorDocumentStatusPanels({
                 variant="secondary"
                 size="iconSm"
                 disabled={isCompiling || contextGenerating}
-                aria-label="Refresh design specification"
-                title="Refresh design specification"
+                aria-label={internalContextRefreshLabel ?? 'Regenerate design specification'}
+                title={internalContextRefreshLabel ?? 'Regenerate design specification'}
                 onClick={onRefreshInternalContext}
               >
                 <RefreshCw size={11} aria-hidden />
@@ -120,27 +103,21 @@ export function IncubatorDocumentStatusPanels({
           generating: designMdGeneratingNodeId === node.id,
           document: doc,
         });
+        const dsUiState = getDesignSystemDocumentUiState(ds ?? {}, {
+          generating: designMdGeneratingNodeId === node.id,
+          document: doc,
+        });
         const dsStatus = dsState.designMdStatus;
-        const inactive = !dsState.hasEffectiveSourceInput;
-        const statusLabel = inactive
-          ? dsState.inactiveReason === 'none'
-            ? 'none'
-            : 'optional'
-          : documentStatusLabel(designMdStatusLabel(dsStatus ?? 'missing'));
-        const docHasContent = dsState.hasEffectiveSourceInput && Boolean(doc?.content?.trim());
+        const docHasContent = dsUiState.canView;
         const canRefreshDesignMd =
           canRunDocumentTask &&
-          dsState.hasEffectiveSourceInput &&
-          (dsStatus === 'missing' ||
-            dsStatus === 'stale' ||
-            dsStatus === 'error' ||
-            dsStatus === 'generating');
+          dsUiState.canGenerate;
         return (
           <StatusPanel
             key={node.id}
             title="DESIGN.md"
-            status={statusLabel}
-            tone={inactive ? 'neutral' : designMdStatusTone(dsStatus ?? 'missing')}
+            status={dsUiState.statusLabel}
+            tone={dsUiState.tone}
             animated={dsStatus === 'generating'}
             density="compact"
             actions={docHasContent || canRefreshDesignMd ? (
@@ -163,8 +140,8 @@ export function IncubatorDocumentStatusPanels({
                     variant="secondary"
                     size="iconSm"
                     disabled={isCompiling || contextGenerating || Boolean(designMdGeneratingNodeId)}
-                    aria-label="Refresh DESIGN.md"
-                    title="Refresh DESIGN.md"
+                    aria-label={dsUiState.actionLabel ?? 'Regenerate DESIGN.md'}
+                    title={dsUiState.actionLabel ?? 'Regenerate DESIGN.md'}
                     onClick={() => onRefreshDesignMdDocument(node.id)}
                   >
                     <RefreshCw size={11} aria-hidden />
@@ -173,8 +150,8 @@ export function IncubatorDocumentStatusPanels({
               </>
             ) : undefined}
           >
-            {dsState.hasEffectiveSourceInput && doc?.error && dsStatus !== 'generating' ? (
-              <span className="text-error">{doc.error}</span>
+            {dsUiState.error && dsStatus !== 'generating' ? (
+              <span className="text-error">{dsUiState.error}</span>
             ) : null}
           </StatusPanel>
         );

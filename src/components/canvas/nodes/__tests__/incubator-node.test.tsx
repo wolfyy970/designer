@@ -103,15 +103,24 @@ describe('IncubatorNode', () => {
     expect(blank.disabled).toBe(false);
   });
 
-  it('shows missing design specification status by default without document actions', () => {
-    useSpecStore.getState().updateSection('design-brief', 'Ship a calmer onboarding.');
+  it('shows missing design specification status when Design Brief is empty', () => {
     render(<IncubatorNode {...minimalIncubatorProps()} />);
     expect(screen.getByText('Design specification')).toBeTruthy();
     expect(screen.getByText('missing')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'View design specification' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Generate design specification' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Regenerate design specification' })).toBeNull();
+  });
+
+  it('shows ready-to-generate design specification status once Design Brief has content', () => {
+    useSpecStore.getState().updateSection('design-brief', 'Ship a calmer onboarding.');
+    render(<IncubatorNode {...minimalIncubatorProps()} />);
+    expect(screen.getByText('Design specification')).toBeTruthy();
+    expect(screen.getByText('ready to generate')).toBeTruthy();
     expect(screen.getByText('DESIGN.md')).toBeTruthy();
     expect(screen.getByText('optional')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'View design specification' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Refresh design specification' })).toBeNull();
+    expect((screen.getByRole('button', { name: 'Generate design specification' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('shows ready design specification as green-dot-only with view action', () => {
@@ -130,10 +139,10 @@ describe('IncubatorNode', () => {
     expect(container.querySelector('.bg-success')).toBeTruthy();
     expect(screen.queryByText('ready')).toBeNull();
     expect(screen.getByRole('button', { name: 'View design specification' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Refresh design specification' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Regenerate design specification' })).toBeNull();
   });
 
-  it('shows stale design specification status with view and refresh actions', () => {
+  it('shows needs-update design specification status with view and regenerate actions', () => {
     useSpecStore.getState().updateSection('design-brief', 'Ship a calmer onboarding.');
     useSpecStore.getState().setInternalContextDocument({
       content: '# Context',
@@ -143,9 +152,9 @@ describe('IncubatorNode', () => {
       modelId: 'test-model',
     });
     render(<IncubatorNode {...minimalIncubatorProps()} />);
-    expect(screen.getByText('stale')).toBeTruthy();
+    expect(screen.getByText('needs update')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'View design specification' })).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Refresh design specification' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'Regenerate design specification' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('places generated document rows above connected input controls', () => {
@@ -174,8 +183,8 @@ describe('IncubatorNode', () => {
     render(<IncubatorNode {...minimalIncubatorProps()} />);
 
     expect(screen.getByText('DESIGN.md')).toBeTruthy();
-    expect(screen.getByText('needs generation')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Refresh DESIGN.md' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getAllByText('ready to generate')).toHaveLength(2);
+    expect((screen.getByRole('button', { name: 'Generate DESIGN.md' }) as HTMLButtonElement).disabled).toBe(false);
     expect(screen.queryByRole('button', { name: 'View DESIGN.md' })).toBeNull();
   });
 
@@ -192,7 +201,7 @@ describe('IncubatorNode', () => {
     render(<IncubatorNode {...minimalIncubatorProps()} />);
     expect(screen.getByText('error')).toBeTruthy();
     expect(screen.getByText('Context failed')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Refresh design specification' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'Retry design specification' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('shows ready scoped DESIGN.md as green-dot-only with view action', () => {
@@ -224,7 +233,7 @@ describe('IncubatorNode', () => {
     expect(container.querySelector('.bg-success')).toBeTruthy();
     expect(screen.queryByText('ready')).toBeNull();
     expect(screen.getByRole('button', { name: 'View DESIGN.md' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Refresh DESIGN.md' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Regenerate DESIGN.md' })).toBeNull();
   });
 
   it('does not show stale DESIGN.md for custom style with no source material', () => {
@@ -259,7 +268,7 @@ describe('IncubatorNode', () => {
     expect(screen.queryByText('stale')).toBeNull();
     expect(screen.getByText('optional')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'View DESIGN.md' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Refresh DESIGN.md' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Regenerate DESIGN.md' })).toBeNull();
   });
 
   it('does not show stale DESIGN.md when style is none even if saved sources exist', () => {
@@ -293,10 +302,10 @@ describe('IncubatorNode', () => {
     expect(screen.queryByText('stale')).toBeNull();
     expect(screen.getByText('none')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'View DESIGN.md' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Refresh DESIGN.md' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Regenerate DESIGN.md' })).toBeNull();
   });
 
-  it('shows stale and error states for scoped design-system DESIGN.md documents', () => {
+  it('shows needs-update and error states for scoped design-system DESIGN.md documents', () => {
     useSpecStore.getState().updateSection('design-brief', 'Ship a calmer onboarding.');
     useCanvasStore.setState({
       nodes: [
@@ -344,12 +353,11 @@ describe('IncubatorNode', () => {
     });
     render(<IncubatorNode {...minimalIncubatorProps()} />);
 
-    expect(screen.getByText('stale')).toBeTruthy();
+    expect(screen.getByText('needs update')).toBeTruthy();
     expect(screen.getByText('error')).toBeTruthy();
     expect(screen.getByText('DESIGN.md failed')).toBeTruthy();
-    const refreshButtons = screen.getAllByRole('button', { name: 'Refresh DESIGN.md' }) as HTMLButtonElement[];
-    expect(refreshButtons).toHaveLength(2);
-    expect(refreshButtons.every((button) => button.disabled === false)).toBe(true);
+    expect((screen.getByRole('button', { name: 'Regenerate DESIGN.md' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'Retry DESIGN.md' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('shows generating state while refreshing a scoped DESIGN.md document', async () => {
@@ -372,7 +380,7 @@ describe('IncubatorNode', () => {
     });
     render(<IncubatorNode {...minimalIncubatorProps()} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh DESIGN.md' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Generate DESIGN.md' }));
     expect(await screen.findByText('generating...')).toBeTruthy();
     resolveExtract({
       result: '---\nname: Generated\n---\n# Generated',

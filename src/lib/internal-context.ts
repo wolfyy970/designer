@@ -34,6 +34,93 @@ export function isInternalContextDocumentStale(
   return doc.sourceHash !== computeInternalContextSourceHash(spec);
 }
 
+export type InternalContextStatus =
+  | 'missing'
+  | 'ready-to-generate'
+  | 'generating'
+  | 'ready'
+  | 'needs-update'
+  | 'error';
+
+export interface InternalContextUiState {
+  status: InternalContextStatus;
+  statusLabel?: string;
+  canView: boolean;
+  canGenerate: boolean;
+  actionLabel?: string;
+}
+
+export function hasInternalContextSourceInput(spec: DesignSpec): boolean {
+  return Boolean(spec.sections['design-brief']?.content?.trim());
+}
+
+export function getInternalContextUiState(
+  spec: DesignSpec,
+  options: {
+    generating?: boolean;
+    document?: InternalContextDocument;
+  } = {},
+): InternalContextUiState {
+  const doc = options.document ?? spec.internalContextDocument;
+  const canView = Boolean(doc?.content?.trim());
+  const hasSource = hasInternalContextSourceInput(spec);
+
+  if (options.generating) {
+    return {
+      status: 'generating',
+      statusLabel: 'generating...',
+      canView,
+      canGenerate: hasSource,
+      actionLabel: canView ? 'Regenerate design specification' : 'Generate design specification',
+    };
+  }
+
+  if (!hasSource) {
+    return {
+      status: 'missing',
+      statusLabel: 'missing',
+      canView: false,
+      canGenerate: false,
+    };
+  }
+
+  if (doc?.error) {
+    return {
+      status: 'error',
+      statusLabel: 'error',
+      canView,
+      canGenerate: true,
+      actionLabel: 'Retry design specification',
+    };
+  }
+
+  if (!doc?.content?.trim()) {
+    return {
+      status: 'ready-to-generate',
+      statusLabel: 'ready to generate',
+      canView: false,
+      canGenerate: true,
+      actionLabel: 'Generate design specification',
+    };
+  }
+
+  if (isInternalContextDocumentStale(spec, doc)) {
+    return {
+      status: 'needs-update',
+      statusLabel: 'needs update',
+      canView: true,
+      canGenerate: true,
+      actionLabel: 'Regenerate design specification',
+    };
+  }
+
+  return {
+    status: 'ready',
+    canView: true,
+    canGenerate: false,
+  };
+}
+
 function appendBlock(lines: string[], tag: string, body: string | undefined): void {
   const t = body?.trim();
   if (!t) return;

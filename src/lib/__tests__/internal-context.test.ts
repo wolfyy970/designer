@@ -3,6 +3,7 @@ import type { DesignSpec, ReferenceImage, SpecSection, SpecSectionId } from '../
 import {
   buildInternalContextUserMessage,
   computeInternalContextSourceHash,
+  getInternalContextUiState,
   isInternalContextDocumentStale,
 } from '../internal-context';
 
@@ -118,6 +119,76 @@ describe('internal context helpers', () => {
         modelId: 'm',
       }),
     ).toBe(true);
+  });
+
+  it('derives missing when the design brief has no source input', () => {
+    const s = spec({
+      internalContextDocument: {
+        content: 'Old doc',
+        sourceHash: 'old',
+        generatedAt: '2026-01-01T00:00:00Z',
+        providerId: 'p',
+        modelId: 'm',
+      },
+      sections: {
+        ...spec().sections,
+        'design-brief': section('design-brief', ''),
+      },
+    });
+    expect(getInternalContextUiState(s)).toMatchObject({
+      status: 'missing',
+      statusLabel: 'missing',
+      canView: false,
+      canGenerate: false,
+    });
+  });
+
+  it('derives ready-to-generate when the design brief exists but no document exists', () => {
+    expect(getInternalContextUiState(spec())).toMatchObject({
+      status: 'ready-to-generate',
+      statusLabel: 'ready to generate',
+      canView: false,
+      canGenerate: true,
+      actionLabel: 'Generate design specification',
+    });
+  });
+
+  it('derives needs-update when the generated document is stale', () => {
+    expect(getInternalContextUiState(spec({
+      internalContextDocument: {
+        content: 'Doc',
+        sourceHash: 'old',
+        generatedAt: '2026-01-01T00:00:00Z',
+        providerId: 'p',
+        modelId: 'm',
+      },
+    }))).toMatchObject({
+      status: 'needs-update',
+      statusLabel: 'needs update',
+      canView: true,
+      canGenerate: true,
+      actionLabel: 'Regenerate design specification',
+    });
+  });
+
+  it('derives ready when the generated document matches the current source', () => {
+    const s = spec();
+    const state = getInternalContextUiState({
+      ...s,
+      internalContextDocument: {
+        content: 'Doc',
+        sourceHash: computeInternalContextSourceHash(s),
+        generatedAt: '2026-01-01T00:00:00Z',
+        providerId: 'p',
+        modelId: 'm',
+      },
+    });
+    expect(state).toMatchObject({
+      status: 'ready',
+      canView: true,
+      canGenerate: false,
+    });
+    expect(state).not.toHaveProperty('statusLabel');
   });
 
   it('builds a user message with supplied sections and reference image summaries', () => {

@@ -258,7 +258,7 @@ describe('useIncubatorDocumentPreparation', () => {
     expect(docs).toEqual([]);
   });
 
-  it('passes the built-in wireframe source into DESIGN.md preparation by default', async () => {
+  it('uses the built-in wireframe DESIGN.md without running preparation by default', async () => {
     useCanvasStore.setState({
       nodes: [
         { id: 'inc-1', type: NODE_TYPES.INCUBATOR, position: { x: 0, y: 0 }, data: {} },
@@ -275,22 +275,18 @@ describe('useIncubatorDocumentPreparation', () => {
     });
     const { result } = renderPreparationHook();
 
+    let docs: Awaited<ReturnType<typeof result.current.ensureDesignSystemDocuments>> = [];
     await act(async () => {
-      await result.current.ensureDesignSystemDocuments();
+      docs = await result.current.ensureDesignSystemDocuments();
     });
 
-    expect(apiMocks.extractDesignSystem).toHaveBeenCalledWith(
+    expect(apiMocks.extractDesignSystem).not.toHaveBeenCalled();
+    expect(docs).toEqual([
       expect.objectContaining({
-        title: 'Wireframe',
-        markdownSources: [
-          expect.objectContaining({
-            filename: 'DESIGN.md',
-            content: expect.stringContaining('name: Wireframe'),
-          }),
-        ],
+        nodeId: 'ds-1',
+        content: expect.stringContaining('name: Wireframe'),
       }),
-      expect.anything(),
-    );
+    ]);
   });
 
   it('exports the same initial task state shape expected by callers', () => {

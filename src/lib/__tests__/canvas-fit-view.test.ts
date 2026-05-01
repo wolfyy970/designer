@@ -3,7 +3,14 @@ import {
   scheduleCanvasFocusToNode,
   scheduleCanvasFitView,
   scheduleCanvasFitViewToNodes,
+  scheduleCanvasStarterView,
+  starterCanvasCameraTarget,
+  starterInputNodeIds,
   NODE_FOCUS_MIN_ZOOM,
+  STARTER_CANVAS_SCREEN_BOTTOM_PX,
+  STARTER_CANVAS_SCREEN_LEFT_PX,
+  STARTER_CANVAS_SCREEN_TOP_PX,
+  STARTER_CANVAS_ZOOM,
   SUBSET_FIT_VIEW_MAX_ZOOM,
   variantInspectorDockWidthPx,
   fitViewOptionsWithInspectorDock,
@@ -80,6 +87,127 @@ describe('scheduleCanvasFitViewToNodes', () => {
     vi.runAllTimers();
     expect(fitView).toHaveBeenCalledTimes(1);
     expect(fitView.mock.calls[0][0]).not.toHaveProperty('nodes');
+  });
+});
+
+describe('starter canvas camera', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('selects the brief and design-system nodes in starter order', () => {
+    expect(starterInputNodeIds([
+      { id: 'model-1', type: 'model', position: { x: 0, y: 0 } },
+      { id: 'ds-1', type: 'designSystem', position: { x: 0, y: 0 } },
+      { id: 'brief-1', type: 'designBrief', position: { x: 0, y: 0 } },
+    ])).toEqual(['brief-1', 'ds-1']);
+  });
+
+  it('anchors starter inputs inside the visible pane instead of fitting their bounds', () => {
+    const viewport = { width: 1900, height: 1180 };
+    const target = starterCanvasCameraTarget(
+      [
+        {
+          id: 'brief-1',
+          type: 'designBrief',
+          position: { x: 0, y: 200 },
+          measured: { width: 480, height: 600 },
+        },
+        {
+          id: 'incubator-1',
+          type: 'incubator',
+          position: { x: 800, y: 960 },
+          measured: { width: 480, height: 280 },
+        },
+        {
+          id: 'ds-1',
+          type: 'designSystem',
+          position: { x: 0, y: 940 },
+          measured: { width: 480, height: 220 },
+        },
+      ],
+      viewport,
+    );
+    expect(target).toBeDefined();
+    expect(target!.zoom).toBeLessThanOrEqual(STARTER_CANVAS_ZOOM);
+    const briefScreenLeft = (0 - target!.x) * target!.zoom + viewport.width / 2;
+    const briefScreenTop = (200 - target!.y) * target!.zoom + viewport.height / 2;
+    const designSystemBottom = (940 + 220 - target!.y) * target!.zoom + viewport.height / 2;
+    expect(briefScreenLeft).toBeCloseTo(STARTER_CANVAS_SCREEN_LEFT_PX);
+    expect(briefScreenTop).toBeCloseTo(STARTER_CANVAS_SCREEN_TOP_PX);
+    expect(designSystemBottom).toBeLessThanOrEqual(viewport.height - STARTER_CANVAS_SCREEN_BOTTOM_PX);
+  });
+
+  it('moves the starter camera without fitting to node bounds', () => {
+    const fitView = vi.fn();
+    const setCenter = vi.fn();
+    const viewport = { width: 1900, height: 1180 };
+    scheduleCanvasStarterView(
+      { fitView, setCenter, getViewportSize: () => viewport },
+      [
+        {
+          id: 'brief-1',
+          type: 'designBrief',
+          position: { x: 0, y: 200 },
+          measured: { width: 480, height: 600 },
+        },
+        {
+          id: 'incubator-1',
+          type: 'incubator',
+          position: { x: 800, y: 960 },
+          measured: { width: 480, height: 280 },
+        },
+        {
+          id: 'ds-1',
+          type: 'designSystem',
+          position: { x: 0, y: 940 },
+          measured: { width: 480, height: 220 },
+        },
+      ],
+    );
+    vi.runAllTimers();
+    expect(fitView).not.toHaveBeenCalled();
+    const target = starterCanvasCameraTarget(
+      [
+        {
+          id: 'brief-1',
+          type: 'designBrief',
+          position: { x: 0, y: 200 },
+          measured: { width: 480, height: 600 },
+        },
+        {
+          id: 'incubator-1',
+          type: 'incubator',
+          position: { x: 800, y: 960 },
+          measured: { width: 480, height: 280 },
+        },
+        {
+          id: 'ds-1',
+          type: 'designSystem',
+          position: { x: 0, y: 940 },
+          measured: { width: 480, height: 220 },
+        },
+      ],
+      viewport,
+    );
+    expect(setCenter).toHaveBeenCalledWith(target!.x, target!.y, {
+      duration: 400,
+      zoom: target!.zoom,
+    });
+  });
+
+  it('falls back to full fit when starter nodes are missing', () => {
+    const fitView = vi.fn();
+    const setCenter = vi.fn();
+    scheduleCanvasStarterView({ fitView, setCenter }, [
+      { id: 'brief-1', type: 'designBrief', position: { x: 0, y: 200 } },
+    ]);
+    vi.runAllTimers();
+    expect(setCenter).not.toHaveBeenCalled();
+    expect(fitView).toHaveBeenCalledWith({ duration: 400, padding: 0.15 });
   });
 });
 

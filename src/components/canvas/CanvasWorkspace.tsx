@@ -19,9 +19,11 @@ import { INPUT_GHOST_NODE_TYPE, PREVIEW_NODE_GENERATING_Z_INDEX } from '../../co
 import { getPreviewNodeData } from '../../lib/canvas-node-data';
 import {
   scheduleCanvasFitView,
+  scheduleCanvasStarterView,
   scheduleCanvasFocusToNode,
   DEFAULT_FIT_VIEW_OPTIONS,
   fitViewOptionsWithInspectorDock,
+  NODE_FOCUS_MIN_ZOOM,
 } from '../../lib/canvas-fit-view';
 import type { WorkspaceNode } from '../../types/workspace-graph';
 import { toReactFlowEdges, toReactFlowNodes } from '../../workspace/reactflow-adapter';
@@ -128,9 +130,25 @@ function CanvasInner() {
 
   useEffect(() => {
     if (!pendingFitViewAfterTemplate) return;
-    const id = scheduleCanvasFitView(fitView, consumePendingFitView);
-    return () => window.clearTimeout(id);
-  }, [pendingFitViewAfterTemplate, fitView, consumePendingFitView]);
+    const id = scheduleCanvasStarterView(
+      {
+        fitView,
+        setCenter,
+        getViewportSize: () => {
+          const state = rfStore.getState();
+          return {
+            width: state.width || window.innerWidth,
+            height: state.height || window.innerHeight,
+          };
+        },
+      },
+      getNodes(),
+      consumePendingFitView,
+    );
+    return () => {
+      if (id != null) window.clearTimeout(id);
+    };
+  }, [pendingFitViewAfterTemplate, fitView, setCenter, getNodes, consumePendingFitView, rfStore]);
 
   useEffect(() => {
     if (!pendingFocusNodeId) return;
@@ -202,16 +220,16 @@ function CanvasInner() {
       if (target.closest('input, textarea, select, button, [role="combobox"]')) {
         return;
       }
-      const rfNode = getNodes().find((n) => n.id === node.id);
-      if (!rfNode) return;
-      const w = rfNode.measured?.width ?? rfNode.width ?? 320;
-      const h = rfNode.measured?.height ?? rfNode.height ?? 200;
-      setCenter(rfNode.position.x + w / 2, rfNode.position.y + h / 2, {
-        zoom: 0.85,
-        duration: 300,
-      });
+      scheduleCanvasFocusToNode(
+        setCenter,
+        node.id,
+        (nodeId) => getNodes().find((n) => n.id === nodeId),
+        () => getViewport().zoom,
+        undefined,
+        { zoom: NODE_FOCUS_MIN_ZOOM },
+      );
     },
-    [setCenter, getNodes],
+    [setCenter, getNodes, getViewport],
   );
 
   const miniMapNodeColor = useCallback((node: { type?: string }) => {
