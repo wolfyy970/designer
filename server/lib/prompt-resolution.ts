@@ -7,10 +7,9 @@
  * directory. They are mapped here so existing callers (evaluator dispatch, etc.)
  * keep working without each one knowing about the package layout.
  */
-import { loadPackagePromptBody } from '@auto-designer/pi';
+import { loadDesignerSystemPrompt, loadPackagePromptBody } from '@auto-designer/pi';
 import type { PromptKey } from '../../src/lib/prompts/defaults.ts';
 import { getSkillBody } from './skill-discovery.ts';
-import { getSystemPromptBody } from './prompt-discovery.ts';
 import {
   INCUBATOR_USER_INPUTS_TEMPLATE,
   DESIGNER_HYPOTHESIS_INPUTS_TEMPLATE,
@@ -49,7 +48,7 @@ const PACKAGE_PROMPT_FILES: Partial<Record<PromptKey, string>> = {
  */
 export async function getPromptBody(key: PromptKey): Promise<string> {
   if (key === 'designer-agentic-system') {
-    return getSystemPromptBody('designer-agentic-system');
+    return loadDesignerSystemPrompt();
   }
 
   const glue = GLUE_TEMPLATES[key];

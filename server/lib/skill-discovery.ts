@@ -1,7 +1,6 @@
 /**
  * Runtime discovery of repo-backed Agent Skills (skills/<key>/SKILL.md plus optional resources).
  * Skills are **optional** catalog entries: invalid YAML or schema failures omit the skill (see dev warnings).
- * Contrast `prompt-discovery.ts`: the system `PROMPT.md` is required and throws when invalid.
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';

@@ -1,12 +1,13 @@
 /**
- * Fresh agentic system prompt + skill catalog from disk-backed skills and PROMPT.md.
+ * Fresh agentic system prompt + skill catalog from the @auto-designer/pi package.
  * Call once per PI session boundary so skill edits apply to the next build or revision.
  *
- * Skills are **not** copied into the just-bash virtual filesystem; the agent loads SKILL.md via
- * `use_skill` and optional sibling resources through host-backed skill resource tools.
- * The returned `sandboxSeedFiles` is always empty unless callers add seeds
- * (e.g. revision rounds merge prior design files in the orchestrator).
+ * Skills are **not** copied into the just-bash virtual filesystem; the agent loads
+ * SKILL.md via `use_skill` and optional sibling resources through host-backed skill
+ * resource tools. The returned `sandboxSeedFiles` is always empty unless callers
+ * add seeds (e.g. revision rounds merge prior design files in the orchestrator).
  */
+import { loadDesignerSystemPrompt } from '@auto-designer/pi';
 import type { LoadedSkillSummary, SkillCatalogEntry } from './skill-schema.ts';
 import {
   catalogEntriesToSummaries,
@@ -15,7 +16,6 @@ import {
   resolvePackageSkillsCatalogRoot,
   type SessionType,
 } from './skill-discovery.ts';
-import { getSystemPromptBody } from './prompt-discovery.ts';
 import { env } from '../env.ts';
 
 export async function buildAgenticSystemContext(input: {
@@ -32,7 +32,7 @@ export async function buildAgenticSystemContext(input: {
   /** Full catalog entries for `use_skill` tool (host-backed reads). */
   skillCatalog: SkillCatalogEntry[];
 }> {
-  const systemPrompt = await getSystemPromptBody('designer-agentic-system');
+  const systemPrompt = loadDesignerSystemPrompt();
   const sandboxSeedFiles: Record<string, string> = {};
 
   const sessionType = input.sessionType ?? 'design';

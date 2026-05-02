@@ -37,9 +37,9 @@ describe('getPromptBody', () => {
     expect(body).toBe(DESIGNER_HYPOTHESIS_INPUTS_TEMPLATE);
   });
 
-  it('routes designer-agentic-system to PROMPT.md body', async () => {
+  it('routes designer-agentic-system to the @auto-designer/pi bundled body', async () => {
     const body = await getPromptBody('designer-agentic-system');
-    const promptPath = repoPath('prompts', 'designer-agentic-system', 'PROMPT.md');
+    const promptPath = repoPath('packages', 'auto-designer-pi', 'prompts', '_designer-system.md');
     const raw = await fs.readFile(promptPath, 'utf8');
     const afterFrontmatter = raw.replace(/^---[\s\S]*?---\s*/, '');
     expect(body.trim()).toBe(afterFrontmatter.trim());

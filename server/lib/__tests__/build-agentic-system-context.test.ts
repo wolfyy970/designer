@@ -5,9 +5,13 @@ import path from 'node:path';
 
 import { buildAgenticSystemContext } from '../build-agentic-system-context.ts';
 
-vi.mock('../prompt-discovery.ts', () => ({
-  getSystemPromptBody: vi.fn(async () => 'BASE'),
-}));
+vi.mock('@auto-designer/pi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@auto-designer/pi')>();
+  return {
+    ...actual,
+    loadDesignerSystemPrompt: () => 'BASE',
+  };
+});
 
 describe('buildAgenticSystemContext', () => {
   async function emptySkillsRoot(): Promise<string> {
