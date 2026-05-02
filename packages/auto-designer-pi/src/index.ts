@@ -69,6 +69,41 @@ export {
 } from './internal/pi-types.ts';
 
 // ────────────────────────────────────────────────────────────────────────────
+// Resource loader (session-scoped skill filtering)
+
+export {
+  SessionScopedResourceLoader,
+  SESSION_TAGS,
+  defaultSkillTagLookup,
+  parseTagsFromFrontmatter,
+  clearSkillTagCache,
+  type SkillTagLookup,
+  type SessionScopedSkillFilterOptions,
+} from './resource-loader.ts';
+
+// ────────────────────────────────────────────────────────────────────────────
+// Designer extension (todo_write, validate_js, validate_html, compaction hook)
+
+export {
+  createDesignerExtensionFactory,
+  type DesignerExtensionOptions,
+} from './extension/designer.ts';
+export {
+  createTodoWriteTool,
+  createValidateJsTool,
+  createValidateHtmlTool,
+} from './extension/designer-tools.ts';
+export {
+  createDesignerCompactionExtensionFactory,
+  type CompactionFocusLoader,
+} from './extension/compaction.ts';
+
+// ────────────────────────────────────────────────────────────────────────────
+// Shared types
+
+export type { TodoItem, TodoStatus } from './types.ts';
+
+// ────────────────────────────────────────────────────────────────────────────
 // Limits
 
 export { SANDBOX_LIMITS, SANDBOX_READ_MAX_LINES, DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES } from './internal/limits.ts';
@@ -85,13 +120,7 @@ export class NotImplementedError extends Error {
   }
 }
 
-export type SessionType =
-  | 'design'
-  | 'evaluation'
-  | 'incubation'
-  | 'inputs-gen'
-  | 'design-system'
-  | 'internal-context';
+export type { SessionType } from './resource-loader.ts';
 
 export interface BaseSessionOptions {
   providerId: string;
