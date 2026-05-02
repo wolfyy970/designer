@@ -284,7 +284,13 @@ export async function runDesignAgentSession(
     thinkingLevel: (params.thinkingLevel ?? 'medium') as NonNullable<
       CreateAgentSessionOptions['thinkingLevel']
     >,
-    tools: [],
+    /**
+     * Pi 0.72 changed `tools: []` semantics: empty array = allowlist of size zero, which
+     * filters out customTools too. To suppress Pi's host-touching built-ins (read/write/
+     * edit/bash) while keeping our VFS-backed customTools, allowlist the customTool names
+     * explicitly.
+     */
+    tools: customTools.map((t) => t.name),
     customTools: customTools as ToolDefinition[],
     sessionManager: SessionManager.inMemory(),
     cwd: SANDBOX_PROJECT_ROOT,

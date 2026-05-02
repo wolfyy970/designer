@@ -70,7 +70,7 @@ importers:
         version: 3.14.0
       just-bash:
         specifier: ^2.14.0
-        version: 2.14.3
+        version: 2.14.4
       logrocket:
         specifier: ^12.1.1
         version: 12.1.1
@@ -197,7 +197,7 @@ importers:
         version: 0.72.1(ws@8.20.0)(zod@4.4.2)
       just-bash:
         specifier: '*'
-        version: 2.14.3
+        version: 2.14.4
       minimatch:
         specifier: '*'
         version: 10.2.5
@@ -3146,8 +3146,8 @@ packages:
     resolution: {integrity: sha512-tWPGKMZf/8UPim+fcW2EfcQ/d/7aKUrP6IECz9G3Tu6Q5dX0orSleqJ9z6sSw7qrQkjF8/Edo4DvsWBZ8H+HNg==}
     hasBin: true
 
-  just-bash@2.14.3:
-    resolution: {integrity: sha512-uCFlAvBsGHVUukerfso8ZvJ66IJqe0HUR9Yr4pf4bkkWjBZAWlsxMAeg1WD2B6h6n7Sd0dQ7vbJDABybJB0/rA==}
+  just-bash@2.14.4:
+    resolution: {integrity: sha512-d8PR7XX4e6rRQ9CLWkllotV+5EF/hOGwR7/dQtr8lGHNO/HTjubpBbdoavGUAc70YwxpYjPxdrJ5JCAqEs33jg==}
     hasBin: true
 
   jwa@2.0.1:
@@ -8069,7 +8069,7 @@ snapshots:
 
   jsonrepair@3.14.0: {}
 
-  just-bash@2.14.3:
+  just-bash@2.14.4:
     dependencies:
       diff: 8.0.4
       fast-xml-parser: 5.3.3
