@@ -1,18 +1,16 @@
 ---
-description: Use when building inside the virtual filesystem sandbox. Covers available file types, what tools and frameworks are NOT available, Google Fonts allowlist, and file structure best practices.
+description: Use when building static web artifacts in the virtual workspace. Covers what artifacts to produce, the framework / TypeScript / CDN restrictions, the Google Fonts allowlist, and the default file structure conventions (index.html as preview entry, relative cross-links, all referenced assets must exist).
 ---
 
-# Sandbox Environment
+# Artifact Conventions
 
-You are building inside a virtual filesystem. There is no package manager, no build tool, and agent tools cannot open arbitrary network connections.
+These are conventions for **what to build** in the virtual workspace. The shell environment that runs your tools (just-bash, available built-ins, no host binaries) is described in the system prompt's `<sandbox_environment>` section — this file is about the artifacts themselves.
 
 ## Available
 - A virtual **directory tree**: multiple `.html` pages if needed, plus `.css`, `.js`, images, fonts, `.svg`, etc.
 - Default preview entry is `index.html` when present — create it for most artifacts so preview lands predictably.
 
 ## Not available
-- npm, pnpm, yarn, or any package manager
-- Vite, webpack, esbuild, or any bundler/build tool
 - React, Vue, Svelte, or any framework
 - TypeScript (write plain JS)
 - External CDN links **except** allowlisted **Google Fonts**: `https://fonts.googleapis.com/...` stylesheets and `https://fonts.gstatic.com/...` font files (loaded when the user's preview browser fetches the CSS — tools here do not download them)

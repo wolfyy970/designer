@@ -31,7 +31,7 @@ const EXPECTED_PROMPTS = [
   'gen-objectives.md',
   'gen-research.md',
   'revise.md',
-  'sandbox-env.md',
+  'artifact-conventions.md',
   '_designer-system.md',
 ];
 
