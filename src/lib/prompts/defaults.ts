@@ -8,7 +8,6 @@ export type PromptKey =
   | 'designer-hypothesis-inputs'
   | 'design-system-extract-system'
   | 'design-system-extract-user-input'
-  | 'agent-context-compaction'
   | 'agents-md-file'
   | 'evaluator-design-quality'
   | 'evaluator-strategy-fidelity'
@@ -25,7 +24,6 @@ export const PROMPT_KEYS: PromptKey[] = [
   'designer-hypothesis-inputs',
   'design-system-extract-system',
   'design-system-extract-user-input',
-  'agent-context-compaction',
   'agents-md-file',
   'evaluator-design-quality',
   'evaluator-strategy-fidelity',

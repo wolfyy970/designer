@@ -22,7 +22,6 @@ describe('@auto-designer/pi public API', () => {
   it('exports the resource loader and designer extension wiring', () => {
     expect(typeof pi.SessionScopedResourceLoader).toBe('function');
     expect(typeof pi.createDesignerExtensionFactory).toBe('function');
-    expect(typeof pi.createDesignerCompactionExtensionFactory).toBe('function');
   });
 
   it('exports the model builder + completion budget helpers', () => {

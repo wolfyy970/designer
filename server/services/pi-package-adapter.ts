@@ -20,11 +20,9 @@ import {
   createIncubationSession,
   createInputsGenSession,
   createInternalContextSession,
-  loadCompactionPrompt,
   loadDesignerSystemPrompt,
   type ResourceLoader,
   type SessionHandle,
-  type SettingsManager,
   type ExtensionFactory,
   type SessionEvent,
   type TodoItem,
@@ -60,7 +58,6 @@ function createTraceEvent(
 
 function buildPackageResourceLoader(input: {
   sessionType: string;
-  settingsManager: SettingsManager;
   extensionFactories: ExtensionFactory[];
   systemPrompt: string;
   cwd: string;
@@ -69,7 +66,6 @@ function buildPackageResourceLoader(input: {
     cwd: input.cwd,
     /** Required since Pi 0.72 even when project-local discovery is disabled. */
     agentDir: input.cwd,
-    settingsManager: input.settingsManager,
     /** Disable project-local discovery — we point at the package's bundled paths instead. */
     noExtensions: true,
     noSkills: true,
@@ -154,19 +150,15 @@ export async function runDesignAgentSessionViaPackage(
     onFile,
     onTodos,
     onEvent: onPackageEvent,
-    getCompactionFocus: async () => loadCompactionPrompt(),
     buildResourceLoader: ({
       sessionType,
-      settingsManager,
       extensionFactories,
     }: {
       sessionType: string;
-      settingsManager: SettingsManager;
       extensionFactories: ExtensionFactory[];
     }) =>
       buildPackageResourceLoader({
         sessionType,
-        settingsManager,
         extensionFactories,
         systemPrompt: systemPromptBody,
         cwd: '/home/user/project',

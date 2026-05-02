@@ -1,7 +1,9 @@
 /**
- * Per-session designer extension: registers todo_write / validate_js / validate_html
- * and the session_before_compact handler. Closes over the host-built bash sandbox
- * so the validators can read VFS files without going through Pi's tool layer.
+ * Per-session designer extension: registers todo_write / validate_js / validate_html.
+ * Closes over the host-built bash sandbox so the validators can read VFS files
+ * without going through Pi's tool layer.
+ *
+ * Compaction uses Pi's built-in defaults — no custom hook here.
  *
  * Use as `extensionFactories: [createDesignerExtensionFactory({ ... })]` on
  * `DefaultResourceLoader` (or its replacement). One factory per session — the
@@ -14,10 +16,6 @@ import {
   createValidateHtmlTool,
   createValidateJsTool,
 } from './designer-tools.ts';
-import {
-  createDesignerCompactionExtensionFactory,
-  type CompactionFocusLoader,
-} from './compaction.ts';
 import type { TodoItem } from '../types.ts';
 
 export interface DesignerExtensionOptions {
@@ -27,8 +25,6 @@ export interface DesignerExtensionOptions {
   todoState: { current: TodoItem[] };
   /** Callback invoked every time the model writes the todo list. */
   onTodos: (todos: TodoItem[]) => void;
-  /** Optional compaction focus loader. When provided, Pi's compaction runs with this body merged into customInstructions. */
-  getCompactionFocus?: CompactionFocusLoader;
 }
 
 export function createDesignerExtensionFactory(opts: DesignerExtensionOptions): ExtensionFactory {
@@ -36,11 +32,5 @@ export function createDesignerExtensionFactory(opts: DesignerExtensionOptions): 
     pi.registerTool(createTodoWriteTool(opts.todoState, opts.onTodos));
     pi.registerTool(createValidateJsTool(opts.bash));
     pi.registerTool(createValidateHtmlTool(opts.bash));
-
-    if (opts.getCompactionFocus) {
-      // Delegate to the dedicated compaction factory so it stays unit-testable.
-      const compactionFactory = createDesignerCompactionExtensionFactory(opts.getCompactionFocus);
-      compactionFactory(pi);
-    }
   };
 }

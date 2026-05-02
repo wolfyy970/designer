@@ -2,10 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { existsSync } from 'node:fs';
 import {
   PACKAGE_DESIGNER_SYSTEM_PROMPT_PATH,
-  PACKAGE_COMPACTION_PROMPT_PATH,
   PACKAGE_PROMPTS_DIR,
   PACKAGE_SKILLS_DIR,
-  loadCompactionPrompt,
   loadDesignerSystemPrompt,
 } from '../src/paths';
 
@@ -21,10 +19,6 @@ describe('package paths', () => {
   it('PACKAGE_DESIGNER_SYSTEM_PROMPT_PATH exists', () => {
     expect(existsSync(PACKAGE_DESIGNER_SYSTEM_PROMPT_PATH)).toBe(true);
   });
-
-  it('PACKAGE_COMPACTION_PROMPT_PATH exists', () => {
-    expect(existsSync(PACKAGE_COMPACTION_PROMPT_PATH)).toBe(true);
-  });
 });
 
 describe('loadDesignerSystemPrompt', () => {
@@ -32,12 +26,5 @@ describe('loadDesignerSystemPrompt', () => {
     const body = loadDesignerSystemPrompt();
     expect(body.length).toBeGreaterThan(100);
     expect(body.startsWith('---')).toBe(false);
-  });
-});
-
-describe('loadCompactionPrompt', () => {
-  it('returns a non-empty compaction body', () => {
-    const body = loadCompactionPrompt();
-    expect(body.length).toBeGreaterThan(50);
   });
 });

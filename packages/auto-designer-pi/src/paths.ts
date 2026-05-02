@@ -4,9 +4,9 @@
  * Pi's `DefaultResourceLoader` so the package's content is discoverable without
  * the host having to figure out where the package lives on disk.
  *
- * Helpers also load the system prompt (`prompts/_designer-system.md`) and the
- * compaction body (`prompts/_internal/compaction.md`) — both with frontmatter
- * stripped — since those are addressed by name, not by Pi's auto-discovery.
+ * `loadDesignerSystemPrompt` reads `prompts/_designer-system.md` (frontmatter
+ * stripped) since the system prompt is addressed by name, not by Pi's
+ * auto-discovery. Compaction uses Pi's built-in defaults — no host body.
  */
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -29,13 +29,6 @@ export const PACKAGE_EXTENSIONS_DIR = resolve(PACKAGE_ROOT, 'extensions');
 /** Path to the designer system prompt body (used as `customPrompt` on createAgentSession). */
 export const PACKAGE_DESIGNER_SYSTEM_PROMPT_PATH = resolve(PACKAGE_PROMPTS_DIR, '_designer-system.md');
 
-/** Path to the host-private compaction prompt body (loaded by the compaction handler). */
-export const PACKAGE_COMPACTION_PROMPT_PATH = resolve(
-  PACKAGE_PROMPTS_DIR,
-  '_internal',
-  'compaction.md',
-);
-
 function stripFrontmatter(text: string): string {
   if (!text.startsWith('---')) return text;
   const end = text.indexOf('\n---', 3);
@@ -49,12 +42,4 @@ function stripFrontmatter(text: string): string {
  */
 export function loadDesignerSystemPrompt(): string {
   return stripFrontmatter(readFileSync(PACKAGE_DESIGNER_SYSTEM_PROMPT_PATH, 'utf8')).trim();
-}
-
-/**
- * Read the compaction prompt body. No frontmatter to strip in `_internal/`,
- * but apply the helper for consistency.
- */
-export function loadCompactionPrompt(): string {
-  return stripFrontmatter(readFileSync(PACKAGE_COMPACTION_PROMPT_PATH, 'utf8')).trim();
 }

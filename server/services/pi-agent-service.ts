@@ -129,12 +129,9 @@ function createDesignFileEmitter(onEvent: AgentEventSink, trace: TraceFactory): 
   };
 }
 
-async function createSandboxSessionResources(params: AgentSessionParams, contextWindow: number) {
-  const { getPromptBody: getPromptBodyFn } = await import('../lib/prompt-resolution.ts');
+async function createSandboxSessionResources(params: AgentSessionParams) {
   return createSandboxResourceLoader({
     systemPrompt: params.systemPrompt.trim(),
-    contextWindow,
-    getCompactionPromptBody: () => getPromptBodyFn('agent-context-compaction'),
   });
 }
 
@@ -276,7 +273,7 @@ export async function runDesignAgentSession(
 
   const llmTurnLogRef: { current?: string } = {};
 
-  const { resourceLoader, settingsManager } = await createSandboxSessionResources(params, contextWindow);
+  const { resourceLoader } = await createSandboxSessionResources(params);
 
   const { session, modelFallbackMessage } = await createAgentSession({
     authStorage,
@@ -294,7 +291,6 @@ export async function runDesignAgentSession(
     customTools: customTools as ToolDefinition[],
     sessionManager: SessionManager.inMemory(),
     cwd: SANDBOX_PROJECT_ROOT,
-    settingsManager,
     resourceLoader,
   });
 

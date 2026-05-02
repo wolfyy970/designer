@@ -93,10 +93,6 @@ export {
   createValidateJsTool,
   createValidateHtmlTool,
 } from './extension/designer-tools.ts';
-export {
-  createDesignerCompactionExtensionFactory,
-  type CompactionFocusLoader,
-} from './extension/compaction.ts';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Model + completion budget
@@ -138,7 +134,6 @@ export {
   createInputsGenSession,
   createDesignSystemSession,
   createInternalContextSession,
-  compactionReserveTokensForContextWindow,
   type SessionRunnerOptions,
   type SessionRunResult,
   type SessionHandle,
@@ -164,9 +159,7 @@ export {
   PACKAGE_PROMPTS_DIR,
   PACKAGE_EXTENSIONS_DIR,
   PACKAGE_DESIGNER_SYSTEM_PROMPT_PATH,
-  PACKAGE_COMPACTION_PROMPT_PATH,
   loadDesignerSystemPrompt,
-  loadCompactionPrompt,
 } from './paths.ts';
 
 // ────────────────────────────────────────────────────────────────────────────

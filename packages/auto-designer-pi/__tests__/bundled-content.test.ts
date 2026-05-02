@@ -92,17 +92,10 @@ describe('bundled prompts/', () => {
     expect(fm.description, `${filename}: missing frontmatter \`description\``).toBeTruthy();
   });
 
-  it('does not bundle nested prompt subdirectories that Pi would skip', () => {
-    // _internal/ is allowed (it's a host-private location, not loaded by Pi as a slash command).
-    // Any other subdir would mean we have prompts that Pi can't see.
+  it('keeps prompts/ flat — Pi does not recurse, so any nested subdir would be invisible to slash-command discovery', () => {
     const subdirs = readdirSync(PROMPTS_DIR).filter((d) =>
       statSync(join(PROMPTS_DIR, d)).isDirectory(),
     );
-    expect(subdirs.sort()).toEqual(['_internal']);
-  });
-
-  it('_internal/compaction.md exists and is non-empty', () => {
-    const body = readFileSync(join(PROMPTS_DIR, '_internal/compaction.md'), 'utf8');
-    expect(body.length).toBeGreaterThan(0);
+    expect(subdirs).toEqual([]);
   });
 });

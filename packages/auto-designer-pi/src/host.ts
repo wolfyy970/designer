@@ -10,10 +10,8 @@
 import {
   AuthStorage,
   SessionManager,
-  SettingsManager,
   type AgentSession,
   type ResourceLoader,
-  type SettingsManager as SettingsManagerType,
   type ToolDefinition,
   createAgentSession,
 } from './internal/pi-types.ts';
@@ -25,7 +23,6 @@ import {
 import { createSandboxBashTool } from './tools/bash-tool.ts';
 import { createVirtualPiCodingTools } from './tools/virtual-tools.ts';
 import { createDesignerExtensionFactory } from './extension/designer.ts';
-import { type CompactionFocusLoader } from './extension/compaction.ts';
 import {
   SessionScopedResourceLoader,
   type SessionType,
@@ -38,15 +35,6 @@ import {
   sleepMs,
 } from './internal/upstream-retry.ts';
 import type { TodoItem } from './types.ts';
-
-const DEFAULT_KEEP_RECENT_TOKENS = 20_000;
-const COMPACTION_RESERVE_FRACTION = 0.28;
-const COMPACTION_RESERVE_FLOOR = 24_000;
-
-/** ~72% of context usage before auto-compaction (Pi triggers when tokens > contextWindow − reserveTokens). */
-export function compactionReserveTokensForContextWindow(contextWindow: number): number {
-  return Math.max(COMPACTION_RESERVE_FLOOR, Math.floor(contextWindow * COMPACTION_RESERVE_FRACTION));
-}
 
 export interface SessionRunnerOptions {
   sessionType: SessionType;
@@ -72,18 +60,11 @@ export interface SessionRunnerOptions {
   /** ResourceLoader factory: host builds Pi `DefaultResourceLoader` with paths it owns and returns it. */
   buildResourceLoader: (input: {
     sessionType: SessionType;
-    settingsManager: SettingsManagerType;
     extensionFactories: ReturnType<typeof createDesignerExtensionFactory>[];
   }) => Promise<ResourceLoader>;
 
   /** Optional override for skill-tag lookup (defaults to YAML frontmatter scan). */
   getSkillTags?: SkillTagLookup;
-
-  /** Compaction prompt body loader; when provided, the designer extension wires it into Pi's compaction. */
-  getCompactionFocus?: CompactionFocusLoader;
-
-  /** Settings construction hook so callers can adjust `keepRecentTokens` / extra factories. */
-  buildSettingsManager?: (input: { reserveTokens: number }) => SettingsManagerType;
 
   /** Event sink — narrow bridge events. */
   onEvent?: (event: SessionEvent) => void | Promise<void>;
@@ -175,23 +156,14 @@ export async function createSession(opts: SessionRunnerOptions): Promise<Session
     createSandboxBashTool(bash, onFile),
   ] as unknown as ToolDefinition[];
 
-  const reserveTokens = compactionReserveTokensForContextWindow(opts.contextWindow ?? 131_072);
-  const settingsManager = opts.buildSettingsManager
-    ? opts.buildSettingsManager({ reserveTokens })
-    : SettingsManager.inMemory({
-        compaction: { enabled: true, reserveTokens, keepRecentTokens: DEFAULT_KEEP_RECENT_TOKENS },
-      });
-
   const designerExtension = createDesignerExtensionFactory({
     bash,
     todoState,
     onTodos,
-    getCompactionFocus: opts.getCompactionFocus,
   });
 
   const baseLoader = await opts.buildResourceLoader({
     sessionType: opts.sessionType,
-    settingsManager,
     extensionFactories: [designerExtension],
   });
 
@@ -219,11 +191,16 @@ export async function createSession(opts: SessionRunnerOptions): Promise<Session
     authStorage,
     model,
     thinkingLevel: opts.thinkingLevel ?? 'medium',
-    tools: [],
+    /**
+     * Pi 0.72 changed `tools: []` semantics to "allowlist of size zero", which
+     * filters out customTools too. Allowlist customTool names explicitly so the
+     * built-in read/write/edit/bash stay disabled while our VFS-backed versions
+     * are visible to the model.
+     */
+    tools: customTools.map((t) => t.name),
     customTools,
     sessionManager: SessionManager.inMemory(),
     cwd: SANDBOX_PROJECT_ROOT,
-    settingsManager,
     resourceLoader: scopedLoader,
   });
 
