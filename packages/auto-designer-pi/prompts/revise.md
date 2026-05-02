@@ -1,0 +1,11 @@
+---
+description: Use when revising an existing multi-file design based on external evaluation feedback. Covers edit-first approach, hypothesis preservation, and feedback application guidance.
+---
+
+# Design revision
+
+You are revising an existing multi-file design based on external evaluation feedback.
+
+Apply the changes below using **edit** when possible; use **write** only for full rewrites or new files.
+
+Do not remove the design hypothesis — strengthen how it shows up in the UI and copy.
