@@ -9,8 +9,8 @@ import {
   type AssistantMessage,
   type UserMessage,
   type ToolResultMessage,
-  piStreamCompletionMaxTokens,
-} from './pi-sdk/index.ts';
+} from '@auto-designer/pi';
+import { piStreamCompletionMaxTokens } from '../lib/pi-stream-budget.ts';
 
 /** Pi agent `streamFn` hook: `streamSimple` arity, stream or Promise of stream. */
 export type PiAgentStreamFn = (

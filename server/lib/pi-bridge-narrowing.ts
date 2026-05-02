@@ -2,7 +2,7 @@
  * Runtime narrowing for Pi SDK shapes at the session event bridge boundary.
  * Avoids unchecked `as` casts on assistant message slices, tool calls, and compaction payloads.
  */
-import type { AssistantMessage } from '../services/pi-sdk/types.ts';
+import type { AssistantMessage } from '@auto-designer/pi';
 import { extractPiToolPathFromArguments } from './pi-tool-args.ts';
 
 /** Pi assistant message content slice when type is `toolCall`. */

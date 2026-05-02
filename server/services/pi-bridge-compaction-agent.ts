@@ -1,7 +1,7 @@
 /**
  * Pi bridge: compaction lifecycle + agent_end error surfacing.
  */
-import type { AgentSessionEvent } from './pi-sdk/types.ts';
+import type { AgentSessionEvent } from '@auto-designer/pi';
 import { parseCompactionDetails } from '../lib/pi-bridge-narrowing.ts';
 import { findLastAssistantMessage } from '../lib/pi-message-helpers.ts';
 import type { RunTraceEvent } from '../../src/types/provider.ts';

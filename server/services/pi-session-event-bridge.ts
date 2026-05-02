@@ -1,7 +1,7 @@
 /**
  * Bridge Pi `AgentSession` events → app `AgentRunEvent` SSE payloads.
  */
-import type { AgentSessionEvent, AgentSession } from './pi-sdk/types.ts';
+import type { AgentSessionEvent, AgentSession } from '@auto-designer/pi';
 import type { PiSessionBridgeContext } from './pi-bridge-core.ts';
 import {
   handleAgentEnd,

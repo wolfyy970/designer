@@ -26,7 +26,7 @@ import {
   toolMetaFromPartialNarrowed,
   toolPathFromNarrowedToolCall,
 } from '../lib/pi-bridge-narrowing.ts';
-import type { AgentSessionEvent } from './pi-sdk/types.ts';
+import type { AgentSessionEvent } from '@auto-designer/pi';
 import type { PiSessionBridgeContext } from './pi-bridge-core.ts';
 import { safeBridgeEmit } from './pi-bridge-core.ts';
 

@@ -1,12 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { AssistantMessage } from '../pi-sdk/types.ts';
+import type { AssistantMessage, AgentSession } from '@auto-designer/pi';
 import {
   subscribePiSessionBridge,
   STREAMING_TOOL_EMIT_INTERVAL_MS,
 } from '../pi-session-event-bridge.ts';
 import type { PiSessionBridgeContext } from '../pi-session-event-bridge.ts';
 import type { AgentRunEvent } from '../pi-agent-run-types.ts';
-import type { AgentSession } from '../pi-sdk/types.ts';
 
 function mkPartial(content: AssistantMessage['content']): AssistantMessage {
   return {

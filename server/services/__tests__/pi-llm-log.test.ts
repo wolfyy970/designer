@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { Context } from '../../services/pi-sdk/types.ts';
+import type { Context } from '@auto-designer/pi';
 import { piContextToLogFields } from '../pi-llm-log.ts';
 
 describe('piContextToLogFields', () => {

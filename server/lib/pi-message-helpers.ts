@@ -1,7 +1,7 @@
 /**
  * Shared Pi session message helpers (pi-agent-service + pi-session-event-bridge).
  */
-import type { AgentSession, AssistantMessage } from '../services/pi-sdk/types.ts';
+import type { AgentSession, AssistantMessage } from '@auto-designer/pi';
 
 /**
  * Last assistant message in the conversation, or undefined.

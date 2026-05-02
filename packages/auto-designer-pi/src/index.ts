@@ -56,6 +56,12 @@ export type {
   ExtensionAPI,
   ExtensionFactory,
   PromptOptions,
+  Model,
+  Context,
+  AssistantMessage,
+  Message,
+  UserMessage,
+  ToolResultMessage,
 } from './internal/pi-types.ts';
 export {
   AuthStorage,
@@ -65,6 +71,7 @@ export {
   DefaultResourceLoader,
   SessionManager,
   SettingsManager,
+  streamSimple,
 } from './internal/pi-types.ts';
 
 // ────────────────────────────────────────────────────────────────────────────

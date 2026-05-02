@@ -1,7 +1,7 @@
 {
   "name": "auto-designer",
   "private": true,
-  "version": "0.3.75",
+  "version": "0.3.76",
   "packageManager": "pnpm@10.10.0",
   "type": "module",
   "scripts": {
