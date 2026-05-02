@@ -68,4 +68,16 @@ describe('runDesignAgentSession dispatch', () => {
     expect(legacyMock).toHaveBeenCalledTimes(1);
     expect(packageMock).not.toHaveBeenCalled();
   });
+
+  it('routes non-design session types via the same dispatcher (e.g. evaluation, incubation)', async () => {
+    vi.stubEnv('PI_INTEGRATION', 'package:evaluation,incubation,inputs-gen,design-system,internal-context');
+    const { runDesignAgentSession } = await loadFreshRuntime();
+    for (const t of ['evaluation', 'incubation', 'inputs-gen', 'design-system', 'internal-context'] as const) {
+      packageMock.mockClear();
+      legacyMock.mockClear();
+      await runDesignAgentSession({ ...baseParams, sessionType: t }, () => {});
+      expect(packageMock).toHaveBeenCalledTimes(1);
+      expect(legacyMock).not.toHaveBeenCalled();
+    }
+  });
 });

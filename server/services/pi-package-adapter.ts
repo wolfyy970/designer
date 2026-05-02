@@ -15,9 +15,15 @@ import {
   PACKAGE_SKILLS_DIR,
   computeDesignFilesBeyondSeed,
   createDesignSession,
+  createDesignSystemSession,
+  createEvaluationSession,
+  createIncubationSession,
+  createInputsGenSession,
+  createInternalContextSession,
   loadCompactionPrompt,
   loadDesignerSystemPrompt,
   type ResourceLoader,
+  type SessionHandle,
   type SettingsManager,
   type ExtensionFactory,
   type SessionEvent,
@@ -136,21 +142,28 @@ export async function runDesignAgentSessionViaPackage(
   };
 
   // ── Build the package session ──────────────────────────────────────────────
-  const handle = await createDesignSession({
+  const baseOpts = {
     provider,
     modelId: params.modelId,
     contextWindow,
     thinkingLevel: params.thinkingLevel,
     systemPrompt: systemPromptBody,
     userPrompt: params.userPrompt,
-    seedFiles: params.seedFiles,
     signal: params.signal,
     correlationId: params.correlationId,
     onFile,
     onTodos,
     onEvent: onPackageEvent,
     getCompactionFocus: async () => loadCompactionPrompt(),
-    buildResourceLoader: ({ sessionType, settingsManager, extensionFactories }) =>
+    buildResourceLoader: ({
+      sessionType,
+      settingsManager,
+      extensionFactories,
+    }: {
+      sessionType: string;
+      settingsManager: SettingsManager;
+      extensionFactories: ExtensionFactory[];
+    }) =>
       buildPackageResourceLoader({
         sessionType,
         settingsManager,
@@ -158,7 +171,32 @@ export async function runDesignAgentSessionViaPackage(
         systemPrompt: systemPromptBody,
         cwd: '/home/user/project',
       }),
-  });
+  };
+  // Route by session type so the SessionScopedResourceLoader picks the right
+  // skill-tag set. Only `design` accepts seedFiles (revision rounds); the rest
+  // are zero-seed by contract.
+  let handle: SessionHandle;
+  switch (params.sessionType) {
+    case 'evaluation':
+      handle = await createEvaluationSession(baseOpts);
+      break;
+    case 'incubation':
+      handle = await createIncubationSession(baseOpts);
+      break;
+    case 'inputs-gen':
+      handle = await createInputsGenSession(baseOpts);
+      break;
+    case 'design-system':
+      handle = await createDesignSystemSession(baseOpts);
+      break;
+    case 'internal-context':
+      handle = await createInternalContextSession(baseOpts);
+      break;
+    case 'design':
+    default:
+      handle = await createDesignSession({ ...baseOpts, seedFiles: params.seedFiles });
+      break;
+  }
 
   // ── Wrap streamFn with the host's LLM-log sink ────────────────────────────
   const llmTurnLogRef: { current?: string } = {};
