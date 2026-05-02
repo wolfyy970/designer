@@ -1,5 +1,7 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react';
+import LogRocket from 'logrocket';
 import { Button } from '@ds/components/ui/button';
+import { isLogRocketActive } from '../../lib/logrocket-bootstrap';
 
 interface Props {
   children: ReactNode;
@@ -23,6 +25,11 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo) {
     if (import.meta.env.DEV) {
       console.error('ErrorBoundary caught:', error, info);
+    }
+    if (isLogRocketActive()) {
+      LogRocket.captureException(error, {
+        extra: { componentStack: info.componentStack ?? '' },
+      });
     }
   }
 

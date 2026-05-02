@@ -1,7 +1,10 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
+import { initLogRocket } from './lib/logrocket-bootstrap';
 import { migrateLegacyStoragePrefixes, migrateToIndexedDB } from './services/migration';
+
+initLogRocket();
 
 // Rename legacy app storage keys, then localStorage → IndexedDB, before stores hydrate
 migrateLegacyStoragePrefixes()

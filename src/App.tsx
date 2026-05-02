@@ -5,6 +5,7 @@ import { useThemeEffect } from './hooks/useThemeEffect';
 import { useGenerationStore } from './stores/generation-store';
 import { garbageCollect } from './services/idb-storage';
 import { ErrorBoundary } from './components/shared/ErrorBoundary';
+import { LogRocketRouteTracker } from './components/shared/LogRocketRouteTracker';
 import { ViewportGate } from './components/shared/ViewportGate';
 import { ApiServerGate } from './components/shared/ApiServerGate';
 
@@ -59,6 +60,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <LogRocketRouteTracker />
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<HomePage />} />

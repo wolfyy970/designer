@@ -7,6 +7,11 @@ interface ImportMetaEnv {
   readonly VITE_APP_RELEASED_AT: string;
   /** Dev only: Hono `PORT` for the Vite proxy (empty in production builds). */
   readonly VITE_DEV_API_PORT: string;
+  /**
+   * LogRocket app id (`org/app`). When unset in development, LogRocket stays off unless you set this.
+   * Production builds use `qbwhsc/designer-6dify` when this is empty.
+   */
+  readonly VITE_LOGROCKET_APP_ID?: string;
 }
 
 interface ImportMeta {
