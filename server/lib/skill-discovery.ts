@@ -41,13 +41,8 @@ const TEXT_RESOURCE_EXTENSIONS = new Set([
   '.yml',
 ]);
 
-export type SessionType =
-  | 'design'
-  | 'incubation'
-  | 'internal-context'
-  | 'evaluation'
-  | 'inputs-gen'
-  | 'design-system';
+export type { SessionType } from './session-types.ts';
+import type { SessionType } from './session-types.ts';
 
 const SESSION_TAGS: Record<SessionType, string[]> = {
   design: ['design'],

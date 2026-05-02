@@ -1,6 +1,6 @@
 import type { ThinkingConfig } from '../../src/lib/thinking-defaults.ts';
 import { env } from '../env.ts';
-import type { SessionType } from '../lib/skill-discovery.ts';
+import type { SessionType } from '../lib/session-types.ts';
 import { OBSERVABILITY_SCHEMA_VERSION } from '../lib/observability-line.ts';
 import { writeObservabilityLine } from '../lib/observability-sink.ts';
 import { writeTaskRunDiskLog } from '../lib/task-run-logger.ts';

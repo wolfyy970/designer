@@ -17,7 +17,7 @@ export type PiAgentStreamFn = (
   ...args: Parameters<typeof streamSimple>
 ) => ReturnType<typeof streamSimple> | Promise<ReturnType<typeof streamSimple>>;
 import type { LlmLogEntry } from '../log-store.ts';
-import type { SessionType } from '../lib/skill-discovery.ts';
+import type { SessionType } from '../lib/session-types.ts';
 import {
   beginLlmCall,
   failLlmCall,

@@ -4,7 +4,7 @@
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { SessionType } from './skill-discovery.ts';
+import type { SessionType } from './session-types.ts';
 
 export async function writeTaskRunDiskLog(input: {
   baseDir: string;

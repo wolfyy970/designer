@@ -1,7 +1,7 @@
 import type { ThinkingConfig } from '../../src/lib/thinking-defaults.ts';
 import { emitSkillsLoadedEvents, type SkillsLoadedStreamEvent } from '../lib/agentic-skills-emission.ts';
 import { buildAgenticSystemContext } from '../lib/build-agentic-system-context.ts';
-import type { SessionType } from '../lib/skill-discovery.ts';
+import type { SessionType } from '../lib/session-types.ts';
 import { runDesignAgentSession, type AgentRunEvent } from './agent-runtime.ts';
 
 export interface TaskAgentPiSessionInput {

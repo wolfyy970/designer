@@ -2,7 +2,7 @@ import { env } from './env.ts';
 import { flushAgentLogSnapshotNow, scheduleAgentLogSnapshot } from './lib/agent-log-snapshot.ts';
 import { OBSERVABILITY_SCHEMA_VERSION } from './lib/observability-line.ts';
 import { writeObservabilityLine } from './lib/observability-sink.ts';
-import type { SessionType } from './lib/skill-discovery.ts';
+import type { SessionType } from './lib/session-types.ts';
 import type { ThinkingConfig } from '../src/lib/thinking-defaults.ts';
 import { clearTraceLogEntries } from './trace-log-store.ts';
 

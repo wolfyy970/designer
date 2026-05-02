@@ -11,7 +11,7 @@ import { normalizeError } from '../../src/lib/error-utils.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import type { ThinkingConfig } from '../../src/lib/thinking-defaults.ts';
 import { agenticOrchestratorEventToSse } from '../lib/agentic-sse-map.ts';
-import type { SessionType } from '../lib/skill-discovery.ts';
+import type { SessionType } from '../lib/session-types.ts';
 import { env } from '../env.ts';
 import type { SseStreamWriter } from './generate-execution.ts';
 import { createWriteGate, type WriteGate } from '../lib/sse-write-gate.ts';
