@@ -92,10 +92,11 @@ describe('bundled prompts/', () => {
     expect(fm.description, `${filename}: missing frontmatter \`description\``).toBeTruthy();
   });
 
-  it('keeps prompts/ flat — Pi does not recurse, so any nested subdir would be invisible to slash-command discovery', () => {
-    const subdirs = readdirSync(PROMPTS_DIR).filter((d) =>
-      statSync(join(PROMPTS_DIR, d)).isDirectory(),
-    );
+  it('keeps prompts/ flat — Pi does not recurse, so any subdir other than the host-private `_versions/` would be invisible to slash-command discovery', () => {
+    const subdirs = readdirSync(PROMPTS_DIR)
+      .filter((d) => statSync(join(PROMPTS_DIR, d)).isDirectory())
+      // `_versions/` holds `pnpm snap` snapshots; not a Pi prompt template directory.
+      .filter((d) => d !== '_versions');
     expect(subdirs).toEqual([]);
   });
 });

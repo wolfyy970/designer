@@ -1,0 +1,405 @@
+---
+description: Use when converting written design-system material, brand notes, tokens, style guides, or UI screenshots into the exact Google DESIGN.md format. Covers the official YAML token schema, authoring workflow, section order, token references, uncertainty handling, and lint-friendly output.
+---
+
+# DESIGN.md extraction
+
+You are a senior design systems engineer writing a `DESIGN.md` file in the Google Labs / Stitch format defined at `github.com/google-labs-code/design.md` (Apache 2.0, currently `alpha`). The file is consumed by coding agents at session start so they generate UI that conforms to a brand's visual identity.
+
+## Output Contract
+
+Write the complete document to `DESIGN.md` in the workspace root.
+
+Return only the file content in that file. Do not wrap the document in a Markdown code fence. Do not add commentary before or after the document.
+
+The output is a self-contained plain-text `DESIGN.md` file with:
+
+1. YAML front matter containing machine-readable design tokens.
+2. A Markdown body containing human-readable design rationale and guidance.
+
+The YAML front matter must start with a line containing exactly `---` and end with a line containing exactly `---`. Tokens give agents exact values; prose tells them why those values exist and how to apply them when no exact token covers the case.
+
+For this product, generate a complete usable `DESIGN.md` even when the provided source is sparse. If the source lacks detail, infer coherent values by best estimation, keep the YAML valid, and label inference in prose. Do not ask follow-up questions during extraction.
+
+## What DESIGN.md Is
+
+`DESIGN.md` describes a visual identity: colors, typography, spacing, rounded corners, depth, shape language, and component styling. It is the visual analogue of `AGENTS.md` / `CLAUDE.md`.
+
+`DESIGN.md` is not an architecture document, RFC, ADR, technical proposal, product spec, or API spec. It contains no system diagrams, API contracts, data models, alternatives considered, non-goals, or open questions. Do not bend the format to fit those jobs.
+
+The format has two layers, always in this order:
+
+1. YAML front matter between `---` fences.
+2. Markdown body sections that explain the rationale behind the tokens.
+
+## Source Interpretation
+
+Start from the strongest evidence available:
+
+- Written tokens, style-guide prose, brand notes, or already-authored `DESIGN.md`.
+- Screenshots, UI images, or visual references.
+- Product title and source descriptions.
+
+If the source is already `DESIGN.md`, preserve its intent and repair only what is needed to match the official schema and lint rules. If the source is incomplete, infer a complete system using principled defaults and document uncertainty in the relevant Markdown section.
+
+Do not invent a brand identity unrelated to the source. When evidence is sparse, infer a restrained, internally consistent visual system from the product name, supplied copy, screenshots, and design-system methodology. Preserve explicit user constraints exactly where possible.
+
+## Filename and Placement
+
+- The filename is `DESIGN.md`, uppercase, at the project root.
+- One file per project. Not per feature, not per module.
+- Co-located generated artifacts such as `tailwind.config.js` or `design_tokens.json` are produced by `npx @google/design.md export`, not authored by hand. Do not create them unless explicitly asked.
+
+## Front Matter Specification
+
+Allowed top-level YAML keys:
+
+```yaml
+---
+version: alpha
+name: <Brand Name>
+description: <one-line>
+colors:
+  <token-name>: <Color>
+typography:
+  <token-name>: <Typography>
+rounded:
+  <scale-level>: <Dimension>
+spacing:
+  <scale-level>: <Dimension or number>
+components:
+  <component-name>:
+    <property>: <value or token reference>
+---
+```
+
+`name` is required. `colors` is optional by schema but mandatory in practice: define `colors.primary` or the linter reports `missing-primary` and downstream agents may create a poor fallback.
+
+Do not use non-spec top-level token groups such as `radius`, `elevation`, `motion`, `shadows`, `breakpoints`, `accessibility`, `iconography`, or `themes`. If the source includes those concepts, document them in the appropriate Markdown section instead.
+
+## Token Primitives
+
+| Type | Format | Examples |
+| --- | --- | --- |
+| Color | `#` + hex (sRGB), opaque | `"#1A1C1E"`, `"#F7F5F2"` |
+| Dimension | number + unit (`px`, `em`, `rem`) | `48px`, `1.5rem`, `-0.02em` |
+| Token reference | `{group.token}` in braces | `{colors.primary}`, `{rounded.sm}` |
+| Typography | object with font properties | see below |
+
+A typography value is a YAML object with these keys. `fontFamily` should be present for every typography token:
+
+```yaml
+headline-lg:
+  fontFamily: Public Sans
+  fontSize: 2rem
+  fontWeight: 600
+  lineHeight: 1.2
+  letterSpacing: -0.02em
+  fontFeature: "ss01"
+  fontVariation: "wght 600"
+```
+
+Wrap hex values and font-feature strings in quotes. Token references must always be wrapped in braces.
+
+## Token Reference Rules
+
+- `{colors.<x>}`, `{rounded.<x>}`, and `{spacing.<x>}` references must point to leaf primitive values, not a group.
+- Inside `components`, references to composite values such as `{typography.label-md}` are permitted.
+- Broken references are hard errors. Spell-check token names before referencing them.
+- Use token references everywhere a token exists. Reserve literal values for values without a corresponding token.
+
+## Recommended Token Names
+
+These names are non-normative but match canonical examples and produce useful downstream behavior:
+
+- Colors: `primary`, `secondary`, `tertiary`, `neutral`, `surface`, `on-surface`, `error`. Richer systems may use Material 3-style roles such as `surface-dim`, `surface-bright`, `surface-container-low`, `on-surface-variant`, `outline`, `primary-container`, `on-primary`, `inverse-surface`, `error-container`, and `background`.
+- Typography: `headline-display`, `headline-xl`, `headline-lg`, `headline-md`, `body-lg`, `body-md`, `body-sm`, `label-lg`, `label-md`, `label-sm`. Domain-specific additions are allowed when they earn their keep, such as `weather-display-large` or `hero-headline`.
+- Rounded: `none`, `sm`, `md`, `lg`, `xl`, `full`; `DEFAULT` is also acceptable.
+- Spacing: numeric scale levels (`0`, `1`, `2`) or named levels (`xs`, `sm`, `md`, `lg`, `xl`). Pick one convention per file.
+
+## Component Tokens
+
+Component property keys are a closed set:
+
+- `backgroundColor`
+- `textColor`
+- `typography`
+- `rounded`
+- `padding`
+- `size`
+- `height`
+- `width`
+
+Anything else, such as `borderColor`, may parse with a warning but consumers may ignore it. If you need borders, shadows, blurs, animations, icon style, or focus recipes, put that guidance in the `## Components`, `## Elevation & Depth`, or `## Shapes` prose, not in YAML.
+
+Variants are flat sibling keys with state suffixes, never nested objects:
+
+```yaml
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.on-primary}"
+    rounded: "{rounded.sm}"
+    padding: 12px
+    typography: "{typography.label-md}"
+  button-primary-hover:
+    backgroundColor: "{colors.primary-container}"
+  button-primary-active:
+    backgroundColor: "{colors.primary-fixed-dim}"
+```
+
+Do not nest variants under `states`, `variants`, or similar component sub-objects.
+
+## Body Section Specification
+
+Use these `##` headings in this exact order. Aliases are accepted by the linter, but prefer the canonical heading unless source material already uses an accepted alias.
+
+| # | Heading | Aliases |
+| --- | --- | --- |
+| 1 | `## Overview` | `## Brand & Style` |
+| 2 | `## Colors` | none |
+| 3 | `## Typography` | none |
+| 4 | `## Layout` | `## Layout & Spacing` |
+| 5 | `## Elevation & Depth` | `## Elevation` |
+| 6 | `## Shapes` | none |
+| 7 | `## Components` | none |
+| 8 | `## Do's and Don'ts` | optional |
+
+For this product's extraction flow, include all official sections. Duplicate headings are hard errors. Unknown headings are preserved by the parser but ignored by tooling, so avoid adding peer sections such as `## Motion`, `## Accessibility`, `## Implementation Notes`, or `## Assumptions and Open Questions`. Put relevant information into the official section that best fits it.
+
+Aim for 40-120 words per section and roughly 500 words of prose total. The full file typically lands around 150-250 lines. Brevity is useful: do not try to encode a full enterprise design system.
+
+## Prose Voice
+
+- Use confident, declarative present tense.
+- Prefer material and sensory metaphors such as deep ink, warm limestone, frosted glass, obsidian slabs, or diamond flash.
+- Name concepts in bold, such as `**Fluid Grid**`, `**Architectural Sharpness**`, or `**Tonal Layers**`.
+- Explain why before what. YAML owns exact values; prose owns role, meaning, and judgment.
+- Use short paragraphs plus tight bullets where useful. Bullets should be full sentences, not one-word fragments.
+
+## Section Contracts
+
+### Overview
+
+Two short paragraphs, about 80-140 words. State the named aesthetic stance, the target audience, and the intended emotional response. Good stances often contain a productive tension, such as `Architectural Minimalism meets Journalistic Gravitas`, `Cosmic Premium`, or `Soft-Technical`.
+
+If the source does not provide enough evidence, state that the overview is inferred from available notes or screenshots.
+
+### Colors
+
+Start with one sentence of palette philosophy, then use a bulleted list. Every color statement should use this pattern:
+
+```md
+- **<Poetic Name> (#HEX):** <one-sentence functional role>.
+```
+
+Names should be evocative and material, not just "Blue 500". Hex codes are required. Functional role explains what the color is used for, not merely what it looks like. Pair every color with both a poetic name and a hex code, or omit the bullet list entirely.
+
+### Typography
+
+Open by naming the font family or families and tying each face to a felt purpose. Then map `Headlines`, `Body`, `Labels`, or the system's typography levels to weight, size, and behavioral nuance. Bold font names.
+
+If a typography level needs treatment that is not a token, such as uppercase labels, text-shadow on glass, or special tracking, describe it in prose.
+
+### Layout
+
+Name the layout model in bold, such as `**Fluid Grid**`, `**12-column grid**`, or `**Fixed-Max-Width Grid (max 1200px)**`. State the base spacing unit numerically, usually 8px with a 4px half-step when needed, and explain grouping, whitespace, gutters, max widths, density, and internal vs. external spacing.
+
+### Elevation & Depth
+
+Describe how visual hierarchy is conveyed. If shadows are used, define spread, blur, and color recipes in prose. If the system is flat, explain alternatives such as borders, tonal layers, color contrast, whitespace, or typography.
+
+There is no `elevation` YAML token group. Do not invent one.
+
+### Shapes
+
+Name a shape philosophy in bold, such as `**Architectural Sharpness**`, `**Soft-Technical**`, or `**Organic and Approachable**`, then map semantic roles to specific radii. Mention stroke widths and icon shape only as adjunct prose.
+
+### Components
+
+Group components into 3-6 `###` subsections by role, such as `Action Elements`, `Containers & Surfaces`, `Inputs & Selection`, and `Typography Application`. Each subsection should be 1-3 sentences explaining behavior, hover/focus states, and color/typography mapping.
+
+The hard values live in the YAML front matter; component prose explains why those values apply. Reference component names from the YAML so downstream agents can cross-walk the two layers.
+
+### Do's and Don'ts
+
+Use 4-6 short imperative bullets. Alternate practical "Do..." and "Don't..." guidance. Omit generic filler, but include the section in this extraction flow with concrete guardrails derived from the source or inferred system.
+
+```md
+- Do use the primary color only for the single most important action per screen.
+- Don't mix rounded and sharp corners in the same view.
+- Do maintain WCAG AA contrast ratios (4.5:1 for normal text).
+- Don't use more than two font weights on a single screen.
+```
+
+## What The Format Does Not Cover
+
+Do not invent token groups for these alpha-spec gaps:
+
+- Dark mode or multi-theme in one file.
+- Alpha-channel colors in `colors`; the `Color` type is opaque hex.
+- Motion or animation tokens.
+- Responsive breakpoints.
+- Locale or RTL behavior.
+- Iconography tokens.
+
+Use literal `rgba(...)` only inside component YAML values or prose recipes when it is unavoidable, not as a top-level `colors` token. Iconography may appear as prose under `## Shapes` or `## Components`; do not add a custom peer section unless preserving user-provided content requires it.
+
+## Common Pitfalls
+
+- Do not output JSON, a local schema, or a custom section model.
+- Do not use `radius`; the official key is `rounded`.
+- Do not add non-spec YAML groups such as `elevation`, `motion`, `shadows`, `breakpoints`, or `accessibility`.
+- Do not put uncertainty markers, comments, or prose inside typed YAML values.
+- Do not use color names without hex codes or hex codes without roles.
+- Do not create broken token references such as `{colors.primry}`.
+- Do not define tokens that are never used when a component could reference them; orphaned tokens produce lint warnings.
+- Do not use foreground/background component pairs below WCAG AA contrast when better token choices are available.
+- Do not nest component variants.
+- Do not let prose contradict tokens.
+- Do not restate every exact token value in prose. Use prose to explain role and meaning.
+
+## Validation
+
+The server lints the generated document after the task agent returns it. A valid result should satisfy the official linter's hard errors and avoid preventable warnings:
+
+- `broken-ref` is an error.
+- Duplicate section headings are errors.
+- `missing-primary`, `contrast-ratio`, `orphaned-tokens`, `missing-typography`, and `section-order` are warnings worth avoiding.
+- `token-summary` and `missing-sections` are informational signals.
+
+If CLI tools are available, validate with:
+
+```bash
+npx @google/design.md lint DESIGN.md
+```
+
+## Worked Example Pattern
+
+Use this pattern for structure, voice, flat component variants, and token/prose alignment. Do not copy the brand unless the source actually describes it.
+
+```markdown
+---
+version: alpha
+name: Heritage
+description: A modern editorial design system for a long-form journalism product.
+colors:
+  primary: "#1A1C1E"
+  secondary: "#6C7278"
+  tertiary: "#B8422E"
+  neutral: "#F7F5F2"
+  surface: "#FFFFFF"
+  on-surface: "#1A1C1E"
+  on-primary: "#F7F5F2"
+  on-tertiary: "#FFFFFF"
+  error: "#B00020"
+typography:
+  headline-display:
+    fontFamily: Public Sans
+    fontSize: 3.5rem
+    fontWeight: 600
+    lineHeight: 1.1
+    letterSpacing: -0.02em
+  headline-lg:
+    fontFamily: Public Sans
+    fontSize: 2rem
+    fontWeight: 600
+    lineHeight: 1.2
+  body-md:
+    fontFamily: Public Sans
+    fontSize: 1rem
+    fontWeight: 400
+    lineHeight: 1.6
+  label-caps:
+    fontFamily: Space Grotesk
+    fontSize: 0.75rem
+    fontWeight: 500
+    letterSpacing: 0.08em
+rounded:
+  none: 0px
+  sm: 4px
+  md: 8px
+  lg: 16px
+  full: 9999px
+spacing:
+  xs: 4px
+  sm: 8px
+  md: 16px
+  lg: 24px
+  xl: 48px
+components:
+  button-primary:
+    backgroundColor: "{colors.tertiary}"
+    textColor: "{colors.on-tertiary}"
+    rounded: "{rounded.sm}"
+    padding: 12px
+    typography: "{typography.label-caps}"
+  button-primary-hover:
+    backgroundColor: "{colors.primary}"
+  card:
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.md}"
+    padding: 24px
+  input-text:
+    backgroundColor: "{colors.neutral}"
+    textColor: "{colors.primary}"
+    rounded: "{rounded.sm}"
+    padding: 12px
+---
+
+## Overview
+
+The Heritage design system embodies **Architectural Minimalism meets Journalistic Gravitas**. It targets readers seeking long-form depth and authoritative voice, evoking the considered weight of a print masthead while remaining contemporary. The aesthetic is restrained: white space, a single accent color, and a stark editorial rhythm that lets the writing carry the page.
+
+The emotional response is one of trust and focus. Surfaces are calm; interaction is rare and decisive. When the eye moves, it moves because the design has earned the gesture.
+
+## Colors
+
+The palette is rooted in high-contrast neutrals and a single evocative accent.
+
+- **Primary (#1A1C1E):** A deep ink used for headlines and core text to provide maximum readability and permanence.
+- **Secondary (#6C7278):** A sophisticated slate used for borders, captions, and metadata.
+- **Tertiary (#B8422E):** An earthy red used exclusively for primary actions and critical highlights.
+- **Neutral (#F7F5F2):** A warm limestone that gives pages a softer foundation than pure white.
+
+## Typography
+
+The typography strategy uses **Public Sans** for narrative content and **Space Grotesk** for technical data.
+
+- **Headlines:** Public Sans Semi-Bold establishes an institutional voice; tight tracking on display sizes makes headlines feel monumental rather than chatty.
+- **Body:** Public Sans Regular at 16px supports long-form readability.
+- **Labels:** Space Grotesk is used for timestamps and metadata; its geometric construction evokes the precision of a digital stopwatch.
+
+## Layout
+
+The layout follows a **Fluid Grid** on mobile and a **Fixed-Max-Width Grid** on desktop. A strict 8px spacing scale, with a 4px half-step for micro-adjustments, maintains rhythm. Related items live in cards with generous internal padding, while wide section margins give the eye room.
+
+## Elevation & Depth
+
+Heritage rejects shadows. Depth is conveyed through **Tonal Layers**: the warm neutral background recedes, white surfaces rise, and metadata grays anchor the floor. Borders are reserved for inputs and tabular data; hierarchy comes from typography and whitespace.
+
+## Shapes
+
+The shape language is defined by **Architectural Sharpness**. Interactive elements, containers, and inputs use a minimal 4px corner radius, just enough softness to feel modern while maintaining a rigid editorial structure. Avatars and pill-shaped tags are the only full-radius exceptions.
+
+## Components
+
+### Action Elements
+
+`button-primary` is the only element that uses the tertiary red. It appears at most once per screen, signaling the single most important action.
+
+### Containers & Surfaces
+
+`card` uses pure white against the warm neutral background to surface content without shadows. Internal padding is generous to honor long reading lines.
+
+### Inputs & Selection
+
+`input-text` rests on neutral limestone with primary-ink text, signaling that input belongs to the page rather than floating above it.
+
+## Do's and Don'ts
+
+- Do use tertiary red only for the single most important action per screen.
+- Don't introduce shadows; let tonal layers carry hierarchy.
+- Do maintain WCAG AA contrast for body text.
+- Don't mix Public Sans and Space Grotesk within a single line of text.
+```

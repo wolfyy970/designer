@@ -48,12 +48,12 @@ All LLM-facing prompt **bodies** ship with the repo: `skills/<key>/SKILL.md` (YA
 
 ### Version history
 
-If you edit **skills**, **`prompts/designer-agentic-system/PROMPT.md`**, or **`src/lib/rubric-weights.json`** yourself (this app’s prompts live in the repo—there is no in-app editor), you can keep a history without snapshotting *before* every edit.
+If you edit a **skill** (`packages/auto-designer-pi/skills/<key>/SKILL.md`), a **prompt template** (`packages/auto-designer-pi/prompts/<name>.md`, including `_designer-system.md` and `artifact-conventions.md`), or **`src/lib/rubric-weights.json`** yourself (this app's prompts live in the repo — there is no in-app editor), you can keep a history without snapshotting *before* every edit.
 
 **What gets saved**
 
-- **Skills:** Timestamped copies under **`skills/<key>/_versions/`** next to each `SKILL.md`.
-- **Designer system prompt:** **`prompts/designer-agentic-system/_versions/`** next to `PROMPT.md`.
+- **Skills:** Timestamped copies under **`packages/auto-designer-pi/skills/<key>/_versions/`** next to each `SKILL.md`.
+- **Prompt templates:** **`packages/auto-designer-pi/prompts/_versions/<name>/`** — single shared `_versions/` dir under prompts, with one subdir per template file. Pi's loader does NOT recurse, so `_versions/` is invisible to slash-command discovery.
 - **Rubric weights:** Still under **`.prompt-versions/snapshots/`** (so `src/lib/` stays clean).
 - **Manifest:** **`.prompt-versions/manifest.jsonl`** records every snapshot (manual + meta-harness).
 
@@ -68,7 +68,7 @@ That is the normal loop: edit first, snap after.
 **Power user: one explicit file**
 
 ```bash
-pnpm snap skills/<key>/SKILL.md
+pnpm snap packages/auto-designer-pi/skills/<key>/SKILL.md
 ```
 
 That still snapshots the **current on-disk** contents of that path (legacy “save this version now”).
@@ -82,7 +82,7 @@ That still snapshots the **current on-disk** contents of that path (legacy “sa
 | Diff latest snapshot vs working file | `pnpm snap --diff-current <path>` |
 | Restore a saved version (backs up current file first) | `pnpm snap --restore <path> <safeTs>` |
 
-The **`safeTs`** id is the first column from `--list`. Skill-specific notes live in [skills/README.md](skills/README.md).
+The **`safeTs`** id is the first column from `--list`.
 
 **Note — meta-harness:** The separate **`pnpm meta-harness`** app snapshots those paths **automatically** when its proposer or promotion **`P`** writes files. You **do not** run **`pnpm snap`** for that flow. See **[meta-harness/VERSIONING.md](meta-harness/VERSIONING.md)**.
 

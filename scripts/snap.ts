@@ -19,7 +19,7 @@ import {
 
 function usage(): never {
   console.error(`Usage:
-  pnpm snap                              snapshot all changed versioned files (skills, PROMPT.md, rubric)
+  pnpm snap                              snapshot all changed versioned files (package skills, package prompts, rubric)
   pnpm snap --hook                       same as above, for Husky (quiet; stages new files if any)
   pnpm snap --list <path>                list saved versions (newest first)
   pnpm snap --diff <path> <safeTsA> <safeTsB>   unified diff between two snapshots
@@ -37,9 +37,10 @@ function normalizeRepoRel(raw: string): string {
 function isVersionedPath(rel: string): boolean {
   const n = normalizeRepoRel(rel);
   if (n.includes('..')) return false;
-  if (n === 'prompts/designer-agentic-system/PROMPT.md') return true;
   if (n === 'src/lib/rubric-weights.json') return true;
-  if (n.startsWith('skills/')) return true;
+  if (/^packages\/auto-designer-pi\/skills\/[^/]+\/SKILL\.md$/.test(n)) return true;
+  /** Top-level prompt templates only — `_versions/<name>/<ts>.md` snapshots have an extra `/` segment so they don't match. */
+  if (/^packages\/auto-designer-pi\/prompts\/[^/]+\.md$/.test(n)) return true;
   return false;
 }
 
@@ -77,7 +78,9 @@ async function main(): Promise<void> {
   if (argv.length === 0) {
     const tracked = await enumerateVersionedFiles(repoRoot);
     if (tracked.length === 0) {
-      console.warn('No versioned files found (skills/*/SKILL.md, PROMPT.md, rubric-weights.json).');
+      console.warn(
+        'No versioned files found (packages/auto-designer-pi/skills/*/SKILL.md, packages/auto-designer-pi/prompts/*.md, src/lib/rubric-weights.json).',
+      );
       return;
     }
     const result = await snapAll(repoRoot, 'manual:snap');

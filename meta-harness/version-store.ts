@@ -1,7 +1,17 @@
 /**
- * Shadow version store for skills, designer system prompt, and rubric weights.
- * Skills and PROMPT.md use `skills/<key>/_versions/` and `prompts/.../_versions/`;
- * rubric weights stay under `.prompt-versions/snapshots/`. Manifest: `.prompt-versions/manifest.jsonl`.
+ * Shadow version store for the @auto-designer/pi package's skills + prompt
+ * templates and the rubric weights.
+ *
+ * - Package skills (`packages/auto-designer-pi/skills/<key>/SKILL.md`) snapshot
+ *   to `packages/auto-designer-pi/skills/<key>/_versions/<timestamp>.md`.
+ * - Package prompt templates (`packages/auto-designer-pi/prompts/<name>.md`)
+ *   snapshot to `packages/auto-designer-pi/prompts/_versions/<name>/<timestamp>.md`
+ *   — kept in a single `_versions/` dir since prompts are flat files. Pi's
+ *   prompt loader does NOT recurse, so `_versions/` is invisible to it.
+ * - Rubric weights (`src/lib/rubric-weights.json`) snapshot to the legacy
+ *   `.prompt-versions/snapshots/...` location to preserve history continuity.
+ *
+ * Manifest: `.prompt-versions/manifest.jsonl`.
  */
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -95,20 +105,36 @@ export function legacySnapshotDirForRelPath(repoRoot: string, relPath: string): 
 
 /**
  * Directory holding timestamped snapshot files for this versioned path.
- * Skills → `skills/<key>/_versions/`; PROMPT → `prompts/designer-agentic-system/_versions/`;
- * rubric → legacy under `.prompt-versions/snapshots/`.
+ * Package skills → `packages/auto-designer-pi/skills/<key>/_versions/`;
+ * package prompts → `packages/auto-designer-pi/prompts/_versions/<name>/`;
+ * rubric → legacy `.prompt-versions/snapshots/...`.
  */
 export function snapshotDirForRelPath(repoRoot: string, relPath: string): string {
   const norm = normalizeRelPath(relPath);
   if (norm === 'src/lib/rubric-weights.json') {
     return legacySnapshotDirForRelPath(repoRoot, norm);
   }
-  if (norm === 'prompts/designer-agentic-system/PROMPT.md') {
-    return path.join(repoRoot, 'prompts', 'designer-agentic-system', '_versions');
+  const skillMatch = /^packages\/auto-designer-pi\/skills\/([^/]+)\/SKILL\.md$/u.exec(norm);
+  if (skillMatch) {
+    return path.join(
+      repoRoot,
+      'packages',
+      'auto-designer-pi',
+      'skills',
+      skillMatch[1]!,
+      '_versions',
+    );
   }
-  const m = /^skills\/([^/]+)\/SKILL\.md$/u.exec(norm);
-  if (m) {
-    return path.join(repoRoot, 'skills', m[1]!, '_versions');
+  const promptMatch = /^packages\/auto-designer-pi\/prompts\/([^/]+)\.md$/u.exec(norm);
+  if (promptMatch) {
+    return path.join(
+      repoRoot,
+      'packages',
+      'auto-designer-pi',
+      'prompts',
+      '_versions',
+      promptMatch[1]!,
+    );
   }
   return legacySnapshotDirForRelPath(repoRoot, norm);
 }
@@ -306,16 +332,18 @@ export async function diffCurrentVsSnapshot(
   return diffVersions({ fileA: absSnap, fileB: absWork });
 }
 
-/** All repo-backed versioned files that exist on disk (each `skills/<key>/SKILL.md`, PROMPT.md, rubric JSON). */
+/** All repo-backed versioned files that exist on disk: package skills, package prompts, rubric JSON. */
 export async function enumerateVersionedFiles(repoRoot: string): Promise<string[]> {
   const out: string[] = [];
-  const skillsRoot = path.join(repoRoot, 'skills');
+
+  // Package skills: packages/auto-designer-pi/skills/<key>/SKILL.md
+  const pkgSkillsRoot = path.join(repoRoot, 'packages', 'auto-designer-pi', 'skills');
   try {
-    const names = await readdir(skillsRoot);
+    const names = await readdir(pkgSkillsRoot);
     for (const name of names) {
       if (name.startsWith('_') || name.startsWith('.')) continue;
-      const rel = `skills/${name}/SKILL.md`;
-      const abs = path.join(skillsRoot, name, 'SKILL.md');
+      const rel = `packages/auto-designer-pi/skills/${name}/SKILL.md`;
+      const abs = path.join(pkgSkillsRoot, name, 'SKILL.md');
       try {
         const st = await stat(abs);
         if (st.isFile()) out.push(rel);
@@ -324,9 +352,32 @@ export async function enumerateVersionedFiles(repoRoot: string): Promise<string[
       }
     }
   } catch {
-    /* no skills dir */
+    /* no package skills dir */
   }
-  const fixed = ['prompts/designer-agentic-system/PROMPT.md', 'src/lib/rubric-weights.json'] as const;
+
+  // Package prompts: packages/auto-designer-pi/prompts/*.md (top level only — Pi does not recurse).
+  // _versions/ subdir holds snapshots and is skipped.
+  const pkgPromptsRoot = path.join(repoRoot, 'packages', 'auto-designer-pi', 'prompts');
+  try {
+    const names = await readdir(pkgPromptsRoot);
+    for (const name of names) {
+      if (name.startsWith('_versions')) continue;
+      if (!name.endsWith('.md')) continue;
+      const rel = `packages/auto-designer-pi/prompts/${name}`;
+      const abs = path.join(pkgPromptsRoot, name);
+      try {
+        const st = await stat(abs);
+        if (st.isFile()) out.push(rel);
+      } catch {
+        /* skip */
+      }
+    }
+  } catch {
+    /* no package prompts dir */
+  }
+
+  // Rubric weights stay at their existing path; snapshot directory remains the legacy location.
+  const fixed = ['src/lib/rubric-weights.json'] as const;
   for (const rel of fixed) {
     try {
       const st = await stat(path.join(repoRoot, ...rel.split('/')));
