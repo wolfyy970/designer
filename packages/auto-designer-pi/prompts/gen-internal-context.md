@@ -1,9 +1,5 @@
 ---
-name: Internal context synthesis
 description: Use when generating the internal Markdown context document from all design spec inputs before incubation. Covers grounded synthesis, persona/task modeling, assumptions, risks, and success signals without inventing research.
-tags:
-  - internal-context
-when: auto
 ---
 
 # Internal context synthesis

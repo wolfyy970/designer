@@ -14,11 +14,8 @@ const PROMPTS_DIR = join(PKG_ROOT, 'prompts');
 
 const EXPECTED_SKILLS = [
   'accessibility',
-  'agents-md-file',
   'design-generation',
   'design-quality',
-  'hypotheses-generator-system',
-  'internal-context-synthesis',
 ];
 
 const EXPECTED_PROMPTS = [
@@ -29,9 +26,12 @@ const EXPECTED_PROMPTS = [
   'eval-implementation.md',
   'eval-strategy-fidelity.md',
   'gen-constraints.md',
+  'gen-hypotheses.md',
+  'gen-internal-context.md',
   'gen-objectives.md',
   'gen-research.md',
   'revise.md',
+  'sandbox-env.md',
   '_designer-system.md',
 ];
 

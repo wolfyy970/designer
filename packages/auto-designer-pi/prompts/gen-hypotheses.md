@@ -1,9 +1,5 @@
 ---
-name: Hypotheses generator
 description: Use when analyzing a design specification to produce a dimension map with hypothesis strategies. Covers dimension extraction, hypothesis formulation, JSON output format, and calibration guidelines for the incubation step.
-tags:
-  - incubation
-when: auto
 ---
 
 # Hypotheses generator

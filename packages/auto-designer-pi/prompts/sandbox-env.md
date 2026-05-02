@@ -1,9 +1,5 @@
 ---
-name: Sandbox environment guide
 description: Use when building inside the virtual filesystem sandbox. Covers available file types, what tools and frameworks are NOT available, Google Fonts allowlist, and file structure best practices.
-tags:
-  - design
-when: auto
 ---
 
 # Sandbox Environment
