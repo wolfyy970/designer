@@ -156,6 +156,20 @@ export {
 export type { TodoItem, TodoStatus } from './types.ts';
 
 // ────────────────────────────────────────────────────────────────────────────
+// Bundled-content paths (for hosts that need to point Pi's loaders at them)
+
+export {
+  PACKAGE_ROOT,
+  PACKAGE_SKILLS_DIR,
+  PACKAGE_PROMPTS_DIR,
+  PACKAGE_EXTENSIONS_DIR,
+  PACKAGE_DESIGNER_SYSTEM_PROMPT_PATH,
+  PACKAGE_COMPACTION_PROMPT_PATH,
+  loadDesignerSystemPrompt,
+  loadCompactionPrompt,
+} from './paths.ts';
+
+// ────────────────────────────────────────────────────────────────────────────
 // Limits
 
 export {

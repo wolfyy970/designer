@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@auto-designer/pi':
+        specifier: workspace:*
+        version: link:packages/auto-designer-pi
       '@fontsource-variable/fraunces':
         specifier: ^5.2.9
         version: 5.2.9

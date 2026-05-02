@@ -1,7 +1,7 @@
 {
   "name": "auto-designer",
   "private": true,
-  "version": "0.3.66",
+  "version": "0.3.67",
   "packageManager": "pnpm@10.10.0",
   "type": "module",
   "scripts": {
@@ -24,6 +24,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@auto-designer/pi": "workspace:*",
     "@fontsource-variable/fraunces": "^5.2.9",
     "@fontsource-variable/inter-tight": "^5.2.7",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",

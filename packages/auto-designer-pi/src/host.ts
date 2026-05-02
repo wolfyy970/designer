@@ -168,10 +168,12 @@ export async function createSession(opts: SessionRunnerOptions): Promise<Session
     opts.onTodos?.(todos);
   };
 
-  const customTools: ToolDefinition[] = [
+  // Each Pi factory returns a strictly-typed ToolDefinition; the array is heterogeneous,
+  // so widen via cast — Pi accepts any ToolDefinition[] downstream.
+  const customTools = [
     ...createVirtualPiCodingTools(bash, onFile),
     createSandboxBashTool(bash, onFile),
-  ];
+  ] as unknown as ToolDefinition[];
 
   const reserveTokens = compactionReserveTokensForContextWindow(opts.contextWindow ?? 131_072);
   const settingsManager = opts.buildSettingsManager
@@ -247,7 +249,9 @@ export async function createSession(opts: SessionRunnerOptions): Promise<Session
   return {
     sessionId: session.sessionId,
     session,
-    abort: () => session.agent.abort(),
+    abort: async () => {
+      await session.agent.abort();
+    },
     run: async (): Promise<SessionRunResult> => {
       if (started) throw new Error('SessionHandle.run() is single-shot');
       started = true;
