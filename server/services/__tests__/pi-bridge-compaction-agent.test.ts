@@ -28,7 +28,7 @@ function ctxWithEmit(): PiSessionBridgeContext & { emitted: AgentRunEvent[] } {
   };
 }
 
-import type { AgentRunEvent } from '../pi-agent-run-types.ts';
+import type { AgentRunEvent } from '../agent-runtime.ts';
 
 describe('handleCompactionStart', () => {
   it('emits progress and trace', async () => {

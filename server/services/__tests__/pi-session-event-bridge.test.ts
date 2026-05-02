@@ -5,7 +5,7 @@ import {
   STREAMING_TOOL_EMIT_INTERVAL_MS,
 } from '../pi-session-event-bridge.ts';
 import type { PiSessionBridgeContext } from '../pi-session-event-bridge.ts';
-import type { AgentRunEvent } from '../pi-agent-run-types.ts';
+import type { AgentRunEvent } from '../agent-runtime.ts';
 
 function mkPartial(content: AssistantMessage['content']): AssistantMessage {
   return {

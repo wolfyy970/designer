@@ -8,7 +8,7 @@
 import type { RunTraceEvent, TodoItem } from '../../src/types/provider.ts';
 import type { SkillCatalogEntry } from '../lib/skill-schema.ts';
 import type { SessionType } from '../lib/session-types.ts';
-import type { ThinkingLevel } from './pi-model.ts';
+import type { ThinkingLevel } from '../../src/lib/thinking-defaults.ts';
 
 export interface AgentRunParams {
   systemPrompt: string;

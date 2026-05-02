@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { safeBridgeEmit, type PiSessionBridgeContext } from '../pi-bridge-core.ts';
-import type { AgentRunEvent } from '../pi-agent-run-types.ts';
+import type { AgentRunEvent } from '../agent-runtime.ts';
 
 function minimalCtx(
   overrides: Partial<PiSessionBridgeContext> = {},
