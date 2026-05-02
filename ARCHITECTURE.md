@@ -112,6 +112,8 @@ flowchart TB
 
 ### Pi design sandbox (three-layer contract)
 
+> **Rebuild in flight (Phase 1 landed).** A parallel implementation lives at [`packages/auto-designer-pi`](packages/auto-designer-pi/) — a `pi-package`-keyworded workspace package that will eventually own every Pi import in the repo. The factories there throw `NotImplementedError` until Phase 2 ports the integration layer; the legacy path under `server/services/pi-*` keeps serving every session in the meantime. The plan trades a layered in-place refactor for a clean module boundary so future Pi upgrades stay localized; the active plan file is at `~/.claude/plans/i-want-you-to-curried-eich.md`. The contract documented below is the legacy shape — keep editing it until cut-over.
+
 Confusing these layers causes bad prompts and false “tool not working” reports.
 
 1. **Layer 1 — VFS + just-bash** (`[virtual-workspace.ts](server/services/virtual-workspace.ts)` over `[agent-bash-sandbox.ts](server/services/agent-bash-sandbox.ts)`, `just-bash`): In-memory tree at `**/home/user/project`**; `bash.fs.*` and `bash.exec`. Optional runtimes (**network**, **python**, **javascript**) are **not** enabled in our constructor—do not document `npm`, `curl`, etc. as available unless you change that code.

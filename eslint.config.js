@@ -29,6 +29,7 @@ export default defineConfig([
       'src/api/**/*.{ts,tsx}',
       'src/lib/**/*.{ts,tsx}',
       'server/services/**/*.ts',
+      'packages/auto-designer-pi/**/*.ts',
     ],
     rules: {
       '@typescript-eslint/no-unused-vars': [

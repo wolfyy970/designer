@@ -1,7 +1,7 @@
 {
   "name": "auto-designer",
   "private": true,
-  "version": "0.3.60",
+  "version": "0.3.61",
   "packageManager": "pnpm@10.10.0",
   "type": "module",
   "scripts": {
@@ -12,7 +12,7 @@
     "tokens:build": "node packages/design-system/build-tokens.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run && pnpm -F @auto-designer/design-system test",
+    "test": "vitest run && pnpm -F @auto-designer/design-system test && pnpm -F @auto-designer/pi test",
     "test:playwright-eval": "vitest run -c vitest.playwright.config.ts server/services/__tests__/browser-playwright-evaluator.test.ts",
     "test:watch": "vitest",
     "dev:server": "tsx watch server/dev.ts",

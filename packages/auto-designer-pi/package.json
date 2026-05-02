@@ -1,0 +1,32 @@
+{
+  "name": "@auto-designer/pi",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Pi boundary for auto-designer: extensions, skills, prompt templates, and session factories. Everything Pi-specific lives here so upgrades and replacement stay localized.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./extensions"],
+    "skills": ["./skills"],
+    "prompts": ["./prompts"]
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "extensions",
+    "skills",
+    "prompts"
+  ],
+  "scripts": {
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-coding-agent": "*",
+    "typebox": "*"
+  }
+}

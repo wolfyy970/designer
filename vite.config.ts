@@ -62,6 +62,8 @@ export default defineConfig(({ mode }) => {
         '.vendor/**',
         // DS package has its own vitest config (jsdom env) — avoid double-running with wrong environment.
         'packages/design-system/**',
+        // Pi-boundary package has its own vitest config; chained from the root `test` script.
+        'packages/auto-designer-pi/**',
         // Optional Playwright browser stack; keep unit tests hermetic.
         '**/browser-playwright-evaluator.test.ts',
       ],
