@@ -48,7 +48,8 @@ export async function runPromptWithUpstreamRetries(
 
     const msgs = session.agent.state.messages;
     if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') {
-      session.agent.replaceMessages(msgs.slice(0, -1));
+      // 0.72 removed `replaceMessages`; assigning `state.messages` copies the array.
+      session.agent.state.messages = msgs.slice(0, -1);
     }
     await sleepMs(2000 * 2 ** (attempts - 1));
     await session.agent.continue();

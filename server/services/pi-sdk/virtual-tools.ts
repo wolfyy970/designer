@@ -3,7 +3,7 @@
  * All adapter code stays under `pi-sdk/` so the rest of the app stays agent-agnostic.
  */
 import path from 'node:path';
-import type { Static } from '@sinclair/typebox';
+import type { Static } from 'typebox';
 import { minimatch } from 'minimatch';
 import type { Bash } from 'just-bash';
 import { debugAgentIngest } from '../../lib/debug-agent-ingest.ts';
@@ -23,7 +23,7 @@ import {
   createEditToolDefinition,
   createLsToolDefinition,
   createFindToolDefinition,
-  grepToolDefinition,
+  createGrepToolDefinition,
   formatSize,
   truncateHead,
   truncateLine,
@@ -108,7 +108,8 @@ function shellSingleQuote(s: string): string {
 }
 
 function createVirtualGrepTool(bash: Bash, sessionCwd: string) {
-  const base = grepToolDefinition;
+  /** Pi requires `cwd` even though our `execute` overrides it; keeps the parameter schema upstream. */
+  const base = createGrepToolDefinition(sessionCwd);
   type GrepParams = Static<(typeof base)['parameters']>;
   return {
     ...base,

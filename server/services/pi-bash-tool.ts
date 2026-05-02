@@ -4,7 +4,7 @@
  * `promptSnippet` is omitted on purpose: Pi only injects it when no `customPrompt` is set;
  * we use `designer-agentic-system` as the custom prompt, so snippets never reach the model.
  */
-import { Type } from '@sinclair/typebox';
+import { Type } from 'typebox';
 import type { Bash } from 'just-bash';
 import type { ExtensionContext, ToolDefinition } from './pi-sdk/types.ts';
 import { BASH_TOOL_MAX_CHARS } from '../lib/content-limits.ts';

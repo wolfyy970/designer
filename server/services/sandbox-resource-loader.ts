@@ -58,6 +58,8 @@ export async function createSandboxResourceLoader(
 
   const loader = new DefaultResourceLoader({
     cwd: SANDBOX_PROJECT_ROOT,
+    /** Required since Pi 0.72 even when every loader (extensions/skills/prompts/themes) is disabled. */
+    agentDir: SANDBOX_PROJECT_ROOT,
     settingsManager,
     noExtensions: true,
     noSkills: true,

@@ -1,7 +1,7 @@
 /**
  * App-specific Pi SDK tools (todo + validators) reading the just-bash project tree.
  */
-import { Type } from '@sinclair/typebox';
+import { Type } from 'typebox';
 import { Script } from 'node:vm';
 import type { Bash } from 'just-bash';
 import type { ExtensionContext, ToolDefinition } from './pi-sdk/types.ts';

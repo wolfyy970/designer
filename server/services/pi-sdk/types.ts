@@ -39,7 +39,7 @@ export {
   createEditToolDefinition,
   createLsToolDefinition,
   createFindToolDefinition,
-  grepToolDefinition,
+  createGrepToolDefinition,
 } from '@mariozechner/pi-coding-agent';
 export {
   DEFAULT_MAX_BYTES,
