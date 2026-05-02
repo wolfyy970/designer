@@ -1,0 +1,50 @@
+/**
+ * Single import boundary for `@mariozechner/pi-ai` and `@mariozechner/pi-coding-agent`
+ * inside the package. When upgrading Pi, adjust this file first.
+ */
+export type {
+  Model,
+  Context,
+  AssistantMessage,
+  Message,
+  UserMessage,
+  ToolResultMessage,
+} from '@mariozechner/pi-ai';
+export { streamSimple } from '@mariozechner/pi-ai';
+
+export type {
+  AgentSession,
+  AgentSessionEvent,
+  CreateAgentSessionOptions,
+  AgentToolResult,
+  AgentToolUpdateCallback,
+  GrepToolDetails,
+  ResourceLoader,
+  ToolDefinition,
+  ExtensionContext,
+  ExtensionAPI,
+  ExtensionFactory,
+  PromptOptions,
+} from '@mariozechner/pi-coding-agent';
+export {
+  AuthStorage,
+  compact,
+  createAgentSession,
+  createExtensionRuntime,
+  DefaultResourceLoader,
+  SessionManager,
+  SettingsManager,
+  createReadToolDefinition,
+  createWriteToolDefinition,
+  createEditToolDefinition,
+  createLsToolDefinition,
+  createFindToolDefinition,
+  createGrepToolDefinition,
+} from '@mariozechner/pi-coding-agent';
+export {
+  DEFAULT_MAX_BYTES,
+  DEFAULT_MAX_LINES,
+  formatSize,
+  truncateHead,
+  truncateLine,
+} from '@mariozechner/pi-coding-agent';

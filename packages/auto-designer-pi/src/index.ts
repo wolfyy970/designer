@@ -1,13 +1,82 @@
 /**
  * Public API for the auto-designer Pi boundary.
  *
- * Phase 1 (skeleton): types and factory signatures only — every factory throws
- * `NotImplementedError` so consumers fail loudly until Phase 2 lands the real
- * integration layer. The legacy path under server/services/pi-* still serves
- * every session today.
+ * Phase 1 (skeleton): factory placeholders that throw NotImplementedError.
+ * Phase 2a (this commit): VFS sandbox + Pi-native tool builders ported into the package.
+ * Phase 2b/2c (next): resource-loader wrapper, designer extension, compaction handler,
+ * session host. Until those land, the legacy path under server/services/pi-* still
+ * serves every session.
  */
 
-export const NOT_IMPLEMENTED = 'auto-designer-pi: factory not implemented yet (Phase 2)';
+// ────────────────────────────────────────────────────────────────────────────
+// VFS sandbox
+
+export {
+  SANDBOX_PROJECT_ROOT,
+  sandboxProjectAbsPath,
+  buildSandboxSeedMaps,
+  createAgentBashSandbox,
+  extractDesignFiles,
+  computeDesignFilesBeyondSeed,
+  snapshotDesignFiles,
+  type AgentBashSandboxOptions,
+} from './sandbox/virtual-workspace.ts';
+
+// ────────────────────────────────────────────────────────────────────────────
+// Tools
+
+export { createVirtualPiCodingTools } from './tools/virtual-tools.ts';
+export { createSandboxBashTool } from './tools/bash-tool.ts';
+export { SANDBOX_TOOL_OVERRIDES } from './tools/sandbox-overrides.ts';
+export {
+  attemptMatchCascade,
+  isEditNotFoundError,
+  normalizeEditToolParams,
+  strategy1LeadingWhitespaceOnly,
+  strategy2CollapsedWhitespace,
+  strategy3LineTrimAnchors,
+  strategy4CaseInsensitiveCollapsed,
+  strategy5AnchorLines,
+  type CascadeEdit,
+  type CascadeDiagnostic,
+} from './tools/edit-match-cascade.ts';
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pi SDK re-exports (single import boundary)
+
+export type {
+  AgentSession,
+  AgentSessionEvent,
+  CreateAgentSessionOptions,
+  AgentToolResult,
+  AgentToolUpdateCallback,
+  GrepToolDetails,
+  ResourceLoader,
+  ToolDefinition,
+  ExtensionContext,
+  ExtensionAPI,
+  ExtensionFactory,
+  PromptOptions,
+} from './internal/pi-types.ts';
+export {
+  AuthStorage,
+  compact,
+  createAgentSession,
+  createExtensionRuntime,
+  DefaultResourceLoader,
+  SessionManager,
+  SettingsManager,
+} from './internal/pi-types.ts';
+
+// ────────────────────────────────────────────────────────────────────────────
+// Limits
+
+export { SANDBOX_LIMITS, SANDBOX_READ_MAX_LINES, DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES } from './internal/limits.ts';
+
+// ────────────────────────────────────────────────────────────────────────────
+// Phase 1 placeholder factories — replaced in Phase 2c
+
+export const NOT_IMPLEMENTED = 'auto-designer-pi: factory not implemented yet (Phase 2c)';
 
 export class NotImplementedError extends Error {
   constructor(method: string) {
@@ -16,7 +85,6 @@ export class NotImplementedError extends Error {
   }
 }
 
-/** Discriminator for the session-scoped resource-loader filter and prompt-template selection. */
 export type SessionType =
   | 'design'
   | 'evaluation'
@@ -25,14 +93,12 @@ export type SessionType =
   | 'design-system'
   | 'internal-context';
 
-/** Minimal shape every session factory needs. Concrete options refine this per session type. */
 export interface BaseSessionOptions {
   providerId: string;
   modelId: string;
   thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   cwd?: string;
   signal?: AbortSignal;
-  /** Stable correlation id surfaced through events for log/SSE join. */
   correlationId?: string;
 }
 
@@ -67,7 +133,6 @@ export interface InternalContextSessionOptions extends BaseSessionOptions {
   userPrompt: string;
 }
 
-/** Session lifecycle handle returned by every factory. Concrete event union arrives in Phase 2. */
 export interface SessionHandle<TEvent = unknown, TResult = unknown> {
   readonly sessionId: string;
   subscribe(listener: (event: TEvent) => void | Promise<void>): () => void;

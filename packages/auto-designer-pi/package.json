@@ -27,6 +27,8 @@
   "peerDependencies": {
     "@mariozechner/pi-ai": "*",
     "@mariozechner/pi-coding-agent": "*",
+    "just-bash": "*",
+    "minimatch": "*",
     "typebox": "*"
   }
 }
