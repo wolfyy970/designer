@@ -1,17 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import * as pi from '../src/index';
 
-/**
- * Phase 1 wiring proof: the package exports its public API surface and every
- * factory throws NotImplementedError until Phase 2 lands the real layer.
- *
- * When Phase 2 starts replacing factories, expect these "throws not-implemented"
- * tests to fail — that's the signal to retire each one in favor of a real
- * integration test against the implemented factory.
- */
-
 describe('@auto-designer/pi public API', () => {
-  it('exports every session factory', () => {
+  it('exports every session factory as a function', () => {
+    expect(typeof pi.createSession).toBe('function');
     expect(typeof pi.createDesignSession).toBe('function');
     expect(typeof pi.createEvaluationSession).toBe('function');
     expect(typeof pi.createIncubationSession).toBe('function');
@@ -20,18 +12,23 @@ describe('@auto-designer/pi public API', () => {
     expect(typeof pi.createInternalContextSession).toBe('function');
   });
 
-  it('every factory throws NotImplementedError until Phase 2 wires it', () => {
-    const baseOpts = {
-      providerId: 'openrouter',
-      modelId: 'anthropic/claude-sonnet-4',
-      systemPrompt: '',
-      userPrompt: '',
-    } as const;
-    expect(() => pi.createDesignSession({ ...baseOpts })).toThrow(pi.NotImplementedError);
-    expect(() => pi.createEvaluationSession({ ...baseOpts })).toThrow(pi.NotImplementedError);
-    expect(() => pi.createIncubationSession({ ...baseOpts })).toThrow(pi.NotImplementedError);
-    expect(() => pi.createInputsGenSession({ ...baseOpts })).toThrow(pi.NotImplementedError);
-    expect(() => pi.createDesignSystemSession({ ...baseOpts })).toThrow(pi.NotImplementedError);
-    expect(() => pi.createInternalContextSession({ ...baseOpts })).toThrow(pi.NotImplementedError);
+  it('exports the VFS surface', () => {
+    expect(pi.SANDBOX_PROJECT_ROOT).toBe('/home/user/project');
+    expect(typeof pi.createAgentBashSandbox).toBe('function');
+    expect(typeof pi.createVirtualPiCodingTools).toBe('function');
+    expect(typeof pi.createSandboxBashTool).toBe('function');
+  });
+
+  it('exports the resource loader and designer extension wiring', () => {
+    expect(typeof pi.SessionScopedResourceLoader).toBe('function');
+    expect(typeof pi.createDesignerExtensionFactory).toBe('function');
+    expect(typeof pi.createDesignerCompactionExtensionFactory).toBe('function');
+  });
+
+  it('exports the model builder + completion budget helpers', () => {
+    expect(typeof pi.buildModel).toBe('function');
+    expect(typeof pi.completionBudgetFromPromptTokens).toBe('function');
+    expect(typeof pi.maxCompletionBudgetForContextWindow).toBe('function');
+    expect(pi.DEFAULT_COMPLETION_BUDGET.minCompletion).toBeGreaterThan(0);
   });
 });

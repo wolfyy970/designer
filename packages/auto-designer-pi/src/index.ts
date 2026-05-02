@@ -1,11 +1,10 @@
 /**
  * Public API for the auto-designer Pi boundary.
  *
- * Phase 1 (skeleton): factory placeholders that throw NotImplementedError.
- * Phase 2a (this commit): VFS sandbox + Pi-native tool builders ported into the package.
- * Phase 2b/2c (next): resource-loader wrapper, designer extension, compaction handler,
- * session host. Until those land, the legacy path under server/services/pi-* still
- * serves every session.
+ * Phase 2 (this commit): VFS sandbox + Pi-native tool builders + designer extension
+ * + SessionScopedResourceLoader + session host factories. The legacy path under
+ * server/services/pi-* still serves every session; Phase 4 cuts over per session
+ * type behind a PI_INTEGRATION env flag, Phase 5 deletes the legacy code.
  */
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -77,6 +76,7 @@ export {
   defaultSkillTagLookup,
   parseTagsFromFrontmatter,
   clearSkillTagCache,
+  type SessionType,
   type SkillTagLookup,
   type SessionScopedSkillFilterOptions,
 } from './resource-loader.ts';
@@ -99,6 +99,58 @@ export {
 } from './extension/compaction.ts';
 
 // ────────────────────────────────────────────────────────────────────────────
+// Model + completion budget
+
+export {
+  buildModel,
+  type BuildModelOptions,
+  type ProviderConfig,
+  type OpenRouterProviderConfig,
+  type LMStudioProviderConfig,
+  type ThinkingLevel,
+} from './model.ts';
+export {
+  completionBudgetFromPromptTokens,
+  maxCompletionBudgetForContextWindow,
+  DEFAULT_COMPLETION_BUDGET,
+  type CompletionPurpose,
+  type CompletionBudgetConfig,
+} from './internal/completion-budget.ts';
+
+// ────────────────────────────────────────────────────────────────────────────
+// Event bridge + retries
+
+export { subscribeNarrowBridge, type SessionEvent } from './event-bridge.ts';
+export {
+  isAppRetryableUpstreamError,
+  APP_RETRYABLE_UPSTREAM_PATTERN,
+  sleepMs,
+} from './internal/upstream-retry.ts';
+
+// ────────────────────────────────────────────────────────────────────────────
+// Session host factories
+
+export {
+  createSession,
+  createDesignSession,
+  createEvaluationSession,
+  createIncubationSession,
+  createInputsGenSession,
+  createDesignSystemSession,
+  createInternalContextSession,
+  compactionReserveTokensForContextWindow,
+  type SessionRunnerOptions,
+  type SessionRunResult,
+  type SessionHandle,
+  type DesignSessionOptions,
+  type EvaluationSessionOptions,
+  type IncubationSessionOptions,
+  type InputsGenSessionOptions,
+  type DesignSystemSessionOptions,
+  type InternalContextSessionOptions,
+} from './host.ts';
+
+// ────────────────────────────────────────────────────────────────────────────
 // Shared types
 
 export type { TodoItem, TodoStatus } from './types.ts';
@@ -106,91 +158,9 @@ export type { TodoItem, TodoStatus } from './types.ts';
 // ────────────────────────────────────────────────────────────────────────────
 // Limits
 
-export { SANDBOX_LIMITS, SANDBOX_READ_MAX_LINES, DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES } from './internal/limits.ts';
-
-// ────────────────────────────────────────────────────────────────────────────
-// Phase 1 placeholder factories — replaced in Phase 2c
-
-export const NOT_IMPLEMENTED = 'auto-designer-pi: factory not implemented yet (Phase 2c)';
-
-export class NotImplementedError extends Error {
-  constructor(method: string) {
-    super(`${method}: ${NOT_IMPLEMENTED}`);
-    this.name = 'NotImplementedError';
-  }
-}
-
-export type { SessionType } from './resource-loader.ts';
-
-export interface BaseSessionOptions {
-  providerId: string;
-  modelId: string;
-  thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
-  cwd?: string;
-  signal?: AbortSignal;
-  correlationId?: string;
-}
-
-export interface DesignSessionOptions extends BaseSessionOptions {
-  systemPrompt: string;
-  userPrompt: string;
-  seedFiles?: Record<string, string>;
-}
-
-export interface EvaluationSessionOptions extends BaseSessionOptions {
-  systemPrompt: string;
-  userPrompt: string;
-}
-
-export interface IncubationSessionOptions extends BaseSessionOptions {
-  systemPrompt: string;
-  userPrompt: string;
-}
-
-export interface InputsGenSessionOptions extends BaseSessionOptions {
-  systemPrompt: string;
-  userPrompt: string;
-}
-
-export interface DesignSystemSessionOptions extends BaseSessionOptions {
-  systemPrompt: string;
-  userPrompt: string;
-}
-
-export interface InternalContextSessionOptions extends BaseSessionOptions {
-  systemPrompt: string;
-  userPrompt: string;
-}
-
-export interface SessionHandle<TEvent = unknown, TResult = unknown> {
-  readonly sessionId: string;
-  subscribe(listener: (event: TEvent) => void | Promise<void>): () => void;
-  run(): Promise<TResult>;
-  abort(): Promise<void>;
-}
-
-export function createDesignSession(_opts: DesignSessionOptions): Promise<SessionHandle> {
-  throw new NotImplementedError('createDesignSession');
-}
-
-export function createEvaluationSession(_opts: EvaluationSessionOptions): Promise<SessionHandle> {
-  throw new NotImplementedError('createEvaluationSession');
-}
-
-export function createIncubationSession(_opts: IncubationSessionOptions): Promise<SessionHandle> {
-  throw new NotImplementedError('createIncubationSession');
-}
-
-export function createInputsGenSession(_opts: InputsGenSessionOptions): Promise<SessionHandle> {
-  throw new NotImplementedError('createInputsGenSession');
-}
-
-export function createDesignSystemSession(_opts: DesignSystemSessionOptions): Promise<SessionHandle> {
-  throw new NotImplementedError('createDesignSystemSession');
-}
-
-export function createInternalContextSession(
-  _opts: InternalContextSessionOptions,
-): Promise<SessionHandle> {
-  throw new NotImplementedError('createInternalContextSession');
-}
+export {
+  SANDBOX_LIMITS,
+  SANDBOX_READ_MAX_LINES,
+  DEFAULT_MAX_BYTES,
+  DEFAULT_MAX_LINES,
+} from './internal/limits.ts';
