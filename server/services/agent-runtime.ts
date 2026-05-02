@@ -60,28 +60,6 @@ export type AgentRunEvent =
     }
   | { type: 'trace'; trace: RunTraceEvent };
 
-import { runDesignAgentSession as runDesignAgentSessionLegacy } from './pi-agent-service.ts';
-import { runDesignAgentSessionViaPackage } from './pi-package-adapter.ts';
-import { env } from '../env.ts';
-
-/**
- * Dispatches to the legacy `pi-agent-service` path or the new
- * `@auto-designer/pi` package path based on `PI_INTEGRATION`. The flag
- * supports `legacy` (default), `package`, or `package:design,evaluation`
- * for partial cut-over by session type. Phase 5 of the rebuild deletes
- * this dispatcher and the legacy branch.
- */
-export function runDesignAgentSession(
-  params: AgentSessionParams,
-  onEvent: (event: AgentRunEvent) => void | Promise<void>,
-): Promise<DesignAgentSessionResult | null> {
-  const flag = env.PI_INTEGRATION;
-  if (flag.mode === 'package') {
-    if (!flag.types || (params.sessionType && flag.types.has(params.sessionType))) {
-      return runDesignAgentSessionViaPackage(params, onEvent);
-    }
-  }
-  return runDesignAgentSessionLegacy(params, onEvent);
-}
+export { runDesignAgentSessionViaPackage as runDesignAgentSession } from './pi-package-adapter.ts';
 
 export type { ThinkingLevel };

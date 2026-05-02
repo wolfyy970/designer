@@ -116,29 +116,7 @@ export const env = {
     if (process.env.VITEST === 'true') return false;
     return process.env.BROWSER_PLAYWRIGHT_EVAL !== '0';
   },
-  /**
-   * Pi integration cut-over flag. `legacy` (default) keeps the existing
-   * `server/services/pi-*` path serving every session. `package` routes through
-   * `@auto-designer/pi`. A comma-separated `package:design,evaluation` form
-   * lets specific session types flip while others stay on legacy. The flag is
-   * checked per call in [agent-runtime.ts](server/services/agent-runtime.ts);
-   * Phase 5 of the rebuild deletes the flag and the legacy branch.
-   */
-  get PI_INTEGRATION(): { mode: 'legacy' | 'package'; types?: ReadonlySet<string> } {
-    const raw = (process.env.PI_INTEGRATION ?? '').trim();
-    if (!raw || raw === 'package') return { mode: 'package' };
-    if (raw === 'legacy') return { mode: 'legacy' };
-    if (raw.startsWith('package:')) {
-      const types = raw
-        .slice('package:'.length)
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-      return { mode: 'package', types: new Set(types) };
-    }
-    return { mode: 'package' };
-  },
-  /**
+/**
    * Public origin for server-side preview URLs (Playwright, eval). No trailing slash.
    * Defaults to 127.0.0.1 + PORT so headless browsers hit the same process as the API.
    */
