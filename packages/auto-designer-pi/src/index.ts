@@ -160,6 +160,7 @@ export {
   PACKAGE_EXTENSIONS_DIR,
   PACKAGE_DESIGNER_SYSTEM_PROMPT_PATH,
   loadDesignerSystemPrompt,
+  loadPackagePromptBody,
 } from './paths.ts';
 
 // ────────────────────────────────────────────────────────────────────────────

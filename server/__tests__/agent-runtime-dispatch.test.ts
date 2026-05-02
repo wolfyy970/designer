@@ -34,8 +34,16 @@ describe('runDesignAgentSession dispatch', () => {
     vi.unstubAllEnvs();
   });
 
-  it('routes to the legacy path by default', async () => {
+  it('routes to the package adapter by default', async () => {
     vi.stubEnv('PI_INTEGRATION', '');
+    const { runDesignAgentSession } = await loadFreshRuntime();
+    await runDesignAgentSession({ ...baseParams }, () => {});
+    expect(packageMock).toHaveBeenCalledTimes(1);
+    expect(legacyMock).not.toHaveBeenCalled();
+  });
+
+  it('routes to the legacy path when PI_INTEGRATION=legacy is explicit', async () => {
+    vi.stubEnv('PI_INTEGRATION', 'legacy');
     const { runDesignAgentSession } = await loadFreshRuntime();
     await runDesignAgentSession({ ...baseParams }, () => {});
     expect(legacyMock).toHaveBeenCalledTimes(1);

@@ -12,7 +12,7 @@ import {
   catalogEntriesToSummaries,
   discoverSkills,
   filterSkillsForSession,
-  resolveSkillsRoot,
+  resolvePackageSkillsCatalogRoot,
   type SessionType,
 } from './skill-discovery.ts';
 import { getSystemPromptBody } from './prompt-discovery.ts';
@@ -37,7 +37,7 @@ export async function buildAgenticSystemContext(input: {
 
   const sessionType = input.sessionType ?? 'design';
 
-  const skillsRoot = resolveSkillsRoot(input.skillsRoot);
+  const skillsRoot = input.skillsRoot ?? resolvePackageSkillsCatalogRoot();
   const allEntries = await discoverSkills(skillsRoot);
   const catalogEntries = filterSkillsForSession(allEntries, sessionType);
   const loadedSkills = catalogEntriesToSummaries(catalogEntries);

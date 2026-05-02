@@ -126,8 +126,8 @@ export const env = {
    */
   get PI_INTEGRATION(): { mode: 'legacy' | 'package'; types?: ReadonlySet<string> } {
     const raw = (process.env.PI_INTEGRATION ?? '').trim();
-    if (!raw || raw === 'legacy') return { mode: 'legacy' };
-    if (raw === 'package') return { mode: 'package' };
+    if (!raw || raw === 'package') return { mode: 'package' };
+    if (raw === 'legacy') return { mode: 'legacy' };
     if (raw.startsWith('package:')) {
       const types = raw
         .slice('package:'.length)
@@ -136,7 +136,7 @@ export const env = {
         .filter(Boolean);
       return { mode: 'package', types: new Set(types) };
     }
-    return { mode: 'legacy' };
+    return { mode: 'package' };
   },
   /**
    * Public origin for server-side preview URLs (Playwright, eval). No trailing slash.

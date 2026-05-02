@@ -96,15 +96,14 @@ Eval body`,
     }
   });
 
-  it('exposes the checked-in DESIGN.md extraction skill to design-system sessions', async () => {
-    const out = await buildAgenticSystemContext({ sessionType: 'design-system' });
-    const skill = out.skillCatalog.find((entry) => entry.key === 'design-system-extract-system');
-
-    expect(skill).toBeTruthy();
-    expect(out.loadedSkills.some((entry) => entry.key === 'design-system-extract-system')).toBe(true);
-    expect(skill?.tags).toContain('design-system');
-    expect(skill?.bodyMarkdown).toContain('## Output Contract');
-    expect(skill?.bodyMarkdown).toContain('Write the complete document to `DESIGN.md` in the workspace root.');
-    expect(skill?.bodyMarkdown).toContain('Google Labs / Stitch format');
+  it('returns only the @auto-designer/pi package skills for the default catalog (design session)', async () => {
+    const out = await buildAgenticSystemContext({ sessionType: 'design' });
+    const keys = out.skillCatalog.map((entry) => entry.key).sort();
+    expect(keys).toEqual(['accessibility', 'design-generation', 'design-quality']);
+    expect(out.loadedSkills.map((s) => s.key).sort()).toEqual([
+      'accessibility',
+      'design-generation',
+      'design-quality',
+    ]);
   });
 });

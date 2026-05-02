@@ -25,6 +25,12 @@ const dimensionRangeSchema = z.union([
   z.array(z.string()).transform((a) => a.join(', ')),
 ]);
 
+/** Models occasionally emit `measurements` as an array of bullet points despite the prompt asking for a string. Normalize. */
+const measurementsSchema = z.union([
+  z.string(),
+  z.array(z.unknown()).transform((a) => a.map((x) => String(x)).join('; ')),
+]);
+
 const DimensionSchema = z.object({
   name: z.string().default(''),
   range: dimensionRangeSchema.default(''),
@@ -37,7 +43,7 @@ const HypothesisStrategyParseSchema = z
     hypothesis: z.string().optional().default(''),
     primaryEmphasis: z.string().optional(),
     rationale: z.string().default(''),
-    measurements: z.string().default(''),
+    measurements: measurementsSchema.optional().default(''),
     dimensionValues: z
       .record(z.string(), z.unknown())
       .optional()
@@ -92,15 +98,18 @@ incubate.post('/', async (c) => {
     },
   );
 
+  const hypothesesGuidance = await getPromptBody('hypotheses-generator-system');
   const agentUserPrompt = `<task>
 Analyze the design specification below and produce a dimension map with hypothesis strategies.
 
 Write the complete JSON result to \`result.json\` in the workspace root. The JSON must contain:
 - "dimensions": array of { name, range, isConstant }
 - "hypotheses": array of { name, hypothesis, rationale, measurements, dimensionValues }
-
-Use the \`use_skill\` tool to load relevant skills before beginning your analysis.
 </task>
+
+<hypotheses_generator_guidance>
+${hypothesesGuidance}
+</hypotheses_generator_guidance>
 
 ${assembledSpec}`;
 

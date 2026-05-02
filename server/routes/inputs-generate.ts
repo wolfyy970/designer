@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { PromptKey } from '../../src/lib/prompts/defaults.ts';
 import { clampProviderModel } from '../lib/lockdown-model.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
@@ -6,6 +7,7 @@ import {
   buildInputsGenerateUserMessage,
 } from '../../src/lib/prompts/inputs-generate.ts';
 import { runTaskAgentRoute } from '../lib/task-agent-route-runner.ts';
+import { getPromptBody } from '../lib/prompt-resolution.ts';
 import { InputsGenerateRequestSchema } from '../../src/api/request-schemas.ts';
 
 const inputsGenerate = new Hono();
@@ -14,6 +16,12 @@ const INPUT_LABELS: Record<string, string> = {
   'research-context': 'Research & Context',
   'objectives-metrics': 'Objectives & Metrics',
   'design-constraints': 'Design Constraints',
+};
+
+const INPUT_PROMPT_KEYS: Record<string, PromptKey> = {
+  'research-context': 'inputs-gen-research-context',
+  'objectives-metrics': 'inputs-gen-objectives-metrics',
+  'design-constraints': 'inputs-gen-design-constraints',
 };
 
 inputsGenerate.post('/generate', async (c) => {
@@ -31,16 +39,16 @@ inputsGenerate.post('/generate', async (c) => {
   });
 
   const label = INPUT_LABELS[body.inputId] ?? body.inputId;
+  const promptKey = INPUT_PROMPT_KEYS[body.inputId];
+  const guidance = promptKey ? await getPromptBody(promptKey) : '';
   const agentUserPrompt = `<task>
 Generate the **${label}** section content for a design specification.
 
 Write the result as plain text to \`result.txt\` in the workspace root.
 The output should be ready to paste into a textarea — no JSON wrapping, no markdown code fences, no meta commentary.
-
-Use the \`use_skill\` tool to load relevant skills before generating.
 </task>
 
-${contextMessage}`;
+${guidance ? `<input_generator_guidance>\n${guidance}\n</input_generator_guidance>\n\n` : ''}${contextMessage}`;
 
   return runTaskAgentRoute(c, {
     routeLabel: 'inputs-generate',

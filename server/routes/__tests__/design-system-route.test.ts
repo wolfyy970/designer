@@ -103,7 +103,7 @@ describe('POST /api/design-system/extract', () => {
     expect(res.status).toBe(200);
   });
 
-  it('prompts the agent to load the authoritative DESIGN.md extraction skill', async () => {
+  it('inlines the authoritative DESIGN.md extraction guidance into the agent user prompt', async () => {
     const res = await app.request('http://localhost/api/design-system/extract', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -116,16 +116,13 @@ describe('POST /api/design-system/extract', () => {
     });
     expect(res.status).toBe(200);
     const taskOptions = vi.mocked(executeTaskAgentStream).mock.calls.at(-1)?.[1];
-    expect(taskOptions?.userPrompt).toContain('use_skill');
+    expect(taskOptions?.userPrompt).toContain('<design_md_extraction_guidance>');
     expect(taskOptions?.userPrompt).toContain('authoritative contract');
     expect(taskOptions?.userPrompt).toContain('Google/Stitch DESIGN.md schema');
     expect(taskOptions?.userPrompt).toContain('<markdown_sources>');
     expect(taskOptions?.userPrompt).toContain('source evidence');
     expect(taskOptions?.userPrompt).toContain('Do not assume they are already canonical or lint-clean');
     expect(taskOptions?.userPrompt).toContain('write the complete Markdown document to `DESIGN.md`');
-    expect(taskOptions?.userPrompt).not.toContain(
-      'version, name, description, colors, typography, rounded, spacing, components',
-    );
   });
 
   it('fails the stream when DESIGN.md lint returns errors', async () => {

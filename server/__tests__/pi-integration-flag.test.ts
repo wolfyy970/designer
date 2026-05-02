@@ -14,10 +14,10 @@ describe('env.PI_INTEGRATION', () => {
     vi.unstubAllEnvs();
   });
 
-  it("defaults to legacy mode when unset", async () => {
+  it('defaults to package mode when unset', async () => {
     vi.stubEnv('PI_INTEGRATION', '');
     const env = await loadFreshEnv();
-    expect(env.PI_INTEGRATION).toEqual({ mode: 'legacy' });
+    expect(env.PI_INTEGRATION).toEqual({ mode: 'package' });
   });
 
   it('reads `legacy` literal as legacy', async () => {
@@ -45,10 +45,10 @@ describe('env.PI_INTEGRATION', () => {
     expect(flag.types?.has('incubation')).toBe(false);
   });
 
-  it('falls back to legacy on garbage values', async () => {
+  it('falls back to package on garbage values', async () => {
     vi.stubEnv('PI_INTEGRATION', 'lolwut');
     const env = await loadFreshEnv();
-    expect(env.PI_INTEGRATION.mode).toBe('legacy');
+    expect(env.PI_INTEGRATION.mode).toBe('package');
   });
 
   it('strips whitespace and empty entries from the per-type list', async () => {

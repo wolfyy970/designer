@@ -67,6 +67,16 @@ export function resolveSkillsRoot(explicit?: string): string {
   return path.resolve(process.cwd(), 'skills');
 }
 
+/**
+ * Catalog root for the UI/skills_loaded SSE — the @auto-designer/pi package's bundled
+ * skills directory. The agent only sees these three real skills inside Pi sessions; the
+ * legacy `skills/` directory at repo root still holds prompt-template content fetched by
+ * non-Pi code via `getSkillBody`, so we keep `resolveSkillsRoot` pointed there.
+ */
+export function resolvePackageSkillsCatalogRoot(): string {
+  return path.resolve(process.cwd(), 'packages', 'auto-designer-pi', 'skills');
+}
+
 /** Split `SKILL.md` into YAML frontmatter and body. */
 export function splitSkillMarkdown(raw: string): { frontmatterYaml: string; body: string } | null {
   return splitYamlFrontmatter(raw);

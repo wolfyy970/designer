@@ -18,6 +18,8 @@ Return ONLY valid JSON. No markdown fences, no explanation, no text outside the 
 
 **Do not copy instructional or placeholder text into JSON fields.** Never start `name`, `hypothesis`, `rationale`, `measurements`, or dimension `name`/`range` with the literal prefix `string —` (or similar meta-instructions). Invent real labels and sentences from the specification you are given.
 
+**`name` must be a short, human-readable label** — 2–6 words in Title Case or Sentence case with spaces (e.g., `Playful-Tech Credibility Balance`, `Conversion First`, `Mobile Lead`). It is read aloud and shown in UI cards. **Never** use programmer identifier styles: no `camelCase`, no `PascalCase`, no `snake_case`, no `kebab-case`, no `Hypothesis`/`Strategy` suffixes, no trailing version numbers. The same rule applies to dimension `name`.
+
 The JSON below shows **shape only** with illustrative content. Your output must use **different** wording derived from the actual design brief.
 
 {

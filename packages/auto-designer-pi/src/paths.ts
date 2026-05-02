@@ -43,3 +43,15 @@ function stripFrontmatter(text: string): string {
 export function loadDesignerSystemPrompt(): string {
   return stripFrontmatter(readFileSync(PACKAGE_DESIGNER_SYSTEM_PROMPT_PATH, 'utf8')).trim();
 }
+
+/**
+ * Read a bundled prompt template body by filename (e.g. `gen-hypotheses.md`),
+ * with YAML frontmatter stripped. Hosts use this to inject task-specific
+ * behavioral guidance into Pi user prompts when a session type is not driven
+ * through Pi's `use_skill` flow.
+ */
+export function loadPackagePromptBody(filename: string): string {
+  const safe = filename.replace(/[^A-Za-z0-9._-]/g, '');
+  const full = resolve(PACKAGE_PROMPTS_DIR, safe);
+  return stripFrontmatter(readFileSync(full, 'utf8')).trim();
+}
