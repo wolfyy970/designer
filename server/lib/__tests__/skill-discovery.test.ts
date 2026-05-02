@@ -10,7 +10,6 @@ import {
   formatSkillsCatalogXml,
   normalizeSkillResourcePath,
   readSkillResourceText,
-  resolveSkillsRoot,
   SKILL_RESOURCE_READ_MAX_BYTES,
   splitSkillMarkdown,
 } from '../skill-discovery.ts';
@@ -117,8 +116,8 @@ body`,
     warn.mockRestore();
   });
 
-  it('all checked-in skills have loadable frontmatter', async () => {
-    const skillsRoot = path.resolve(process.cwd(), 'skills');
+  it('all checked-in package skills have loadable frontmatter', async () => {
+    const skillsRoot = path.resolve(process.cwd(), 'packages', 'auto-designer-pi', 'skills');
     const names = await fs.readdir(skillsRoot);
     const expected: string[] = [];
     for (const name of names) {
@@ -127,7 +126,7 @@ body`,
         const stat = await fs.stat(path.join(skillsRoot, name, 'SKILL.md'));
         if (stat.isFile()) expected.push(name);
       } catch {
-        // Non-skill files such as README.md are expected in this directory.
+        // Non-skill files in this directory are not expected, but ignore them.
       }
     }
 
@@ -299,20 +298,11 @@ describe('skill resources', () => {
   });
 });
 
-describe('resolveSkillsRoot', () => {
-  it('uses explicit path when provided', () => {
-    const result = resolveSkillsRoot('/custom/skills');
-    expect(result).toBe('/custom/skills');
-  });
-
-  it('defaults to cwd/skills when no override', () => {
-    const original = process.env.SKILLS_ROOT;
-    delete process.env.SKILLS_ROOT;
-    try {
-      const result = resolveSkillsRoot();
-      expect(result).toBe(path.resolve(process.cwd(), 'skills'));
-    } finally {
-      if (original !== undefined) process.env.SKILLS_ROOT = original;
-    }
+describe('resolvePackageSkillsCatalogRoot', () => {
+  it('points at the @auto-designer/pi package skills directory', async () => {
+    const { resolvePackageSkillsCatalogRoot } = await import('../skill-discovery.ts');
+    expect(resolvePackageSkillsCatalogRoot()).toBe(
+      path.resolve(process.cwd(), 'packages', 'auto-designer-pi', 'skills'),
+    );
   });
 });

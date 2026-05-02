@@ -58,19 +58,10 @@ const SESSION_TAGS: Record<SessionType, string[]> = {
   'design-system': ['design-system'],
 };
 
-/** Skills root: repo skills directory, or SKILLS_ROOT env (tests). */
-export function resolveSkillsRoot(explicit?: string): string {
-  if (explicit?.trim()) return path.resolve(explicit.trim());
-  const fromEnv = process.env.SKILLS_ROOT?.trim();
-  if (fromEnv) return path.resolve(fromEnv);
-  return path.resolve(process.cwd(), 'skills');
-}
-
 /**
- * Catalog root for the UI/skills_loaded SSE — the @auto-designer/pi package's bundled
- * skills directory. The agent only sees these three real skills inside Pi sessions; the
- * legacy `skills/` directory at repo root still holds prompt-template content fetched by
- * non-Pi code via `getSkillBody`, so we keep `resolveSkillsRoot` pointed there.
+ * Catalog root for the UI/skills_loaded SSE — the @auto-designer/pi package's
+ * bundled skills directory. There is no longer a legacy fallback; the agent
+ * sees exactly the three skills the package owns.
  */
 export function resolvePackageSkillsCatalogRoot(): string {
   return path.resolve(process.cwd(), 'packages', 'auto-designer-pi', 'skills');
@@ -304,16 +295,3 @@ function escapeXmlAttr(s: string): string {
     .replace(/>/g, '&gt;');
 }
 
-const skillBodyCache = new Map<string, string>();
-
-/** Read a skill's markdown body by key (directory name under skills/). Cached. */
-export async function getSkillBody(key: string, skillsRoot?: string): Promise<string> {
-  const root = resolveSkillsRoot(skillsRoot);
-  const cacheKey = `${root}:${key}`;
-  const cached = skillBodyCache.get(cacheKey);
-  if (cached !== undefined) return cached;
-  const entry = await safeReadSkillDir(root, key);
-  if (!entry) throw new Error(`Skill "${key}" not found under ${root}`);
-  skillBodyCache.set(cacheKey, entry.bodyMarkdown);
-  return entry.bodyMarkdown;
-}

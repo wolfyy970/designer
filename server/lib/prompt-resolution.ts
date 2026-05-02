@@ -1,15 +1,9 @@
 /**
- * Unified prompt body resolution — reads from the @auto-designer/pi package prompts,
- * system prompt files, or code-constant glue templates.
- *
- * Migration note: keys that used to resolve to a SKILL.md under `skills/` were
- * reclassified as Pi prompt templates and now live in the package's `prompts/`
- * directory. They are mapped here so existing callers (evaluator dispatch, etc.)
- * keep working without each one knowing about the package layout.
+ * Unified prompt body resolution — every prompt body lives in either
+ * `@auto-designer/pi`'s bundled prompts or a host-side glue template.
  */
 import { loadDesignerSystemPrompt, loadPackagePromptBody } from '@auto-designer/pi';
 import type { PromptKey } from '../../src/lib/prompts/defaults.ts';
-import { getSkillBody } from './skill-discovery.ts';
 import {
   INCUBATOR_USER_INPUTS_TEMPLATE,
   DESIGNER_HYPOTHESIS_INPUTS_TEMPLATE,
@@ -20,11 +14,7 @@ const GLUE_TEMPLATES: Partial<Record<PromptKey, string>> = {
   'designer-hypothesis-inputs': DESIGNER_HYPOTHESIS_INPUTS_TEMPLATE,
 };
 
-/**
- * PromptKey → bundled prompt filename in `@auto-designer/pi/prompts/`.
- * Keys absent from this map fall through to legacy `getSkillBody` (still needed
- * for keys whose body has not migrated to the package yet).
- */
+/** PromptKey → bundled prompt filename in `@auto-designer/pi/prompts/`. */
 const PACKAGE_PROMPT_FILES: Partial<Record<PromptKey, string>> = {
   'hypotheses-generator-system': 'gen-hypotheses.md',
   'evaluator-design-quality': 'eval-design-quality.md',
@@ -41,10 +31,9 @@ const PACKAGE_PROMPT_FILES: Partial<Record<PromptKey, string>> = {
 
 /**
  * Resolve prompt body by key. Routes to the appropriate source:
- * - `designer-agentic-system` → PROMPT.md (system prompt file)
+ * - `designer-agentic-system` → package's `_designer-system.md`
  * - `incubator-user-inputs` / `designer-hypothesis-inputs` → glue templates
- * - migrated keys → package prompt template body
- * - Everything else → SKILL.md (skill files)
+ * - everything else → bundled package prompt template
  */
 export async function getPromptBody(key: PromptKey): Promise<string> {
   if (key === 'designer-agentic-system') {
@@ -57,5 +46,5 @@ export async function getPromptBody(key: PromptKey): Promise<string> {
   const packageFile = PACKAGE_PROMPT_FILES[key];
   if (packageFile !== undefined) return loadPackagePromptBody(packageFile);
 
-  return getSkillBody(key);
+  throw new Error(`getPromptBody: unhandled PromptKey "${key}"`);
 }
