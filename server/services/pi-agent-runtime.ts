@@ -1,12 +1,10 @@
 /**
- * Package-backed adapter for the new Pi boundary at `@auto-designer/pi`.
+ * Pi agent runtime — single boundary between the host and `@auto-designer/pi`.
  *
- * Surfaces the same `runDesignAgentSession` signature as the legacy
- * `pi-agent-service.ts` so callers don't change. Internally builds a session
- * via the package, then layers the existing host bridge + LLM-log wrap on top
- * of the returned `handle.session` so SSE consumers see the same event stream
- * they get from the legacy path. Phase 5 lifts the bridge + log wrap into the
- * package and removes this adapter.
+ * Builds a Pi session via the package, then layers the host's event bridge and
+ * LLM-log wrap on top of the returned `handle.session` so SSE consumers see
+ * the host's `AgentRunEvent` shape and dev-time `/api/logs` records every
+ * model turn.
  */
 import { performance } from 'node:perf_hooks';
 import {
@@ -82,13 +80,13 @@ function buildPackageResourceLoader(input: {
   });
 }
 
-export async function runDesignAgentSessionViaPackage(
+export async function runPiAgentSession(
   params: AgentSessionParams,
   onEvent: (event: AgentRunEvent) => void | Promise<void>,
 ): Promise<DesignAgentSessionResult | null> {
   // ── Provider config (env-resolved) ────────────────────────────────────────
   if (params.providerId !== 'openrouter' && params.providerId !== 'lmstudio') {
-    throw new Error(`PI_INTEGRATION=package: unsupported provider "${params.providerId}"`);
+    throw new Error(`pi-agent-runtime: unsupported provider "${params.providerId}"`);
   }
   const provider =
     params.providerId === 'openrouter'
@@ -222,7 +220,7 @@ export async function runDesignAgentSessionViaPackage(
   // ── Run + map result ──────────────────────────────────────────────────────
   if (env.isDev) {
     const seedKeys = params.seedFiles ? Object.keys(params.seedFiles) : [];
-    console.debug('[pi-package-adapter] session start', {
+    console.debug('[pi-agent-runtime] session start', {
       correlationId: params.correlationId,
       provider: params.providerId,
       model: params.modelId,
@@ -237,7 +235,7 @@ export async function runDesignAgentSessionViaPackage(
     const t0 = performance.now();
     result = await handle.run();
     if (env.isDev) {
-      console.debug('[pi-package-adapter] session done', {
+      console.debug('[pi-agent-runtime] session done', {
         correlationId: params.correlationId,
         durationMs: Math.round(performance.now() - t0),
         fileCount: Object.keys(result.files).length,
@@ -247,7 +245,7 @@ export async function runDesignAgentSessionViaPackage(
     }
   } catch (err) {
     if (env.isDev) {
-      console.error('[pi-package-adapter] handle.run failed', normalizeError(err), err);
+      console.error('[pi-agent-runtime] handle.run failed', normalizeError(err), err);
     }
     await onEvent({ type: 'error', payload: `Agent error: ${normalizeProviderError(err)}` });
     return null;

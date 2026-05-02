@@ -60,6 +60,6 @@ export type AgentRunEvent =
     }
   | { type: 'trace'; trace: RunTraceEvent };
 
-export { runDesignAgentSessionViaPackage as runDesignAgentSession } from './pi-package-adapter.ts';
+export { runPiAgentSession as runDesignAgentSession } from './pi-agent-runtime.ts';
 
 export type { ThinkingLevel };
