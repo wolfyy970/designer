@@ -24,14 +24,13 @@ describe('piStreamCompletionMaxTokens', () => {
   });
 
   it('shrinks the budget as prompt size grows', () => {
+    const userMsg = (s: string) =>
+      ({ role: 'user', content: s, timestamp: 0 }) as unknown as Context['messages'][number];
     const big = ctx({
       systemPrompt: 'a'.repeat(60_000),
-      messages: [
-        { role: 'user', content: 'b'.repeat(60_000) },
-        { role: 'user', content: 'c'.repeat(60_000) },
-      ],
+      messages: [userMsg('b'.repeat(60_000)), userMsg('c'.repeat(60_000))],
     });
-    const small = ctx({ systemPrompt: 'sys', messages: [{ role: 'user', content: 'hi' }] });
+    const small = ctx({ systemPrompt: 'sys', messages: [userMsg('hi')] });
     const big1 = piStreamCompletionMaxTokens(model, big);
     const small1 = piStreamCompletionMaxTokens(model, small);
     expect(big1).toBeLessThanOrEqual(small1);
