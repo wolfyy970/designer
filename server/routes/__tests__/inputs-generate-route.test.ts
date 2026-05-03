@@ -68,6 +68,17 @@ describe('POST /api/inputs/generate', () => {
     expect(text.match(/event: done/g)).toHaveLength(1);
   });
 
+  it('inlines bundled inputs-gen guidance for the requested inputId', async () => {
+    await app.request('http://localhost/api/inputs/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(baseBody),
+    });
+    const taskOptions = vi.mocked(executeTaskAgentStream).mock.calls.at(-1)?.[1];
+    expect(taskOptions?.userPrompt).toContain('<input_generator_guidance>');
+    expect(taskOptions?.userPrompt).not.toContain('use the `use_skill` tool');
+  });
+
   it('surfaces task execution errors on the SSE stream', async () => {
     vi.mocked(executeTaskAgentStream).mockRejectedValueOnce(new Error('task failed'));
     const res = await app.request('http://localhost/api/inputs/generate', {

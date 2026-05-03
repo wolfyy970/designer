@@ -103,11 +103,11 @@ Start a run with **Design** on the Hypothesis node. With **Auto-improve** **off*
 
 **Thinking** (Model node). When the connected model advertises reasoning support: **None / Light / Deep** map to API levels *off* / *minimal* / *medium*. Other levels exist in the stack but are not exposed in this UI.
 
-**Prompts.** Incubate, hypothesis, agentic design/revision, evaluators, design-system extract, and compaction use text loaded from repo **`skills/*/SKILL.md`** files (YAML frontmatter + body) and **`prompts/designer-agentic-system/PROMPT.md`**, composed per request by **`server/lib/prompt-resolution.ts`** (see **[ARCHITECTURE.md](ARCHITECTURE.md)**). **`src/lib/prompts/defaults.ts`** holds shared **prompt key** identifiers and labels for the app and harness, not prompt bodies. Revision loop limits default from **Settings → Evaluator defaults** and can be overridden per hypothesis (**Auto-improve**, max rounds, target score on the node) or via API/env.
+**Prompts.** Incubate, hypothesis, agentic design/revision, evaluators, design-system extract, internal-context, and inputs-gen use text shipped in the [`@auto-designer/pi`](packages/auto-designer-pi/) package — three real skills under `packages/auto-designer-pi/skills/<key>/SKILL.md` (YAML frontmatter + body) and per-task prompt templates under `packages/auto-designer-pi/prompts/<name>.md` (including the designer system prompt `_designer-system.md`), resolved per request by `server/lib/prompt-resolution.ts` (see [ARCHITECTURE.md](ARCHITECTURE.md)). `src/lib/prompts/defaults.ts` holds shared **prompt key** identifiers and labels, not bodies. Revision loop limits default from **Settings → Evaluator defaults** and can be overridden per hypothesis (**Auto-improve**, max rounds, target score on the node) or via API/env.
 
 ## Prompt keys (catalog)
 
-Do not duplicate the full prompt catalog here — keys and labels live in **`src/lib/prompts/defaults.ts`**; bodies live next to those keys under **`skills/`** and **`prompts/`** as described in **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+Do not duplicate the full prompt catalog here — keys and labels live in `src/lib/prompts/defaults.ts`; bodies live next to those keys under `packages/auto-designer-pi/skills/` and `packages/auto-designer-pi/prompts/` as described in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Providers
 

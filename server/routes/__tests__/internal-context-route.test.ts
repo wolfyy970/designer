@@ -73,6 +73,17 @@ describe('POST /api/internal-context/generate', () => {
     expect(text).toContain('"result":"# Context"');
   });
 
+  it('inlines bundled gen-internal-context guidance into the agent user prompt', async () => {
+    await app.request('http://localhost/api/internal-context/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(baseBody),
+    });
+    const taskOptions = vi.mocked(executeTaskAgentStream).mock.calls.at(-1)?.[1];
+    expect(taskOptions?.userPrompt).toContain('<internal_context_guidance>');
+    expect(taskOptions?.userPrompt).not.toContain('use the `use_skill` tool');
+  });
+
   it('surfaces task execution errors on the SSE stream', async () => {
     vi.mocked(executeTaskAgentStream).mockRejectedValueOnce(new Error('context failed'));
     const res = await app.request('http://localhost/api/internal-context/generate', {

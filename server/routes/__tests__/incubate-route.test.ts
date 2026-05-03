@@ -117,6 +117,45 @@ describe('POST /api/incubate SSE wire', () => {
     expect(text).toContain('"hypothesis":"A guided flow reduces uncertainty."');
   });
 
+  it('coerces array-shaped `measurements` into a joined string', async () => {
+    vi.mocked(executeTaskAgentStream).mockResolvedValueOnce({
+      result: JSON.stringify({
+        dimensions: [{ name: 'Tone', range: 'playful to serious', isConstant: false }],
+        hypotheses: [
+          {
+            name: 'Playful Lead',
+            hypothesis: 'Lead with playfulness.',
+            rationale: 'r',
+            measurements: ['Time on page', 'Bounce rate', 'Pages per session'],
+            dimensionValues: { Tone: 'playful' },
+          },
+        ],
+      }),
+      resultFile: 'result.json',
+      files: {},
+    });
+    const res = await app.request('http://localhost/api/incubate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyWithSpec()),
+    });
+    const text = await res.text();
+    expect(text).toContain('event: incubate_result');
+    expect(text).toContain('Time on page; Bounce rate; Pages per session');
+  });
+
+  it('injects the bundled gen-hypotheses guidance into the agent user prompt', async () => {
+    vi.mocked(executeTaskAgentStream).mockClear();
+    await app.request('http://localhost/api/incubate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyWithSpec()),
+    });
+    const taskOptions = vi.mocked(executeTaskAgentStream).mock.calls.at(-1)?.[1];
+    expect(taskOptions?.userPrompt).toContain('<hypotheses_generator_guidance>');
+    expect(taskOptions?.userPrompt).not.toContain('use the `use_skill` tool');
+  });
+
   it('surfaces task execution errors on the SSE stream', async () => {
     vi.mocked(executeTaskAgentStream).mockRejectedValueOnce(new Error('incubate failed'));
     const res = await app.request('http://localhost/api/incubate', {

@@ -57,6 +57,12 @@ describe('getPromptBody', () => {
     },
   );
 
+  it('throws when handed a key with no resolver', async () => {
+    await expect(getPromptBody('not-a-real-key' as unknown as PromptKey)).rejects.toThrow(
+      /unhandled PromptKey/u,
+    );
+  });
+
   it('routes the DESIGN.md extraction prompt to the authoritative authoring contract', async () => {
     const body = await getPromptBody('design-system-extract-system');
 

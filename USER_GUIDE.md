@@ -44,7 +44,7 @@ In **development** only, the API keeps an in-memory `**/api/logs`** ring (LLM ro
 
 ## Prompts and skills (editing the repo)
 
-All LLM-facing prompt **bodies** ship with the repo: `skills/<key>/SKILL.md` (YAML frontmatter + markdown body) and the designer **system** text in `prompts/designer-agentic-system/PROMPT.md`. The server loads and composes them per request via `server/lib/prompt-resolution.ts`. Prompt keys (`PromptKey`, `PROMPT_KEYS`) live in `src/lib/prompts/defaults.ts`. There is no in-app prompt editor—change files, restart the API if needed, and run tests. See [ARCHITECTURE.md](ARCHITECTURE.md) and [PRODUCT.md](PRODUCT.md).
+All LLM-facing prompt **bodies** ship inside the [`@auto-designer/pi`](packages/auto-designer-pi/) workspace package — three real skills under `packages/auto-designer-pi/skills/<key>/SKILL.md` (YAML frontmatter + markdown body) and per-task prompt templates under `packages/auto-designer-pi/prompts/<name>.md` (including the designer system prompt `_designer-system.md`). The server loads them per request via `server/lib/prompt-resolution.ts`; prompt keys (`PromptKey`, `PROMPT_KEYS`) live in `src/lib/prompts/defaults.ts`. There is no in-app prompt editor—change files, restart the API if needed, and run tests. See [ARCHITECTURE.md](ARCHITECTURE.md) and [PRODUCT.md](PRODUCT.md).
 
 ### Version history
 
