@@ -4605,9 +4605,7 @@ async function runPiAgentSession(params, onEvent) {
       });
     }
   } catch (err) {
-    if (env.isDev) {
-      console.error("[pi-agent-runtime] handle.run failed", normalizeError(err), err);
-    }
+    console.error("[pi-agent-runtime] handle.run failed", normalizeError(err), err);
     await onEvent({ type: "error", payload: `Agent error: ${normalizeProviderError(err)}` });
     if (err instanceof StreamIdleError) {
       throw err;

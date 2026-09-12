@@ -10,6 +10,7 @@ import { LogRocketRouteTracker } from './components/shared/LogRocketRouteTracker
 import { ViewportGate } from './components/shared/ViewportGate';
 import { ApiServerGate } from './components/shared/ApiServerGate';
 import { migrateModelNodeToSettings } from './lib/migrate-model-node-to-settings';
+import { normalizeError } from './lib/error-utils';
 
 const HomePage = lazy(() => import('./pages/HomePage'));
 const CanvasPage = lazy(() => import('./pages/CanvasPage'));
@@ -48,18 +49,34 @@ export default function App() {
       const activeIds = new Set(
         useGenerationStore.getState().results.map((r) => r.id),
       );
-      garbageCollect(activeIds).then(({ codesRemoved, provenanceRemoved }) => {
-        if (import.meta.env.DEV && (codesRemoved > 0 || provenanceRemoved > 0)) {
-          console.log(
-            `[gc] Removed ${codesRemoved} orphaned code(s), ${provenanceRemoved} provenance(s) from IndexedDB`,
-          );
-        }
-      });
-      garbageCollectCanvasSnapshots(getSavedCanvasIds()).then((removed) => {
-        if (import.meta.env.DEV && removed > 0) {
-          console.log(`[gc] Removed ${removed} orphaned canvas snapshot(s) from IndexedDB`);
-        }
-      });
+      /**
+       * Both sweeps are best-effort background work, but they must still handle
+       * rejection. `runCanvasSnapshotTx` rejects on a blocked upgrade, an open
+       * timeout, or a transaction error (the exact conditions the store was
+       * hardened for), and there is no global `unhandledrejection` handler — so
+       * an unhandled rejection here is invisible in the UI, gets collected by
+       * session replay, and leaves no signal that GC never ran.
+       */
+      garbageCollect(activeIds)
+        .then(({ codesRemoved, provenanceRemoved }) => {
+          if (import.meta.env.DEV && (codesRemoved > 0 || provenanceRemoved > 0)) {
+            console.log(
+              `[gc] Removed ${codesRemoved} orphaned code(s), ${provenanceRemoved} provenance(s) from IndexedDB`,
+            );
+          }
+        })
+        .catch((err) => {
+          console.warn('[gc] artifact sweep failed', normalizeError(err));
+        });
+      garbageCollectCanvasSnapshots(getSavedCanvasIds())
+        .then((removed) => {
+          if (import.meta.env.DEV && removed > 0) {
+            console.log(`[gc] Removed ${removed} orphaned canvas snapshot(s) from IndexedDB`);
+          }
+        })
+        .catch((err) => {
+          console.warn('[gc] canvas snapshot sweep failed', normalizeError(err));
+        });
     }, 3000); // Defer 3s to not compete with initial render
     return () => clearTimeout(timer);
   }, []);

@@ -389,9 +389,19 @@ export async function runPiAgentSession(
       });
     }
   } catch (err) {
-    if (env.isDev) {
-      console.error('[pi-agent-runtime] handle.run failed', normalizeError(err), err);
-    }
+    /**
+     * Always logged, not only in dev.
+     *
+     * This catch is the single point every design/task run passes through, and
+     * it holds the only reference to the raw `Error` — stack, `cause`, and
+     * custom fields. Everything downstream sees the flattened
+     * `Agent error: …` string (and, for a non-`StreamIdleError`, a bare `null`).
+     * Gating this on `env.isDev` meant a production failure produced exactly one
+     * user-visible sentence and no server-side record at all: no stack, no
+     * correlation id, nothing to grep. This log line is the operator's only
+     * diagnostic on a deployed instance.
+     */
+    console.error('[pi-agent-runtime] handle.run failed', normalizeError(err), err);
     await onEvent({ type: 'error', payload: `Agent error: ${normalizeProviderError(err)}` });
     if (err instanceof StreamIdleError) {
       throw err;
