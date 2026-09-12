@@ -1026,6 +1026,108 @@ async function validateHtmlWorkspaceContent(content, htmlPath, hasProjectFile2) 
   }
   return issues;
 }
+const ID_ATTR = /\bid=["']([^"']+)["']/g;
+const CLASS_ATTR = /\bclass=["']([^"']+)["']/g;
+const INLINE_SCRIPT = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
+const GET_BY_ID = /getElementById\s*\(\s*["']([^"']+)["']\s*\)/g;
+const QUERY_SEL_ID = /querySelector(?:All)?\s*\(\s*["']#([A-Za-z_][\w-]*)["']\s*\)/g;
+const QUERY_SEL_CLASS = /querySelector(?:All)?\s*\(\s*["']\.([A-Za-z_][\w-]*)["']\s*\)/g;
+const GET_BY_CLASS_NAME = /getElementsByClassName\s*\(\s*["']([A-Za-z_][\w-]*)["']\s*\)/g;
+const JS_ID_ASSIGN = /\.id\s*=\s*["']([^"']+)["']/g;
+const JS_SET_ATTR_ID = /setAttribute\s*\(\s*["']id["']\s*,\s*["']([^"']+)["']\s*\)/g;
+const JS_CLASS_NAME_ASSIGN = /\.className\s*=\s*["']([^"']+)["']/g;
+const JS_SET_ATTR_CLASS = /setAttribute\s*\(\s*["']class["']\s*,\s*["']([^"']+)["']\s*\)/g;
+const JS_CLASSLIST_ADD = /\.classList\s*\.\s*(?:add|toggle|replace)\s*\(\s*["']([A-Za-z_][\w-]*)["']/g;
+function isDynamicLiteral(value) {
+  return value.includes("${") || value.includes("+");
+}
+function addClassTokens(target, value) {
+  if (isDynamicLiteral(value)) return;
+  for (const tok of value.split(/\s+/)) {
+    if (tok.length > 0) target.add(tok);
+  }
+}
+function checkArtifactCrossRefs(input) {
+  const issues = [];
+  const htmlIds = /* @__PURE__ */ new Set();
+  const htmlClasses = /* @__PURE__ */ new Set();
+  for (const m of input.htmlContent.matchAll(ID_ATTR)) {
+    const id = m[1];
+    if (!isDynamicLiteral(id)) htmlIds.add(id);
+  }
+  for (const m of input.htmlContent.matchAll(CLASS_ATTR)) {
+    addClassTokens(htmlClasses, m[1]);
+  }
+  const inlineScripts = [];
+  for (const m of input.htmlContent.matchAll(INLINE_SCRIPT)) {
+    inlineScripts.push(m[1] ?? "");
+  }
+  const allJsSources = [
+    ...input.jsFiles.map((f) => ({ src: f.content, label: f.path })),
+    ...inlineScripts.map((src, i) => ({ src, label: `${input.htmlPath}#inline-script-${i + 1}` }))
+  ];
+  for (const { src } of allJsSources) {
+    for (const m of src.matchAll(JS_ID_ASSIGN)) {
+      const id = m[1];
+      if (!isDynamicLiteral(id)) htmlIds.add(id);
+    }
+    for (const m of src.matchAll(JS_SET_ATTR_ID)) {
+      htmlIds.add(m[1]);
+    }
+    for (const m of src.matchAll(JS_CLASS_NAME_ASSIGN)) {
+      addClassTokens(htmlClasses, m[1]);
+    }
+    for (const m of src.matchAll(JS_SET_ATTR_CLASS)) {
+      addClassTokens(htmlClasses, m[1]);
+    }
+    for (const m of src.matchAll(JS_CLASSLIST_ADD)) {
+      htmlClasses.add(m[1]);
+    }
+  }
+  for (const { src, label } of allJsSources) {
+    for (const m of src.matchAll(GET_BY_ID)) {
+      const id = m[1];
+      if (!htmlIds.has(id)) {
+        issues.push({
+          kind: "unresolved-dom-id",
+          reference: id,
+          context: `${label}: getElementById('${id}')`
+        });
+      }
+    }
+    for (const m of src.matchAll(QUERY_SEL_ID)) {
+      const id = m[1];
+      if (!htmlIds.has(id)) {
+        issues.push({
+          kind: "unresolved-dom-id",
+          reference: id,
+          context: `${label}: querySelector('#${id}')`
+        });
+      }
+    }
+    for (const m of src.matchAll(QUERY_SEL_CLASS)) {
+      const cls = m[1];
+      if (!htmlClasses.has(cls)) {
+        issues.push({
+          kind: "unresolved-class",
+          reference: cls,
+          context: `${label}: querySelector('.${cls}')`
+        });
+      }
+    }
+    for (const m of src.matchAll(GET_BY_CLASS_NAME)) {
+      const cls = m[1];
+      if (!htmlClasses.has(cls)) {
+        issues.push({
+          kind: "unresolved-class",
+          reference: cls,
+          context: `${label}: getElementsByClassName('${cls}')`
+        });
+      }
+    }
+  }
+  return issues;
+}
 async function readProjectFile(bash, rel) {
   const abs = sandboxProjectAbsPath(rel);
   try {
@@ -1141,6 +1243,43 @@ function createValidateHtmlTool(bash) {
       );
       const text = issues.length === 0 ? `${path2}: structure OK` : `${path2}: ${issues.length} issue(s)
 ${issues.map((i) => `- ${i}`).join("\n")}`;
+      return { content: [{ type: "text", text }], details: null };
+    }
+  };
+}
+const validateArtifactSchema = Type.Object({
+  entry: Type.Optional(
+    Type.String({
+      description: 'Entry HTML path (defaults to "index.html"). The tool follows its <script src> references to find associated JS files.'
+    })
+  )
+});
+function createValidateArtifactTool(bash) {
+  return {
+    name: "validate_artifact",
+    label: "validate_artifact",
+    description: 'Use `validate_artifact` to cross-check that every DOM id and single-class selector your JS references (getElementById, querySelector("#…"), querySelector(".…"), querySelectorAll, getElementsByClassName) exists in the entry HTML — or gets assigned dynamically by JS (`el.id = …`, `el.className = …`, `classList.add(…)`). The closest equivalent to `tsc` for this static-web project — catches dead-on-arrival handlers and stale selectors after substantive working-depth changes, before the artifact ships.',
+    parameters: validateArtifactSchema,
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+      const { entry = "index.html" } = params;
+      const htmlContent = await readProjectFile(bash, entry);
+      if (htmlContent === void 0) {
+        return { content: [{ type: "text", text: `File not found: ${entry}` }], details: null };
+      }
+      const jsFiles = [];
+      for (const match of htmlContent.matchAll(
+        /<script\s+[^>]*src=["']([^"']+)["'][^>]*><\/script>/gi
+      )) {
+        const ref = match[1] ?? "";
+        if (classifyAssetRef(ref) !== "relative") continue;
+        const resolved = resolveVirtualAssetPath$1(ref, entry);
+        if (!resolved) continue;
+        const content = await readProjectFile(bash, resolved);
+        if (content !== void 0) jsFiles.push({ path: resolved, content });
+      }
+      const issues = checkArtifactCrossRefs({ htmlPath: entry, htmlContent, jsFiles });
+      const text = issues.length === 0 ? `${entry}: cross-references resolve (${jsFiles.length} linked JS file${jsFiles.length === 1 ? "" : "s"} checked)` : `${entry}: ${issues.length} issue(s)
+${issues.map((i) => `- ${i.context}`).join("\n")}`;
       return { content: [{ type: "text", text }], details: null };
     }
   };
@@ -1332,7 +1471,7 @@ function buildModel(opts) {
     maxTokens
   };
 }
-function lastAssistant(messages) {
+function findLastAssistantMessage$1(messages) {
   if (!Array.isArray(messages)) return void 0;
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
@@ -1387,7 +1526,7 @@ function subscribeNarrowBridge(session, opts) {
       }
       case "agent_end": {
         const e = event;
-        const last = lastAssistant(e.messages);
+        const last = findLastAssistantMessage$1(e.messages);
         const aborted = last?.stopReason === "aborted";
         const errorMessage = last?.stopReason === "error" ? last?.errorMessage : void 0;
         return void opts.onEvent({ type: "agent_end", aborted, errorMessage });
@@ -1438,14 +1577,34 @@ async function seedSkillsIntoSandbox(bash, skills) {
   return { filePathByOriginalFilePath, baseDirByOriginalBaseDir };
 }
 const MAX_APP_UPSTREAM_RETRIES = 2;
+function buildDesignToolSurface(args) {
+  const { bash, sandboxCtx, todoState, onTodos } = args;
+  return new ToolSurface().add({ kind: "sandboxed-pi", name: "read", build: () => buildSandboxedReadTool(sandboxCtx) }).add({ kind: "sandboxed-pi", name: "write", build: () => buildSandboxedWriteTool(sandboxCtx) }).add({ kind: "sandboxed-pi", name: "edit", build: () => buildSandboxedEditTool(sandboxCtx) }).add({ kind: "sandboxed-pi", name: "ls", build: () => buildSandboxedLsTool(sandboxCtx) }).add({ kind: "sandboxed-pi", name: "find", build: () => buildSandboxedFindTool(sandboxCtx) }).add({ kind: "sandboxed-pi", name: "grep", build: () => buildSandboxedGrepTool(sandboxCtx) }).add({ kind: "sandboxed-pi", name: "bash", build: () => buildSandboxedBashTool(sandboxCtx) }).add({
+    kind: "auto-designer-extension",
+    name: "todo_write",
+    register: (api) => api.registerTool(createTodoWriteTool(todoState, onTodos))
+  }).add({
+    kind: "auto-designer-extension",
+    name: "validate_js",
+    register: (api) => api.registerTool(createValidateJsTool(bash))
+  }).add({
+    kind: "auto-designer-extension",
+    name: "validate_html",
+    register: (api) => api.registerTool(createValidateHtmlTool(bash))
+  }).add({
+    kind: "auto-designer-extension",
+    name: "validate_artifact",
+    register: (api) => api.registerTool(createValidateArtifactTool(bash))
+  });
+}
 async function runPromptWithUpstreamRetries(session, userPrompt) {
   await session.prompt(userPrompt, { expandPromptTemplates: false });
   let attempts = 0;
   while (attempts < MAX_APP_UPSTREAM_RETRIES) {
     const messages = session.agent.state.messages;
-    const lastAssistant2 = lastAssistantMessage(messages);
-    if (!lastAssistant2 || lastAssistant2.stopReason !== "error") return;
-    if (!isAppRetryableUpstreamError(lastAssistant2.errorMessage)) return;
+    const lastAssistant = findLastAssistantMessage$1(messages);
+    if (!lastAssistant || lastAssistant.stopReason !== "error") return;
+    if (!isAppRetryableUpstreamError(lastAssistant.errorMessage)) return;
     if (session.retryAttempt !== 0) return;
     attempts += 1;
     if (messages.length > 0 && messages[messages.length - 1].role === "assistant") {
@@ -1454,16 +1613,6 @@ async function runPromptWithUpstreamRetries(session, userPrompt) {
     await sleepMs(2e3 * 2 ** (attempts - 1));
     await session.agent.continue();
   }
-}
-function lastAssistantMessage(messages) {
-  if (!Array.isArray(messages)) return void 0;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m && typeof m === "object" && m.role === "assistant") {
-      return m;
-    }
-  }
-  return void 0;
 }
 async function createSession(opts) {
   const bash = createAgentBashSandbox({ seedFiles: opts.seedFiles });
@@ -1478,19 +1627,7 @@ async function createSession(opts) {
     opts.onTodos?.(todos);
   };
   const sandboxCtx = createSandboxToolContext(bash, onFile);
-  const surface = new ToolSurface().add({ kind: "sandboxed-pi", name: "read", build: () => buildSandboxedReadTool(sandboxCtx) }).add({ kind: "sandboxed-pi", name: "write", build: () => buildSandboxedWriteTool(sandboxCtx) }).add({ kind: "sandboxed-pi", name: "edit", build: () => buildSandboxedEditTool(sandboxCtx) }).add({ kind: "sandboxed-pi", name: "ls", build: () => buildSandboxedLsTool(sandboxCtx) }).add({ kind: "sandboxed-pi", name: "find", build: () => buildSandboxedFindTool(sandboxCtx) }).add({ kind: "sandboxed-pi", name: "grep", build: () => buildSandboxedGrepTool(sandboxCtx) }).add({ kind: "sandboxed-pi", name: "bash", build: () => buildSandboxedBashTool(sandboxCtx) }).add({
-    kind: "auto-designer-extension",
-    name: "todo_write",
-    register: (api) => api.registerTool(createTodoWriteTool(todoState, onTodos))
-  }).add({
-    kind: "auto-designer-extension",
-    name: "validate_js",
-    register: (api) => api.registerTool(createValidateJsTool(bash))
-  }).add({
-    kind: "auto-designer-extension",
-    name: "validate_html",
-    register: (api) => api.registerTool(createValidateHtmlTool(bash))
-  });
+  const surface = buildDesignToolSurface({ bash, sandboxCtx, todoState, onTodos });
   const built = surface.build();
   const baseLoader = await opts.buildResourceLoader({
     sessionType: opts.sessionType,
@@ -1738,7 +1875,7 @@ function resolveFlag(value) {
 }
 const FEATURE_LOCKDOWN = resolveFlag(FLAGS.lockdown);
 const FEATURE_AUTO_IMPROVE = resolveFlag(FLAGS.autoImprove);
-const perTaskDefaults$1 = { "design": { "providerId": "openrouter", "modelId": "minimax/minimax-m2.5" }, "incubate": { "providerId": "openrouter", "modelId": "minimax/minimax-m2.5" }, "inputs": { "providerId": "openrouter", "modelId": "minimax/minimax-m2.5" }, "design-system": { "providerId": "openrouter", "modelId": "minimax/minimax-m2.5" }, "evaluator": { "providerId": "openrouter", "modelId": "minimax/minimax-m2.5" } };
+const perTaskDefaults$1 = { "design": { "providerId": "openrouter", "modelId": "deepseek/deepseek-v4.1-flash" }, "incubate": { "providerId": "openrouter", "modelId": "deepseek/deepseek-v4.1-flash" }, "inputs": { "providerId": "openrouter", "modelId": "deepseek/deepseek-v4.1-flash" }, "design-system": { "providerId": "openrouter", "modelId": "deepseek/deepseek-v4.1-flash" }, "evaluator": { "providerId": "openrouter", "modelId": "deepseek/deepseek-v4.1-flash" } };
 const rawTaskDefaults = {
   perTaskDefaults: perTaskDefaults$1
 };
@@ -3837,9 +3974,9 @@ function handleCompactionStart(ctx, event) {
 function handleAgentEnd(ctx, event) {
   if (event.type !== "agent_end") return;
   const messages = event.messages;
-  const lastAssistant2 = findLastAssistantMessage(messages);
-  if (!lastAssistant2 || lastAssistant2.stopReason !== "error") return;
-  const errMsg = lastAssistant2.errorMessage?.trim() || "Model stream error";
+  const lastAssistant = findLastAssistantMessage(messages);
+  if (!lastAssistant || lastAssistant.stopReason !== "error") return;
+  const errMsg = lastAssistant.errorMessage?.trim() || "Model stream error";
   const traceRow = {
     id: crypto.randomUUID(),
     at: (/* @__PURE__ */ new Date()).toISOString(),
