@@ -3,9 +3,9 @@ import { streamSSE } from 'hono/streaming';
 import type { ThinkingOverride, ThinkingTask } from '../../src/lib/thinking-defaults.ts';
 import { resolveThinkingConfig } from '../../src/lib/thinking-defaults.ts';
 import { env } from '../env.ts';
-import { runTaskAgentSseBody, type TaskAgentSseWrite } from './sse-task-route.ts';
-import { executeTaskAgentStream, type TaskAgentResult } from '../services/task-agent-execution.ts';
-import type { SessionType } from './session-types.ts';
+import { runTaskAgentSseBody, type TaskAgentSseWrite } from '../lib/sse-task-route.ts';
+import { executeTaskAgentStream, type TaskAgentResult } from './task-agent-execution.ts';
+import type { SessionType } from '../lib/session-types.ts';
 
 export interface TaskAgentRouteBody {
   providerId: string;

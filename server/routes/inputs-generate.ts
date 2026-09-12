@@ -6,7 +6,7 @@ import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import {
   buildInputsGenerateUserMessage,
 } from '../../src/lib/prompts/inputs-generate.ts';
-import { runTaskAgentRoute } from '../lib/task-agent-route-runner.ts';
+import { runTaskAgentRoute } from '../services/task-agent-route-runner.ts';
 import { inlineGuidance } from '../lib/inline-guidance.ts';
 import { InputsGenerateRequestSchema } from '../../src/api/request-schemas.ts';
 

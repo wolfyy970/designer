@@ -43,4 +43,34 @@ export default defineConfig([
       'prefer-const': 'error',
     },
   },
+  {
+    /**
+     * Boundary rule from `ARCHITECTURE.md:257`: "server/lib/ must not import
+     * upward into server/services/".
+     *
+     * It was documented and unenforced, so five violations accumulated unnoticed.
+     * A rule needs a mechanism, not a paragraph.
+     *
+     * `allowTypeImports` is on because a type-only import is erased at runtime and
+     * does not create the dependency this rule exists to prevent — leaving it off
+     * would flag `agentic-sse-map.ts`'s `import type`, which moves no code.
+     */
+    files: ['server/lib/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['../services/*', '../../services/*', '**/server/services/*'],
+              allowTypeImports: true,
+              message:
+                'server/lib must not import upward into server/services (ARCHITECTURE.md:257). ' +
+                'Either move the shared piece down into server/lib, or the dependent piece up into server/services.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 ])

@@ -20,7 +20,7 @@ vi.mock('../../services/task-agent-session.ts', () => ({
 }));
 
 import { runBrainstormPrelude } from '../incubator-brainstorm.ts';
-import { runTaskAgentPiSession } from '../../services/task-agent-session.ts';
+import { runTaskAgentPiSession } from '../task-agent-session.ts';
 
 const baseInput = {
   designBrief: 'Design an app for people in active grief.',

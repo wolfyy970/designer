@@ -23,7 +23,7 @@ vi.mock('../../lib/prompt-resolution.ts', () => ({
   getPromptBody: vi.fn(async () => 'template body'),
 }));
 
-vi.mock('../../lib/incubator-brainstorm.ts', () => ({
+vi.mock('../../services/incubator-brainstorm.ts', () => ({
   runBrainstormPrelude: vi.fn(async ({ designBrief }: { designBrief: string }) => ({
     augmentedBrief: `${designBrief}\n\n<product_shape_candidates>\n## Stubbed direction\n</product_shape_candidates>`,
     curatedText: '## Stubbed direction',
@@ -32,7 +32,7 @@ vi.mock('../../lib/incubator-brainstorm.ts', () => ({
 
 import app from '../../app.ts';
 import { executeTaskAgentStream } from '../../services/task-agent-execution.ts';
-import { runBrainstormPrelude } from '../../lib/incubator-brainstorm.ts';
+import { runBrainstormPrelude } from '../../services/incubator-brainstorm.ts';
 
 const validSection = {
   id: 'design-brief' as const,

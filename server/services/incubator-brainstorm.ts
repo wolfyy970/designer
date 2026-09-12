@@ -25,9 +25,9 @@
  * per-stage progress; not needed for v1.
  */
 import { randomUUID } from 'node:crypto';
-import { getPromptBody } from './prompt-resolution.ts';
-import { runTaskAgentPiSession } from '../services/task-agent-session.ts';
-import { resolveTaskAgentResultFile } from '../services/task-agent-result-files.ts';
+import { getPromptBody } from '../lib/prompt-resolution.ts';
+import { runTaskAgentPiSession } from './task-agent-session.ts';
+import { resolveTaskAgentResultFile } from './task-agent-result-files.ts';
 
 export interface BrainstormPreludeInput {
   designBrief: string;

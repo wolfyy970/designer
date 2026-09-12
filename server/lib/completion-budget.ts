@@ -17,7 +17,6 @@ import {
   estimateChatMessagesTokens,
 } from '../../src/lib/token-estimate.ts';
 import type { ChatMessage } from '../../src/types/provider.ts';
-import { getProviderModelContextWindow } from '../services/provider-model-context.ts';
 
 export type CompletionPurpose = 'incubate' | 'compaction' | 'agent_turn' | 'default';
 
@@ -76,18 +75,31 @@ export function completionBudgetFromPromptTokens(
   return Math.max(MIN_COMPLETION, b);
 }
 
-export async function completionMaxTokensForChat(
+/**
+ * Resolve the context window for a model, then compute its completion budget.
+ *
+ * This lived here and imported `../services/provider-model-context.ts` — the one
+ * genuine **runtime** inversion of the documented rule that `server/lib` must not
+ * import upward into `server/services` (`ARCHITECTURE.md:257`). The pure
+ * function above is the part `lib` owns; the registry lookup is a service
+ * concern, so it moved to `server/services/completion-budget-lookup.ts` while the
+ * registry stays private to the service layer.
+ *
+ * The type-only import of `AgenticOrchestratorEvent` in `agentic-sse-map.ts` and
+ * the misplacements in `incubator-brainstorm.ts` / `task-agent-route-runner.ts`
+ * are unchanged: type-only imports are erased and are not a runtime dependency,
+ * and relocating the other two moves the prompt-assembly and SSE-route seams,
+ * which is a larger change than a boundary fix.
+ */
+export function computeCompletionBudget(
+  contextWindow: number | undefined,
   providerId: string,
-  modelId: string,
   messages: ChatMessage[],
   purpose: CompletionPurpose,
-): Promise<number | undefined> {
-  const registry =
-    (await getProviderModelContextWindow(providerId, modelId)) ?? contextFallback(providerId);
-  const est = estimateChatMessagesTokens(messages);
+): number | undefined {
   return completionBudgetFromPromptTokens(
-    registry,
-    est,
+    contextWindow ?? contextFallback(providerId),
+    estimateChatMessagesTokens(messages),
     purpose,
     env.MAX_OUTPUT_TOKENS,
   );

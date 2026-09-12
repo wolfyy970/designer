@@ -3,7 +3,7 @@ import { clampProviderModel } from '../lib/lockdown-model.ts';
 import { parseRequestJson } from '../lib/parse-request.ts';
 import { SSE_EVENT_NAMES } from '../../src/constants/sse-events.ts';
 import { lintDesignMdDocument } from '../lib/design-md-lint.ts';
-import { runTaskAgentRoute } from '../lib/task-agent-route-runner.ts';
+import { runTaskAgentRoute } from '../services/task-agent-route-runner.ts';
 import { inlineGuidance } from '../lib/inline-guidance.ts';
 import { DesignSystemExtractRequestSchema } from '../../src/api/request-schemas.ts';
 

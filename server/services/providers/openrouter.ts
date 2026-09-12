@@ -6,7 +6,7 @@ import type {
   ChatMessage,
 } from '../../../src/types/provider.ts';
 import { env } from '../../env.ts';
-import { completionMaxTokensForChat } from '../../lib/completion-budget.ts';
+import { completionMaxTokensForChat } from '../completion-budget-lookup.ts';
 import {
   buildChatRequestFromMessages,
   fetchChatCompletion,

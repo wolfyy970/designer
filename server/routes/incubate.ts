@@ -16,8 +16,8 @@ import {
 import { generateId, now } from '../../src/lib/utils.ts';
 import { env } from '../env.ts';
 import { appendIncubateParsedLogEntry } from '../log-store.ts';
-import { runTaskAgentRoute } from '../lib/task-agent-route-runner.ts';
-import { runBrainstormPrelude } from '../lib/incubator-brainstorm.ts';
+import { runTaskAgentRoute } from '../services/task-agent-route-runner.ts';
+import { runBrainstormPrelude } from '../services/incubator-brainstorm.ts';
 import { IncubateRequestSchema } from '../../src/api/request-schemas.ts';
 import { normalizeIncubationPlanExplorationAxes } from '../../src/lib/exploration-axis-normalizer.ts';
 import type { DesignSpec } from '../../src/types/spec.ts';
