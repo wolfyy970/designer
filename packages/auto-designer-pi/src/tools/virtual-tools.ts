@@ -62,12 +62,42 @@ async function emitDesignFileIfNeeded(
   }
 }
 
+/**
+ * Resolve a model-supplied path against the sandbox session cwd, and refuse
+ * anything that lands outside the project root.
+ *
+ * The upstream SDK resolves paths with `path.resolve`, which **normalizes** `..`
+ * rather than rejecting it — `resolve('/home/user/project', '../evil.html')` is
+ * `/home/user/evil.html`. Before this guard, a model writing `../evil.html` (or
+ * running `bash: echo x > ../evil.html`) created the file outside the sandbox
+ * root while being told it had succeeded. Every consequence was silent:
+ *
+ *   - `toProjectRelative` returns null, so no `onFile` callback, no `file` SSE
+ *     event and no `file_written` trace — the live monitor never showed it;
+ *   - `extractDesignFiles` filtered it out of the result map, so a preview
+ *     referencing it 404s;
+ *   - if it was the run's only write, the result map was empty and
+ *     `mapPackageResult` reported `no_files`, **discarding the whole run** as
+ *     failed even though the model was told the write worked.
+ *
+ * Rejecting here makes "the workspace root is the sandbox" true and turns a
+ * silent loss into an error the model can act on. `resolve-virtual-asset-path.ts`
+ * already applies this containment rule to asset refs; this is the same rule at
+ * the tool-path seam, which every file tool routes through.
+ */
 function resolveVirtualPath(relativeOrAbsolute: string | undefined, cwd: string): string {
   const raw = (relativeOrAbsolute ?? '.').trim() || '.';
-  if (path.posix.isAbsolute(raw)) {
-    return path.posix.normalize(raw);
+  const resolved = path.posix.isAbsolute(raw)
+    ? path.posix.normalize(raw)
+    : path.posix.resolve(cwd, raw);
+  if (resolved !== SANDBOX_PROJECT_ROOT && !resolved.startsWith(`${SANDBOX_PROJECT_ROOT}/`)) {
+    throw new Error(
+      `Path escapes the sandbox workspace root: ${relativeOrAbsolute ?? ''} ` +
+        `(resolved to ${resolved}; the workspace root is ${SANDBOX_PROJECT_ROOT}). ` +
+        `Use paths relative to the workspace root.`,
+    );
   }
-  return path.posix.resolve(cwd, raw);
+  return resolved;
 }
 
 function shellSingleQuote(s: string): string {
@@ -285,17 +315,48 @@ export function buildSandboxedReadTool(ctx: SandboxToolContext): ToolDefinition 
   return read as unknown as ToolDefinition;
 }
 
+/**
+ * Containment check for a path the **upstream SDK** has already resolved.
+ *
+ * `write.js` calls `resolveToCwd(path, cwd)` itself and then hands the result
+ * straight to our `operations.writeFile`, so the resolved path never passes
+ * through `resolveVirtualPath` — guarding that wrapper (as `edit` and `grep` do)
+ * does not cover `write`. `path.resolve` normalizes `..` rather than rejecting
+ * it, so `../evil.html` arrived here as `/home/user/evil.html` and was written
+ * **outside the workspace root** while the tool replied "Successfully wrote
+ * 3 bytes to ../evil.html".
+ *
+ * Every consequence was silent: `toProjectRelative` returns null so no `onFile`
+ * callback fires (no `file` SSE event, no `file_written` trace); `extractDesignFiles`
+ * filtered it out of the result map; and if it was the run's only write, the map
+ * was empty and `mapPackageResult` reported `no_files`, discarding the entire run
+ * as failed even though the model had been told the write succeeded.
+ */
+function assertInsideSandbox(absPath: string): string {
+  const normalized = path.posix.normalize(absPath);
+  if (normalized !== SANDBOX_PROJECT_ROOT && !normalized.startsWith(`${SANDBOX_PROJECT_ROOT}/`)) {
+    throw new Error(
+      `Path escapes the sandbox workspace root: ${absPath} ` +
+        `(the workspace root is ${SANDBOX_PROJECT_ROOT}). ` +
+        `Use paths relative to the workspace root.`,
+    );
+  }
+  return normalized;
+}
+
 export function buildSandboxedWriteTool(ctx: SandboxToolContext): ToolDefinition {
   const { bash, sessionCwd, pathsSeenBeforeEdit, onDesignFile } = ctx;
   const writeInner = createWriteToolDefinition(sessionCwd, {
     operations: {
       mkdir: async (dir) => {
-        await bash.fs.mkdir(dir, { recursive: true });
+        // The SDK resolves this path on its own; contain it here.
+        await bash.fs.mkdir(assertInsideSandbox(dir), { recursive: true });
       },
       writeFile: async (absolutePath, content) => {
-        await bash.fs.mkdir(path.posix.dirname(absolutePath), { recursive: true });
-        await bash.fs.writeFile(absolutePath, content, 'utf8');
-        await emitDesignFileIfNeeded(absolutePath, bash, onDesignFile);
+        const contained = assertInsideSandbox(absolutePath);
+        await bash.fs.mkdir(path.posix.dirname(contained), { recursive: true });
+        await bash.fs.writeFile(contained, content, 'utf8');
+        await emitDesignFileIfNeeded(contained, bash, onDesignFile);
       },
     },
   });

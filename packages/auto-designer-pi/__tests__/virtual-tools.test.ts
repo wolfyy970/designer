@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { createAgentBashSandbox, SANDBOX_PROJECT_ROOT } from '../src/sandbox/virtual-workspace';
-import { createVirtualPiCodingTools } from '../src/tools/virtual-tools';
+import {
+  buildSandboxedWriteTool,
+  createSandboxToolContext,
+  createVirtualPiCodingTools,
+} from '../src/tools/virtual-tools';
 import { createSandboxBashTool } from '../src/tools/bash-tool';
 import type { ExtensionContext } from '../src/internal/pi-types';
 
@@ -97,5 +101,70 @@ describe('virtual-tools', () => {
     const bashText = (bashResult.content[0] as { type: 'text'; text: string }).text;
     expect(bashText).toContain('index.html');
     expect(bashText).toContain('app.css');
+  });
+});
+
+/**
+ * VFS write containment.
+ *
+ * `write.js` resolves the model's path with `path.resolve` — which NORMALIZES
+ * `..` rather than rejecting it — and then hands the resolved path to our
+ * `operations.writeFile`. So the escape never passed through the app's own path
+ * wrapper, and `../evil.html` landed at `/home/user/evil.html` while the tool
+ * reported success, with no `file` SSE event and no `file_written` trace.
+ *
+ * Verified before the guard: tool said "Successfully wrote 3 bytes to
+ * ../evil.html" and `/home/user/evil.html` contained the content.
+ * Verified after: the write is refused and nothing exists outside the root.
+ */
+describe('sandbox write containment', () => {
+  const call = (tool: unknown, args: Record<string, unknown>) =>
+    (tool as { execute: (...a: unknown[]) => Promise<unknown> }).execute(
+      'tc',
+      args,
+      undefined,
+      undefined,
+      {} as never,
+    );
+
+  it('refuses a write that escapes the project root', async () => {
+    const bash = createAgentBashSandbox();
+    const ctx = createSandboxToolContext(bash, () => {});
+    const tool = buildSandboxedWriteTool(ctx);
+
+    await expect(call(tool, { path: '../evil.html', content: 'PWN' })).rejects.toThrow(
+      /escapes the sandbox workspace root/,
+    );
+    // Nothing was created outside the root.
+    await expect(bash.fs.readFile('/home/user/evil.html', 'utf8')).rejects.toBeTruthy();
+  });
+
+  it('refuses an absolute path outside the project root', async () => {
+    const bash = createAgentBashSandbox();
+    const ctx = createSandboxToolContext(bash, () => {});
+    const tool = buildSandboxedWriteTool(ctx);
+
+    await expect(call(tool, { path: '/tmp/evil.html', content: 'PWN' })).rejects.toThrow(
+      /escapes the sandbox workspace root/,
+    );
+  });
+
+  it('refuses a traversal that climbs out through a subdirectory', async () => {
+    const bash = createAgentBashSandbox();
+    const ctx = createSandboxToolContext(bash, () => {});
+    const tool = buildSandboxedWriteTool(ctx);
+
+    await expect(
+      call(tool, { path: 'a/b/../../../evil.html', content: 'PWN' }),
+    ).rejects.toThrow(/escapes the sandbox workspace root/);
+  });
+
+  it('still writes a normal relative path inside the root', async () => {
+    const bash = createAgentBashSandbox();
+    const ctx = createSandboxToolContext(bash, () => {});
+    const tool = buildSandboxedWriteTool(ctx);
+
+    await call(tool, { path: 'nested/ok.html', content: 'HI' });
+    expect(await bash.fs.readFile('/home/user/project/nested/ok.html', 'utf8')).toBe('HI');
   });
 });

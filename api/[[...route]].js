@@ -425,10 +425,13 @@ async function emitDesignFileIfNeeded(absPath, bash, onDesignFile) {
 }
 function resolveVirtualPath(relativeOrAbsolute, cwd) {
   const raw = (relativeOrAbsolute ?? ".").trim() || ".";
-  if (path.posix.isAbsolute(raw)) {
-    return path.posix.normalize(raw);
+  const resolved = path.posix.isAbsolute(raw) ? path.posix.normalize(raw) : path.posix.resolve(cwd, raw);
+  if (resolved !== SANDBOX_PROJECT_ROOT && !resolved.startsWith(`${SANDBOX_PROJECT_ROOT}/`)) {
+    throw new Error(
+      `Path escapes the sandbox workspace root: ${relativeOrAbsolute ?? ""} (resolved to ${resolved}; the workspace root is ${SANDBOX_PROJECT_ROOT}). Use paths relative to the workspace root.`
+    );
   }
-  return path.posix.resolve(cwd, raw);
+  return resolved;
 }
 function shellSingleQuote(s) {
   return `'${s.replace(/'/g, `'\\''`)}'`;
@@ -582,17 +585,27 @@ function buildSandboxedReadTool(ctx) {
   };
   return read;
 }
+function assertInsideSandbox(absPath) {
+  const normalized = path.posix.normalize(absPath);
+  if (normalized !== SANDBOX_PROJECT_ROOT && !normalized.startsWith(`${SANDBOX_PROJECT_ROOT}/`)) {
+    throw new Error(
+      `Path escapes the sandbox workspace root: ${absPath} (the workspace root is ${SANDBOX_PROJECT_ROOT}). Use paths relative to the workspace root.`
+    );
+  }
+  return normalized;
+}
 function buildSandboxedWriteTool(ctx) {
   const { bash, sessionCwd, pathsSeenBeforeEdit, onDesignFile } = ctx;
   const writeInner = createWriteToolDefinition(sessionCwd, {
     operations: {
       mkdir: async (dir) => {
-        await bash.fs.mkdir(dir, { recursive: true });
+        await bash.fs.mkdir(assertInsideSandbox(dir), { recursive: true });
       },
       writeFile: async (absolutePath, content) => {
-        await bash.fs.mkdir(path.posix.dirname(absolutePath), { recursive: true });
-        await bash.fs.writeFile(absolutePath, content, "utf8");
-        await emitDesignFileIfNeeded(absolutePath, bash, onDesignFile);
+        const contained = assertInsideSandbox(absolutePath);
+        await bash.fs.mkdir(path.posix.dirname(contained), { recursive: true });
+        await bash.fs.writeFile(contained, content, "utf8");
+        await emitDesignFileIfNeeded(contained, bash, onDesignFile);
       }
     }
   });
