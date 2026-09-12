@@ -3,8 +3,22 @@
  * context window, an estimated prompt size, and a per-purpose margin (formatting +
  * tool-def growth + reasoning + safety).
  *
- * Defaults are aligned with the host's `config/completion-budget.json` at the time
- * of extraction; callers can override per-session via `completionBudgetConfig`.
+ * **`DEFAULT_COMPLETION_BUDGET` below is NOT the host's table, and the host's
+ * `config/completion-budget.json` does not reach this module.** The previous
+ * comment here claimed the two were "aligned … at the time of extraction"; every
+ * value differs, by 4×–64× (`absoluteCeiling` 32 768 here vs 2 097 152 there).
+ *
+ * What that means in practice: `host.ts` calls `buildModel()` without a
+ * `budgetConfig`, so these values set `model.maxTokens`, and
+ * `server/lib/pi-stream-budget.ts` then clamps every turn to it. The *per-turn*
+ * figure still comes from the host config through
+ * `completionBudgetFromPromptTokens`, so this is not unbounded — but the hard
+ * ceiling is 32 768 regardless of context window, and raising
+ * `config/completion-budget.json`'s `absoluteCeiling` has no effect.
+ *
+ * Changing either side alters real token budgets, so this is left as-is and
+ * pinned by `completion-budget-parity.test.ts` instead. If the host table should
+ * win, pass it in from `host.ts` and delete this constant.
  */
 
 export type CompletionPurpose = 'incubate' | 'compaction' | 'agent_turn' | 'default';
