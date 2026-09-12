@@ -113,6 +113,26 @@ describe("HomePage", () => {
     expect(screen.getAllByText(/June 2026/).length).toBeGreaterThan(0);
   });
 
+  it("says up front that the UI was not the point of the experiment", () => {
+    // The experiment tests whether part of the UX *process* can be embodied
+    // agentically. Without a note saying the app's own UI was not where the
+    // effort went, a visitor reasonably judges the prototype on its polish and
+    // reads the rough edges as the deliverable.
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>,
+    );
+
+    const note = screen.getByRole("region", { name: "Note" });
+    expect(note.textContent).toContain("This is an experiment");
+    expect(note.textContent).toContain("the interface is not what it set out to prove");
+    expect(note.textContent).toMatch(/UX process/i);
+    expect(note.textContent).toMatch(/embodied agentically/i);
+    // The framing is "this was the priority instead", not "excuse the mess".
+    expect(note.textContent).toContain("That is where the effort went");
+  });
+
   it("shows OpenRouter daily credit exhaustion without exposing remaining budget", () => {
     mocks.budgetStatus = {
       data: {

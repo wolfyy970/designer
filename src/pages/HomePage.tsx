@@ -36,6 +36,39 @@ export default function HomePage() {
             <p className="mt-5 text-sm font-medium tracking-wide text-fg-muted sm:text-base">
               Run in {EXPERIMENT_PERIOD_LABEL}
             </p>
+            {/*
+              Read before judging the interface. The experiment's question is
+              whether part of the *UX process* can be carried out agentically —
+              so polish on this app's own UI and UX was deliberately not where
+              the time went. Without saying that plainly, a visitor reasonably
+              reads the rough edges as the thing being demonstrated, and grades
+              the work on a bar it was never aimed at.
+            */}
+            <section
+              className="mt-10 max-w-2xl rounded-md border border-border-subtle bg-surface-raised/60 px-5 py-4"
+              aria-labelledby="scope-note-heading"
+            >
+              <h2
+                id="scope-note-heading"
+                className="text-sm font-medium tracking-wide text-fg-secondary"
+              >
+                Note
+              </h2>
+              <div className="mt-2 space-y-2 text-sm leading-relaxed text-fg-muted">
+                <p>
+                  This is an experiment, and the interface is not what it set out
+                  to prove. The question was whether part of the UX process
+                  itself can be embodied agentically — whether an agent can take
+                  a solution hypothesis through exploration, evaluation, and
+                  revision. That is where the effort went.
+                </p>
+                <p>
+                  The UI and UX here were built to make that legible, not to be
+                  finished. Please read the rough edges as the state of the
+                  experiment rather than as the work being demonstrated.
+                </p>
+              </div>
+            </section>
             <div className="mt-12 flex flex-wrap items-center gap-x-5 gap-y-3">
               <Button asChild size="lg">
                 <Link to="/canvas">
