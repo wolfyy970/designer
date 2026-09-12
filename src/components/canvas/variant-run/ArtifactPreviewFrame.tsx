@@ -64,6 +64,13 @@ export default function ArtifactPreviewFrame({
    * registered URL is simply not the one that failed.
    */
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  /**
+   * Bumped by the "Reload preview" affordance. Used as the iframe `key` so a
+   * reload tears the document down and re-requests every subresource instead of
+   * reusing a cached miss. A stranded unstyled frame is otherwise only fixable
+   * by the user discovering that switching tabs and back rebuilds it.
+   */
+  const [reloadCount, setReloadCount] = useState(0);
   const frameStyle: CSSProperties | undefined = interactive
     ? style
     : { ...style, pointerEvents: 'none' };
@@ -88,6 +95,14 @@ export default function ArtifactPreviewFrame({
    * Warning strip above the frame. Rendered for both the URL and srcDoc paths
    * so the message survives a fallback — an incomplete build is incomplete
    * either way, and switching to srcDoc would otherwise hide it.
+   *
+   * Carries a reload affordance because a preview can also come up *unstyled*
+   * without the artifact being at fault: if a subresource request loses a race
+   * with the session's file map, the browser caches a miss for that URL and the
+   * frame keeps rendering without its stylesheet. Changing this iframe's `key`
+   * forces a fresh document and a fresh network request for every subresource,
+   * which is exactly what switching tabs and back did by hand. One click instead
+   * of discovering the workaround.
    */
   const notice = integrityNotice ? (
     <div
@@ -95,7 +110,14 @@ export default function ArtifactPreviewFrame({
       className="flex shrink-0 items-start gap-1.5 border-b border-warning-border bg-warning-subtle px-2.5 py-1.5 text-nano text-warning"
     >
       <TriangleAlert size={11} className="mt-px shrink-0" aria-hidden />
-      <span className="min-w-0">{integrityNotice}</span>
+      <span className="min-w-0 flex-1">{integrityNotice}</span>
+      <button
+        type="button"
+        onClick={() => setReloadCount((n) => n + 1)}
+        className="nodrag shrink-0 rounded border border-warning-border px-1.5 py-0.5 font-medium transition-colors hover:bg-warning/10"
+      >
+        Reload preview
+      </button>
     </div>
   ) : null;
 
@@ -112,6 +134,8 @@ export default function ArtifactPreviewFrame({
   if (previewSrc && urlPreviewUsable) {
     return wrap(
       <iframe
+        // A new key tears the document down and re-requests every subresource.
+        key={`url-${reloadCount}`}
         src={previewSrc}
         // URL previews are served same-origin (/api/preview/...). They need
         // allow-same-origin so the bundle can use localStorage and parent postMessage;
@@ -137,6 +161,7 @@ export default function ArtifactPreviewFrame({
   if (fallbackSrcDoc) {
     return wrap(
       <iframe
+        key={`srcdoc-${reloadCount}`}
         srcDoc={fallbackSrcDoc}
         sandbox="allow-scripts"
         title={title}

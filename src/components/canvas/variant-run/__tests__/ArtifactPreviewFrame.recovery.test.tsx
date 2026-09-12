@@ -74,10 +74,15 @@ describe('ArtifactPreviewFrame — recovery from a failed URL preview', () => {
     // The session expired between verification and the browser's own GET.
     fireFrameLoad(frame, 'Not found');
 
+    // The fallback is a different element: the iframe is keyed, so switching
+    // from the URL form to srcDoc remounts it. Re-query instead of holding the
+    // pre-fallback node.
     await waitFor(() => {
-      expect(frame.getAttribute('srcdoc')).toContain('Loaded design');
+      expect(
+        screen.getByTitle<HTMLIFrameElement>('Preview: Test').getAttribute('srcdoc'),
+      ).toContain('Loaded design');
     });
-    expect(frame.getAttribute('src')).toBeNull();
+    expect(screen.getByTitle<HTMLIFrameElement>('Preview: Test').getAttribute('src')).toBeNull();
   });
 
   it('does not lose the fallback when the failure is detected on first load', async () => {
@@ -89,14 +94,19 @@ describe('ArtifactPreviewFrame — recovery from a failed URL preview', () => {
     const frame = await screen.findByTitle<HTMLIFrameElement>('Preview: Test');
     fireFrameLoad(frame, 'Not found');
 
-    await waitFor(() => expect(frame.getAttribute('srcdoc')).toContain('Loaded design'));
+    await waitFor(() =>
+      expect(
+        screen.getByTitle<HTMLIFrameElement>('Preview: Test').getAttribute('srcdoc'),
+      ).toContain('Loaded design'),
+    );
 
     // Give any post-commit effect a chance to undo it, then re-assert.
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    expect(frame.getAttribute('srcdoc')).toContain('Loaded design');
-    expect(frame.getAttribute('src')).toBeNull();
+    const settled = screen.getByTitle<HTMLIFrameElement>('Preview: Test');
+    expect(settled.getAttribute('srcdoc')).toContain('Loaded design');
+    expect(settled.getAttribute('src')).toBeNull();
   });
 
   it('falls back when the 404 renders an empty document', async () => {
@@ -108,7 +118,11 @@ describe('ArtifactPreviewFrame — recovery from a failed URL preview', () => {
 
     fireFrameLoad(frame, '');
 
-    await waitFor(() => expect(frame.getAttribute('srcdoc')).toContain('Loaded design'));
+    await waitFor(() =>
+      expect(
+        screen.getByTitle<HTMLIFrameElement>('Preview: Test').getAttribute('srcdoc'),
+      ).toContain('Loaded design'),
+    );
   });
 
   it('does not fall back for a legitimately sparse but valid design', async () => {
@@ -230,7 +244,9 @@ describe('ArtifactPreviewFrame — incomplete artifact warning', () => {
     const frame = await screen.findByTitle<HTMLIFrameElement>('Preview: Fallback');
     fireFrameLoad(frame, 'Not found');
 
-    await waitFor(() => expect(frame.getAttribute('srcdoc')).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByTitle<HTMLIFrameElement>('Preview: Fallback').getAttribute('srcdoc')).toBeTruthy(),
+    );
     expect(screen.getByRole('status').textContent).toContain('Build incomplete');
   });
 });
