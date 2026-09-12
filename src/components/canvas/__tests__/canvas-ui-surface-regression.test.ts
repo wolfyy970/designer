@@ -1,7 +1,11 @@
+/** @vitest-environment jsdom */
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createElement } from 'react';
+import { cleanup, render } from '@testing-library/react';
+import { PreviewHoverOverlay } from '../nodes/PreviewHoverOverlay';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '../../../..');
@@ -69,4 +73,32 @@ describe('canvas UI surface regressions', () => {
       expect(source).not.toContain('<select');
     }
   });
+
+  it('keeps the preview hover scrim see-through', () => {
+    // The scrim sits on top of the design being judged. `bg-overlay-heavy`
+    // (92%) read as a blank panel and hid the artwork; `bg-overlay` (45%) keeps
+    // the work visible while the Preview button stays legible on its own
+    // secondary surface.
+    //
+    // Asserted by executing the component rather than grepping its source: the
+    // source *mentions* `bg-overlay-heavy` in the doc comment explaining this
+    // decision, so a text scan can't tell the class from the rationale.
+    const Scrim = renderHoverOverlay();
+    const classes = Scrim.classList;
+
+    expect(classes.contains('bg-overlay')).toBe(true);
+    expect(classes.contains('bg-overlay-heavy')).toBe(false);
+  });
 });
+
+/** Render the scrim and return its root element. */
+function renderHoverOverlay(): HTMLElement {
+  // createElement, not JSX: this file is `.ts` (it also does fs scans).
+  const { container } = render(
+    createElement(PreviewHoverOverlay, { onClick: () => {}, ariaLabel: 'Open preview' }),
+  );
+  const el = container.firstElementChild;
+  if (!el) throw new Error('PreviewHoverOverlay rendered nothing');
+  cleanup();
+  return el as HTMLElement;
+}

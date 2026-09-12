@@ -15,12 +15,16 @@ type Props = {
  *
  * Used inside a parent that carries the `group relative` classes — see
  * `VariantNodeMultiFileBody` and `VariantNodeSingleFileBody`.
+ *
+ * Uses `bg-overlay` (45%), NOT `bg-overlay-heavy` (92%). This scrim sits on top
+ * of the design being judged; at 92% the card read as a blank panel and the work
+ * underneath was effectively invisible, which defeats the point of hovering to
+ * look at it. The Button is `variant="secondary"` with its own surface, so it
+ * stays legible over any artwork at this opacity.
  */
 export function PreviewHoverOverlay({ onClick, ariaLabel }: Props) {
   return (
-    <div
-      className="pointer-events-none absolute inset-0 flex items-center justify-center bg-overlay-heavy opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
-    >
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-overlay opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
       <Button
         type="button"
         variant="secondary"
