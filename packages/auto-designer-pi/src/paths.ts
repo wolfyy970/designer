@@ -58,11 +58,57 @@ export const PACKAGE_EXTENSIONS_DIR = resolve(PACKAGE_ROOT, 'extensions');
 /** Path to the designer system prompt body (used as `customPrompt` on createAgentSession). */
 export const PACKAGE_DESIGNER_SYSTEM_PROMPT_PATH = resolve(PACKAGE_PROMPTS_DIR, '_designer-system.md');
 
-function stripFrontmatter(text: string): string {
-  if (!text.startsWith('---')) return text;
-  const end = text.indexOf('\n---', 3);
-  if (end < 0) return text;
-  return text.slice(end + 4).replace(/^\n+/, '');
+/**
+ * Split YAML frontmatter from a markdown file body. The single implementation
+ * for both the bundled prompts (this module) and the host's skill loader
+ * (`server/lib/frontmatter-split.ts` delegates here).
+ *
+ * There used to be four parsers with two semantics, and the one feeding the
+ * **system prompt** was the least careful: it tested `text.startsWith('---')`
+ * with no BOM strip and searched for `indexOf('\n---', 3)`.
+ *
+ * Consequences, all silent, all in the path that decides what the model is told:
+ *
+ *   - **UTF-8 BOM** — `readFileSync(…, 'utf8')` keeps it, so `startsWith('---')`
+ *     is false and the raw YAML header is returned as the prompt body. The
+ *     system prompt gained ~333 characters of metadata (`name:`, `type:`,
+ *     `description:`) on every session. Verified by reproduction.
+ *   - **CRLF** — no `\n---` match, so the frontmatter was not stripped and the
+ *     body kept stray `\r` characters.
+ *   - **`----`** — `indexOf('\n---')` matches the leading three of four dashes,
+ *     truncating the body to a single `-`.
+ *
+ * The rules here are deliberately strict, matching the server's existing
+ * semantics: the opening fence must be the first line and exactly `---`, the
+ * closing fence must be a line that trims to exactly `---`, and CRLF is
+ * normalized. Unterminated frontmatter is returned verbatim as body rather than
+ * guessed at, so a malformed file is visible in the prompt instead of silently
+ * halved.
+ */
+export function parseFrontmatter(raw: string): { yaml: string | undefined; body: string } {
+  // Strip a UTF-8 BOM and normalize line endings before looking for fences.
+  const text = raw.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  const lines = text.split('\n');
+  if (lines[0]?.trim() !== '---') return { yaml: undefined, body: text };
+
+  let end = -1;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i]!.trim() === '---') {
+      end = i;
+      break;
+    }
+  }
+  if (end === -1) return { yaml: undefined, body: text };
+
+  return {
+    yaml: lines.slice(1, end).join('\n'),
+    body: lines.slice(end + 1).join('\n').replace(/^\n+/, ''),
+  };
+}
+
+/** Frontmatter-stripped body, for callers that do not need the metadata. */
+export function stripFrontmatter(text: string): string {
+  return parseFrontmatter(text).body;
 }
 
 /**

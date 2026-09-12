@@ -186,6 +186,8 @@ export {
   PACKAGE_DESIGNER_SYSTEM_PROMPT_PATH,
   loadDesignerSystemPrompt,
   loadPackagePromptBody,
+  parseFrontmatter,
+  stripFrontmatter,
 } from './paths.ts';
 
 // ────────────────────────────────────────────────────────────────────────────
