@@ -43,14 +43,21 @@ jobs:
 
       # `pnpm test` chains the root Vitest suite plus the
       # @auto-designer/design-system and @auto-designer/pi package suites.
-      #
-      # Deliberately NOT run here:
-      #   - `test:playwright-eval` — 65 lines covering merge logic only. The
-      #     headless-Chromium path itself is untested (see ARCHITECTURE.md
-      #     coverage notes); wiring it up would need `playwright install`.
-      #   - Anything requiring OPENROUTER_API_KEY. The suite is hermetic.
+      # Hermetic: no network, no API key, no browser.
       - name: Test
         run: pnpm test
+
+      # Browser-grounded evaluation is excluded from `pnpm test` (it launches
+      # Chromium), so it gets its own step. The real-browser suite asserts
+      # render/console/layout scoring against inline HTML fixtures; if Chromium
+      # is missing the evaluator returns a `browser_unavailable` skip and those
+      # assertions no-op, which is why the install step below is load-bearing
+      # rather than an optimization.
+      - name: Install Chromium for browser evaluation
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Test browser evaluation
+        run: pnpm test:playwright-eval
 
       # `build` runs tokens:build + `tsc -b` + vite build. Note the root
       # `tsc -b` only references tsconfig.{app,node,server} — it does NOT cover
