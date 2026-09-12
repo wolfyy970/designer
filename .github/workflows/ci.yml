@@ -1,0 +1,69 @@
+name: CI
+
+# Until this workflow existed, nothing ran the suite automatically: the Husky
+# pre-commit hook only bumps the patch version and snapshots prompts. Every gate
+# below was manual-only. The whole job is ~1 minute, so it runs on every push.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Superseded runs on the same ref are wasted work — the newer commit is what matters.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # No `version:` input — the packageManager field in package.json pins
+      # pnpm (10.10.0) and action-setup reads it. Hardcoding a version here
+      # would silently fight that pin.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      # `pnpm test` chains the root Vitest suite plus the
+      # @auto-designer/design-system and @auto-designer/pi package suites.
+      #
+      # Deliberately NOT run here:
+      #   - `test:playwright-eval` — 65 lines covering merge logic only. The
+      #     headless-Chromium path itself is untested (see ARCHITECTURE.md
+      #     coverage notes); wiring it up would need `playwright install`.
+      #   - Anything requiring OPENROUTER_API_KEY. The suite is hermetic.
+      - name: Test
+        run: pnpm test
+
+      # `build` runs tokens:build + `tsc -b` + vite build. Note the root
+      # `tsc -b` only references tsconfig.{app,node,server} — it does NOT cover
+      # either workspace package, so those get their own typecheck below.
+      - name: Build
+        run: pnpm build
+        env:
+          CI: 'true'
+
+      # Vitest transpiles without typechecking, and the root `tsc -b` above
+      # does not reference either package's tsconfig. Without these, a type
+      # error in a package is invisible until something imports it at runtime.
+      - name: Typecheck workspace packages
+        run: |
+          pnpm -F @auto-designer/pi exec tsc --noEmit
+          pnpm -F @auto-designer/design-system exec tsc --noEmit
