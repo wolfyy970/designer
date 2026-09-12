@@ -7,7 +7,12 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 export default defineConfig({
   test: {
     environment: 'jsdom',
-    setupFilesAfterEnv: [resolve(__dirname, 'vitest.setup.ts')],
+    // Vitest's option is `setupFiles`. This was `setupFilesAfterEnv`, which is
+    // the Jest name — Vitest 4 ignores unknown keys, so `vitest.setup.ts` was
+    // never actually loaded and jest-dom matchers were silently unavailable.
+    // No current DS test uses them, so nothing was failing; this makes the
+    // config honest (and lets `tsc --noEmit` pass on this package).
+    setupFiles: [resolve(__dirname, 'vitest.setup.ts')],
     include: [
       resolve(__dirname, 'lib/__tests__/**/*.test.ts'),
       resolve(__dirname, 'components/ui/__tests__/**/*.test.{ts,tsx}'),

@@ -1,4 +1,3 @@
-import React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
 import { StatusDot } from '../status-dot';
