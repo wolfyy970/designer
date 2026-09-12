@@ -29,6 +29,31 @@ type LegacyAgentMode = 'single' | 'agentic';
 type LegacyHypothesisWithAgentMode = PersistedHypothesis & { agentMode?: LegacyAgentMode };
 
 /**
+ * Read a string-array field from a persisted row that may predate the field, or
+ * hold a non-array from a hand-edited/partially-written blob.
+ *
+ * Every migrated field removed from `DomainHypothesis` / `DomainIncubatorWiring`
+ * is still read by earlier ladder steps, and the values were cast
+ * (`as string[]`) rather than checked — so a missing field threw
+ * `TypeError: … is not iterable` inside the migrator.
+ *
+ * That mattered more than a bad cast normally would, because of *where* it ran:
+ * `workspace-domain-persist.ts` hands the migrator to `persist` with no
+ * try/catch (unlike `canvas-store.ts`, which wraps and falls back). Zustand's
+ * hydration `.catch` then swallowed the throw, the store kept its empty
+ * defaults, and every hypothesis, wiring, design-system attachment and preview
+ * slot disappeared — silently, and again on every reload, since the stored
+ * version never advanced.
+ *
+ * These fields only ever fed derived legacy data (model profiles, section
+ * wiring), so treating an absent or malformed value as empty is correct: the
+ * row is preserved and the removed field contributes nothing.
+ */
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+}
+
+/**
  * Zustand persist migration for workspace domain store (versioned).
  * @param persisted — raw persisted state
  * @param fromVersion — store version before migration
@@ -48,7 +73,7 @@ export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: n
     const hypotheses: Record<string, PersistedHypothesis> = {};
     for (const [hid, h] of Object.entries(rawHyp)) {
       const am = h.agentMode ?? 'single';
-      for (const mid of h.modelNodeIds) {
+      for (const mid of asStringArray(h.modelNodeIds)) {
         const cur = modelProfiles[mid];
         if (cur) {
           modelProfiles[mid] = { ...cur, agentMode: cur.agentMode ?? am };
@@ -73,13 +98,13 @@ export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: n
 
     for (const [hid, h] of Object.entries(rawHyp)) {
       let aggregated: LegacyAgentMode = 'single';
-      for (const mid of h.modelNodeIds) {
+      for (const mid of asStringArray(h.modelNodeIds)) {
         const prof = modelProfiles[mid];
         if (prof?.agentMode === 'agentic') aggregated = 'agentic';
       }
       const laneThinking = (h as { thinkingLevel?: string }).thinkingLevel ?? 'minimal';
 
-      for (const mid of h.modelNodeIds) {
+      for (const mid of asStringArray(h.modelNodeIds)) {
         const cur = modelProfiles[mid];
         if (!cur) continue;
         const { agentMode: _drop, ...rest } = cur;
@@ -94,7 +119,7 @@ export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: n
         id: h.id,
         incubatorId: h.incubatorId,
         strategyId: h.strategyId ?? ((h as unknown as Record<string, unknown>).variantStrategyId as string),
-        modelNodeIds: h.modelNodeIds,
+        modelNodeIds: asStringArray(h.modelNodeIds),
         designSystemNodeIds: h.designSystemNodeIds,
         placeholder: h.placeholder,
         agentMode: aggregated,
@@ -116,7 +141,9 @@ export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: n
     const incubatorWirings: Record<string, DomainIncubatorWiring> = {};
     for (const [k, w] of Object.entries(rawW)) {
       incubatorWirings[k] = {
-        inputNodeIds: (w.sectionNodeIds as string[] | undefined) ?? (w.inputNodeIds as string[] | undefined) ?? [],
+        inputNodeIds: asStringArray(w.sectionNodeIds).length > 0
+          ? asStringArray(w.sectionNodeIds)
+          : asStringArray(w.inputNodeIds),
         previewNodeIds: (w.previewNodeIds as string[] | undefined) ?? (w.variantNodeIds as string[] | undefined) ?? [],
       };
     }
@@ -154,7 +181,9 @@ export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: n
     const incubatorWirings: Record<string, DomainIncubatorWiring> = {};
     for (const [k, w] of Object.entries(rawW)) {
       incubatorWirings[k] = {
-        inputNodeIds: (w.sectionNodeIds as string[] | undefined) ?? (w.inputNodeIds as string[] | undefined) ?? [],
+        inputNodeIds: asStringArray(w.sectionNodeIds).length > 0
+          ? asStringArray(w.sectionNodeIds)
+          : asStringArray(w.inputNodeIds),
         previewNodeIds: (w.previewNodeIds as string[] | undefined) ?? (w.variantNodeIds as string[] | undefined) ?? [],
       };
     }
@@ -165,7 +194,9 @@ export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: n
     const incubatorWirings: Record<string, DomainIncubatorWiring> = {};
     for (const [k, w] of Object.entries(rawW)) {
       const inputNodeIds =
-        (w.inputNodeIds as string[] | undefined) ?? (w.sectionNodeIds as string[] | undefined) ?? [];
+        asStringArray(w.inputNodeIds).length > 0
+          ? asStringArray(w.inputNodeIds)
+          : asStringArray(w.sectionNodeIds);
       incubatorWirings[k] = {
         inputNodeIds,
         previewNodeIds: (w.previewNodeIds as string[] | undefined) ?? [],
@@ -196,7 +227,7 @@ export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: n
     for (const [hid, h] of Object.entries(rawHyp)) {
       hypotheses[hid] = {
         ...h,
-        modelNodeIds: h.modelNodeIds.slice(0, 1),
+        modelNodeIds: asStringArray(h.modelNodeIds).slice(0, 1),
       };
     }
     p = { ...p, hypotheses };
@@ -206,7 +237,7 @@ export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: n
     const incubatorWirings: Record<string, DomainIncubatorWiring> = {};
     for (const [k, w] of Object.entries(rawW)) {
       incubatorWirings[k] = {
-        inputNodeIds: (w.inputNodeIds as string[] | undefined) ?? [],
+        inputNodeIds: asStringArray(w.inputNodeIds),
         previewNodeIds: (w.previewNodeIds as string[] | undefined) ?? [],
       };
     }
@@ -218,7 +249,7 @@ export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: n
     for (const [k, w] of Object.entries(rawW)) {
       incubatorWirings[k] = {
         ...w,
-        inputNodeIds: w.inputNodeIds.filter((id) => !id.startsWith('existingDesign')),
+        inputNodeIds: asStringArray(w.inputNodeIds).filter((id) => !id.startsWith('existingDesign')),
       };
     }
     p = { ...p, incubatorWirings };
