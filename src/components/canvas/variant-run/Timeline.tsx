@@ -16,8 +16,18 @@ import {
   TimelineJumpToLatest,
 } from './timeline-parts.tsx';
 import { ToolTraceObservabilityBlocks } from '../../shared/ToolTraceObservabilityBlocks';
+import { buildTurnTimelineParts } from './timeline-ordering.ts';
+import {
+  beginProgrammaticScroll,
+  nextFollowState,
+  shouldOfferJump,
+} from './timeline-follow.ts';
 
-const NEAR_BOTTOM_PX = 48;
+const STATUS_COLOR: Record<string, string> = {
+  error: 'text-error',
+  warning: 'text-warning',
+  success: 'text-success',
+};
 
 /** Cycling ".", "..", "..." indicator — lightweight signal that data is flowing. */
 function StreamingEllipsis() {
@@ -27,34 +37,6 @@ function StreamingEllipsis() {
     return () => window.clearInterval(id);
   }, []);
   return <span className="ml-0.5 inline-block w-[1.2em] text-left text-fg-faint">{'.'.repeat(dots)}</span>;
-}
-
-const STATUS_COLOR: Record<string, string> = {
-  error: 'text-error',
-  warning: 'text-warning',
-  success: 'text-success',
-};
-
-/** Per-turn trace lines grouped under the Tool use accordion (matches bridge + UX). */
-const TOOL_USE_KINDS = new Set<RunTraceEvent['kind']>([
-  'model_first_token',
-  'tool_started',
-  'tool_finished',
-  'tool_failed',
-  'file_written',
-]);
-
-function partitionToolUseTraces(traces: RunTraceEvent[]): {
-  toolUse: RunTraceEvent[];
-  rest: RunTraceEvent[];
-} {
-  const toolUse: RunTraceEvent[] = [];
-  const rest: RunTraceEvent[] = [];
-  for (const t of traces) {
-    if (TOOL_USE_KINDS.has(t.kind)) toolUse.push(t);
-    else rest.push(t);
-  }
-  return { toolUse, rest };
 }
 
 function traceTimeLabel(at: string): string {
@@ -287,6 +269,13 @@ export function Timeline({
   const streamingToolChars = streamingLiveness?.streamingToolChars;
   const scrollRef = useRef<HTMLDivElement>(null);
   const followLatestRef = useRef(true);
+  /**
+   * True while a `scroll` event may have been caused by our own
+   * `scrollTop = scrollHeight`. Cleared in a microtask, which runs before any
+   * real user scroll can be queued — see `timeline-follow.ts` for why this
+   * matters (a programmatic scroll must never un-pin the timeline).
+   */
+  const programmaticScrollRef = useRef(false);
   const [showJump, setShowJump] = useState(false);
   const [thinkingExpanded, setThinkingExpanded] = useState<
     Record<number, boolean | undefined>
@@ -369,16 +358,31 @@ export function Timeline({
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !followLatestRef.current) return;
-    el.scrollTop = el.scrollHeight;
+    programmaticScrollRef.current = true;
+    beginProgrammaticScroll(el);
+    // The scroll event this assignment triggers is dispatched as a task, after
+    // this microtask — so the flag is still set when our own event arrives, and
+    // already cleared before a genuine user scroll can be handled.
+    queueMicrotask(() => {
+      programmaticScrollRef.current = false;
+    });
   }, [scrollFingerprint]);
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const near = dist < NEAR_BOTTOM_PX;
-    followLatestRef.current = near;
-    setShowJump(!near && isStreaming);
+    const pos = {
+      scrollTop: el.scrollTop,
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    };
+    // Our own scroll to the bottom is not evidence that the viewer left it.
+    followLatestRef.current = nextFollowState(
+      followLatestRef.current,
+      programmaticScrollRef.current,
+      pos,
+    );
+    setShowJump(shouldOfferJump(followLatestRef.current, isStreaming, pos));
   }, [isStreaming]);
 
   const jumpToLatest = useCallback(() => {
@@ -387,7 +391,11 @@ export function Timeline({
     setShowJump(false);
     if (el) {
       requestAnimationFrame(() => {
-        el.scrollTop = el.scrollHeight;
+        programmaticScrollRef.current = true;
+        beginProgrammaticScroll(el);
+        queueMicrotask(() => {
+          programmaticScrollRef.current = false;
+        });
       });
     }
   }, []);
@@ -474,45 +482,57 @@ export function Timeline({
 
             {segments.map((seg, segIdx) => {
               const slice = thinkingMap.get(seg.turnId);
-              const { toolUse: toolUseTraces, rest: otherTraces } =
-                partitionToolUseTraces(seg.traces);
               const rawText =
                 activityByTurn?.[seg.turnId] ??
                 (segIdx === segments.length - 1 && !activityByTurn
                   ? fallbackActivity
                   : '');
               const isActive = seg.turnId === activeTurnId;
+              const streamingToolPending =
+                isActive && isStreaming && streamingToolName != null;
+              // Time-ordered, so the turn reads as the story it actually was:
+              // reasoning and tool calls appear where they happened rather than
+              // all reasoning being hoisted above all tool calls.
+              const parts = buildTurnTimelineParts({
+                traces: seg.traces,
+                slice,
+                streamingToolPending,
+              });
 
               return (
                 <div key={seg.turnId} className="mb-3">
                   <TraceLine t={seg.startTrace} />
 
-                  <ThinkingBlock
-                    slice={slice}
-                    isStreaming={isStreaming}
-                    isActiveTurn={isActive}
-                    open={resolvedThinkingOpen(seg.turnId)}
-                    onToggle={() => toggleThinking(seg.turnId)}
-                  />
-
-                  <ToolUseBlock
-                    traces={toolUseTraces}
-                    isStreaming={isStreaming}
-                    isActiveTurn={isActive}
-                    open={resolvedToolUseOpen(seg.turnId)}
-                    onToggle={() => toggleToolUse(seg.turnId)}
-                    streamingToolName={isActive ? streamingToolName : undefined}
-                    streamingToolPath={isActive ? streamingToolPath : undefined}
-                    streamingToolChars={isActive ? streamingToolChars : undefined}
-                  />
-
-                  {otherTraces.length > 0 && (
-                    <div className="mb-2 space-y-px">
-                      {otherTraces.map((t) => (
-                        <TraceLine key={t.id} t={t} />
-                      ))}
-                    </div>
-                  )}
+                  {parts.map((part, partIdx) => {
+                    if (part.kind === 'thinking') {
+                      return (
+                        <ThinkingBlock
+                          key={`thinking-${part.slice.turnId}`}
+                          slice={part.slice}
+                          isStreaming={isStreaming}
+                          isActiveTurn={isActive}
+                          open={resolvedThinkingOpen(seg.turnId)}
+                          onToggle={() => toggleThinking(seg.turnId)}
+                        />
+                      );
+                    }
+                    if (part.kind === 'toolUse') {
+                      return (
+                        <ToolUseBlock
+                          key={`tools-${part.traces[0]?.id ?? partIdx}`}
+                          traces={part.traces}
+                          isStreaming={isStreaming}
+                          isActiveTurn={isActive}
+                          open={resolvedToolUseOpen(seg.turnId)}
+                          onToggle={() => toggleToolUse(seg.turnId)}
+                          streamingToolName={isActive ? streamingToolName : undefined}
+                          streamingToolPath={isActive ? streamingToolPath : undefined}
+                          streamingToolChars={isActive ? streamingToolChars : undefined}
+                        />
+                      );
+                    }
+                    return <TraceLine key={part.trace.id} t={part.trace} />;
+                  })}
 
                   {rawText ? (
                     <div className="text-fg-muted">
