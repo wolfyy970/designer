@@ -47,6 +47,16 @@ export function useArtifactPreviewUrl(
       }
     };
 
+    /**
+     * Bundled upfront, not only on the failure path. A session that registers
+     * and verifies successfully can still fail in the browser afterwards: the
+     * ephemeral session may expire or be evicted between our verification GET
+     * and the iframe's own request. Without a bundle already in hand, that
+     * iframe has nothing to fall back to and the card shows the server's 404
+     * body inside the design frame — the "agent built something broken" look.
+     */
+    const fallbackSrcDoc = computeFallback();
+
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
@@ -75,7 +85,7 @@ export function useArtifactPreviewUrl(
           if (cancelled) return;
           setState({
             previewSrc,
-            fallbackSrcDoc: null,
+            fallbackSrcDoc,
             isPending: false,
           });
         } catch (registerErr) {
@@ -91,7 +101,7 @@ export function useArtifactPreviewUrl(
           if (!cancelled) {
             setState({
               previewSrc: null,
-              fallbackSrcDoc: computeFallback(),
+              fallbackSrcDoc,
               isPending: false,
             });
           }
