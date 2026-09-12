@@ -81,19 +81,28 @@ describe('resolveProviderConfig', () => {
 });
 
 describe('stream-idle watchdog threshold', () => {
-  it('stays above the p99 turn latency of the pinned default model', () => {
-    // Measured against `deepseek/deepseek-v4.1-flash` on OpenRouter: single
-    // turns of 45.6s / 36.9s / 55.5s producing 10k+ completion tokens. At the
-    // old 45s the watchdog aborted healthy builds mid-flight, and an aborted
-    // build leaves a partial artifact (HTML referencing styles.css/app.js that
-    // were never written) which renders as a broken-looking design.
-    expect(STREAM_IDLE_LIMIT_MS).toBeGreaterThanOrEqual(90_000);
+  /**
+   * Measured builder per-turn durations from three real builds with the pinned
+   * default (`deepseek/deepseek-v4.1-flash`), in seconds:
+   *
+   *   45.6 55.5 36.9 28.4 35.9 23.7 ... 81.5 63.7 109.9
+   *
+   * The original 45s aborted healthy builds. 120s cleared the 55s samples but
+   * sat under the 109.9s one, so a slightly slower turn was still killed — and
+   * an aborted build leaves a partial artifact that renders unstyled, which is
+   * the "broken preview" the user reported.
+   */
+  const SLOWEST_OBSERVED_TURN_MS = 109_900;
+
+  it('clears the slowest observed turn with real headroom', () => {
+    // Not just "greater than" — a threshold 10% above the worst sample is how
+    // the previous value passed while still aborting real runs.
+    expect(STREAM_IDLE_LIMIT_MS).toBeGreaterThanOrEqual(SLOWEST_OBSERVED_TURN_MS * 1.5);
   });
 
-  it('stays well inside the 800s serverless function limit', () => {
-    // Too generous is also a failure mode: the abort must fire while the
-    // request is still alive, otherwise the user gets a bare timeout instead
-    // of an explanatory error.
-    expect(STREAM_IDLE_LIMIT_MS).toBeLessThanOrEqual(300_000);
+  it('still fires inside the 800s serverless function limit', () => {
+    // Too generous is also a failure mode: the abort must happen while the
+    // request is alive, or the user gets a bare timeout instead of a message.
+    expect(STREAM_IDLE_LIMIT_MS).toBeLessThanOrEqual(400_000);
   });
 });

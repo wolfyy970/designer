@@ -72,24 +72,33 @@ export class StreamIdleError extends Error {
  * text_delta events on a millisecond cadence once a turn starts, so a long
  * silence means the connection is dead rather than slow.
  *
- * **Threshold history.** This was 45s, justified by "the pre-first-token
+ * **Threshold history.** Originally 45s, justified by "the pre-first-token
  * thinking window, which on the models we use is typically under 15s and never
  * above ~45s." Measured against the current default (`deepseek/deepseek-v4.1-flash`,
- * OpenRouter) that assumption no longer holds: this model enters long reasoning
- * stretches and produces single calls of 45.6s, 36.9s and 55.5s, generating
- * 10k+ completion tokens from prompts of a few hundred tokens. At 45s the
- * watchdog aborted healthy builds mid-flight, and an aborted build leaves a
- * *partial* artifact (HTML referencing styles.css/app.js that were never
- * written), which renders as an unstyled, broken-looking design.
+ * OpenRouter) that assumption is false. Across three real builds the builder's
+ * per-turn durations were:
  *
- * 120s is chosen to clear the slowest turn observed (~56s) with margin while
- * still catching a genuinely dead connection well inside the 800s function
- * limit. Keep this above the p99 turn duration for whatever model is pinned as
- * the default; a model change that invalidates that assumption will resurface
- * as intermittent broken previews rather than as an obvious error.
+ *   45.6  55.5  36.9  28.4  35.9  23.7 ... 81.5  63.7  109.9
+ *
+ * A 45s threshold aborted healthy builds mid-flight. Raising it to 120s was not
+ * enough either — 109.9s sits just under it, so a slightly slower turn still
+ * gets killed. An aborted build leaves a *partial* artifact (HTML referencing
+ * `styles.css`/`app.js` that were never written) which the preview then serves
+ * faithfully and renders completely unstyled — reproduced directly: a map
+ * without `styles.css` makes the iframe 404 the stylesheet and paint raw HTML.
+ *
+ * 240s is ~2x the slowest observed turn. The cost is that a genuinely dead
+ * connection takes four minutes to surface instead of two; the benefit is that
+ * a healthy-but-slow turn is never mistaken for a hang. That trade is
+ * deliberate: a false abort produces a broken-looking design the user blames on
+ * the model, while a slow true abort produces an error message.
+ *
+ * Keep this comfortably above the p99 turn duration for whatever model is
+ * pinned as the default. A model change that invalidates the assumption
+ * resurfaces as intermittent broken previews, not as an obvious failure.
  */
 /** Exported for tests: the idle abort threshold must stay above p99 turn latency. */
-export const STREAM_IDLE_LIMIT_MS = 120_000;
+export const STREAM_IDLE_LIMIT_MS = 240_000;
 const STREAM_IDLE_CHECK_INTERVAL_MS = 3_000;
 
 type ProviderConfig =
