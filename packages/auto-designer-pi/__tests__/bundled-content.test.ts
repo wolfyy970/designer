@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseFrontmatter } from '../src/paths';
 import { parseTagsFromFrontmatter } from '../src/resource-loader';
 
 const PKG_ROOT = join(fileURLToPath(import.meta.url), '..', '..');
@@ -33,15 +34,22 @@ const EXPECTED_PROMPTS = [
   '_designer-system.md',
 ] as const;
 
+/**
+ * Frontmatter for a bundled file, via the REAL parser.
+ *
+ * This used to be a local re-implementation — the fourth copy of the fence scan,
+ * with the same `startsWith('---')` + `indexOf('\n---')` weakness that made the
+ * package leak raw YAML into the system prompt on a BOM-encoded file. A test
+ * that parses with its own copy cannot catch a parser regression, which is the
+ * one thing this suite exists to do.
+ */
 function readFrontmatter(text: string): Record<string, string> {
+  const { yaml } = parseFrontmatter(text);
   const out: Record<string, string> = {};
-  if (!text.startsWith('---')) return out;
-  const end = text.indexOf('\n---', 3);
-  if (end < 0) return out;
-  const yaml = text.slice(3, end);
+  if (yaml === undefined) return out;
   for (const line of yaml.split('\n')) {
     const m = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line);
-    if (m && m[2] && !m[2].startsWith('-')) out[m[1]] = m[2].trim();
+    if (m && m[2] && !m[2].startsWith('-')) out[m[1]!] = m[2].trim();
   }
   return out;
 }

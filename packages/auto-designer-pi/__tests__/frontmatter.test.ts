@@ -17,9 +17,15 @@
  *     4-dash fence     "-\nBODY"                  null          <-- diverges
  *     leading blank    (unstripped)               null          <-- diverges
  *
- * A BOM is the dangerous one: `readFileSync(…, 'utf8')` keeps it, so
- * `text.startsWith('---')` is false, the raw YAML header is returned as the
- * system-prompt body, and metadata leaks into **every** agent session.
+ * A BOM is the dangerous one: `readFileSync(…, 'utf8')` keeps it, so the old
+ * `text.startsWith('---')` was false, the raw YAML header was returned as the
+ * system-prompt body, and metadata leaked into **every** agent session.
+ *
+ * Note on which line earns its keep: `lines[0].trim()` already strips a BOM
+ * (`trim` removes U+FEFF), so the explicit BOM strip is belt-and-braces. The
+ * CRLF normalization is the load-bearing part — removing both fails three of
+ * these tests, removing only the BOM strip fails none. Recorded so nobody
+ * "simplifies" the normalization away.
  *
  * These tests pin one implementation's behaviour. Only the shapes listed as
  * divergences above change relative to the package version; LF-only, no-BOM

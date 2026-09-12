@@ -15,6 +15,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import type { ResourceLoader } from './internal/pi-types.ts';
+import { parseFrontmatter } from './paths.ts';
 
 export type SessionType =
   | 'design'
@@ -74,21 +75,31 @@ export function clearSkillTagCache(): void {
 }
 
 export function parseTagsFromFrontmatter(body: string): string[] {
-  if (!body.startsWith('---')) return [];
-  const end = body.indexOf('\n---', 3);
-  if (end < 0) return [];
-  const lines = body.slice(3, end).split('\n');
+  /**
+   * Uses the shared parser rather than its own fence scan, so a skill's *body*
+   * and its *tags* can never be derived by two different rules. The previous
+   * local scan repeated the same `startsWith('---')` + `indexOf('\n---')` pair
+   * that leaked raw YAML into the system prompt: on a BOM- or CRLF-encoded file
+   * it returned no tags, which would silently hide that skill from every
+   * session, while the body path had its own (different) answer.
+   *
+   * No checked-in skill has a BOM or CRLF today, so this is a latent fix rather
+   * than a behaviour change for the current corpus.
+   */
+  const { yaml } = parseFrontmatter(body);
+  if (yaml === undefined) return [];
+  const lines = yaml.split('\n');
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i]!;
     const inline = /^tags:\s*\[(.*?)\]\s*$/.exec(line);
     if (inline?.[1] !== undefined) return splitInlineTagList(inline[1]);
     if (/^tags:\s*$/.test(line)) {
       const out: string[] = [];
       for (let j = i + 1; j < lines.length; j++) {
-        const item = /^\s*-\s*(.+?)\s*$/.exec(lines[j]);
+        const item = /^\s*-\s*(.+?)\s*$/.exec(lines[j]!);
         if (!item) break;
-        out.push(item[1].replace(/^["']|["']$/g, '').trim());
+        out.push(item[1]!.replace(/^["']|["']$/g, '').trim());
       }
       return out;
     }
