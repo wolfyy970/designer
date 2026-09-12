@@ -1,51 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, X } from 'lucide-react';
-import { Button } from '@ds/components/ui/button';
-import { StatusDot } from '@ds/components/ui/status-dot';
-import type { StatusDotVariantProps } from '@ds/components/ui/status-dot-variants';
-import { EVALUATOR_RUBRIC_IDS, EVALUATOR_WORKER_COUNT } from '../../types/evaluation';
+import { EVALUATOR_RUBRIC_IDS } from '../../types/evaluation';
 import { storage } from '../../storage';
 import { useCanvasStore } from '../../stores/canvas-store';
 import { useIncubatorStore, findStrategy } from '../../stores/incubator-store';
 import { getPreviewNodeData } from '../../lib/canvas-node-data';
+import { resolveRoundFileView, shouldLoadRoundFiles } from './round-file-view';
 import { useVersionStack } from '../../hooks/useVersionStack';
 import { useResultCode } from '../../hooks/useResultCode';
 import { useResultFiles } from '../../hooks/useResultFiles';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
-import { RF_INTERACTIVE } from '../../constants/canvas';
 import { GENERATION_STATUS } from '../../constants/generation';
 import { prepareIframeContent, renderErrorHtml } from '../../lib/iframe-utils';
 import { preferredArtifactFileOrder } from '../../lib/preview-entry';
 import { normalizeError } from '../../lib/error-utils';
-import { pickLivenessSlice, pickStreamingToolLiveness } from '../../types/provider';
-import {
-  AgenticHarnessStripe,
-  ArtifactPreviewFrame,
-  EvaluationTabPanel,
-  GeneratingFooter,
-  Timeline,
-  TodoTracker,
-} from './variant-run';
-import FileExplorer from './nodes/FileExplorer';
+import { EvaluationTabPanel } from './variant-run';
+import { VariantRunMonitorTab } from './variant-run-inspector/VariantRunMonitorTab';
+import { VariantRunDesignTab } from './variant-run-inspector/VariantRunDesignTab';
+import { VariantRunFilesTab } from './variant-run-inspector/VariantRunFilesTab';
+import { VariantRunHeader } from './variant-run-inspector/VariantRunHeader';
+import type { VariantRunTabId } from './variant-run-inspector/variant-run-tabs';
 
-type TabId = 'monitor' | 'files' | 'design' | 'evaluation';
-
-const TAB_DEFS: { id: TabId; label: string }[] = [
-  { id: 'monitor', label: 'Monitor' },
-  { id: 'files', label: 'Files' },
-  { id: 'design', label: 'Design' },
-  { id: 'evaluation', label: 'Evaluation' },
-];
-
-function statusDotProps(status: string): StatusDotVariantProps {
-  if (status === GENERATION_STATUS.COMPLETE) return { tone: 'success' };
-  if (status === GENERATION_STATUS.GENERATING) return { tone: 'accent', animated: true };
-  if (status === GENERATION_STATUS.ERROR) return { tone: 'error' };
-  return { tone: 'neutral' };
-}
-function RunStatusDot({ status }: { status: string }) {
-  return <StatusDot {...statusDotProps(status)} aria-hidden />;
-}
 
 interface VariantRunInspectorProps {
   onPointerEnter?: () => void;
@@ -94,7 +68,7 @@ export default function VariantRunInspector({ onPointerEnter }: VariantRunInspec
     return () => document.removeEventListener('keydown', onKey);
   }, [runInspectorPreviewNodeId, closeRunInspector]);
 
-  const [tab, setTab] = useState<TabId>('monitor');
+  const [tab, setTab] = useState<VariantRunTabId>('monitor');
   const [filesTabPath, setFilesTabPath] = useState<string | undefined>(undefined);
 
   useEffect(() => {
@@ -141,7 +115,11 @@ export default function VariantRunInspector({ onPointerEnter }: VariantRunInspec
     }
   }, [result, code]);
 
-  const rounds = result?.evaluationRounds ?? [];
+  // Memoised so it is referentially stable: `result.evaluationRounds` is
+  // replaced on every streamed update, and an unstable identity here defeats
+  // the `roundFileView` memo below (and re-runs its dependency comparisons on
+  // every render).
+  const rounds = useMemo(() => result?.evaluationRounds ?? [], [result?.evaluationRounds]);
   const [evalRoundIdx, setEvalRoundIdx] = useState(0);
   useEffect(() => {
     const n = result?.evaluationRounds?.length ?? 0;
@@ -159,50 +137,81 @@ export default function VariantRunInspector({ onPointerEnter }: VariantRunInspec
   const [roundFilesFromIdb, setRoundFilesFromIdb] = useState<Record<string, string> | undefined>(
     undefined,
   );
+  /**
+   * Whether a read for the selected round is in flight. Tracked separately from
+   * the value because `undefined` means both "not read yet" and "read, nothing
+   * stored" — and only one of those can still resolve. Without this the caller
+   * cannot tell them apart, which is how a spinner for a round that has no
+   * snapshot ended up never resolving.
+   */
+  const [roundFilesLoading, setRoundFilesLoading] = useState(false);
+  const wantsRoundFiles = shouldLoadRoundFiles({
+    hasResultId: !!result?.id,
+    isComplete: result?.status === GENERATION_STATUS.COMPLETE,
+    roundCount: rounds.length,
+    selectedRound,
+    isLatestRound: isLatestEvalRound,
+  });
   useEffect(() => {
-    if (
-      !result?.id ||
-      result.status !== GENERATION_STATUS.COMPLETE ||
-      !selectedRound ||
-      rounds.length <= 1
-    ) {
+    if (!wantsRoundFiles || !result?.id || !selectedRound) {
       setRoundFilesFromIdb(undefined);
-      return;
-    }
-    if (isLatestEvalRound) {
-      setRoundFilesFromIdb(undefined);
+      setRoundFilesLoading(false);
       return;
     }
     let cancelled = false;
+    setRoundFilesLoading(true);
     void storage
       .loadRoundFiles(result.id, selectedRound.round)
       .then((f) => {
-        if (!cancelled) setRoundFilesFromIdb(f);
+        if (cancelled) return;
+        setRoundFilesFromIdb(f);
       })
       .catch(() => {
-        if (!cancelled) setRoundFilesFromIdb(undefined);
+        if (cancelled) return;
+        setRoundFilesFromIdb(undefined);
+      })
+      .finally(() => {
+        if (!cancelled) setRoundFilesLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [result?.id, result?.status, selectedRound, rounds.length, isLatestEvalRound]);
+  }, [result?.id, wantsRoundFiles, selectedRound]);
 
-  const designPreviewFiles = useMemo(() => {
-    if (!result || rounds.length <= 1) {
-      return currentFiles;
-    }
-    if (isLatestEvalRound) {
-      return currentFiles;
-    }
-    return roundFilesFromIdb ?? selectedRound?.files ?? currentFiles;
-  }, [
-    result,
-    rounds.length,
-    isLatestEvalRound,
-    roundFilesFromIdb,
-    selectedRound?.files,
-    currentFiles,
-  ]);
+  /**
+   * Which file map this panel shows, and — the part a bare `??` chain could not
+   * express — *why*. `kind` distinguishes an older round whose snapshot is still
+   * being read from one that has none, which is what the five duplicated
+   * render-site conditions were each re-deriving by hand.
+   */
+  const roundFileView = useMemo(
+    () =>
+      resolveRoundFileView({
+        currentFiles,
+        rounds,
+        selectedRound,
+        roundFilesFromIdb,
+        isLoadingRoundFiles: roundFilesLoading,
+        isComplete: result?.status === GENERATION_STATUS.COMPLETE,
+      }),
+    [
+      currentFiles,
+      rounds,
+      selectedRound,
+      roundFilesFromIdb,
+      roundFilesLoading,
+      result?.status,
+    ],
+  );
+  const designPreviewFiles = roundFileView.files;
+  /**
+   * An older round is selected and its snapshot is not available in any form.
+   * The panels below deliberately render *nothing* in this case rather than
+   * falling back to the live files, which would silently show a different
+   * round's design under this round's label.
+   */
+  const olderRoundSnapshotUnavailable =
+    roundFileView.kind === 'loading' || roundFileView.kind === 'missing';
 
   const designIsMultiFile =
     !!designPreviewFiles && Object.keys(designPreviewFiles).length > 0;
@@ -254,292 +263,66 @@ export default function VariantRunInspector({ onPointerEnter }: VariantRunInspec
       onPointerEnter={onPointerEnter}
       onWheelCapture={(e) => e.stopPropagation()}
     >
-      {/* ── Identity header ──────────────────────────────────── */}
-      <div className="shrink-0 border-b border-border-subtle px-3 py-1.5">
-        <div className="flex items-start justify-between gap-2">
-          <h2 className="min-w-0 truncate text-sm font-semibold leading-tight text-fg">
-            {variantName}
-          </h2>
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              variant="ghost"
-              size="iconSm"
-              onClick={closeRunInspector}
-              title="Close (Esc)"
-            >
-              <X size={14} />
-            </Button>
-          </div>
-        </div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-nano text-fg-muted">
-          {versionKey && result?.runNumber != null && (
-            <span className="tabular-nums text-fg-secondary">v{result.runNumber}</span>
-          )}
-          {model && (
-            <>
-              <span className="text-border">&middot;</span>
-              <span className="truncate">{model}</span>
-            </>
-          )}
-          {durationSec && (
-            <>
-              <span className="text-border">&middot;</span>
-              <span className="tabular-nums">{durationSec}s</span>
-            </>
-          )}
-          <span className="text-border">&middot;</span>
-          <span className="flex items-center gap-1 capitalize">
-            <RunStatusDot status={statusLabel} />
-            {statusLabel}
-          </span>
-        </div>
-      </div>
-
-      {/* ── Tabs ─────────────────────────────────────────────── */}
-      <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border-subtle px-2 py-1">
-        {TAB_DEFS.map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={`flex shrink-0 items-center rounded px-2 py-0.5 text-nano font-medium transition-colors ${
-              tab === id
-                ? 'bg-surface-nested text-fg'
-                : 'text-fg-muted hover:text-fg-secondary'
-            }`}
-          >
-            {label}
-            {id === 'evaluation' && showEvaluationTabBadge ? (
-              <>
-                <StatusDot
-                  tone="accent"
-                  animated
-                  className="ml-1"
-                  aria-hidden
-                />
-                <span className="ml-0.5 shrink-0 tabular-nums text-fg-faint">
-                  ({evalWorkersDoneCount}/{EVALUATOR_WORKER_COUNT})
-                </span>
-              </>
-            ) : null}
-          </button>
-        ))}
-      </div>
+      <VariantRunHeader
+        variantName={variantName}
+        onClose={closeRunInspector}
+        versionKey={versionKey}
+        runNumber={result?.runNumber}
+        model={model}
+        durationSec={durationSec}
+        statusLabel={statusLabel}
+        tab={tab}
+        onSelectTab={setTab}
+        showEvaluationTabBadge={showEvaluationTabBadge}
+        evalWorkersDoneCount={evalWorkersDoneCount}
+      />
 
       {/* ── Tab content ──────────────────────────────────────── */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 
         {tab === 'monitor' && (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {/* Generating progress strip (fixed, above resizable panels) */}
-            {isGenerating && result && (
-              <div className="shrink-0 border-b border-border-subtle">
-                <AgenticHarnessStripe
-                  phase={result.agenticPhase}
-                  evaluationStatus={result.evaluationStatus}
-                  progressMessage={result.progressMessage}
-                />
-                <GeneratingFooter
-                  plan={result.liveFilesPlan}
-                  written={Object.keys(result.liveFiles ?? {}).length}
-                  elapsed={elapsed}
-                  liveness={pickLivenessSlice(result)}
-                  liveTodos={result.liveTodos}
-                  skillCatalogEmpty={result.liveSkills != null && result.liveSkills.length === 0}
-                  liveActivatedSkills={result.liveActivatedSkills}
-                />
-              </div>
-            )}
-
-            {/* Tasks — fixed, auto-height, fits content snugly */}
-            <div className="shrink-0 border-b border-border-subtle">
-              <div className="flex items-center bg-surface-nested/40 px-3 py-0.5">
-                <span className="text-pico font-semibold uppercase tracking-widest text-fg-faint">Tasks</span>
-              </div>
-              {result?.liveTodos && result.liveTodos.length > 0 ? (
-                <TodoTracker todos={result.liveTodos} />
-              ) : (
-                <p className="px-3 py-1.5 text-nano text-fg-muted">
-                  {isGenerating ? 'Planning…' : 'No tasks.'}
-                </p>
-              )}
-            </div>
-
-            {/* Unified timeline — trace events + model output in one scroll */}
-            <Timeline
-              trace={result?.liveTrace}
-              thinkingTurns={result?.thinkingTurns}
-              activityByTurn={result?.activityByTurn}
-              activityLog={result?.activityLog}
-              isStreaming={isGenerating}
-              streamingLiveness={result ? pickStreamingToolLiveness(result) : undefined}
-            />
-          </div>
+          <VariantRunMonitorTab result={result} isGenerating={isGenerating} elapsed={elapsed} />
         )}
 
         {tab === 'files' && (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-bg">
-            {rounds.length > 1 && (
-              <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-3 py-1.5">
-                <span className="text-badge font-medium uppercase tracking-wider text-fg-faint">
-                  Eval round
-                </span>
-                <select
-                  className="nodrag max-w-[var(--width-model-trigger)] rounded border border-border-subtle bg-surface px-2 py-0.5 text-nano text-fg"
-                  value={safeRoundIdx}
-                  onChange={(e) => setEvalRoundIdx(Number(e.target.value))}
-                >
-                  {rounds.map((r, i) => (
-                    <option key={r.round} value={i}>
-                      Round {r.round}
-                      {r.round === lastRoundNum ? ' (final)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {(codeLoading || filesLoading) && result?.status === GENERATION_STATUS.COMPLETE && (
-              <div className="flex flex-1 items-center justify-center">
-                <Loader2 size={20} className="animate-spin text-fg-muted" />
-              </div>
-            )}
-            {rounds.length > 1 &&
-              !isLatestEvalRound &&
-              result?.status === GENERATION_STATUS.COMPLETE &&
-              !roundFilesFromIdb &&
-              !selectedRound?.files && (
-                <div className="flex flex-1 items-center justify-center px-3">
-                  <Loader2 size={18} className="animate-spin text-fg-muted" />
-                </div>
-              )}
-            {!codeLoading &&
-              !filesLoading &&
-              !(rounds.length > 1 && !isLatestEvalRound && !roundFilesFromIdb && !selectedRound?.files) &&
-              (Object.keys(writtenForFilesTab ?? {}).length > 0 ||
-                (filesTabPlanned?.length ?? 0) > 0) && (
-                <div className="flex min-h-0 flex-1 overflow-hidden">
-                  <div className="flex w-[var(--width-inspector-tab)] shrink-0 flex-col border-r border-border-subtle bg-surface">
-                    <div className="border-b border-border-subtle px-2 py-1.5">
-                      <span className="text-badge font-medium uppercase tracking-wider text-fg-faint">
-                        Files
-                      </span>
-                    </div>
-                    <FileExplorer
-                      files={writtenForFilesTab ?? {}}
-                      plannedFiles={filesTabPlanned}
-                      activeFile={filesTabPath}
-                      onSelectFile={setFilesTabPath}
-                      isGenerating={isGenerating}
-                      writingFile={result?.activeToolPath}
-                      allowSelectPlanned
-                      className="flex-1 min-h-0"
-                    />
-                  </div>
-                  <div className={`${RF_INTERACTIVE} min-h-0 min-w-0 flex-1 overflow-y-auto`}>
-                    {filesTabSnippet != null ? (
-                      <pre className="min-h-full p-3 font-mono text-nano leading-relaxed text-fg-secondary whitespace-pre-wrap">
-                        {filesTabSnippet}
-                      </pre>
-                    ) : (
-                      <p className="p-3 text-nano text-fg-muted">
-                        {filesTabPath
-                          ? 'Not written yet — watch the Monitor stream for updates.'
-                          : 'No files in this run.'}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-            {!codeLoading &&
-              !filesLoading &&
-              !(rounds.length > 1 && !isLatestEvalRound && !roundFilesFromIdb && !selectedRound?.files) &&
-              Object.keys(writtenForFilesTab ?? {}).length === 0 &&
-              (filesTabPlanned?.length ?? 0) === 0 && (
-                <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
-                  <p className="text-nano text-fg-muted">
-                    {isGenerating
-                      ? 'Paths appear here when the agent plans and writes files.'
-                      : 'No project files for this run.'}
-                  </p>
-                </div>
-              )}
-          </div>
+          <VariantRunFilesTab
+            rounds={rounds}
+            safeRoundIdx={safeRoundIdx}
+            lastRoundNum={lastRoundNum}
+            onSelectRoundIndex={setEvalRoundIdx}
+            codeLoading={codeLoading}
+            filesLoading={filesLoading}
+            isRunComplete={result?.status === GENERATION_STATUS.COMPLETE}
+            roundSnapshotLoading={roundFileView.kind === 'loading'}
+            roundSnapshotMissing={roundFileView.kind === 'missing'}
+            writtenFiles={writtenForFilesTab ?? {}}
+            plannedFiles={filesTabPlanned}
+            activeFilePath={filesTabPath}
+            onSelectFile={setFilesTabPath}
+            isGenerating={isGenerating}
+            writingFile={result?.activeToolPath}
+            fileSnippet={filesTabSnippet}
+          />
         )}
 
         {tab === 'design' && (
-          <div className="flex min-h-0 flex-1 flex-col bg-bg">
-            {rounds.length > 1 && (
-              <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-3 py-1.5">
-                <span className="text-badge font-medium uppercase tracking-wider text-fg-faint">
-                  Eval round
-                </span>
-                <select
-                  className="nodrag max-w-[var(--width-model-trigger)] rounded border border-border-subtle bg-surface px-2 py-0.5 text-nano text-fg"
-                  value={safeRoundIdx}
-                  onChange={(e) => setEvalRoundIdx(Number(e.target.value))}
-                >
-                  {rounds.map((r, i) => (
-                    <option key={r.round} value={i}>
-                      Round {r.round}
-                      {r.round === lastRoundNum ? ' (final)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {(codeLoading || filesLoading) && result?.status === GENERATION_STATUS.COMPLETE && (
-              <div className="flex flex-1 items-center justify-center">
-                <Loader2 size={20} className="animate-spin text-fg-muted" />
-              </div>
-            )}
-            {rounds.length > 1 &&
-              !isLatestEvalRound &&
-              result?.status === GENERATION_STATUS.COMPLETE &&
-              !roundFilesFromIdb &&
-              !selectedRound?.files && (
-                <div className="flex flex-1 items-center justify-center px-3">
-                  <Loader2 size={18} className="animate-spin text-fg-muted" />
-                </div>
-              )}
-            {!codeLoading &&
-              !filesLoading &&
-              !(rounds.length > 1 && !isLatestEvalRound && !roundFilesFromIdb && !selectedRound?.files) &&
-              designIsMultiFile &&
-              designPreviewFiles && (
-              <ArtifactPreviewFrame
-                files={designPreviewFiles}
-                title={`Design preview: ${variantName}`}
-                className="min-h-[var(--min-height-input-textarea)] flex-1 border-0 bg-preview-canvas"
-              />
-            )}
-            {!codeLoading &&
-              !filesLoading &&
-              !(rounds.length > 1 && !isLatestEvalRound && !roundFilesFromIdb && !selectedRound?.files) &&
-              !designIsMultiFile &&
-              singleFileSrc && (
-              <iframe
-                title={`Design preview: ${variantName}`}
-                sandbox="allow-scripts"
-                srcDoc={singleFileSrc}
-                className="min-h-[var(--min-height-input-textarea)] flex-1 border-0 bg-preview-canvas"
-              />
-            )}
-            {!codeLoading &&
-              !filesLoading &&
-              !(rounds.length > 1 && !isLatestEvalRound && !roundFilesFromIdb && !selectedRound?.files) &&
-              !designIsMultiFile &&
-              !singleFileSrc && (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
-                <p className="text-nano text-fg-muted">
-                  {isGenerating
-                    ? 'Preview appears when the first artifact is ready.'
-                    : rounds.length > 1 && !isLatestEvalRound
-                      ? 'No file snapshot for this round (re-run agentic to capture).'
-                      : 'No preview available.'}
-                </p>
-              </div>
-            )}
-          </div>
+          <VariantRunDesignTab
+            rounds={rounds}
+            safeRoundIdx={safeRoundIdx}
+            lastRoundNum={lastRoundNum}
+            onSelectRoundIndex={setEvalRoundIdx}
+            codeLoading={codeLoading}
+            filesLoading={filesLoading}
+            isRunComplete={result?.status === GENERATION_STATUS.COMPLETE}
+            roundSnapshotUnavailable={olderRoundSnapshotUnavailable}
+            roundSnapshotLoading={roundFileView.kind === 'loading'}
+            isLatestRound={isLatestEvalRound}
+            variantName={variantName}
+            isGenerating={isGenerating}
+            designIsMultiFile={designIsMultiFile}
+            designPreviewFiles={designPreviewFiles}
+            singleFileSrc={singleFileSrc}
+          />
         )}
 
         {tab === 'evaluation' && (

@@ -127,6 +127,15 @@ export function EvaluationTabPanel(props: {
           <div className="flex flex-col gap-3 p-3">
             {rounds.map((round) => {
               const isLatest = lastRoundNum != null && round.round === lastRoundNum;
+              /**
+               * `aggregate` is required by `EvaluationRoundSnapshot`, but this
+               * array is fed straight from live SSE and only the *persist* zod
+               * schema demands it — so a malformed round can reach here at
+               * runtime. Reading `round.aggregate.shouldRevise` used to throw
+               * and unmount the whole panel; a card that names what is missing
+               * is strictly better than a dead tab.
+               */
+              const aggregate = round.aggregate;
               return (
                 <article
                   key={round.round}
@@ -143,21 +152,29 @@ export function EvaluationTabPanel(props: {
                         ) : null}
                       </div>
                       <div className="text-badge text-fg-muted">
-                        {round.aggregate.shouldRevise ? 'Revise suggested' : 'Pass'}
+                        {aggregate == null
+                          ? 'No evaluation data for this round'
+                          : aggregate.shouldRevise
+                            ? 'Revise suggested'
+                            : 'Pass'}
                       </div>
                     </div>
-                    <span className="shrink-0 tabular-nums font-mono text-sm text-accent">
-                      {round.aggregate.overallScore.toFixed(1)}
-                    </span>
+                    {aggregate == null ? null : (
+                      <span className="shrink-0 tabular-nums font-mono text-sm text-accent">
+                        {aggregate.overallScore.toFixed(1)}
+                      </span>
+                    )}
                   </header>
-                  <div className="px-3 pb-3 pt-1">
-                    <EvaluationScorecard
-                      summary={round.aggregate}
-                      latestSnapshot={round}
-                      mode="panel"
-                      showAggregateHeader={false}
-                    />
-                  </div>
+                  {aggregate == null ? null : (
+                    <div className="px-3 pb-3 pt-1">
+                      <EvaluationScorecard
+                        summary={aggregate}
+                        latestSnapshot={round}
+                        mode="panel"
+                        showAggregateHeader={false}
+                      />
+                    </div>
+                  )}
                 </article>
               );
             })}

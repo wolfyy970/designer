@@ -89,12 +89,24 @@ export default function FileExplorer({
               >
                 {fileIcon(path)}
                 <span className="truncate text-micro leading-tight flex-1">{filename}</span>
-                {isWriting && <StatusDot tone="accent" animated aria-label="Writing…" />}
+                {/*
+                  Visually the dot sits at the end of the row, but it must not
+                  contribute to the button's accessible name: an `aria-label`
+                  here *replaces* the name, so the row was announced as
+                  "Writing…" and the filename — the one thing the control is
+                  for — was dropped. The dot is decorative; the state is
+                  announced once, by the live region below the list.
+                */}
+                {isWriting && <StatusDot tone="accent" animated aria-hidden />}
               </button>
             );
           })}
         </div>
       ))}
+      {/* Announces the file being written without clobbering any row's name. */}
+      <span className="sr-only" role="status">
+        {writingFile ? `Writing ${writingFile}` : ''}
+      </span>
     </div>
   );
 }

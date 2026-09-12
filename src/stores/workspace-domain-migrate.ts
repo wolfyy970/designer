@@ -1,3 +1,4 @@
+import { isRecord } from '../lib/is-record';
 import type {
   DomainHypothesis,
   DomainIncubatorWiring,
@@ -270,10 +271,6 @@ export function migrateWorkspaceDomainPersist(persisted: unknown, fromVersion: n
     }
   }
   return normalizeWorkspaceDomainPersistShape(p);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function recordOrEmpty(value: unknown): Record<string, unknown> {

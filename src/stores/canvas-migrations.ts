@@ -1,3 +1,4 @@
+import { isRecord } from '../lib/is-record';
 import { DEFAULT_COL_GAP } from '../lib/canvas-layout';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 import { EDGE_TYPES, EDGE_STATUS, NODE_TYPES } from '../constants/canvas';
@@ -701,10 +702,6 @@ export function migrateCanvasState(
   if (fromVersion < 33) s = migrateV32ToV33(s);
 
   return normalizeMigratedCanvasState(s);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function normalizeMigratedCanvasState(state: Record<string, unknown>): Record<string, unknown> {

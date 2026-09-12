@@ -1,3 +1,4 @@
+import { isRecord } from '../lib/is-record';
 import { type DesignSpec, DesignSpecSchema } from '../types/spec';
 import { STORAGE_KEYS } from '../lib/storage-keys';
 import {
@@ -15,10 +16,6 @@ import {
 const CANVASES_KEY = STORAGE_KEYS.CANVASES;
 
 type CanvasIndexEntry = SavedCanvasListEntry | DesignSpec;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function isSavedCanvasListEntry(value: unknown): value is SavedCanvasListEntry {
   return (
