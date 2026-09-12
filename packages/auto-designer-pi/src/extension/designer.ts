@@ -6,9 +6,15 @@
  *
  * Compaction uses Pi's built-in defaults — no custom hook here.
  *
- * Use as `extensionFactories: [createDesignerExtensionFactory({ ... })]` on
- * `DefaultResourceLoader` (or its replacement). One factory per session — the
- * factory is invoked once per session by Pi's extension runtime.
+ * **Relationship to the production surface:** `host.ts` does not call this
+ * factory — it builds `buildDesignToolSurface()`, which registers these same
+ * four extension tools *plus* the seven VFS-backed Pi overrides through one
+ * `ExtensionFactory`. This helper exists for hosts that want the designer
+ * tools without the sandbox overrides.
+ *
+ * `pi-tool-surface.test.ts` pins both paths to the same four names, because
+ * two independent registrations of the same tools can otherwise drift apart
+ * silently — this one is not exercised by any production call site.
  */
 import type { Bash } from 'just-bash';
 import type { ExtensionAPI, ExtensionFactory } from '../internal/pi-types.ts';
