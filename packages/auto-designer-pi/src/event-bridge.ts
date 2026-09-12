@@ -10,6 +10,7 @@
  * adds compaction lifecycle, tool-execution timing, and agent-end status.
  */
 import type { AgentSession, AgentSessionEvent } from './internal/pi-types.ts';
+import { findLastAssistantMessage } from './internal/pi-messages.ts';
 
 export type SessionEvent =
   | { type: 'agent_start' }
@@ -35,17 +36,6 @@ export interface SubscribeOptions {
 interface AgentEndLike {
   type: 'agent_end';
   messages?: unknown;
-}
-
-function lastAssistant(messages: unknown): { stopReason?: string; errorMessage?: string } | undefined {
-  if (!Array.isArray(messages)) return undefined;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m && typeof m === 'object' && (m as { role?: unknown }).role === 'assistant') {
-      return m as { stopReason?: string; errorMessage?: string };
-    }
-  }
-  return undefined;
 }
 
 /**
@@ -104,7 +94,7 @@ export function subscribeNarrowBridge(session: AgentSession, opts: SubscribeOpti
       }
       case 'agent_end': {
         const e = event as AgentEndLike;
-        const last = lastAssistant(e.messages);
+        const last = findLastAssistantMessage(e.messages);
         const aborted = last?.stopReason === 'aborted';
         const errorMessage = last?.stopReason === 'error' ? last?.errorMessage : undefined;
         return void opts.onEvent({ type: 'agent_end', aborted, errorMessage });

@@ -51,6 +51,7 @@ import {
   isAppRetryableUpstreamError,
   sleepMs,
 } from './internal/upstream-retry.ts';
+import { findLastAssistantMessage } from './internal/pi-messages.ts';
 import type { TodoItem } from './types.ts';
 
 export interface SessionRunnerOptions {
@@ -174,7 +175,9 @@ async function runPromptWithUpstreamRetries(
   let attempts = 0;
   while (attempts < MAX_APP_UPSTREAM_RETRIES) {
     const messages = session.agent.state.messages;
-    const lastAssistant = lastAssistantMessage(messages);
+    // Shared with event-bridge's `agent_end` handling: the retry decision and
+    // the reported run outcome must never disagree about what failed.
+    const lastAssistant = findLastAssistantMessage(messages);
     if (!lastAssistant || lastAssistant.stopReason !== 'error') return;
     if (!isAppRetryableUpstreamError(lastAssistant.errorMessage)) return;
     if (session.retryAttempt !== 0) return;
@@ -186,22 +189,6 @@ async function runPromptWithUpstreamRetries(
     await sleepMs(2000 * 2 ** (attempts - 1));
     await session.agent.continue();
   }
-}
-
-interface AssistantLike {
-  role: string;
-  stopReason?: string;
-  errorMessage?: string;
-}
-function lastAssistantMessage(messages: unknown): AssistantLike | undefined {
-  if (!Array.isArray(messages)) return undefined;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m && typeof m === 'object' && (m as { role?: unknown }).role === 'assistant') {
-      return m as AssistantLike;
-    }
-  }
-  return undefined;
 }
 
 export async function createSession(opts: SessionRunnerOptions): Promise<SessionHandle> {
