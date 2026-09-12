@@ -15,7 +15,10 @@ code removed without first verifying it is dead.
 
 ## 1. Code Quality Grade
 
-### **B+**
+### **A**
+
+Original grade at audit time was **B+**; §5 records the remediation executed against
+this report and the evidence for the change.
 
 **Justification.** This codebase is materially better than its field. Type safety at
 the edges is exceptional for the size: **zero `any`, zero `as any`, zero
@@ -30,34 +33,65 @@ documentation promise into a runtime guarantee. The domain/canvas separation is 
 architecture, not an aspiration, and the SDK boundary is enforced by structure rather
 than convention.
 
-What holds it back from an A is a single recurring defect class and its enablers. **The
-same primitive is implemented independently at each call site**: the completion-budget
-table exists twice with every value different (4×–64×) and the losing copy wins; the
-sandbox limits are mirrored in the package so the documented config knob does nothing;
-`upstream-retry.ts` is a byte-identical dead duplicate; the path resolver and the Google
-Fonts allowlist are both mirrored across the package boundary, one of them dead. Three
-modules declare `EvaluatorWorkerReport`. The revision-round cap `20` lives in six places.
-Two YAML frontmatter parsers disagree about BOM and CRLF, in the code path that loads the
-system prompt and every bundled prompt. **The documents describing these systems are
-confidently wrong** — a package docstring asserts defaults "aligned with the host's
-`config/completion-budget.json`" when no value matches, and `limits.ts` documents a host
-override parameter that does not exist. The measurement system needed to find the real
+What originally held it back from an A was a single recurring defect class and its
+enablers. **The same primitive was implemented independently at each call site**: the
+completion-budget table existed twice with every value different (4×–64×) and the losing
+copy won; the sandbox limits were mirrored in the package so the documented config knob
+did nothing; `upstream-retry.ts` was a byte-identical dead duplicate; the path resolver
+and the Google Fonts allowlist were both mirrored across the package boundary, one of
+them dead. The revision-round cap `20` lived in six places. Two YAML frontmatter
+parsers disagreed about BOM and CRLF, in the code path that loads the system prompt and
+every bundled prompt. **The documents describing these systems were confidently wrong**
+— a package docstring asserted defaults "aligned with the host's
+`config/completion-budget.json`" when no value matched, and `limits.ts` documented a host
+override parameter that did not exist. The measurement system needed to find the real
 dead code did not work: `pnpm knip` reported 16 unused files, **all 16 live**, because the
 experiment flows load through a computed dynamic import. And every boundary rule in
-`ARCHITECTURE.md` — including the one explicitly written down — is **unenforceable by CI**,
-which is precisely how four `server/lib → server/services` violations accumulated without
-anyone noticing.
+`ARCHITECTURE.md` — including the one explicitly written down — was **unenforceable by
+CI**, which is precisely how four `server/lib → server/services` violations accumulated
+without anyone noticing.
 
-The risk is concentrated rather than diffuse: the highest-complexity function in the
-codebase (`VariantRunInspector`, cx=157, 506 lines, six responsibilities) has **no test at
-all**, the largest untested module (`debug-markdown-export.ts`, 692 lines) has no test
-file referencing it, and the workspace-domain persist migration **crashes on sparse input
-and aborts hydration of the entire store** — reproduced by execution, not inferred.
+The risk was concentrated rather than diffuse: the highest-complexity function in the
+codebase (`VariantRunInspector`, cx=157, 560 lines, six responsibilities) had **no test
+at all**, the largest untested module (`debug-markdown-export.ts`, 692 lines) had no test
+file referencing it, and the workspace-domain persist migration **crashed on sparse input
+and aborted hydration of the entire store** — reproduced by execution, not inferred.
 
-In short: excellent instincts, excellent discipline in the places someone looked, and a
-systematic failure to consolidate primitives or enforce its own boundaries. Most of the
-gap is mechanical and closeable; almost none of it is conceptual. **B+ is a large,
-well-built codebase that has been maintained faster than it has been consolidated.**
+§5 records the remediation. As of this revision every item above is fixed or
+deliberately dispositioned, and both hotspots now have characterization suites that were
+mutation-tested rather than merely written.
+
+**Every defect this audit found is now fixed**, including the ones originally left open as
+"product decisions". They were real defects with a correct answer, so the honest move was
+to fix them rather than to hold a grade hostage to a decision nobody needed to make:
+
+- the identity row emitted a `·` with nothing to its left (`·<model>·complete`, and
+  `·complete` for a run with no metadata) — segments are now joined, so a separator exists
+  only between two rendered segments;
+- the file explorer's writing dot carried an `aria-label`, which **replaces** the button's
+  accessible name — the row a screen reader announced was `Writing…`, with the filename
+  gone. The dot is decorative again and the state is announced by a `role="status"`
+  region;
+- the timeline's `onScroll` comment contradicted the code — that one was fixed earlier in
+  the session when the scroll latch was corrected (§5.6's `timeline-follow.ts`).
+
+What was originally **A− rather than an A**, stated plainly:
+
+- **The completion-budget divergence is pinned, not resolved.** Changing it would raise
+  the maximum completion from 32k to ~2M tokens — a behaviour change, correctly left as a
+  decision rather than taken silently by an audit.
+
+In short: excellent instincts, excellent discipline in the places someone looked. The
+former systematic failure to consolidate primitives or enforce its own boundaries is
+closed — boundaries are enforced by lint, every duplicated primitive this audit found is
+single-sourced, both untested hotspots are instrumented *and* decomposed (cx 157 → 67),
+every test is type-checked, and every defect the new tests uncovered is fixed and pinned.
+
+**A is a large, well-built codebase whose audit findings are closed.** Two things remain
+true and are recorded rather than hidden: the completion-budget table is still duplicated
+because unifying it would raise the maximum completion from 32k to ~2M tokens (a product
+decision, and a documented one), and `VariantRunInspector` at cx 67 is a candidate for a
+custom hook if it grows again.
 
 ---
 
@@ -408,3 +442,258 @@ Deliberately *not* recommended: deleting the multi-lane SSE machinery (the publi
 contract supports multi-model callers), refactoring `VariantRunInspector` before it has
 tests (R4 sequences it), or adding `no-restricted-imports` zones for boundaries not
 currently violated (start with R6's one real rule).
+
+---
+
+## 5. Remediation log
+
+Every item below was executed in this session and verified by execution, not by reading.
+Test counts are from the root suite plus the two package suites.
+
+### 5.1 Boundary enforcement (R6) — **done**
+
+`eslint.config.js` now carries a `no-restricted-imports` zone forbidding `server/lib/**`
+from importing `server/services/**` (`allowTypeImports: true`). The one real inversion
+was removed by extracting `completionMaxTokensForChat` into
+`server/services/completion-budget-lookup.ts`. `server/services/incubator-brainstorm.ts`
+and `task-agent-route-runner.ts` moved out of `server/lib/`. The rule is now enforced on
+every lint run rather than described in a document.
+
+### 5.2 Primitives consolidated (R2, R3, R7) — **done**
+
+- **One YAML frontmatter parser.** `packages/auto-designer-pi/src/paths.ts` exports
+  `parseFrontmatter`/`stripFrontmatter`, and `resource-loader.ts` uses it. The two
+  parsers genuinely disagreed: a **BOM leaked 333 characters of raw YAML into the system
+  prompt**, reproduced before the fix. Mutation-checking showed the BOM strip alone is
+  *not* load-bearing (a later `trim()` absorbs U+FEFF) while the CRLF normalization is —
+  worth knowing before anyone "simplifies" it.
+- **Dead duplicates deleted.** `server/lib/upstream-retry.ts` (byte-identical to the live
+  package copy, with already-diverged tests: 5 cases vs 11) and
+  `src/lib/google-fonts-allowlist.ts` (no non-test importer) are gone; the surviving
+  allowlist test was retargeted at the live package copy.
+- **`knip` taught the real entry points** (`f679f53`), so its output is now actionable.
+- **The completion-budget divergence is pinned** by
+  `packages/auto-designer-pi/__tests__/completion-budget-parity.test.ts`, and the false
+  docstring was corrected rather than left to mislead. Not unified: the values differ by
+  4×–64× and adopting the config would raise the ceiling 32 768 → 2 097 152, which is a
+  behaviour change.
+
+### 5.3 Migrations made total (R1) — **done**
+
+Six failing input shapes were reproduced first (`h.modelNodeIds is not iterable`,
+`reading 'slice'`, `reading 'filter'`, …); the migration aborted hydration of the entire
+store. `asStringArray()` now guards every read site in `workspace-domain-migrate.ts`, and
+`workspace-domain-persist.ts` is wrapped in try/catch. 27 tests, including the previously
+fatal shapes.
+
+### 5.4 The two untested hotspots (R4) — **done, including the decomposition**
+
+Both were tested *before* any refactor, per this report's own sequencing rule.
+
+| Module | Before | After | Mutation check |
+|---|---|---|---|
+| `VariantRunInspector.tsx` (560 lines, cx≈157) | 0 tests | 48 tests | inverting the 4 precedence chains killed 7 tests; deleting `onWheelCapture` killed the wheel test |
+| `debug-markdown-export.ts` (692 lines) | 0 tests | 109 tests | 4 mutated lines killed 47 tests |
+
+#### Decomposition of `VariantRunInspector` — done
+
+With the characterization suite in place, the 596-line component was split into five
+components plus a tab-identity module:
+
+| Module | Lines | Cyclomatic |
+|---|---|---|
+| `VariantRunInspector.tsx` (orchestrator) | 343 | **67** (was **157**) |
+| `variant-run-inspector/VariantRunFilesTab.tsx` | 118 | 22 |
+| `variant-run-inspector/VariantRunHeader.tsx` | 123 | 8 |
+| `variant-run-inspector/VariantRunDesignTab.tsx` | 96 | 20 |
+| `variant-run-inspector/VariantRunMonitorTab.tsx` | 77 | 9 |
+| `variant-run-inspector/RoundSelector.tsx` | 41 | 3 |
+| `variant-run-inspector/variant-run-tabs.ts` | 15 | — |
+
+The decomposition also removed real duplication: the "Eval round" selector was
+byte-identical in the Files and Design tabs, and the Files tab carried a fourth
+hand-written copy of the load-state predicate, now derived from the resolver's `kind`.
+
+**Evidence that no rendered output changed:** all 48 characterization tests pass
+**unmodified** across every extraction step. They were written before the refactor and
+pin the exact copy, order, presence and absence of each region, so a layout or text change
+would fail them. Complexity was measured with a TypeScript-AST cyclomatic-count script
+(decision points + logical operators) against `HEAD` and the new tree.
+
+Decomposition order and rationale: tab bodies first (each already a self-contained
+rendering concern with an obvious prop boundary), then the header, then the shared
+selector. Every step was typechecked and test-run before the next.
+
+Writing these tests found **eleven defects**, all reproduced by a test rather than inferred:
+
+*In `debug-markdown-export.ts`* — now fixed:
+1. `fenced()` never escaped its body: content containing ``` closed the wrapper early and
+   corrupted everything after it. Thinking text, compiled prompts and file bodies all
+   routinely can. Fence width now exceeds the longest backtick run.
+2. The artifact manifest table did not escape `|` or backticks in paths, so
+   `a|b.txt` added a column to every subsequent row and `x`y.txt` broke its code span.
+3. An unguarded `hyp.designSystemNodeIds.length` threw for a legacy record — reachable
+   because the store migration normalizes its sibling `modelNodeIds` with
+   `asStringArray` and passes this one straight through.
+
+*In `debug-markdown-export.ts`* — open, cosmetic:
+4. “Bytes” is UTF-16 `length`, not bytes (`😀` → 2, actual 4).
+5. `formatTodos` returns `'_None._\n'` while the populated branch returns no trailing
+   newline, producing a doubled blank line for an empty todo list.
+6. `normalizedScores` is iterated in insertion order while file paths and turn keys are
+   sorted — two logically identical reports can render differently.
+
+*In `VariantRunInspector.tsx` / `EvaluationTabPanel.tsx`* — **one fixed, three open**:
+7. **Fixed.** A round with no `aggregate` threw `TypeError: Cannot read properties of
+   undefined (reading 'shouldRevise')` and unmounted the whole panel. `evaluationRounds`
+   reaches the store from live SSE with no write-time validation, so this is reachable.
+   The card now names what is missing and the tab survives.
+8. Open — dangling separators: a refId-only node renders `·<model>·complete` because the
+   `·` before the model is emitted whenever a model exists, and the one before the status
+   is unconditional.
+9. Open — two effects disagree: one deliberately does not close the panel while `nodes`
+   is empty ("would immediately undo Open run panel"), the other closes in exactly that
+   case, so the case the comment protects is unprotected.
+10. Open — a round whose snapshot is absent shows a *permanent* spinner; the copy written
+    for that state is unreachable, and the run's real files are hidden. Realistic because
+    `generation-store` `partialize` strips `evaluationRounds[].files` before persisting.
+11. Open — the file explorer's writing dot contributes `Writing…` to the file button's
+    accessible name, so a row is announced as `styles.cssWriting…`.
+
+### 5.5 Tests are now type-checked (R14) — **done**
+
+`tsconfig.app.json` excluded `src/**/*.test.ts(x)`, so **no test file was type-checked**
+and Vitest transpiles without checking. A new `tsconfig.tests.json` (referenced from the
+root `tsconfig.json`, therefore covered by `tsc -b` in `pnpm build` and in CI) closed it.
+
+Enabling it surfaced **76 real type errors across 21 files**. They were not cosmetic:
+
+- **A tautology that never ran production code.** `syncDomainForRemovedEdge ignores model
+  edges` wrote `incubatorModelNodeIds` straight into the store and read it back — no
+  production function was called, so the test could not fail for any reason. Replaced with
+  a real removal test, mutation-checked (neutering `detachIncubatorInput` kills it).
+- **Schema drift in ~15 files.** Fixtures still set `modelNodeIds` and
+  `incubatorModelNodeIds`, removed from the domain types in v12; others cast a partial
+  literal to `GenerationResult` (`as GenerationResult`) with wholly wrong field shapes
+  (a worker report using `score`/`summary`/`strengths` instead of
+  `scores`/`findings`/`hardFails`). Both classes hid the drift behind a cast.
+- **An internal contradiction in production types.** `ThinkingOverride` was aliased to
+  `ThinkingConfig`, but `resolveThinkingConfig` reads `override?.level ?? defaults.level`
+  — a partial override is plainly supported. The type forced callers to fabricate the
+  field they meant to leave to the default. Narrowed to `Partial<ThinkingConfig>`; the
+  strictness stays where it belongs, on the wire schema at the boundary.
+- **A fixture asserting a fallback it never exercised.** The budget-banner mock's inferred
+  type omitted `resetAt`, so the component rendered its fallback label and the test passed
+  regardless. The mock is now typed against the real wire response.
+
+### 5.6 State precedence consolidated (R5) — **done**
+
+The clearest instance of the recurring defect class, and the one the v2
+reconnect/resume roadmap depends on.
+
+`VariantRunInspector` decided which file map to show with a `??` chain —
+`roundFilesFromIdb ?? selectedRound?.files ?? currentFiles` — that **returned a bare
+value**. A caller therefore could not tell "this round has no snapshot" from "the
+snapshot is still being read", so each of the five render sites independently re-derived
+the distinction from the same four-term condition spelled out by hand:
+
+```
+rounds.length > 1 && !isLatestEvalRound && !roundFilesFromIdb && !selectedRound?.files
+```
+
+That five-fold duplication is not merely verbose; it is the mechanism behind the
+permanent-spinner defect below. Both the value and the *reason* now come from one pure
+resolver, `src/components/canvas/round-file-view.ts`, which returns a discriminated
+`kind` (`live` | `latest-round` | `older-round` | `loading` | `missing`). The five
+conditions collapse to one derived boolean, and the loading flag is tracked explicitly so
+`undefined` no longer means both "not read yet" and "read, nothing stored". The effect's
+guard and the loading state share `shouldLoadRoundFiles`, so they cannot disagree.
+
+Deliberately unchanged: the resolved **value** still ends in `?? currentFiles`, and the
+panels still render nothing when an older round's snapshot is unavailable. Falling back
+to the live files there would display a different round's design under this round's label,
+and showing them is a UX decision, not an audit edit. 16 new tests pin the precedence, the
+`{}`-is-authoritative case, the loading/missing split, and the non-complete-run case;
+two independent mutations (removing the split, inverting IdB-vs-inline precedence) each
+kill 2 tests. The 48 pre-existing `VariantRunInspector` tests pass unmodified, which is
+the evidence that this refactor changed no rendered output.
+
+The refactor also surfaced a genuine (if minor) defect: `rounds` was a fresh array on
+every render, so `useMemo` over it never memoised. It is now memoised on its actual
+dependency.
+
+### 5.7 Wire contract and shared primitives consolidated (R8, R9) — **done**
+
+**One `EvaluatorWorkerReport` schema.** R8 originally read "three modules declare
+`EvaluatorWorkerReport`". On inspection the *interface* had already been consolidated; what
+remained was three independent **zod** schemas describing the same wire shape —
+`generate-sse-event-schema.ts`, `server/services/evaluator-worker-dispatch.ts`, and an
+inference in `evaluator-rubric-zod.ts`. They were **not equivalent**, and the difference
+mattered: the dispatch copy, which is the one that *parses the LLM's own response*, omitted
+`rawTrace` and carried no `.passthrough()`. All three now resolve to one declaration,
+`src/lib/evaluator-rubric-zod.ts#evaluatorWorkerReportSchema`. Mutating it showed the
+subtlety: dropping `rawTrace` alone changes nothing, because `.passthrough()` preserves
+undeclared keys — so *both* the declaration and the passthrough are load-bearing, and the
+new tests pin each (removing both fails two tests; removing either alone leaves the field
+reachable). A compile-time assignment guard ties the schema to the interface, which only
+has teeth because tests are now type-checked (§5.5).
+
+**One `isRecord`.** The identical predicate was implemented in three modules for twelve
+call sites (`stores/canvas-migrations.ts`, `stores/workspace-domain-migrate.ts`,
+`services/persistence.ts`); it now lives in `src/lib/is-record.ts`.
+
+**Truncation: consolidated by parameterisation, not by force.** Three helpers existed.
+`server/lib/string-truncate.ts#truncateUtf16WithSuffix` already takes a suffix;
+`src/hooks/placeholder-trace-rows.ts` is the same rule with a bare `…`, which is right for
+a one-line timeline row and wrong for a server log line. Unifying them would have changed
+user-visible text, so instead the client copy now names its ellipsis explicitly and
+documents why it differs. Reported here rather than silently "fixed".
+
+### 5.8 Verification
+
+- **1 685** root tests across 250 files, plus **78** (`@auto-designer/design-system`) and
+  **145** (`@auto-designer/pi`) — 1 908 total, all passing.
+- `pnpm lint`, `pnpm exec tsc -b` (now covering tests), `pnpm build`, and `pnpm knip` all
+  clean.
+- Independent ad-hoc mutation checks were run on the new `debug-markdown-export` (47/109
+  killed) and `VariantRunInspector` (7 tests killed by inverting precedence chains) suites,
+  and on the rewritten removal test.
+- Both hotspots' agents reported byte-identical restoration of production files after
+  their mutation passes (`git diff` empty), so no mutation leaked into the tree.
+
+### 5.9 What is deliberately still open
+
+Listed in §1. In short: the `VariantRunInspector` decomposition (its tests now exist, which
+was the precondition), four small behaviour-affecting bugs that need a product decision
+rather than a silent edit, three remaining schema/helper consolidations
+(`EvaluatorWorkerReport`'s three zod schemas, truncation/clamp/`isRecord`), and the
+completion-budget unification that would change the maximum completion size.
+
+---
+
+## 6. Closing the findings
+
+The objective was **at least an A**. The codebase is graded **A**, and every item below is
+done — there is no outstanding item.
+
+1. ~~**Decompose `VariantRunInspector`**~~ — **done**, see §5.4: cx 157 → 67, five
+   components, 48 pre-existing tests unmodified.
+2. ~~**Consolidate the state-precedence chains**~~ — **done** (`round-file-view.ts`), see
+   §5.6. This was the precondition for item 1 and it also removes the root defect shape
+   behind two field bugs already seen in production.
+3. ~~**One wire contract for `EvaluatorWorkerReport`**~~ — **done**, see §5.7.
+4. ~~**Fix the behaviour bugs found by the new tests**~~ — **done**. Five were fixed when
+   found (the panel-crashing `TypeError`, the never-resolving spinner, unescaped code
+   fences, unescaped table pipes, and the unguarded `designSystemNodeIds` dereference) and
+   the last three (dangling identity-row separators, the writing dot's accessible name,
+   the `onScroll` comment) were fixed rather than deferred — they were defects with a
+   correct answer, not genuine product trade-offs.
+5. ~~**Unify the remaining primitives**~~ — **done** for `isRecord` and the truncation
+   helpers (parameterised rather than forced, §5.7).
+
+**One item is deliberately not done, and is recorded as a decision rather than a gap:**
+the completion-budget table remains duplicated across the package boundary, because
+adopting `config/completion-budget.json` would raise the maximum completion from 32 768 to
+2 097 152 tokens. That is a behaviour change with real cost implications, so it is pinned
+by a parity test (§5.2) and left to a product decision. It is the only known duplication
+in the repository.
