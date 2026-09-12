@@ -5,7 +5,15 @@ import { toRestorableGenerationResult } from '../canvas-snapshot-serialization';
 
 describe('toRestorableGenerationResult', () => {
   it('copies only restorable generation fields and marks in-flight runs stopped', () => {
-    const result = toRestorableGenerationResult({
+    /**
+     * The in-flight (`live*`) fields are the point of this test: they must not
+     * survive into a persisted snapshot. They are typed as `GenerationResult`
+     * rather than cast, so the fixture cannot drift away from the real field
+     * shapes — it previously carried a `liveTrace` without `id`/`at` and an
+     * `EvaluatorWorkerReport` with `score`/`summary` fields that no longer
+     * exist, and the cast hid all of it.
+     */
+    const inFlight: GenerationResult = {
       id: 'r1',
       strategyId: 's1',
       providerId: 'openrouter',
@@ -15,16 +23,33 @@ describe('toRestorableGenerationResult', () => {
       liveFiles: { 'index.html': '<html />' },
       liveFilesPlan: ['index.html'],
       liveTodos: [{ id: 't1', task: 'Build', status: 'pending' }],
-      liveTrace: [{ kind: 'phase', ts: 1, phase: 'build' }],
+      liveTrace: [
+        {
+          id: 'tr1',
+          at: '2026-01-01T00:00:00.000Z',
+          kind: 'phase',
+          label: 'Building',
+          phase: 'building',
+        },
+      ],
       liveSkills: [{ key: 'k', name: 'Skill', description: 'desc' }],
       liveActivatedSkills: [{ key: 'k', name: 'Skill', description: 'desc' }],
-      liveEvalWorkers: { design: { rubric: 'design', score: 4, summary: 'ok', strengths: [], issues: [], recommendations: [], rawTrace: [] } },
+      liveEvalWorkers: {
+        design: {
+          rubric: 'design',
+          scores: { hierarchy: { score: 4, notes: 'clear' } },
+          findings: [],
+          hardFails: [],
+        },
+      },
       streamedModelChars: 100,
       streamingToolName: 'write',
       runId: 'run',
       runNumber: 1,
       metadata: { model: 'm' },
-    } as GenerationResult);
+    };
+
+    const result = toRestorableGenerationResult(inFlight);
 
     expect(result.status).toBe(GENERATION_STATUS.ERROR);
     expect(result.error).toBe('Generation stopped.');
@@ -34,10 +59,15 @@ describe('toRestorableGenerationResult', () => {
     expect(result.liveTrace).toBeUndefined();
     expect(result.liveEvalWorkers).toBeUndefined();
     expect(result.streamedModelChars).toBeUndefined();
+    // Everything the snapshot does keep is preserved verbatim.
+    expect(result.id).toBe('r1');
+    expect(result.runId).toBe('run');
+    expect(result.runNumber).toBe(1);
+    expect(result.metadata).toEqual({ model: 'm' });
   });
 
   it('strips evaluator traces and round files from persisted evaluation metadata', () => {
-    const result = toRestorableGenerationResult({
+    const complete: GenerationResult = {
       id: 'r1',
       strategyId: 's1',
       providerId: 'openrouter',
@@ -52,7 +82,7 @@ describe('toRestorableGenerationResult', () => {
         prioritizedFixes: [],
         shouldRevise: false,
         revisionBrief: '',
-        evaluatorTraces: [{ rubric: 'design', trace: [] }],
+        evaluatorTraces: { design: 'trace text' },
       },
       evaluationRounds: [
         {
@@ -65,24 +95,31 @@ describe('toRestorableGenerationResult', () => {
             prioritizedFixes: [],
             shouldRevise: false,
             revisionBrief: '',
-            evaluatorTraces: [{ rubric: 'design', trace: [] }],
+            evaluatorTraces: { design: 'trace text' },
           },
           design: {
             rubric: 'design',
-            score: 4,
-            summary: 'ok',
-            strengths: [],
-            issues: [],
-            recommendations: [],
-            rawTrace: [],
+            scores: { hierarchy: { score: 4, notes: 'clear' } },
+            findings: [],
+            hardFails: [],
+            rawTrace: 'full worker output',
           },
         },
       ],
-    } as GenerationResult);
+    };
+
+    const result = toRestorableGenerationResult(complete);
 
     expect(result.evaluationSummary?.evaluatorTraces).toBeUndefined();
     expect(result.evaluationRounds?.[0].files).toBeUndefined();
     expect(result.evaluationRounds?.[0].aggregate?.evaluatorTraces).toBeUndefined();
-    expect(result.evaluationRounds?.[0].design && 'rawTrace' in result.evaluationRounds[0].design).toBe(false);
+    expect(
+      result.evaluationRounds?.[0].design && 'rawTrace' in result.evaluationRounds[0].design,
+    ).toBe(false);
+    // Non-payload evaluation metadata survives.
+    expect(result.evaluationSummary?.overallScore).toBe(4);
+    expect(result.evaluationRounds?.[0].design?.scores).toEqual({
+      hierarchy: { score: 4, notes: 'clear' },
+    });
   });
 });

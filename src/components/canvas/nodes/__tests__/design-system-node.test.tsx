@@ -2,9 +2,11 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { NodeProps } from '@xyflow/react';
+import type { NodeProps, Node } from '@xyflow/react';
 import DesignSystemNode from '../DesignSystemNode';
 import { useCanvasStore } from '../../../../stores/canvas-store';
+import type { DesignSystemNodeData } from '../../../../types/canvas-data';
+import type { DesignSystemSourceMode } from '../../../../types/design-system-mode';
 
 let latestDropzoneOptions: {
   onDrop?: (files: File[]) => void | Promise<void>;
@@ -31,10 +33,12 @@ vi.mock('react-dropzone', () => ({
   },
 }));
 
-function props(data: Record<string, unknown> = {}): NodeProps<{ data: Record<string, unknown>; id: string; type: string }> {
+type DesignSystemNodeType = Node<DesignSystemNodeData, 'designSystem'>;
+
+function props(data: Partial<DesignSystemNodeData> = {}): NodeProps<DesignSystemNodeType> {
   return {
     id: 'ds-1',
-    data,
+    data: data as DesignSystemNodeData,
     selected: false,
     type: 'designSystem',
     isConnectable: true,
@@ -45,7 +49,7 @@ function props(data: Record<string, unknown> = {}): NodeProps<{ data: Record<str
     deletable: true,
     positionAbsoluteX: 0,
     positionAbsoluteY: 0,
-  } as NodeProps<{ data: Record<string, unknown>; id: string; type: string }>;
+  } as NodeProps<DesignSystemNodeType>;
 }
 
 function shellClassName(container: HTMLElement): string {
@@ -98,7 +102,7 @@ describe('DesignSystemNode', () => {
   });
 
   it('can switch to custom source mode without discarding custom source data', () => {
-    const data = {
+    const data: { sourceMode: DesignSystemSourceMode } & Partial<DesignSystemNodeData> = {
       sourceMode: 'wireframe',
       content: 'Use calm blue.',
       markdownSources: [
@@ -126,7 +130,7 @@ describe('DesignSystemNode', () => {
   });
 
   it('hides saved custom controls outside custom mode', () => {
-    const data = {
+    const data: { sourceMode: DesignSystemSourceMode } & Partial<DesignSystemNodeData> = {
       sourceMode: 'wireframe',
       content: 'Use calm blue.',
       markdownSources: [

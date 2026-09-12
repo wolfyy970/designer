@@ -1,18 +1,15 @@
 /** @vitest-environment jsdom */
-import React from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { NodeProps } from '@xyflow/react';
+import type { NodeProps, Node } from '@xyflow/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { NODE_TYPES, INPUT_GHOST_NODE_TYPE } from '../../../../constants/canvas';
 import { useCanvasStore } from '../../../../stores/canvas-store';
 import type { InputGhostData } from '../../../../types/canvas-data';
 import InputGhostNode from '../InputGhostNode';
 
-function ghostProps(): NodeProps<{
-  id: string;
-  type: typeof INPUT_GHOST_NODE_TYPE;
-  data: InputGhostData;
-}> {
+type InputGhostFlowNode = Node<InputGhostData, typeof INPUT_GHOST_NODE_TYPE>;
+
+function ghostProps(): NodeProps<InputGhostFlowNode> {
   return {
     id: 'ghost-input-researchContext',
     type: INPUT_GHOST_NODE_TYPE,
@@ -26,11 +23,7 @@ function ghostProps(): NodeProps<{
     deletable: true,
     positionAbsoluteX: 0,
     positionAbsoluteY: 0,
-  } as NodeProps<{
-    id: string;
-    type: typeof INPUT_GHOST_NODE_TYPE;
-    data: InputGhostData;
-  }>;
+  } as NodeProps<InputGhostFlowNode>;
 }
 
 afterEach(() => cleanup());

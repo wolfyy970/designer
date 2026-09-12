@@ -15,8 +15,12 @@ describe('feature-flags.json', () => {
   });
 
   it('exported booleans match resolved JSON values', () => {
-    expect(FEATURE_LOCKDOWN).toBe(expectedFlag(rawFlags.lockdown));
-    expect(FEATURE_AUTO_IMPROVE).toBe(expectedFlag(rawFlags.autoImprove));
+    // Parsed rather than cast: a raw JSON import widens `0 | 1 | 'auto'` to
+    // `string`, and casting that back would hide a config file that no longer
+    // satisfies the schema. Parsing fails loudly instead.
+    const parsed = FeatureFlagsFileSchema.parse(rawFlags);
+    expect(FEATURE_LOCKDOWN).toBe(expectedFlag(parsed.lockdown));
+    expect(FEATURE_AUTO_IMPROVE).toBe(expectedFlag(parsed.autoImprove));
   });
 
   it('accepts auto as an environment-resolved flag value', () => {

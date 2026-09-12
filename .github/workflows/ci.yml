@@ -67,17 +67,19 @@ jobs:
       - name: Test browser evaluation
         run: pnpm test:playwright-eval
 
-      # `build` runs tokens:build + `tsc -b` + vite build. Note the root
-      # `tsc -b` only references tsconfig.{app,node,server} — it does NOT cover
-      # either workspace package, so those get their own typecheck below.
+      # `build` runs tokens:build + `tsc -b` + vite build. The root `tsc -b`
+      # references tsconfig.{app,node,server,tests}: `tests` is what type-checks
+      # the `*.test.ts(x)` files, which `tsconfig.app.json` excludes. It does
+      # NOT cover either workspace package, so those get their own typecheck
+      # below.
       - name: Build
         run: pnpm build
         env:
           CI: 'true'
 
-      # Vitest transpiles without typechecking, and the root `tsc -b` above
-      # does not reference either package's tsconfig. Without these, a type
-      # error in a package is invisible until something imports it at runtime.
+      # The root `tsc -b` above does not reference either package's tsconfig.
+      # Without these, a type error in a package is invisible until something
+      # imports it at runtime.
       - name: Typecheck workspace packages
         run: |
           pnpm -F @auto-designer/pi exec tsc --noEmit

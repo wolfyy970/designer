@@ -2,12 +2,13 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, fireEvent, screen } from '@testing-library/react';
-import type { NodeProps } from '@xyflow/react';
+import type { NodeProps, Node } from '@xyflow/react';
 import IncubatorNode from '../IncubatorNode';
 import { useSpecStore } from '../../../../stores/spec-store';
 import { useCanvasStore } from '../../../../stores/canvas-store';
 import { useIncubatorStore } from '../../../../stores/incubator-store';
 import { useWorkspaceDomainStore } from '../../../../stores/workspace-domain-store';
+import type { IncubatorNodeData } from '../../../../types/canvas-data';
 
 const apiMocks = vi.hoisted(() => ({
   extractDesignSystem: vi.fn(),
@@ -41,7 +42,9 @@ vi.mock('../../../../hooks/useCanvasNodePermanentRemove', () => ({
   useCanvasNodePermanentRemove: () => () => {},
 }));
 
-function minimalIncubatorProps(): NodeProps<{ data: Record<string, unknown>; id: string; type: string }> {
+type IncubatorNodeFlowType = Node<IncubatorNodeData, 'incubator'>;
+
+function minimalIncubatorProps(): NodeProps<IncubatorNodeFlowType> {
   return {
     id: 'inc-1',
     data: {},
@@ -55,7 +58,7 @@ function minimalIncubatorProps(): NodeProps<{ data: Record<string, unknown>; id:
     deletable: true,
     positionAbsoluteX: 0,
     positionAbsoluteY: 0,
-  } as NodeProps<{ data: Record<string, unknown>; id: string; type: string }>;
+  } as NodeProps<IncubatorNodeFlowType>;
 }
 
 afterEach(() => cleanup());

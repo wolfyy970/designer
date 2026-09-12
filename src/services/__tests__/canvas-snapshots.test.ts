@@ -78,9 +78,7 @@ describe('canvas-snapshots', () => {
     });
     mocks.mockDomainState.mockReturnValue({
       incubatorWirings: { inc: { inputNodeIds: ['brief'], previewNodeIds: [] } },
-      incubatorModelNodeIds: { inc: ['model'] },
-      hypotheses: { hyp: { id: 'hyp', incubatorId: 'inc', strategyId: 's1', modelNodeIds: [], designSystemNodeIds: [], placeholder: false } },
-      modelProfiles: { model: { nodeId: 'model', providerId: 'openrouter', modelId: 'm' } },
+      hypotheses: { hyp: { id: 'hyp', incubatorId: 'inc', strategyId: 's1', designSystemNodeIds: [], placeholder: false } },
       designSystems: {},
       previewSlots: { slot: { hypothesisId: 'hyp', strategyId: 's1', previewNodeId: 'preview', activeResultId: 'r1', pinnedRunId: null } },
     });
@@ -132,7 +130,7 @@ describe('canvas-snapshots', () => {
       savedAt: '2024-01-01',
       spec: mocks.mockSpecState().spec,
       canvas: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, showMiniMap: true, colGap: 320 },
-      workspaceDomain: { incubatorWirings: {}, incubatorModelNodeIds: {}, hypotheses: {}, modelProfiles: {}, designSystems: {}, previewSlots: {} },
+      workspaceDomain: { incubatorWirings: {}, hypotheses: {}, designSystems: {}, previewSlots: {} },
       incubator: { incubationPlans: {}, compiledPrompts: [], selectedProvider: 'openrouter', selectedModel: 'm' },
       generation: { results: [], selectedVersions: {}, userBestOverrides: {} },
       artifacts: { r1: { code: '<html />', files: { 'index.html': '<html />' }, roundFiles: { 1: { 'index.html': '<html />' } } } },
@@ -165,9 +163,7 @@ describe('canvas-snapshots', () => {
       },
       workspaceDomain: {
         incubatorWirings: { inc: { inputNodeIds: ['brief', 'research'], previewNodeIds: [] } },
-        incubatorModelNodeIds: {},
         hypotheses: {},
-        modelProfiles: {},
         designSystems: {},
         previewSlots: {},
       },
@@ -220,9 +216,7 @@ describe('canvas-snapshots', () => {
       },
       workspaceDomain: {
         incubatorWirings: {},
-        incubatorModelNodeIds: {},
         hypotheses: {},
-        modelProfiles: {},
         designSystems: {},
         previewSlots: {},
       },

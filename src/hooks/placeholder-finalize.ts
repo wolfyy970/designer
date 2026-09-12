@@ -10,6 +10,23 @@ import { clearTransientResultFields } from './placeholder-session-state';
 import { normalizeError } from '../lib/error-utils';
 import type { EvaluationRoundSnapshot } from '../types/evaluation';
 
+/**
+ * The slice of the RAF batchers that finalization actually touches: it cancels
+ * the pending thinking frame, flushes the two streams that must land before the
+ * result is marked complete, and cancels the tool frame. It never *schedules*
+ * work — finalization is the end of the stream.
+ *
+ * Declared as exactly this subset so the contract says what the function needs
+ * rather than what the caller happens to hold.
+ */
+export interface PlaceholderFinalizeRaf {
+  activity: Pick<PlaceholderRafBatchers['activity'], 'flushPending'>;
+  thinking: Pick<PlaceholderRafBatchers['thinking'], 'cancelOnly'>;
+  code: Pick<PlaceholderRafBatchers['code'], 'flushPending'>;
+  streamingTool: Pick<PlaceholderRafBatchers['streamingTool'], 'cancelOnly'>;
+  logDevSummary?: () => void;
+}
+
 function stripEvalRoundFiles(rounds: EvaluationRoundSnapshot[]): EvaluationRoundSnapshot[] {
   return rounds.map((er) => {
     const meta = { ...er };
@@ -27,7 +44,7 @@ export function createPlaceholderFinalizeAfterStream(options: {
   updateResult: (id: string, patch: Partial<GenerationResult>) => void;
   flushAllPendingTraces: () => Promise<void>;
   state: PlaceholderGenerationSessionState;
-  raf: PlaceholderRafBatchers;
+  raf: PlaceholderFinalizeRaf;
   onResultComplete?: (placeholderId: string) => void;
 }): () => Promise<void> {
   const {

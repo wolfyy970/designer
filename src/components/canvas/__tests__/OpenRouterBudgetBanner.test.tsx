@@ -2,14 +2,19 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import OpenRouterBudgetBanner from '../OpenRouterBudgetBanner';
+import type { OpenRouterBudgetStatusResponse } from '../../../api/response-schemas';
 
 const mocks = vi.hoisted(() => ({
+  // Typed against the real wire contract so a field the component reads (like
+  // `resetAt`) cannot go missing from the fixture and quietly render the
+  // fallback label while the test still passes.
   budgetStatus: {
     data: {
       status: 'available',
       checkedAt: '2026-04-29T15:30:00.000Z',
       message: 'OpenRouter credits are available.',
-    },
+      resetAt: undefined,
+    } as OpenRouterBudgetStatusResponse,
   },
   appConfig: { data: { lockdown: true } },
   hasOpenRouterNode: true,

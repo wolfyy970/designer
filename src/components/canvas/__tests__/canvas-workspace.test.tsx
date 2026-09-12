@@ -122,9 +122,16 @@ function result(overrides: Partial<GenerationResult> = {}): GenerationResult {
   } as GenerationResult;
 }
 
-/** The nodes the component passed down to ReactFlow. */
-function renderedNodes(): Array<Record<string, unknown>> {
-  return (rf.props?.nodes ?? []) as Array<Record<string, unknown>>;
+/**
+ * The nodes the component passed down to ReactFlow. `id` and `type` are typed
+ * rather than left as `unknown` so assertions on them are checked — the loose
+ * `Record<string, unknown>` shape silently made `.map((n) => n.id)` an
+ * `unknown` and hid that from `tsc`.
+ */
+type RenderedFlowNode = { id: string; type: string } & Record<string, unknown>;
+
+function renderedNodes(): RenderedFlowNode[] {
+  return (rf.props?.nodes ?? []) as RenderedFlowNode[];
 }
 
 function nodeById(id: string) {

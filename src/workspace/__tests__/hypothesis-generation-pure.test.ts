@@ -6,6 +6,7 @@ import {
 } from '../hypothesis-generation-pure';
 import type { HypothesisStrategy } from '../../types/incubator';
 import type { DesignSpec } from '../../types/spec';
+import { EDGE_STATUS, EDGE_TYPES } from '../../constants/canvas';
 
 const strategy: HypothesisStrategy = {
   id: 'vs1',
@@ -204,7 +205,15 @@ describe('hypothesis-generation-pure', () => {
           },
           { id: 'hyp1', type: 'hypothesis', position: { x: 0, y: 0 }, data: {} },
         ],
-        edges: [{ source: 'ds1', target: 'hyp1' }],
+        edges: [
+          {
+            id: 'e-ds1-hyp1',
+            source: 'ds1',
+            target: 'hyp1',
+            type: EDGE_TYPES.DATA_FLOW,
+            data: { status: EDGE_STATUS.IDLE },
+          },
+        ],
       },
       domainHypothesis: null,
       designSystems: {},

@@ -116,7 +116,7 @@ describe('useArtifactPreviewUrl — session cleanup', () => {
   });
 
   it('deletes the previous session before registering a replacement', async () => {
-    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
       if (init?.method === 'POST') {
         return Promise.resolve({
           ok: true,

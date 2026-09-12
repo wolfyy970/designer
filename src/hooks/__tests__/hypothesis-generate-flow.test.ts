@@ -151,7 +151,13 @@ describe('runHypothesisGenerateFlow — success path', () => {
       ]);
       // The abort signal is live so Stop can cancel the run.
       expect(deps.signal.aborted).toBe(false);
-      return { ok: true, laneCount: 1 };
+      return {
+        ok: true,
+        // This run never hands lane ids back (it exercises only the terminal
+        // edge/generating bookkeeping), so the placeholder list stays empty.
+        lanePlaceholderIds: [],
+        modelCredentialCount: 1,
+      };
     });
     const h = harness();
 
@@ -239,7 +245,12 @@ describe('runHypothesisGenerateFlow — failure paths', () => {
     vi.mocked(executeHypothesisGenerationRun).mockImplementation(async (deps) => {
       useGenerationStore.setState({ results: laneResults } as never);
       deps.onLaneIdsReady(laneResults.map((r) => r.id));
-      return { ok: true, laneCount: 2 };
+      return {
+        ok: true,
+        // Shape must match the `ok: true` arm of HypothesisGenerationRunResult.
+        lanePlaceholderIds: laneResults.map((r) => r.id),
+        modelCredentialCount: 1,
+      };
     });
     const h = harness();
 
@@ -262,7 +273,12 @@ describe('runHypothesisGenerateFlow — failure paths', () => {
     vi.mocked(executeHypothesisGenerationRun).mockImplementation(async (deps) => {
       useGenerationStore.setState({ results: laneResults } as never);
       deps.onLaneIdsReady(laneResults.map((r) => r.id));
-      return { ok: true, laneCount: 1 };
+      return {
+        ok: true,
+        // Shape must match the `ok: true` arm of HypothesisGenerationRunResult.
+        lanePlaceholderIds: laneResults.map((r) => r.id),
+        modelCredentialCount: 1,
+      };
     });
     const h = harness();
 
@@ -281,7 +297,12 @@ describe('runHypothesisGenerateFlow — failure paths', () => {
     vi.mocked(executeHypothesisGenerationRun).mockImplementation(async (deps) => {
       useGenerationStore.setState({ results: laneResults } as never);
       deps.onLaneIdsReady(laneResults.map((r) => r.id));
-      return { ok: true, laneCount: 1 };
+      return {
+        ok: true,
+        // Shape must match the `ok: true` arm of HypothesisGenerationRunResult.
+        lanePlaceholderIds: laneResults.map((r) => r.id),
+        modelCredentialCount: 1,
+      };
     });
     const h = harness();
 
@@ -304,7 +325,12 @@ describe('runHypothesisGenerateFlow — failure paths', () => {
     vi.mocked(executeHypothesisGenerationRun).mockImplementation(async (deps) => {
       useGenerationStore.setState({ results: laneResults } as never);
       deps.onLaneIdsReady(laneResults.map((r) => r.id));
-      return { ok: true, laneCount: 1 };
+      return {
+        ok: true,
+        // Shape must match the `ok: true` arm of HypothesisGenerationRunResult.
+        lanePlaceholderIds: laneResults.map((r) => r.id),
+        modelCredentialCount: 1,
+      };
     });
     const h = harness();
 
@@ -328,7 +354,12 @@ describe('runHypothesisGenerateFlow — failure paths', () => {
     vi.mocked(executeHypothesisGenerationRun).mockImplementation(async (deps) => {
       useGenerationStore.setState({ results: laneResults } as never);
       deps.onLaneIdsReady(laneResults.map((r) => r.id));
-      return { ok: true, laneCount: 1 };
+      return {
+        ok: true,
+        // Shape must match the `ok: true` arm of HypothesisGenerationRunResult.
+        lanePlaceholderIds: laneResults.map((r) => r.id),
+        modelCredentialCount: 1,
+      };
     });
     const h = harness();
 

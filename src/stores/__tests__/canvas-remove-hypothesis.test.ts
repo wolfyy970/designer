@@ -53,7 +53,6 @@ describe('canvas-store removeNode (hypothesis)', () => {
           id: 'h1',
           incubatorId: 'c1',
           strategyId: 'vs1',
-          modelNodeIds: [],
           designSystemNodeIds: [],
           placeholder: false,
         },

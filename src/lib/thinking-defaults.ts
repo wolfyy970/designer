@@ -79,13 +79,19 @@ export type ThinkingConfig = {
 };
 
 /**
- * Wire override a client may supply. Both fields required when the
- * object is present; missing fields are not allowed at the boundary
- * (the request schema enforces strictness). The wrapping `thinking?:`
- * field on each request body is itself optional — that is the
- * "no override" signal.
+ * Resolver override. Either field may be omitted, and an omitted field falls
+ * back to this task's default (`override?.level ?? defaults.level`,
+ * `override?.budgetTokens ?? THINKING_BUDGET_BY_LEVEL[level]`) — so a
+ * level-only or budget-only override is a supported call, and both shapes are
+ * exercised.
+ *
+ * Deliberately distinct from {@link ThinkingOverrideSchema}: that is the *wire*
+ * shape and requires both fields (`.strict()`) so a malformed request body is
+ * rejected at the boundary. Strictness belongs at the edge, not in the
+ * resolver's parameter type — aliasing this to the full `ThinkingConfig` forced
+ * every caller to fabricate the very field it meant to leave to the default.
  */
-export type ThinkingOverride = ThinkingConfig;
+export type ThinkingOverride = Partial<ThinkingConfig>;
 
 /** Always-off config. Returned when the model doesn't support reasoning. */
 export const THINKING_OFF: ThinkingConfig = { level: 'off', budgetTokens: 0 };

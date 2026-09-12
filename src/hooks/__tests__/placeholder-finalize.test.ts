@@ -34,6 +34,10 @@ const prompt = {
 } satisfies CompiledPrompt;
 
 const noopBatch = {
+  // Mirrors the real batcher's surface. `schedule` is part of that surface even
+  // though finalization must never call it, so the mock stays a faithful
+  // stand-in rather than a type-widening cast.
+  schedule: () => {},
   cancelOnly: () => {},
   flushPending: () => {},
 };

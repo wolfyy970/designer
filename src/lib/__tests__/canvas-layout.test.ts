@@ -14,7 +14,7 @@ import {
   DEFAULT_COL_GAP,
 } from '../canvas-layout';
 import type { WorkspaceNode } from '../../types/workspace-graph';
-import { EDGE_STATUS, EDGE_TYPES } from '../../constants/canvas';
+import { EDGE_STATUS, EDGE_TYPES, INPUT_GHOST_NODE_TYPE } from '../../constants/canvas';
 import type { WorkspaceEdge } from '../../types/workspace-graph';
 
 function makeNode(
@@ -361,10 +361,34 @@ describe('layoutTypeOrder', () => {
 });
 
 describe('reconcileEphemeralGhostNodes', () => {
-  it('adds optional input ghosts only (no hypothesis ghost)', () => {
+  it('adds optional input ghosts and nothing else ephemeral', () => {
     const inc = makeNode('ic', 'incubator') as WorkspaceNode;
     const out = reconcileEphemeralGhostNodes([inc]);
-    expect(out.some((n) => n.type === 'inputGhost')).toBe(true);
-    expect(out.some((n) => n.type === 'hypothesisGhost')).toBe(false);
+
+    expect(out.some((n) => n.type === INPUT_GHOST_NODE_TYPE)).toBe(true);
+    // `hypothesisGhost` was removed from `CanvasNodeType`, so comparing against
+    // that literal is not even expressible. Assert the stronger property
+    // instead: the reconciler emits no ephemeral node type other than the input
+    // ghost. Anything new it starts adding has to be registered here.
+    const allowed = new Set<string>([
+      INPUT_GHOST_NODE_TYPE,
+      'incubator',
+      'designBrief',
+      'researchContext',
+      'objectivesMetrics',
+      'designConstraints',
+      'designSystem',
+    ]);
+    for (const node of out) {
+      expect(allowed.has(node.type), `unexpected node type ${node.type}`).toBe(true);
+    }
+  });
+
+  it('does not invent a hypothesis ghost for an incubator', () => {
+    const inc = makeNode('ic', 'incubator') as WorkspaceNode;
+    const out = reconcileEphemeralGhostNodes([inc]);
+
+    // No emitted node claims to be a hypothesis placeholder.
+    expect(out.filter((n) => n.type === 'hypothesis')).toEqual([]);
   });
 });

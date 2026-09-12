@@ -83,9 +83,7 @@ function makeSnapshot(overrides: Partial<SavedCanvasSnapshot> = {}): SavedCanvas
     },
     workspaceDomain: {
       incubatorWirings: {},
-      incubatorModelNodeIds: {},
       hypotheses: {},
-      modelProfiles: {},
       designSystems: {},
       previewSlots: {},
     },

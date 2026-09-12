@@ -49,17 +49,38 @@ describe('domain-commands', () => {
     const s = useWorkspaceDomainStore.getState();
     expect(s.hypotheses.h1?.incubatorId).toBe('c1');
     expect(s.hypotheses.h1?.strategyId).toBe('vs1');
-    // Model edges no longer populate modelNodeIds — Settings is the source.
-    expect(s.hypotheses.h1?.modelNodeIds ?? []).toEqual([]);
   });
 
-  it('syncDomainForRemovedEdge ignores model edges (no-op)', () => {
-    useWorkspaceDomainStore.setState({
-      incubatorModelNodeIds: { c1: ['m1'] },
-    });
-    syncDomainForRemovedEdge({ source: 'm1', target: 'c1' }, [model, compiler]);
-    // The legacy slot is left untouched — Stage 6 deletes it.
-    expect(useWorkspaceDomainStore.getState().incubatorModelNodeIds.c1 ?? []).toEqual(['m1']);
+  it('syncDomainForRemovedEdge detaches the removed input from its incubator', () => {
+    // The real removal path. (The previous version of this test wrote
+    // `incubatorModelNodeIds` straight into the store and read it back — it
+    // exercised no production code at all.)
+    const brief: WorkspaceNode = {
+      id: 'b1',
+      type: NODE_TYPES.DESIGN_BRIEF,
+      position: { x: 0, y: 0 },
+      data: {},
+    };
+    const store = useWorkspaceDomainStore.getState();
+    store.ensureIncubatorWiring('c1');
+    store.attachIncubatorInput('c1', 'b1', NODE_TYPES.DESIGN_BRIEF);
+    expect(useWorkspaceDomainStore.getState().incubatorWirings.c1?.inputNodeIds).toEqual(['b1']);
+
+    syncDomainForRemovedEdge(e('b1', 'c1'), [brief, compiler]);
+
+    expect(useWorkspaceDomainStore.getState().incubatorWirings.c1?.inputNodeIds ?? []).toEqual([]);
+  });
+
+  it('syncDomainForRemovedEdge is a no-op when either endpoint node is gone', () => {
+    const store = useWorkspaceDomainStore.getState();
+    store.ensureIncubatorWiring('c1');
+    store.attachIncubatorInput('c1', 'b1', NODE_TYPES.DESIGN_BRIEF);
+
+    // `b1` was deleted from the graph, so the edge removal cannot resolve it.
+    syncDomainForRemovedEdge(e('b1', 'c1'), [compiler]);
+
+    // The wiring is left as-is rather than being silently cleared.
+    expect(useWorkspaceDomainStore.getState().incubatorWirings.c1?.inputNodeIds).toEqual(['b1']);
   });
 
   it('syncDomainForRemovedNode purges compiler incubator', () => {
@@ -70,7 +91,6 @@ describe('domain-commands', () => {
           id: 'h1',
           incubatorId: 'c1',
           strategyId: 'vs1',
-          modelNodeIds: [],
           designSystemNodeIds: [],
           placeholder: false,
         },

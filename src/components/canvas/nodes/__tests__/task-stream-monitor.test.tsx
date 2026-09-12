@@ -1,5 +1,4 @@
 /** @vitest-environment jsdom */
-import React from 'react';
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup, screen } from '@testing-library/react';
 import TaskStreamMonitor from '../TaskStreamMonitor';

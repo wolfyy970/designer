@@ -9,12 +9,18 @@ import {
 } from '../placeholder-session-state';
 
 function makeRaf(): PlaceholderRafBatchers {
-  const noop = () => ({ schedule: vi.fn(), cancelOnly: vi.fn() });
+  // Four independent batchers — each gets its own spies so a test can assert on
+  // one stream without the other three polluting the call counts.
+  const mkBatch = () => ({
+    schedule: vi.fn(),
+    cancelOnly: vi.fn(),
+    flushPending: vi.fn(),
+  });
   return {
-    activity: noop(),
-    thinking: noop(),
-    streamingTool: noop(),
-    code: noop(),
+    activity: mkBatch(),
+    thinking: mkBatch(),
+    streamingTool: mkBatch(),
+    code: mkBatch(),
   };
 }
 

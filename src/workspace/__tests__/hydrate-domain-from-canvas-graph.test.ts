@@ -22,6 +22,5 @@ describe('hydrateDomainFromCanvasGraph', () => {
     });
     const h1 = useWorkspaceDomainStore.getState().hypotheses.h1;
     expect(h1?.incubatorId).toBe('c1');
-    expect(h1?.modelNodeIds ?? []).toEqual([]);
   });
 });

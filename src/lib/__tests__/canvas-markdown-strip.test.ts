@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { createElement, isValidElement } from 'react';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import {
   stripLeadingEmojiClusters,
   stripAllEmojiFrom,
@@ -174,38 +175,60 @@ describe('sanitizeEmojiInChildren', () => {
 // ── canvasMarkdownComponents — pre / code overrides ───────────────────
 
 describe('canvasMarkdownComponents code-fence overrides', () => {
-  it('exports a pre override', () => {
-    expect(typeof canvasMarkdownComponents.pre).toBe('function');
+  /**
+   * Asserted through `renderToStaticMarkup` rather than by invoking the override
+   * as a bare function. Calling a component directly is not how React uses it,
+   * and it cannot tell a working override from one that renders nothing — the
+   * markup can.
+   */
+  const render = (node: Parameters<typeof renderToStaticMarkup>[0]) =>
+    renderToStaticMarkup(node);
+
+  it('renders fenced code through a <pre> wrapper', () => {
+    const markup = render(
+      createElement(canvasMarkdownComponents.pre!, null, createElement('code', null, 'hello')),
+    );
+    expect(markup.startsWith('<pre')).toBe(true);
+    expect(markup).toContain('hello');
   });
 
-  it('exports a code override', () => {
-    expect(typeof canvasMarkdownComponents.code).toBe('function');
+  it('renders inline code through a <code> element', () => {
+    const markup = render(
+      createElement(canvasMarkdownComponents.code!, null, 'const x = 1'),
+    );
+    expect(markup.startsWith('<code')).toBe(true);
+    expect(markup).toContain('const x = 1');
   });
 
-  it('pre override returns a <pre> React element', () => {
-    const PreComp = canvasMarkdownComponents.pre!;
-    const el = PreComp({ children: 'hello' });
-    expect(isValidElement(el)).toBe(true);
-    expect((el as React.ReactElement).type).toBe('pre');
+  it('forwards the language className onto the rendered code element', () => {
+    const markup = render(
+      createElement(canvasMarkdownComponents.code!, {
+        children: 'x',
+        className: 'language-js',
+      }),
+    );
+    expect(markup).toContain('language-js');
   });
 
-  it('code override returns a <code> React element', () => {
-    const CodeComp = canvasMarkdownComponents.code!;
-    const el = CodeComp({ children: 'const x = 1' });
-    expect(isValidElement(el)).toBe(true);
-    expect((el as React.ReactElement).type).toBe('code');
+  it('applies its default styling and preserves children when no className is given', () => {
+    const markup = render(
+      createElement(canvasMarkdownComponents.code!, null, 'x'),
+    );
+    // The override supplies its own default class list; children pass through
+    // untouched.
+    expect(markup).toMatch(/^<code class="[^"]*font-mono[^"]*">x<\/code>$/);
   });
 
-  it('code override forwards className when provided', () => {
-    const CodeComp = canvasMarkdownComponents.code!;
-    const el = CodeComp({ children: 'x', className: 'language-js' });
-    const props = (el as React.ReactElement).props as { className: string };
-    expect(props.className).toContain('language-js');
-  });
-
-  it('code override works without a className', () => {
-    const CodeComp = canvasMarkdownComponents.code!;
-    const el = CodeComp({ children: 'x' });
-    expect(isValidElement(el)).toBe(true);
+  it('keeps its default styling when a language className is supplied', () => {
+    // Guards against the forwarding replacing the override's own classes
+    // instead of combining with them.
+    const markup = render(
+      createElement(canvasMarkdownComponents.code!, {
+        children: 'x',
+        className: 'language-js',
+      }),
+    );
+    expect(markup).toContain('language-js');
+    expect(markup).toContain('font-mono');
   });
 });

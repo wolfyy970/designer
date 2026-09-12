@@ -44,9 +44,7 @@ const activeSnapshot = {
   canvas: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, showMiniMap: true, colGap: 320 },
   workspaceDomain: {
     incubatorWirings: {},
-    incubatorModelNodeIds: {},
     hypotheses: {},
-    modelProfiles: {},
     designSystems: {},
     previewSlots: {},
   },
