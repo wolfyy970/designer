@@ -27,7 +27,10 @@ const LOCAL_REF_RE = /\b(?:href|src)\s*=\s*["']([^"']+)["']/gi;
 export interface ArtifactIntegrity {
   /** Entry document the check used, or null when the tree has no HTML entry. */
   entry: string | null;
-  /** Referenced paths with no matching file in the tree. */
+  /**
+   * Referenced paths with no matching file, from every `.html` in the tree — not
+   * only the entry. Sorted for a stable banner message.
+   */
   missing: string[];
   /** True when a referenced asset is absent — the render will look wrong. */
   incomplete: boolean;
@@ -44,22 +47,35 @@ function isIgnorable(ref: string): boolean {
 }
 
 /**
- * Find local assets referenced by the entry document that the tree does not
- * contain. External URLs, data URIs, and fragment links are not "missing" —
- * they are simply not our files.
+ * Find local assets referenced by any HTML document in the tree that the tree
+ * does not contain. External URLs, data URIs, and fragment links are not
+ * "missing" — they are simply not our files.
+ *
+ * **Every** `.html` file is scanned, not just the entry. A multi-page artifact
+ * links its stylesheet from each page, and checking only the entry missed a page
+ * whose asset never got written — that page then rendered unstyled while the
+ * integrity check called the tree complete. Each reference is resolved relative
+ * to the document that contains it (`pages/menu.html` + `menu.css` →
+ * `pages/menu.css`), which is how the browser resolves it and how
+ * `bundleVirtualFS` inlines it.
+ *
+ * Known limit: assets referenced from *inside* CSS (`url(...)`, `@import`) are
+ * not scanned. This check covers markup references only.
  */
 export function checkArtifactIntegrity(files: Record<string, string>): ArtifactIntegrity {
   const entry = resolvePreviewEntryPath(files);
-  const html = files[entry];
-  if (!html) return { entry: null, missing: [], incomplete: false };
+  if (!files[entry]) return { entry: null, missing: [], incomplete: false };
 
   const missing = new Set<string>();
-  for (const match of html.matchAll(LOCAL_REF_RE)) {
-    const ref = match[1];
-    if (isIgnorable(ref)) continue;
-    const key = resolveVirtualAssetPath(ref, entry);
-    if (!key) continue; // external / data URI / non-path scheme
-    if (!(key in files)) missing.add(key);
+  for (const [path, content] of Object.entries(files)) {
+    if (!path.endsWith('.html')) continue;
+    for (const match of content.matchAll(LOCAL_REF_RE)) {
+      const ref = match[1];
+      if (isIgnorable(ref)) continue;
+      const key = resolveVirtualAssetPath(ref, path);
+      if (!key) continue; // external / data URI / non-path scheme
+      if (!(key in files)) missing.add(key);
+    }
   }
 
   const sorted = [...missing].sort();

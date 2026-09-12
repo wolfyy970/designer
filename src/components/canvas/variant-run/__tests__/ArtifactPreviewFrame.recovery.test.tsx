@@ -208,8 +208,61 @@ describe('ArtifactPreviewFrame — incomplete artifact warning', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it('does not treat external assets as missing', async () => {
-    vi.stubGlobal('fetch', healthyRegistration('external-session'));
+  it('serves an incomplete build from the inlined bundle, not the URL route', async () => {
+    /**
+     * The mid-build shape: `index.html` exists, the stylesheet it links does not.
+     * Serving that over the URL route made the browser request `styles.css` and
+     * get a real 404, so the frame painted unstyled — and a cached miss could
+     * outlive the file. The inlined bundle requests nothing.
+     */
+    const fetchMock = healthyRegistration('mid-build-session');
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <ArtifactPreviewFrame
+        files={{
+          'index.html':
+            '<!doctype html><html><head><link rel="stylesheet" href="styles.css"></head>' +
+            '<body><h1>Mid-build</h1><script src="app.js"></script></body></html>',
+        }}
+        title="Preview: MidBuild"
+      />,
+    );
+
+    const frame = await screen.findByTitle<HTMLIFrameElement>('Preview: MidBuild');
+    // Rendered from the bundle: no subresource URL for the browser to 404 on.
+    expect(frame.getAttribute('srcdoc')).toContain('Mid-build');
+    expect(frame.getAttribute('src')).toBeNull();
+    // ...and the viewer is still told what is missing.
+    expect((await screen.findByRole('status')).textContent).toContain('Build incomplete');
+  });
+
+  it('prefers the URL route once the referenced assets exist', async () => {
+    const fetchMock = healthyRegistration('complete-session');
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <ArtifactPreviewFrame
+        files={{
+          'index.html':
+            '<!doctype html><html><head><link rel="stylesheet" href="styles.css"></head>' +
+            '<body><h1>Complete</h1></body></html>',
+          'styles.css': 'body { color: red; }',
+        }}
+        title="Preview: Complete2"
+      />,
+    );
+
+    const frame = await screen.findByTitle<HTMLIFrameElement>('Preview: Complete2');
+    await waitFor(() => {
+      expect(frame.getAttribute('src')).toBe(
+        '/api/preview/sessions/complete-session/index.html',
+      );
+    });
+    expect(frame.getAttribute('srcdoc')).toBeNull();
+  });
+
+  it('does not treat external assets as missing', async () => {    vi.stubGlobal('fetch', healthyRegistration('external-session'));
 
     render(
       <ArtifactPreviewFrame

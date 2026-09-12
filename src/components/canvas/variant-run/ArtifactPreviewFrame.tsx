@@ -78,7 +78,24 @@ export default function ArtifactPreviewFrame({
   const integrity = useMemo(() => checkArtifactIntegrity(files), [files]);
   const integrityNotice = describeArtifactIntegrity(integrity);
 
-  const urlPreviewUsable = !!previewSrc && previewSrc !== failedSrc;
+  /**
+   * An incomplete tree is served from the inlined `srcDoc` bundle rather than the
+   * URL route, even when a URL is available.
+   *
+   * During a multi-file build `liveFiles` gains entries one at a time, so there is
+   * a window where the entry document exists and the assets it references do not.
+   * Serving that tree over the URL route makes the browser request `styles.css`
+   * and `app.js` and get real 404s — the frame paints unstyled, and a cached miss
+   * can outlive the missing file. The bundle inlines whatever CSS/JS *is* present
+   * and requests nothing, so an interrupted or mid-flight build degrades to
+   * "styled by what exists" instead of "no styles at all".
+   *
+   * The warning strip still reports what is missing, so this hides nothing from
+   * the viewer. Once the referenced files land, `integrity.incomplete` goes false
+   * and the URL preview takes over.
+   */
+  const urlPreviewUsable =
+    !!previewSrc && previewSrc !== failedSrc && !integrity.incomplete;
 
   if (isPending) {
     return (

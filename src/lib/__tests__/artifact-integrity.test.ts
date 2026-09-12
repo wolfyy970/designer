@@ -78,6 +78,68 @@ describe('checkArtifactIntegrity', () => {
     expect(result.missing).toEqual(['styles.css']);
   });
 
+  it('detects a missing asset on a page other than the entry', () => {
+    /**
+     * Multi-page artifacts link their stylesheet from every page. Scanning only
+     * the entry declared this tree complete while `pages/menu.html` rendered
+     * unstyled — the same broken-CSS symptom, in a tree the check had cleared.
+     */
+    const result = checkArtifactIntegrity({
+      'index.html': HTML('<a href="pages/menu.html">Menu</a>'),
+      'pages/menu.html': HTML('<link rel="stylesheet" href="menu.css">'),
+    });
+
+    expect(result.incomplete).toBe(true);
+    expect(result.missing).toEqual(['pages/menu.css']);
+  });
+
+  it('resolves each reference against the document that contains it', () => {
+    const result = checkArtifactIntegrity({
+      'index.html': HTML('<a href="pages/menu.html">Menu</a>'),
+      'pages/menu.html': HTML('<link rel="stylesheet" href="menu.css">'),
+      'pages/menu.css': 'body { color: red; }',
+    });
+
+    expect(result.missing).toEqual([]);
+    expect(result.incomplete).toBe(false);
+  });
+
+  it('does not report a cross-page link that exists', () => {
+    const result = checkArtifactIntegrity({
+      'index.html': HTML('<a href="pages/menu.html">Menu</a>'),
+      'pages/menu.html': HTML('<h1>Menu</h1>'),
+    });
+
+    expect(result.incomplete).toBe(false);
+  });
+
+  it('reports a cross-page link that dangles', () => {
+    const result = checkArtifactIntegrity({
+      'index.html': HTML('<a href="pages/missing.html">Gone</a>'),
+    });
+
+    expect(result.missing).toEqual(['pages/missing.html']);
+  });
+
+  it('ignores a fragment-only link on any page', () => {
+    const result = checkArtifactIntegrity({
+      'index.html': HTML('<a href="#top">Top</a>'),
+      'pages/menu.html': HTML('<a href="#menu">Menu</a><h1>M</h1>'),
+    });
+
+    expect(result.incomplete).toBe(false);
+  });
+
+  it('ignores assets referenced from non-HTML files', () => {
+    // CSS `url(...)` is out of scope: the check covers markup references only.
+    const result = checkArtifactIntegrity({
+      'index.html': HTML('<link rel="stylesheet" href="styles.css">'),
+      'styles.css': 'body { background: url("missing.png"); }',
+    });
+
+    expect(result.incomplete).toBe(false);
+  });
+
   it('returns no entry when the tree has no HTML content to check', () => {
     const result = checkArtifactIntegrity({ 'app.js': 'console.log(1)' });
 
