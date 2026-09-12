@@ -47,7 +47,7 @@ pnpm exp list / show / diff          # browse runs
 pnpm exp run --help                  # full flag list (sourcing, regen, target, caps, dry-run)
 ```
 
-Vitest excludes `server/services/__tests__/browser-playwright-evaluator.test.ts` via `vite.config.ts` so the default suite stays hermetic; run **`pnpm test:playwright-eval`** (or `vitest run -c vitest.playwright.config.ts …` on that file) when changing Playwright merge logic.
+Vitest excludes both browser-evaluation test files (`browser-playwright-evaluator.test.ts` for merge logic, `browser-playwright-real.test.ts` for the real-browser path) via `vite.config.ts` so the default suite stays hermetic. Run **`pnpm test:playwright-eval`** (or `vitest run -c vitest.playwright.config.ts …`) when changing Playwright merge or scoring logic — it needs Chromium (`pnpm exec playwright install chromium`), and without it the real-browser assertions skip themselves.
 
 **Verification reminder:** the root `pnpm test` runs the root Vitest suite plus the `@auto-designer/design-system` and `@auto-designer/pi` package tests. For a narrower package-only check, use `pnpm -F @auto-designer/pi test`.
 

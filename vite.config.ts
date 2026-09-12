@@ -66,7 +66,10 @@ export default defineConfig(({ mode }) => {
         // Pi-boundary package has its own vitest config; chained from the root `test` script.
         'packages/auto-designer-pi/**',
         // Optional Playwright browser stack; keep unit tests hermetic.
+        // Both files need Chromium: the merge helpers via the evaluator import,
+        // the real-browser suite by launching it. Run with `pnpm test:playwright-eval`.
         '**/browser-playwright-evaluator.test.ts',
+        '**/browser-playwright-real.test.ts',
       ],
     },
     plugins: [react(), tailwindcss(), tsconfigPaths(), preloadCriticalFonts()],

@@ -13,7 +13,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run && pnpm -F @auto-designer/design-system test && pnpm -F @auto-designer/pi test",
-    "test:playwright-eval": "vitest run -c vitest.playwright.config.ts server/services/__tests__/browser-playwright-evaluator.test.ts",
+    "test:playwright-eval": "vitest run -c vitest.playwright.config.ts server/services/__tests__/browser-playwright-evaluator.test.ts server/services/__tests__/browser-playwright-real.test.ts",
     "test:watch": "vitest",
     "dev:server": "tsx watch server/dev.ts",
     "dev:all": "concurrently -k -n api,vite -c blue,green \"pnpm dev:server\" \"pnpm exec wait-on http://127.0.0.1:${PORT:-4731}/api/health && vite\"",
