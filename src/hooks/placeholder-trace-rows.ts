@@ -23,8 +23,20 @@ function averageRubricScore(report: EvaluatorWorkerReport): number | null {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
+/**
+ * Clip a worker's detail line for the timeline row.
+ *
+ * Deliberately *not* `server/lib/string-truncate.ts#truncateUtf16WithSuffix`,
+ * though the logic is the same: that one's default suffix is
+ * `"\n…[truncated]"`, which is right for a server log line and wrong for a
+ * one-line timeline row. The two suffixes are user-visible, so this is a
+ * different presentation of the same rule rather than a duplicate of it — hence
+ * the explicit `ELLIPSIS` constant instead of a second magic string.
+ */
+const TRACE_DETAIL_ELLIPSIS = '…';
+
 function truncateTraceDetail(s: string, max: number): string {
-  return s.length > max ? `${s.slice(0, max)}…` : s;
+  return s.length > max ? `${s.slice(0, max)}${TRACE_DETAIL_ELLIPSIS}` : s;
 }
 
 function degradedWorkerDetail(report: EvaluatorWorkerReport): string {

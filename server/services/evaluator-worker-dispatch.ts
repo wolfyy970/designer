@@ -7,7 +7,7 @@ import {
   type EvaluatorRubricId,
   type EvaluatorWorkerReport,
 } from '../../src/types/evaluation.ts';
-import { evaluatorRubricIdZodSchema } from '../../src/lib/evaluator-rubric-zod.ts';
+
 import { env } from '../env.ts';
 import { getPromptBody } from '../lib/prompt-resolution.ts';
 import { getProvider } from './providers/registry.ts';
@@ -20,47 +20,18 @@ import { encodeVirtualPathForUrl, resolvePreviewEntryPath } from '../../src/lib/
 import { normalizeError } from '../../src/lib/error-utils.ts';
 import { extractLlmJsonObjectSegment } from '../lib/extract-llm-json.ts';
 import { resolveThinkingConfig } from '../../src/lib/thinking-defaults.ts';
+import {
+  evaluatorWorkerReportSchema,
+} from '../../src/lib/evaluator-rubric-zod.ts';
+
+/**
+ * Re-exported: this module was the schema's original home and
+ * `design-evaluation-service.ts` re-exports it from here. Kept so the public
+ * surface is unchanged by the consolidation.
+ */
+export { evaluatorWorkerReportSchema };
 import { EVAL_DEGRADED_MSG_MAX } from '../lib/content-limits.ts';
 import { buildEvaluatorUserContent } from './evaluator-prompt-assembly.ts';
-
-const criterionSchema = z.object({
-  score: z.number(),
-  notes: z.string(),
-});
-
-const browserScreenshotArtifactSchema = z.object({
-  mediaType: z.enum(['image/jpeg', 'image/png']),
-  base64: z.string(),
-});
-
-export const evaluatorWorkerReportSchema = z.object({
-  rubric: evaluatorRubricIdZodSchema,
-  scores: z.record(z.string(), criterionSchema),
-  findings: z.array(
-    z.object({
-      severity: z.enum(['high', 'medium', 'low']),
-      summary: z.string(),
-      detail: z.string(),
-    }),
-  ),
-  hardFails: z.array(
-    z.object({
-      code: z.string(),
-      message: z.string(),
-    }),
-  ),
-  playwrightSkipped: z
-    .object({
-      reason: z.enum(['browser_unavailable', 'eval_error']),
-      message: z.string(),
-    })
-    .optional(),
-  artifacts: z
-    .object({
-      browserScreenshot: browserScreenshotArtifactSchema.optional(),
-    })
-    .optional(),
-});
 
 function coerceToArray(
   v: unknown,
@@ -195,7 +166,11 @@ async function runOneEvaluator(
       ...(logCtx.correlationId ? { correlationId: `${logCtx.correlationId}:eval:${rubric}` } : {}),
     },
   );
-  const parsed = parseModelJsonObject(response.raw, evaluatorWorkerReportSchema, normalizeEvaluatorWorkerPayload);
+  const parsed = parseModelJsonObject<EvaluatorWorkerReport>(
+    response.raw,
+    evaluatorWorkerReportSchema,
+    normalizeEvaluatorWorkerPayload,
+  );
   return { ...parsed, rawTrace: response.raw };
 }
 

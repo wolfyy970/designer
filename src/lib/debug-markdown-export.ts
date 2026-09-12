@@ -58,8 +58,21 @@ function section(title: string, body: string): string {
   return `## ${title}\n\n${body.trim()}\n`;
 }
 
+/**
+ * Wrap `content` in a code fence, sizing the fence so the content cannot close
+ * it early.
+ *
+ * A triple-backtick fence silently corrupts the rest of the document when the
+ * content contains one: thinking text, compiled prompts, design-system
+ * snapshots and file bodies all routinely can. The conventional fix is to use a
+ * fence one backtick longer than the longest run present, so nothing inside can
+ * match it.
+ */
 function fenced(lang: string, content: string): string {
-  return '```' + lang + '\n' + content + '\n```\n';
+  const runs = content.match(/`+/g);
+  const longest = runs ? Math.max(...runs.map((r) => r.length)) : 0;
+  const fence = '`'.repeat(Math.max(3, longest + 1));
+  return `${fence}${lang}\n${content}\n${fence}\n`;
 }
 
 function formatTodos(todos: TodoItem[] | undefined): string {
@@ -239,9 +252,20 @@ function formatDomainHypothesisBlock(
   body += `- **minOverallScore (override):** ${hyp.minOverallScore === undefined ? '_use Settings default_' : hyp.minOverallScore === null ? 'off' : hyp.minOverallScore}\n`;
   body += `- **placeholder:** ${hyp.placeholder}\n\n`;
   body += '### Design system nodes\n\n';
-  if (!hyp.designSystemNodeIds.length) body += '_None._\n';
+  /**
+   * Tolerates a hypothesis record with no `designSystemNodeIds`. The field is
+   * required by `DomainHypothesis`, but the store migration passes it straight
+   * through for legacy records (`workspace-domain-migrate.ts` normalizes its
+   * sibling `modelNodeIds` with `asStringArray` and not this one), so an old
+   * persisted record can reach the export without it. Reading `.length`
+   * unguarded made the whole export throw for such a record.
+   */
+  const designSystemNodeIds = Array.isArray(hyp.designSystemNodeIds)
+    ? hyp.designSystemNodeIds
+    : [];
+  if (designSystemNodeIds.length === 0) body += '_None._\n';
   else {
-    for (const did of hyp.designSystemNodeIds) {
+    for (const did of designSystemNodeIds) {
       const d = designSystems[did];
       body += d
         ? `- **${did}** — ${d.title} (${d.content.length} chars, ${d.images.length} images)\n`
@@ -330,13 +354,25 @@ export interface DesignRunDebugExportInput {
   files?: Record<string, string>;
 }
 
+/**
+ * Escape a value destined for a Markdown table cell or an inline code span.
+ *
+ * A path containing `|` silently adds a column to the manifest table, and a
+ * backtick in a path closes the surrounding code span early — both corrupt
+ * every row after them. Escaping is applied only here; file *contents* are
+ * passed through untouched.
+ */
+function escapeInlineCode(text: string): string {
+  return text.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\|/g, '\\|');
+}
+
 function formatFileArtifactsManifest(files: Record<string, string> | undefined): string {
   if (!files || !Object.keys(files).length) return '_No multi-file map._\n';
   const paths = Object.keys(files).sort();
   let out = '| Path | Bytes |\n|------|-------|\n';
   for (const path of paths) {
     const raw = files[path] ?? '';
-    out += `| \`${path}\` | ${raw.length} |\n`;
+    out += `| \`${escapeInlineCode(path)}\` | ${raw.length} |\n`;
   }
   out += '\n';
   return out;
@@ -348,7 +384,7 @@ function formatFileArtifactsContents(files: Record<string, string> | undefined):
   let out = '';
   for (const path of paths) {
     const ext = path.includes('.') ? path.split('.').pop() ?? 'text' : 'text';
-    out += `### \`${path}\`\n\n`;
+    out += `### \`${escapeInlineCode(path)}\`\n\n`;
     out += fenced(ext, files[path] ?? '');
   }
   return out;

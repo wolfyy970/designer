@@ -5,7 +5,10 @@
  * {@link GenerateSSEEvent} is `z.infer<typeof generateSSEEventSchema>` (re-exported from `src/api/types.ts`).
  */
 import { z } from 'zod';
-import { evaluatorRubricIdZodSchema } from './evaluator-rubric-zod';
+import {
+  evaluatorRubricIdZodSchema,
+  evaluatorWorkerReportSchema as evaluatorWorkerReportSSESchema,
+} from './evaluator-rubric-zod';
 import { SSE_EVENT_NAMES } from '../constants/sse-events';
 import { agenticPhaseZodSchema } from '../constants/agentic-stream';
 import { runTraceEventSchema as canonicalRunTraceEventSchema } from './run-trace-event-schema';
@@ -18,49 +21,6 @@ const todoItemSchema = z.object({
   task: z.string(),
   status: z.enum(['pending', 'in_progress', 'completed']),
 });
-
-const evalCriterionScoreSchema = z.object({
-  score: z.number(),
-  notes: z.string(),
-});
-
-const evalFindingSchema = z.object({
-  severity: z.enum(['high', 'medium', 'low']),
-  summary: z.string(),
-  detail: z.string(),
-});
-
-const evalHardFailSchema = z.object({
-  code: z.string(),
-  message: z.string(),
-});
-
-/** Matches {@link import('../types/evaluation').EvaluatorWorkerReport} for SSE wire validation. */
-const evaluatorWorkerReportSSESchema = z
-  .object({
-    rubric: evaluatorRubricIdZodSchema,
-    scores: z.record(z.string(), evalCriterionScoreSchema),
-    findings: z.array(evalFindingSchema),
-    hardFails: z.array(evalHardFailSchema),
-    rawTrace: z.string().optional(),
-    playwrightSkipped: z
-      .object({
-        reason: z.enum(['browser_unavailable', 'eval_error']),
-        message: z.string(),
-      })
-      .optional(),
-    artifacts: z
-      .object({
-        browserScreenshot: z
-          .object({
-            mediaType: z.enum(['image/jpeg', 'image/png']),
-            base64: z.string(),
-          })
-          .optional(),
-      })
-      .optional(),
-  })
-  .passthrough();
 
 const aggregatedHardFailSSESchema = z.object({
   code: z.string(),
