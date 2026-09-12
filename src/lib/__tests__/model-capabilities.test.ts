@@ -27,6 +27,25 @@ describe('supportsReasoningModel', () => {
     expect(supportsReasoningModel('deepseek/deepseek-r1')).toBe(true);
   });
 
+  it('matches every DeepSeek V4 model, including the pinned default', () => {
+    // Verified against OpenRouter's catalog: every `deepseek/deepseek-v4*`
+    // advertises `reasoning` + `reasoning_effort` and emits reasoning tokens.
+    // This is the current default model, so a miss here silently disables
+    // thinking levels for every task.
+    expect(supportsReasoningModel('deepseek/deepseek-v4.1-flash')).toBe(true);
+    expect(supportsReasoningModel('deepseek/deepseek-v4-flash')).toBe(true);
+    expect(supportsReasoningModel('deepseek/deepseek-v4-pro')).toBe(true);
+    expect(supportsReasoningModel('deepseek/deepseek-v4-pro-0813')).toBe(true);
+    expect(supportsReasoningModel('deepseek/deepseek-v4-flash-vision-exp')).toBe(true);
+  });
+
+  it('still treats non-reasoning DeepSeek chat models as non-reasoning', () => {
+    // V3 chat models do not advertise reasoning; the V4 pattern must not sweep
+    // them in.
+    expect(supportsReasoningModel('deepseek/deepseek-chat')).toBe(false);
+    expect(supportsReasoningModel('deepseek/deepseek-chat-v3-0324')).toBe(false);
+  });
+
   it('matches MiniMax M2.7', () => {
     expect(supportsReasoningModel('minimax/minimax-m2.7')).toBe(true);
     expect(supportsReasoningModel('MiniMax/MiniMax-M2.7')).toBe(true);

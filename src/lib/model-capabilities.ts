@@ -10,6 +10,18 @@
  * - qwq — Qwen reasoning model
  * - qwen3 — Qwen 3 series (all reasoning-capable)
  * - -thinking — generic suffix used by some providers
+ *
+ * This is a hand-maintained allowlist, so it goes stale whenever the default
+ * model changes — which it did. Every DeepSeek V4 model (`deepseek-v4*`)
+ * advertises `reasoning` and `reasoning_effort` and emits reasoning tokens, but
+ * the previous entries only matched the `r1` / `reasoner` families, so V4.1
+ * Flash was reported as non-reasoning and thinking levels were forced to `off`.
+ *
+ * **When changing the pinned default model, check it against this list.** A
+ * model that reasons but is reported as non-reasoning is not an error the user
+ * can see — it just silently loses a feature. `openRouterThinkingFields()`
+ * passes `reasoning.effort`/`max_tokens`, which OpenRouter accepts for every
+ * model above that advertises `reasoning_effort`.
  */
 const REASONING_PATTERNS = [
   /\bo[1-9]\b/i,
@@ -18,6 +30,7 @@ const REASONING_PATTERNS = [
   /claude-4/i,
   /deepseek-r1/i,
   /deepseek-reasoner/i,
+  /deepseek-v4/i,
   /minimax-m2\.7/i,
   /\bqwq\b/i,
   /qwen3/i,
