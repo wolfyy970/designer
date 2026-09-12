@@ -23,14 +23,22 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      # v5+ runs on node24; v4 targets the deprecated node20 runtime.
+      - uses: actions/checkout@v5
 
+      # STAYS ON v4, deliberately. v6 of this action requires pnpm >= 11
+      # ("The `version` input can be omitted only when `packageManager` ...
+      # declares pnpm v11 or newer"), and this repo pins pnpm 10.10.0 via the
+      # packageManager field. Upgrading would fail the install step, not just
+      # warn. Revisit when the repo moves to pnpm 11.
+      #
       # No `version:` input — the packageManager field in package.json pins
-      # pnpm (10.10.0) and action-setup reads it. Hardcoding a version here
-      # would silently fight that pin.
+      # pnpm and action-setup reads it. Hardcoding a version here would
+      # silently fight that pin.
       - uses: pnpm/action-setup@v4
 
-      - uses: actions/setup-node@v4
+      # v5+ runs on node24; v4 targets the deprecated node20 runtime.
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
