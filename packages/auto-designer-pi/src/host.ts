@@ -21,6 +21,7 @@ import {
   SANDBOX_PROJECT_ROOT,
 } from './sandbox/virtual-workspace.ts';
 import { seedSkillsIntoSandbox } from './sandbox/seed-skills.ts';
+import type { Bash } from 'just-bash';
 import { buildSandboxedBashTool } from './tools/bash-tool.ts';
 import {
   buildSandboxedEditTool,
@@ -30,6 +31,7 @@ import {
   buildSandboxedReadTool,
   buildSandboxedWriteTool,
   createSandboxToolContext,
+  type SandboxToolContext,
 } from './tools/virtual-tools.ts';
 import {
   createTodoWriteTool,
@@ -110,6 +112,58 @@ export interface SessionHandle {
 
 const MAX_APP_UPSTREAM_RETRIES = 2;
 
+/**
+ * Declarative tool surface — one entry per model-callable tool, kind tagged.
+ * This is the **single source of truth** for the design session's tool
+ * allowlist: `createSession` builds it, and `pi-tool-surface.test.ts` asserts
+ * against it directly rather than against a replica. A test that rebuilt this
+ * list locally would keep passing after a tool was removed here, which is
+ * exactly the drift the tripwire exists to catch.
+ *
+ * `ToolSurface.build()` validates this against upstream Pi's built-in
+ * inventory at runtime: if Pi adds a new built-in we haven't dispositioned,
+ * session creation throws with an actionable message pointing at this list.
+ * See src/internal/pi-tool-surface.ts.
+ *
+ * Exported for that test's use. Not part of the host-facing session API.
+ */
+export function buildDesignToolSurface(args: {
+  bash: Bash;
+  sandboxCtx: SandboxToolContext;
+  todoState: { current: TodoItem[] };
+  onTodos: (todos: TodoItem[]) => void;
+}): ToolSurface {
+  const { bash, sandboxCtx, todoState, onTodos } = args;
+  return new ToolSurface()
+    .add({ kind: 'sandboxed-pi', name: 'read', build: () => buildSandboxedReadTool(sandboxCtx) })
+    .add({ kind: 'sandboxed-pi', name: 'write', build: () => buildSandboxedWriteTool(sandboxCtx) })
+    .add({ kind: 'sandboxed-pi', name: 'edit', build: () => buildSandboxedEditTool(sandboxCtx) })
+    .add({ kind: 'sandboxed-pi', name: 'ls', build: () => buildSandboxedLsTool(sandboxCtx) })
+    .add({ kind: 'sandboxed-pi', name: 'find', build: () => buildSandboxedFindTool(sandboxCtx) })
+    .add({ kind: 'sandboxed-pi', name: 'grep', build: () => buildSandboxedGrepTool(sandboxCtx) })
+    .add({ kind: 'sandboxed-pi', name: 'bash', build: () => buildSandboxedBashTool(sandboxCtx) })
+    .add({
+      kind: 'auto-designer-extension',
+      name: 'todo_write',
+      register: (api) => api.registerTool(createTodoWriteTool(todoState, onTodos)),
+    })
+    .add({
+      kind: 'auto-designer-extension',
+      name: 'validate_js',
+      register: (api) => api.registerTool(createValidateJsTool(bash)),
+    })
+    .add({
+      kind: 'auto-designer-extension',
+      name: 'validate_html',
+      register: (api) => api.registerTool(createValidateHtmlTool(bash)),
+    })
+    .add({
+      kind: 'auto-designer-extension',
+      name: 'validate_artifact',
+      register: (api) => api.registerTool(createValidateArtifactTool(bash)),
+    });
+}
+
 /** Runs the initial prompt, then optional `continue()` rounds for upstream errors Pi auto-retry doesn't match. */
 async function runPromptWithUpstreamRetries(
   session: AgentSession,
@@ -165,41 +219,12 @@ export async function createSession(opts: SessionRunnerOptions): Promise<Session
   };
 
   /**
-   * Declarative tool surface — one entry per model-callable tool, kind tagged.
-   * The `ToolSurface.build()` call below validates this against upstream Pi's
-   * built-in inventory at runtime: if Pi adds a new built-in we haven't
-   * dispositioned, session creation throws with an actionable message
-   * pointing at this list. See src/internal/pi-tool-surface.ts.
+   * Tool surface is built by the exported `buildDesignToolSurface` helper so
+   * the test suite asserts against this exact list rather than a replica.
+   * See that function's doc block.
    */
   const sandboxCtx = createSandboxToolContext(bash, onFile);
-  const surface = new ToolSurface()
-    .add({ kind: 'sandboxed-pi', name: 'read', build: () => buildSandboxedReadTool(sandboxCtx) })
-    .add({ kind: 'sandboxed-pi', name: 'write', build: () => buildSandboxedWriteTool(sandboxCtx) })
-    .add({ kind: 'sandboxed-pi', name: 'edit', build: () => buildSandboxedEditTool(sandboxCtx) })
-    .add({ kind: 'sandboxed-pi', name: 'ls', build: () => buildSandboxedLsTool(sandboxCtx) })
-    .add({ kind: 'sandboxed-pi', name: 'find', build: () => buildSandboxedFindTool(sandboxCtx) })
-    .add({ kind: 'sandboxed-pi', name: 'grep', build: () => buildSandboxedGrepTool(sandboxCtx) })
-    .add({ kind: 'sandboxed-pi', name: 'bash', build: () => buildSandboxedBashTool(sandboxCtx) })
-    .add({
-      kind: 'auto-designer-extension',
-      name: 'todo_write',
-      register: (api) => api.registerTool(createTodoWriteTool(todoState, onTodos)),
-    })
-    .add({
-      kind: 'auto-designer-extension',
-      name: 'validate_js',
-      register: (api) => api.registerTool(createValidateJsTool(bash)),
-    })
-    .add({
-      kind: 'auto-designer-extension',
-      name: 'validate_html',
-      register: (api) => api.registerTool(createValidateHtmlTool(bash)),
-    })
-    .add({
-      kind: 'auto-designer-extension',
-      name: 'validate_artifact',
-      register: (api) => api.registerTool(createValidateArtifactTool(bash)),
-    });
+  const surface = buildDesignToolSurface({ bash, sandboxCtx, todoState, onTodos });
 
   const built = surface.build();
 

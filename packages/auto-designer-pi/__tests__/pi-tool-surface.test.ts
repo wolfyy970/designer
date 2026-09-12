@@ -4,6 +4,7 @@ import {
   ToolSurface,
   ToolSurfaceError,
   _resetUpstreamPiBuiltinNamesCacheForTesting,
+  buildDesignToolSurface,
   buildSandboxedBashTool,
   buildSandboxedEditTool,
   buildSandboxedFindTool,
@@ -12,11 +13,8 @@ import {
   buildSandboxedReadTool,
   buildSandboxedWriteTool,
   createAgentBashSandbox,
+  createDesignerExtensionFactory,
   createSandboxToolContext,
-  createTodoWriteTool,
-  createValidateArtifactTool,
-  createValidateHtmlTool,
-  createValidateJsTool,
   type PiBuiltinToolName,
 } from '../src/index.ts';
 
@@ -29,49 +27,32 @@ afterEach(() => {
  * filesystem. These tests pin the architectural contract enforced by
  * `ToolSurface.build()`:
  *
- *   1. The same registry our host.ts builds passes the runtime check (every
- *      Pi built-in dispositioned, no duplicate names, all extension tools
- *      registered) and produces an allowlist of size 10.
+ *   1. The **exact surface `host.ts` creates** (via `buildDesignToolSurface`,
+ *      the single source of truth) passes the runtime check — every Pi
+ *      built-in dispositioned, no duplicate names, all extension tools
+ *      registered — and produces the expected allowlist.
  *   2. Forgetting to disposition a Pi built-in throws — the runtime makes
  *      Pi-version drift impossible to ship silently.
  *   3. Stale registrations (a Pi tool we've removed) throw.
  *   4. Duplicate tool names throw.
  *   5. The auto-designer-extension factory really registers the names we
  *      claim it does — caught here, not at hypothesis-design runtime.
+ *
+ * `buildHostSurface()` below is a thin wrapper over the production builder so
+ * that removing a tool from `host.ts` fails this suite instead of silently
+ * passing against a locally-rebuilt replica.
  */
 
+/** The production surface host.ts builds, with real sandbox + todo wiring. */
 function buildHostSurface(): ToolSurface {
   const bash = createAgentBashSandbox();
   const ctx = createSandboxToolContext(bash, () => {});
-  const todoState = { current: [] };
-  return new ToolSurface()
-    .add({ kind: 'sandboxed-pi', name: 'read', build: () => buildSandboxedReadTool(ctx) })
-    .add({ kind: 'sandboxed-pi', name: 'write', build: () => buildSandboxedWriteTool(ctx) })
-    .add({ kind: 'sandboxed-pi', name: 'edit', build: () => buildSandboxedEditTool(ctx) })
-    .add({ kind: 'sandboxed-pi', name: 'ls', build: () => buildSandboxedLsTool(ctx) })
-    .add({ kind: 'sandboxed-pi', name: 'find', build: () => buildSandboxedFindTool(ctx) })
-    .add({ kind: 'sandboxed-pi', name: 'grep', build: () => buildSandboxedGrepTool(ctx) })
-    .add({ kind: 'sandboxed-pi', name: 'bash', build: () => buildSandboxedBashTool(ctx) })
-    .add({
-      kind: 'auto-designer-extension',
-      name: 'todo_write',
-      register: (api) => api.registerTool(createTodoWriteTool(todoState, () => {})),
-    })
-    .add({
-      kind: 'auto-designer-extension',
-      name: 'validate_js',
-      register: (api) => api.registerTool(createValidateJsTool(bash)),
-    })
-    .add({
-      kind: 'auto-designer-extension',
-      name: 'validate_html',
-      register: (api) => api.registerTool(createValidateHtmlTool(bash)),
-    })
-    .add({
-      kind: 'auto-designer-extension',
-      name: 'validate_artifact',
-      register: (api) => api.registerTool(createValidateArtifactTool(bash)),
-    });
+  return buildDesignToolSurface({
+    bash,
+    sandboxCtx: ctx,
+    todoState: { current: [] },
+    onTodos: () => {},
+  });
 }
 
 describe('ToolSurface contract', () => {
@@ -126,6 +107,29 @@ describe('ToolSurface contract', () => {
       const piBuiltinNames = new Set(['read', 'write', 'edit', 'ls', 'find', 'grep', 'bash']);
       const piOverrides = registered.filter((t) => piBuiltinNames.has(t.name));
       expect(piOverrides.length).toBe(7);
+    });
+
+    it('the standalone designer extension factory registers the same four extension tools', () => {
+      // host.ts does not call createDesignerExtensionFactory, so nothing else
+      // pins it. Two independent registrations of the same tools drift apart
+      // silently — this keeps the documented integration path honest.
+      const registered: Array<{ name: string }> = [];
+      const bash = createAgentBashSandbox();
+      const factory = createDesignerExtensionFactory({
+        bash,
+        todoState: { current: [] },
+        onTodos: () => {},
+      });
+      factory({
+        registerTool: (tool: { name: string }) => registered.push(tool),
+      } as unknown as Parameters<typeof factory>[0]);
+
+      expect(registered.map((t) => t.name).sort()).toEqual([
+        'todo_write',
+        'validate_artifact',
+        'validate_html',
+        'validate_js',
+      ]);
     });
   });
 

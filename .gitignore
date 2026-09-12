@@ -52,3 +52,6 @@ experiments/.cost-ledger.jsonl
 .env
 .env.local
 build/
+
+# Local agent scratch (screenshots, one-off driver scripts) — never commit-worthy
+.dsh-scratch/

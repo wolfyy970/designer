@@ -159,6 +159,7 @@ export {
   createIncubationSession,
   createInputsGenSession,
   createDesignSystemSession,
+  buildDesignToolSurface,
   type SessionRunnerOptions,
   type SessionRunResult,
   type SessionHandle,
