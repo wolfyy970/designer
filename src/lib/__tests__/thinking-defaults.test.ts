@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { REASONING_MODEL_ID, NON_REASONING_MODEL_ID } from '../../test-support/model-fixtures';
 import { z } from 'zod';
 import rawConfig from '../../../config/thinking-defaults.json';
 import {
@@ -14,8 +15,8 @@ import {
 } from '../thinking-defaults';
 
 // Matches the shipped MiniMax lockdown pin in src/lib/model-capabilities.ts.
-const REASONING_MODEL = 'minimax/minimax-m2.7';
-const NON_REASONING_MODEL = 'minimax/minimax-m2.5';
+const REASONING_MODEL = REASONING_MODEL_ID;
+const NON_REASONING_MODEL = NON_REASONING_MODEL_ID;
 
 describe('thinking-defaults — constants', () => {
   it('covers every task in THINKING_CONFIG_DEFAULTS', () => {

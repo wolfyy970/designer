@@ -30,6 +30,7 @@ import { basename, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createRunDir } from '../src/runDir.ts';
+import taskDefaults from '../../config/task-defaults.json';
 import {
   CostTracker,
   DEFAULT_DAILY_TOKEN_CAP,
@@ -41,7 +42,8 @@ import { runFlow as runIdeation } from '../src/flows/ideation.ts';
 import { runFlow as runReframeThenIdeate } from '../src/flows/reframe-then-ideate.ts';
 
 const DEFAULT_PROVIDER = 'openrouter';
-const DEFAULT_MODEL = 'minimax/minimax-m2.5';
+/** Model the app pins by default, read from config so this cannot drift. */
+const DEFAULT_MODEL = taskDefaults.perTaskDefaults.design.modelId;
 
 type FlowName = 'canonical' | 'ideation' | 'reframe-then-ideate';
 

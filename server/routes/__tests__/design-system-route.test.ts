@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { DEFAULT_MODEL_ID } from '../../../src/test-support/model-fixtures';
 
 vi.mock('../../services/task-agent-execution.ts', () => ({
   executeTaskAgentStream: vi.fn(async () => ({ result: '---\nname: Test\n---\n# Test\n', resultFile: 'DESIGN.md', files: {} })),
@@ -15,7 +16,7 @@ import { lintDesignMdDocument } from '../../lib/design-md-lint.ts';
 const minimalBody = {
   images: [{ dataUrl: 'data:image/png;base64,AAAA' }],
   providerId: 'openrouter',
-  modelId: 'minimax/minimax-m2.5',
+  modelId: DEFAULT_MODEL_ID,
 };
 
 describe('POST /api/design-system/extract', () => {
@@ -45,7 +46,7 @@ describe('POST /api/design-system/extract', () => {
     const res = await app.request('http://localhost/api/design-system/extract', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ providerId: 'openrouter', modelId: 'minimax/minimax-m2.5' }),
+      body: JSON.stringify({ providerId: 'openrouter', modelId: DEFAULT_MODEL_ID }),
     });
     expect(res.status).toBe(400);
   });
@@ -76,7 +77,7 @@ describe('POST /api/design-system/extract', () => {
         title: 'Brand',
         content: 'Use red buttons.',
         providerId: 'openrouter',
-        modelId: 'minimax/minimax-m2.5',
+        modelId: DEFAULT_MODEL_ID,
       }),
     });
     expect(res.status).toBe(200);
@@ -97,7 +98,7 @@ describe('POST /api/design-system/extract', () => {
           },
         ],
         providerId: 'openrouter',
-        modelId: 'minimax/minimax-m2.5',
+        modelId: DEFAULT_MODEL_ID,
       }),
     });
     expect(res.status).toBe(200);
@@ -111,7 +112,7 @@ describe('POST /api/design-system/extract', () => {
         title: 'Brand',
         content: 'Use red buttons.',
         providerId: 'openrouter',
-        modelId: 'minimax/minimax-m2.5',
+        modelId: DEFAULT_MODEL_ID,
       }),
     });
     expect(res.status).toBe(200);

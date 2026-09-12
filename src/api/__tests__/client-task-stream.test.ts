@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_MODEL_ID } from '../../test-support/model-fixtures';
 import {
   extractDesignSystem,
   generateInputContent,
@@ -22,7 +23,7 @@ function sseResponse(events: { name: string; data: Record<string, unknown> }[]):
 
 const modelFields = {
   providerId: 'openrouter',
-  modelId: 'minimax/minimax-m2.5',
+  modelId: DEFAULT_MODEL_ID,
 };
 
 describe('task stream client contract validation', () => {

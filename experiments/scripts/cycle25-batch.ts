@@ -28,6 +28,7 @@ import { join } from 'node:path';
 
 import { runOneCell, type CellSpec, type RunOneCellResult } from './matrix-runner.ts';
 import { DEFAULT_PER_RUN_TOKEN_CAP } from '../src/cost.ts';
+import taskDefaults from '../../config/task-defaults.json';
 
 const REPO_ROOT = process.cwd();
 const BRIEFS_DIR = join(REPO_ROOT, 'experiments', 'briefs');
@@ -130,7 +131,7 @@ function buildCell(brief: string, rep: number): Cell {
       perRunCapTokens: PER_RUN_CAP_TOKENS,
       dailyCapTokens: DAILY_CAP_TOKENS,
       providerId: 'openrouter',
-      modelId: 'minimax/minimax-m2.5',
+      modelId: taskDefaults.perTaskDefaults.design.modelId,
     },
   };
 }

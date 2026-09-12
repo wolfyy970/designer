@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { REASONING_MODEL_ID, NON_REASONING_MODEL_ID } from '../../test-support/model-fixtures';
 import { supportsReasoningModel } from '../model-capabilities';
 
 describe('supportsReasoningModel', () => {
@@ -47,8 +48,8 @@ describe('supportsReasoningModel', () => {
   });
 
   it('matches MiniMax M2.7', () => {
-    expect(supportsReasoningModel('minimax/minimax-m2.7')).toBe(true);
-    expect(supportsReasoningModel('MiniMax/MiniMax-M2.7')).toBe(true);
+    expect(supportsReasoningModel(REASONING_MODEL_ID)).toBe(true);
+    expect(supportsReasoningModel(REASONING_MODEL_ID.toUpperCase())).toBe(true);
   });
 
   it('matches QwQ and Qwen3', () => {
@@ -69,7 +70,7 @@ describe('supportsReasoningModel', () => {
     expect(supportsReasoningModel('llama-3-8b')).toBe(false);
     expect(supportsReasoningModel('mistral-7b')).toBe(false);
     expect(supportsReasoningModel('gemini-pro')).toBe(false);
-    expect(supportsReasoningModel('minimax/minimax-m2.5')).toBe(false);
+    expect(supportsReasoningModel(NON_REASONING_MODEL_ID)).toBe(false);
     expect(supportsReasoningModel('qwen2-72b')).toBe(false);
     expect(supportsReasoningModel('deepseek-v2')).toBe(false);
   });

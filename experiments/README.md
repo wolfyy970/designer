@@ -143,7 +143,8 @@ Token estimates pre-send are rough (~4 chars per token). Real usage gets logged 
 ## Defaults
 
 - Provider: `openrouter`
-- Model: `minimax/minimax-m2.5` (matches production lockdown)
+- Model: read from `config/task-defaults.json` (the same file the app pins), so the CLI
+  cannot drift from the shipped default. Currently `deepseek/deepseek-v4.1-flash`.
 - Evaluator provider/model: same as build unless overridden with `--evaluator-provider` / `--evaluator-model`.
 
 Override with `--provider` / `--model` on the CLI.

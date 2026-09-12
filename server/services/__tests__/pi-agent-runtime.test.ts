@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { DEFAULT_MODEL_ID } from '../../../src/test-support/model-fixtures';
 import { mapPackageResult, STREAM_IDLE_LIMIT_MS } from '../pi-agent-runtime.ts';
 import type { SessionRunResult } from '@auto-designer/pi';
 
@@ -65,7 +66,7 @@ describe('resolveProviderConfig', () => {
     const { getProviderModelContextWindow } = await import('../provider-model-context.ts');
     vi.mocked(getProviderModelContextWindow).mockResolvedValueOnce(undefined);
     const { resolveProviderConfig } = await import('../pi-agent-runtime.ts');
-    const out = await resolveProviderConfig('openrouter', 'minimax/minimax-m2.5');
+    const out = await resolveProviderConfig('openrouter', DEFAULT_MODEL_ID);
     expect(out.provider.id).toBe('openrouter');
     expect(out.provider.baseUrl).toMatch(/\/api\/v1$/u);
     expect(out.contextWindow).toBeGreaterThan(0);

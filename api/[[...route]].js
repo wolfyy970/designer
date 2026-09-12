@@ -1894,6 +1894,7 @@ const REASONING_PATTERNS = [
   /claude-4/i,
   /deepseek-r1/i,
   /deepseek-reasoner/i,
+  /deepseek-v4/i,
   /minimax-m2\.7/i,
   /\bqwq\b/i,
   /qwen3/i,
@@ -3345,7 +3346,7 @@ function lmStudioThinkingFields(thinking) {
   if (!effort) return {};
   return { reasoning_effort: effort };
 }
-const modelProviderRouting = { "minimax/minimax-m2.5": { "order": ["mara"], "allow_fallbacks": false } };
+const modelProviderRouting = {};
 const rawRoutingConfig = {
   modelProviderRouting
 };
@@ -4411,7 +4412,7 @@ class StreamIdleError extends Error {
     this.correlationId = correlationId;
   }
 }
-const STREAM_IDLE_LIMIT_MS = 45e3;
+const STREAM_IDLE_LIMIT_MS = 24e4;
 const STREAM_IDLE_CHECK_INTERVAL_MS = 3e3;
 async function resolveProviderConfig(providerId, modelId) {
   if (providerId !== "openrouter" && providerId !== "lmstudio") {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { DEFAULT_MODEL_ID } from '../../../src/test-support/model-fixtures';
 
 vi.mock('../../services/task-agent-execution.ts', () => ({
   executeTaskAgentStream: vi.fn(async () => ({ result: '  generated text  ', resultFile: 'result.txt', files: {} })),
@@ -17,7 +18,7 @@ const baseBody = {
   inputId: 'research-context' as const,
   designBrief: 'A design brief',
   providerId: 'openrouter',
-  modelId: 'minimax/minimax-m2.5',
+  modelId: DEFAULT_MODEL_ID,
 };
 
 describe('POST /api/inputs/generate', () => {

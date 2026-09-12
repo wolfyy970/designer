@@ -21,6 +21,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import type { InputsGenerateTargetSpecId } from '../../src/lib/prompts/inputs-generate.ts';
 import { createRunDir, readJson, readText } from './runDir.ts';
+import taskDefaults from '../../config/task-defaults.json';
 import {
   CostCapExceededError,
   CostTracker,
@@ -31,7 +32,8 @@ import {
 } from './cost.ts';
 
 const DEFAULT_PROVIDER = 'openrouter';
-const DEFAULT_MODEL = 'minimax/minimax-m2.5';
+/** Model the app pins by default, read from config so this cannot drift. */
+const DEFAULT_MODEL = taskDefaults.perTaskDefaults.design.modelId;
 
 /** Section id aliases — short forms accepted on the CLI. */
 const SECTION_ALIASES: Record<string, InputsGenerateTargetSpecId> = {
@@ -561,7 +563,7 @@ function printHelp(): void {
       '  --cap-tokens N             Per-run token cap (default 200000)',
       '  --daily-cap N              Daily token cap (default 1000000)',
       '  --provider <id>            Provider (default openrouter)',
-      '  --model <id>               Model (default minimax/minimax-m2.5)',
+      '  --model <id>               Model (default: config/task-defaults.json)',
       '  --evaluator-provider <id>  Override provider for evaluator',
       '  --evaluator-model <id>     Override model for evaluator',
       '  --count N                  Hypothesis count for incubator',

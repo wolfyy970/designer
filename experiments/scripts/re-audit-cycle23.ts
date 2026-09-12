@@ -35,6 +35,7 @@ import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 import { createRunDir } from '../src/runDir.ts';
+import taskDefaults from '../../config/task-defaults.json';
 import {
   CostTracker,
   DEFAULT_DAILY_TOKEN_CAP,
@@ -48,7 +49,8 @@ import {
 import type { HypothesisStrategy } from '../../src/types/incubator.ts';
 
 const PROVIDER = 'openrouter';
-const MODEL = 'minimax/minimax-m2.5';
+/** Model the app pins by default, read from config so this cannot drift. */
+const MODEL = taskDefaults.perTaskDefaults.design.modelId;
 
 // ── Sample definition ─────────────────────────────────────────────────────
 

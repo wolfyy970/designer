@@ -11,6 +11,8 @@ Chronological record of prompt-edit cycles, the gap or insight that motivated ea
 - **Brief used as canonical test case**: [grief-app.md](briefs/grief-app.md) — PM-shaped problem statement for a grief-focused web product, intentionally scope-ambiguous
 - **Supplied spec sections** (held constant across canonical runs to isolate prompt-edit signal): [grief-app-research.md](briefs/grief-app-research.md), [grief-app-objectives.md](briefs/grief-app-objectives.md), [grief-app-constraints.md](briefs/grief-app-constraints.md) — outputs of the first inputs-gen run on this brief, then re-used as input for stages 2-4 testing
 - **Default model**: openrouter / minimax/minimax-m2.5 (matches production lockdown)
+  - *Later note:* the shipped default moved to `deepseek/deepseek-v4.1-flash`. The CLI no
+    longer restates a model id — it reads `config/task-defaults.json`.
 - **Open observation that hasn't yet been addressed**: across 4 canonical runs (20 hypotheses) the corpus clusters in ~5 archetypes (quiet refuge / memory-as-central / adaptive-contextual / optional-structure / private-connection). The model is generating variations within "text-based privacy-first journaling app" rather than category-moving bets. **Cycle 5 (next, in progress)** is targeting this.
 
 ---

@@ -9,6 +9,7 @@
  * test doesn't depend on bundled prompt content.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { DEFAULT_MODEL_ID } from '../../../src/test-support/model-fixtures';
 
 vi.mock('../prompt-resolution.ts', () => ({
   getPromptBody: vi.fn(async (key: string) => `GUIDANCE[${key}]`),
@@ -24,7 +25,7 @@ import { runTaskAgentPiSession } from '../../services/task-agent-session.ts';
 const baseInput = {
   designBrief: 'Design an app for people in active grief.',
   providerId: 'openrouter',
-  modelId: 'minimax/minimax-m2.5',
+  modelId: DEFAULT_MODEL_ID,
   correlationId: 'corr-1',
 };
 

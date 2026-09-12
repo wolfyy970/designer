@@ -39,6 +39,7 @@ import { join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
+import taskDefaults from '../../config/task-defaults.json';
 
 import {
   CostTracker,
@@ -56,7 +57,8 @@ import type { DesignSpec } from '../../src/types/spec.ts';
 import type { HypothesisStrategy } from '../../src/types/incubator.ts';
 
 const DEFAULT_PROVIDER = 'openrouter';
-const DEFAULT_MODEL = 'minimax/minimax-m2.5';
+/** Model the app pins by default, read from config so this cannot drift. */
+const DEFAULT_MODEL = taskDefaults.perTaskDefaults.design.modelId;
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '../../..');
 const BRIEFS_DIR = join(REPO_ROOT, 'experiments/briefs');
