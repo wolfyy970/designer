@@ -69,12 +69,27 @@ export class StreamIdleError extends Error {
 /**
  * Stream activity watchdog: aborts the session if no observable streaming
  * event has fired for this long. A working model produces thinking_delta /
- * text_delta events on a millisecond cadence once a turn starts; the only
- * legitimate silence is the pre-first-token thinking window, which on the
- * models we use is typically under 15s and never above ~45s. Past that the
- * connection is dead, not slow.
+ * text_delta events on a millisecond cadence once a turn starts, so a long
+ * silence means the connection is dead rather than slow.
+ *
+ * **Threshold history.** This was 45s, justified by "the pre-first-token
+ * thinking window, which on the models we use is typically under 15s and never
+ * above ~45s." Measured against the current default (`deepseek/deepseek-v4.1-flash`,
+ * OpenRouter) that assumption no longer holds: this model enters long reasoning
+ * stretches and produces single calls of 45.6s, 36.9s and 55.5s, generating
+ * 10k+ completion tokens from prompts of a few hundred tokens. At 45s the
+ * watchdog aborted healthy builds mid-flight, and an aborted build leaves a
+ * *partial* artifact (HTML referencing styles.css/app.js that were never
+ * written), which renders as an unstyled, broken-looking design.
+ *
+ * 120s is chosen to clear the slowest turn observed (~56s) with margin while
+ * still catching a genuinely dead connection well inside the 800s function
+ * limit. Keep this above the p99 turn duration for whatever model is pinned as
+ * the default; a model change that invalidates that assumption will resurface
+ * as intermittent broken previews rather than as an obvious error.
  */
-const STREAM_IDLE_LIMIT_MS = 45_000;
+/** Exported for tests: the idle abort threshold must stay above p99 turn latency. */
+export const STREAM_IDLE_LIMIT_MS = 120_000;
 const STREAM_IDLE_CHECK_INTERVAL_MS = 3_000;
 
 type ProviderConfig =

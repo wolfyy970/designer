@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { mapPackageResult } from '../pi-agent-runtime.ts';
+import { mapPackageResult, STREAM_IDLE_LIMIT_MS } from '../pi-agent-runtime.ts';
 import type { SessionRunResult } from '@auto-designer/pi';
 
 vi.mock('../provider-model-context.ts', () => ({
@@ -77,5 +77,23 @@ describe('resolveProviderConfig', () => {
     const { resolveProviderConfig } = await import('../pi-agent-runtime.ts');
     const out = await resolveProviderConfig('openrouter', 'foo/bar');
     expect(out.contextWindow).toBe(262_144);
+  });
+});
+
+describe('stream-idle watchdog threshold', () => {
+  it('stays above the p99 turn latency of the pinned default model', () => {
+    // Measured against `deepseek/deepseek-v4.1-flash` on OpenRouter: single
+    // turns of 45.6s / 36.9s / 55.5s producing 10k+ completion tokens. At the
+    // old 45s the watchdog aborted healthy builds mid-flight, and an aborted
+    // build leaves a partial artifact (HTML referencing styles.css/app.js that
+    // were never written) which renders as a broken-looking design.
+    expect(STREAM_IDLE_LIMIT_MS).toBeGreaterThanOrEqual(90_000);
+  });
+
+  it('stays well inside the 800s serverless function limit', () => {
+    // Too generous is also a failure mode: the abort must fire while the
+    // request is still alive, otherwise the user gets a bare timeout instead
+    // of an explanatory error.
+    expect(STREAM_IDLE_LIMIT_MS).toBeLessThanOrEqual(300_000);
   });
 });
