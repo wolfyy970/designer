@@ -1,9 +1,9 @@
 {
   "perTaskDefaults": {
-    "design":        { "providerId": "openrouter", "modelId": "minimax/minimax-m2.5" },
-    "incubate":      { "providerId": "openrouter", "modelId": "minimax/minimax-m2.5" },
-    "inputs":        { "providerId": "openrouter", "modelId": "minimax/minimax-m2.5" },
-    "design-system": { "providerId": "openrouter", "modelId": "minimax/minimax-m2.5" },
-    "evaluator":     { "providerId": "openrouter", "modelId": "minimax/minimax-m2.5" }
+    "design":        { "providerId": "openrouter", "modelId": "deepseek/deepseek-v4.1-flash" },
+    "incubate":      { "providerId": "openrouter", "modelId": "deepseek/deepseek-v4.1-flash" },
+    "inputs":        { "providerId": "openrouter", "modelId": "deepseek/deepseek-v4.1-flash" },
+    "design-system": { "providerId": "openrouter", "modelId": "deepseek/deepseek-v4.1-flash" },
+    "evaluator":     { "providerId": "openrouter", "modelId": "deepseek/deepseek-v4.1-flash" }
   }
 }

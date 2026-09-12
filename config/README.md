@@ -56,7 +56,7 @@ Thinking-level and per-call token-budget defaults sent to LLM providers, broken 
 - **`level`** — how hard the model should think. Maps to `reasoning.effort` (OpenRouter), `thinking.budget_tokens` (Anthropic), or `reasoning_effort` (OpenAI).
 - **`budgetTokens`** — max tokens of private reasoning before the final answer. Caps spend per call.
 
-Both apply only when the chosen model **supports reasoning**. The capability gate lives in `src/lib/model-capabilities.ts`; the patterns it matches today are: OpenAI `o1`–`o9`, `claude-3.5` / `claude-3.7` / `claude-4`, `deepseek-r1`, `deepseek-reasoner`, `minimax-m2.7`, `qwq`, `qwen3`, and any model id ending in `-thinking`. Non-reasoning models (e.g. `minimax/minimax-m2.5`) ignore these — the resolver returns `{ level: 'off', budgetTokens: 0 }` regardless of what's in this file.
+Both apply only when the chosen model **supports reasoning**. The capability gate lives in `src/lib/model-capabilities.ts`; the patterns it matches today are: OpenAI `o1`–`o9`, `claude-3.5` / `claude-3.7` / `claude-4`, `deepseek-r1`, `deepseek-reasoner`, `minimax-m2.7`, `qwq`, `qwen3`, and any model id ending in `-thinking`. Non-reasoning models (e.g. the default `deepseek/deepseek-v4.1-flash`) ignore these — the resolver returns `{ level: 'off', budgetTokens: 0 }` regardless of what's in this file.
 
 ### Level ladder (`budgetByLevel`)
 
