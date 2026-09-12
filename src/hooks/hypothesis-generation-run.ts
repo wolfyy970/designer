@@ -59,6 +59,12 @@ export interface HypothesisGenerationRunDeps {
 /**
  * Fetches prompt bundle, creates lane placeholders/sessions, syncs canvas, runs multiplexed SSE.
  * Caller owns abort, edge status, and aggregate error UI (try/finally).
+ *
+ * Lane count comes from `bundle.generationContext.modelCredentials`, which is
+ * always 1 for canvas-originated runs (see `buildHypothesisGenerationContextFromInputs`).
+ * The loop and the multiplexed stream are kept because the `/api/hypothesis/generate`
+ * wire contract is lane-multiplexed; they are exercised with synthetic
+ * multi-credential input in tests rather than by the UI.
  */
 export async function executeHypothesisGenerationRun(
   deps: HypothesisGenerationRunDeps,

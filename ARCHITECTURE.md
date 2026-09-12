@@ -388,6 +388,8 @@ Results accumulate across generation runs. Each result has a `runId` (UUID) and 
 
 Multiple hypotheses can generate simultaneously. Within a single hypothesis the current Settings model produces one lane; older multi-model lane plumbing remains in the hypothesis API and SSE router for compatibility, but the active canvas no longer wires multiple Model nodes into a hypothesis. The global `isGenerating` flag only clears when in-flight results reach a terminal status, preventing premature UI resets. Note: LM Studio runs sequentially — sending concurrent requests returns HTTP 500.
 
+**Consequence for anyone reading the lane code.** `buildHypothesisGenerationContextFromInputs()` hardcodes `modelCredentials` to a single Settings credential, so `generationContext.modelCredentials.length` is always `1` for canvas-originated runs. The per-lane loops in `hypothesis-generation-run.ts` therefore execute once, and the `'${errorCount} of ${n} failed'` copy in `hypothesis-generate-flow.ts` cannot render — every non-lost-connection lane failure reads `'Generation failed'`. Those paths are covered by tests using synthetic multi-credential input, not by the UI. Before chasing a lane-behaviour bug you cannot reproduce from the canvas, check this first.
+
 ## Client Module Boundaries
 
 ### Types (`src/types/`)

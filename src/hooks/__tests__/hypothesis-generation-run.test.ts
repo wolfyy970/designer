@@ -159,6 +159,74 @@ describe('executeHypothesisGenerationRun', () => {
     expect(registeredIds).toHaveLength(2);
   });
 
+  it('maps each credential to its own lane, wired to that credential', async () => {
+    // Multi-credential fan-out is compatibility machinery: the active canvas
+    // always produces exactly one credential (see
+    // `buildHypothesisGenerationContextFromInputs`). It is exercised here with
+    // synthetic input so a regression in the per-lane wiring would surface even
+    // though the UI cannot currently reach it — and so the follow-up copy in
+    // `hypothesis-generate-flow` ("N of M failed") is not silently untested.
+    const prompt = {
+      id: 'cp1',
+      strategyId: 'vs-1',
+      specId: 's1',
+      prompt: 'p',
+      images: [],
+      compiledAt: 't',
+    };
+    const runStream = vi.fn().mockResolvedValue(undefined);
+    const addResult = vi.fn();
+    const result = await executeHypothesisGenerationRun(
+      {
+        workspacePayload: {} as HypothesisGenerateApiPayload,
+        genCtx: minimalGenCtx,
+        nodeId: 'hyp-1',
+        runId: 'run-1',
+        signal: new AbortController().signal,
+        setCompiledPrompts: vi.fn(),
+        addResult,
+        updateResult: vi.fn(),
+        nextRunNumberForStrategy: () => 1,
+        syncAfterGenerate: vi.fn(),
+        scheduleFitView: vi.fn(),
+        fetchBundle: vi.fn().mockResolvedValue({
+          prompts: [prompt],
+          evaluationContext: null,
+          provenance: { strategies: {}, designSystemSnapshot: undefined },
+          generationContext: {
+            modelCredentials: [
+              { providerId: 'openrouter', modelId: 'model-a', thinkingLevel: 'minimal' },
+              { providerId: 'lmstudio', modelId: 'model-b', thinkingLevel: 'minimal' },
+            ],
+          },
+        }),
+        runStream,
+        onLaneIdsReady: vi.fn(),
+      },
+      vi.fn(),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    // Lane 1 is seeded per credential — provider, model, and status — so a lane
+    // can never be attributed to the wrong model.
+    expect(result.lanePlaceholderIds).toHaveLength(2);
+    expect(addResult).toHaveBeenCalledTimes(2);
+    expect(addResult.mock.calls.map(([r]) => [r.providerId, r.metadata?.model])).toEqual([
+      ['openrouter', 'model-a'],
+      ['lmstudio', 'model-b'],
+    ]);
+    expect(addResult.mock.calls.every(([r]) => r.status === GENERATION_STATUS.GENERATING)).toBe(
+      true,
+    );
+
+    // Every lane is handed to the multiplexed stream, in credential order.
+    const [, sessions] = runStream.mock.calls[0] as [unknown, unknown[]];
+    expect(sessions).toHaveLength(2);
+    expect(result.modelCredentialCount).toBe(2);
+  });
+
   it('reports modelCredentialCount from bundle generationContext (lane source of truth)', async () => {
     const prompt = {
       id: 'cp1',

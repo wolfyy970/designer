@@ -169,6 +169,19 @@ export function buildHypothesisGenerationContextFromInputs(input: {
 }): HypothesisGenerationContext | null {
   const { hypothesisNodeId, hypothesisStrategy, spec, snapshot, domainHypothesis } = input;
 
+  /**
+   * Exactly one credential. The canvas used to be able to wire several Model
+   * nodes into a hypothesis; Phase 7 D moved model selection into Settings, so
+   * a hypothesis now resolves to the single `design` task credential.
+   *
+   * The array shape is kept because the SSE wire contract is lane-multiplexed
+   * (`laneIndex`, `lane_done`) and the server already merges several models for
+   * any caller that supplies them. Consequence worth knowing before reading the
+   * lane code: `modelCredentials.length` is always 1 in production, so the
+   * per-lane loops execute once and the "N of M failed" copy in
+   * `hypothesis-generate-flow` cannot currently render. Those paths are covered
+   * by tests with synthetic multi-credential input, not by the UI.
+   */
   const modelCredentials: ModelCredential[] = [input.settingsCredential];
 
   let designSystemContent: string | undefined;
