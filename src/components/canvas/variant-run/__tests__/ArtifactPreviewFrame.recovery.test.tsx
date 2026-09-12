@@ -143,3 +143,94 @@ describe('ArtifactPreviewFrame — recovery from a failed URL preview', () => {
     expect(frame.getAttribute('srcdoc')).toBeNull();
   });
 });
+
+describe('ArtifactPreviewFrame — incomplete artifact warning', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('warns when the entry references files the build never wrote', async () => {
+    // The exact aborted-build shape: index.html landed, its assets did not.
+    vi.stubGlobal('fetch', healthyRegistration('partial-session'));
+
+    render(
+      <ArtifactPreviewFrame
+        files={{
+          'index.html':
+            '<!doctype html><html><head><link rel="stylesheet" href="styles.css"></head>' +
+            '<body><script src="app.js"></script></body></html>',
+        }}
+        title="Preview: Partial"
+      />,
+    );
+
+    const notice = await screen.findByRole('status');
+    expect(notice.textContent).toContain('Build incomplete');
+    expect(notice.textContent).toContain('styles.css');
+    expect(notice.textContent).toContain('app.js');
+    expect(notice.textContent).toContain('not the finished design');
+    // The preview still renders — we annotate, we do not hide the work.
+    expect(screen.getByTitle('Preview: Partial')).toBeTruthy();
+  });
+
+  it('stays silent when every referenced file is present', async () => {
+    vi.stubGlobal('fetch', healthyRegistration('complete-session'));
+
+    render(
+      <ArtifactPreviewFrame
+        files={{
+          'index.html':
+            '<!doctype html><html><head><link rel="stylesheet" href="styles.css"></head>' +
+            '<body><script src="app.js"></script></body></html>',
+          'styles.css': 'body{}',
+          'app.js': 'console.log(1)',
+        }}
+        title="Preview: Complete"
+      />,
+    );
+
+    await screen.findByTitle('Preview: Complete');
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('does not treat external assets as missing', async () => {
+    vi.stubGlobal('fetch', healthyRegistration('external-session'));
+
+    render(
+      <ArtifactPreviewFrame
+        files={{
+          'index.html':
+            '<!doctype html><html><head>' +
+            '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter">' +
+            '</head><body><h1>Design</h1></body></html>',
+        }}
+        title="Preview: External"
+      />,
+    );
+
+    await screen.findByTitle('Preview: External');
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('keeps the warning visible when the URL preview falls back to srcDoc', async () => {
+    // An incomplete build is incomplete either way; the fallback must not hide it.
+    vi.stubGlobal('fetch', healthyRegistration('expired-partial'));
+
+    render(
+      <ArtifactPreviewFrame
+        files={{
+          'index.html':
+            '<!doctype html><html><head><link rel="stylesheet" href="styles.css"></head><body></body></html>',
+        }}
+        title="Preview: Fallback"
+      />,
+    );
+
+    const frame = await screen.findByTitle<HTMLIFrameElement>('Preview: Fallback');
+    fireFrameLoad(frame, 'Not found');
+
+    await waitFor(() => expect(frame.getAttribute('srcdoc')).toBeTruthy());
+    expect(screen.getByRole('status').textContent).toContain('Build incomplete');
+  });
+});

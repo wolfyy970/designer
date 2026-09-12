@@ -1,6 +1,10 @@
-import { useState, type CSSProperties } from 'react';
-import { Loader2 } from 'lucide-react';
+import { useMemo, useState, type CSSProperties } from 'react';
+import { Loader2, TriangleAlert } from 'lucide-react';
 import { useArtifactPreviewUrl } from '../../../hooks/useArtifactPreviewUrl';
+import {
+  checkArtifactIntegrity,
+  describeArtifactIntegrity,
+} from '../../../lib/artifact-integrity';
 
 type Props = {
   files: Record<string, string>;
@@ -22,8 +26,7 @@ const SERVER_NOT_FOUND_BODY = 'Not found';
  *     unknown/expired session;
  *   - a body that rendered nothing at all (no text, no elements). The server's
  *     404 is `c.text('Not found', 404)`, but a proxy or a bare 404 can also
- *     produce an empty document — and `bundleVirtualFS` always emits a full
- *     document with content, so an empty body is never our bundle.
+ *     produce an empty document.
  *
  * Returns false for a document we cannot inspect: `contentDocument` is null
  * both for a cross-origin frame and for one whose navigation has not committed,
@@ -39,6 +42,10 @@ function isFailedPreviewDocument(doc: Document | null): boolean {
 
 /**
  * Multi-file design preview: URL-backed virtual FS when API is available; bundled srcDoc fallback.
+ *
+ * Also reports an *incomplete* artifact — an entry document referencing assets
+ * that were never written — because that renders as an unstyled, broken-looking
+ * page that is indistinguishable from a bad design. See `artifact-integrity.ts`.
  */
 export default function ArtifactPreviewFrame({
   files,
@@ -61,6 +68,9 @@ export default function ArtifactPreviewFrame({
     ? style
     : { ...style, pointerEvents: 'none' };
 
+  const integrity = useMemo(() => checkArtifactIntegrity(files), [files]);
+  const integrityNotice = describeArtifactIntegrity(integrity);
+
   const urlPreviewUsable = !!previewSrc && previewSrc !== failedSrc;
 
   if (isPending) {
@@ -74,8 +84,33 @@ export default function ArtifactPreviewFrame({
     );
   }
 
+  /**
+   * Warning strip above the frame. Rendered for both the URL and srcDoc paths
+   * so the message survives a fallback — an incomplete build is incomplete
+   * either way, and switching to srcDoc would otherwise hide it.
+   */
+  const notice = integrityNotice ? (
+    <div
+      role="status"
+      className="flex shrink-0 items-start gap-1.5 border-b border-warning-border bg-warning-subtle px-2.5 py-1.5 text-nano text-warning"
+    >
+      <TriangleAlert size={11} className="mt-px shrink-0" aria-hidden />
+      <span className="min-w-0">{integrityNotice}</span>
+    </div>
+  ) : null;
+
+  const wrap = (frame: React.ReactElement) =>
+    notice ? (
+      <div className="absolute inset-0 flex flex-col">
+        {notice}
+        <div className="relative min-h-0 flex-1">{frame}</div>
+      </div>
+    ) : (
+      frame
+    );
+
   if (previewSrc && urlPreviewUsable) {
-    return (
+    return wrap(
       <iframe
         src={previewSrc}
         // URL previews are served same-origin (/api/preview/...). They need
@@ -95,21 +130,21 @@ export default function ArtifactPreviewFrame({
             setFailedSrc(previewSrc);
           }
         }}
-      />
+      />,
     );
   }
 
   if (fallbackSrcDoc) {
-    return (
+    return wrap(
       <iframe
         srcDoc={fallbackSrcDoc}
         sandbox="allow-scripts"
         title={title}
         className={className}
         style={frameStyle}
-      />
+      />,
     );
   }
 
-  return null;
+  return notice ?? null;
 }
