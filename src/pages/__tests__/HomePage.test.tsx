@@ -71,6 +71,48 @@ describe("HomePage", () => {
     ).toBe("/canvas");
   });
 
+  it("links to both experiment write-ups, opening them safely in a new tab", () => {
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Experiment write-ups" }),
+    ).not.toBeNull();
+
+    const partOne = screen.getByRole("link", { name: /Part 1/ });
+    const partTwo = screen.getByRole("link", { name: /Part 2/ });
+
+    expect(partOne.getAttribute("href")).toBe(
+      "https://kcwolfy.substack.com/p/the-designer-experiment-part-1?r=mxsut",
+    );
+    expect(partTwo.getAttribute("href")).toBe(
+      "https://kcwolfy.substack.com/p/the-designer-experiment-part-two?r=mxsut",
+    );
+
+    // External links must not hand the opener to the destination.
+    for (const link of [partOne, partTwo]) {
+      expect(link.getAttribute("target")).toBe("_blank");
+      expect(link.getAttribute("rel")).toContain("noopener");
+      expect(link.getAttribute("rel")).toContain("noreferrer");
+    }
+  });
+
+  it("states plainly when the experiment was run", () => {
+    // The work is from a fixed window. Left undated it reads as a current
+    // claim, which is exactly the misreading this guards against.
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/Run in June 2026/i)).not.toBeNull();
+    expect(screen.getAllByText(/June 2026/).length).toBeGreaterThan(0);
+  });
+
   it("shows OpenRouter daily credit exhaustion without exposing remaining budget", () => {
     mocks.budgetStatus = {
       data: {

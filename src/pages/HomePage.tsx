@@ -1,9 +1,13 @@
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowRight } from "lucide-react";
+import { AlertTriangle, ArrowRight, ArrowUpRight } from "lucide-react";
 import { Button } from "@ds/components/ui/button";
 import { useOpenRouterBudgetStatus } from "../hooks/useOpenRouterBudgetStatus";
 import { appReleaseLabel } from "../lib/app-release";
 import { formatOpenRouterResetAt } from "../lib/openrouter-budget-display";
+import {
+  EXPERIMENT_PERIOD_LABEL,
+  EXPERIMENT_WRITE_UPS,
+} from "../lib/experiment-writeups";
 
 export default function HomePage() {
   const releaseLabel = appReleaseLabel();
@@ -23,6 +27,14 @@ export default function HomePage() {
             </h1>
             <p className="mt-12 max-w-2xl text-xl leading-snug text-fg-secondary sm:text-2xl">
               Agentic UX harness for the exploration of solution hypotheses.
+            </p>
+            {/*
+              Prominent and unmissable on purpose: this page describes work from
+              a fixed window, not a live claim. Without the date, a finished
+              experiment reads as the current state of whoever built it.
+            */}
+            <p className="mt-5 text-sm font-medium tracking-wide text-fg-muted sm:text-base">
+              Run in {EXPERIMENT_PERIOD_LABEL}
             </p>
             <div className="mt-12 flex flex-wrap items-center gap-x-5 gap-y-3">
               <Button asChild size="lg">
@@ -52,6 +64,52 @@ export default function HomePage() {
                 </div>
               </div>
             ) : null}
+            <section
+              className="mt-14 max-w-2xl"
+              aria-labelledby="experiment-writeups-heading"
+            >
+              <h2
+                id="experiment-writeups-heading"
+                className="text-sm font-medium tracking-wide text-fg-secondary"
+              >
+                Experiment write-ups
+              </h2>
+              <p className="mt-2 text-xs leading-relaxed text-fg-faint">
+                Two posts covering the {EXPERIMENT_PERIOD_LABEL} run — the setup,
+                the results, and what they showed. Published on Substack.
+              </p>
+              <ul className="mt-5 space-y-3">
+                {EXPERIMENT_WRITE_UPS.map((post) => (
+                  <li key={post.id}>
+                    <a
+                      href={post.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group flex items-start gap-2.5 rounded-md border border-border-subtle bg-surface-raised px-3.5 py-3 transition-colors hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium text-fg">
+                          {post.label}
+                          <span className="sr-only">
+                            {" "}
+                            of the Designer experiment write-up (opens in a new
+                            tab)
+                          </span>
+                        </span>
+                        <span className="mt-1 block text-xs leading-relaxed text-fg-muted">
+                          {post.blurb}
+                        </span>
+                      </span>
+                      <ArrowUpRight
+                        size={15}
+                        className="mt-0.5 shrink-0 text-fg-faint transition-colors group-hover:text-accent"
+                        aria-hidden
+                      />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
           </div>
         </section>
 
